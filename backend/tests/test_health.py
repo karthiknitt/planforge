@@ -7,3 +7,9 @@ def test_health_returns_ok():
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+from app.db import engine
+
+
+def test_engine_is_configured():
+    assert "planforge" in str(engine.url)
