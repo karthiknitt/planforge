@@ -1,0 +1,10 @@
+{
+  "min_bedroom_sqm": 9.5,
+  "min_kitchen_sqm": 7.0,
+  "min_toilet_sqm": 3.0,
+  "min_stair_width_mm": 900,
+  "external_wall_thickness_mm": 230,
+  "internal_wall_thickness_mm": 115,
+  "max_beam_span_m": 4.5,
+  "max_floor_coverage_pct": 70
+}
