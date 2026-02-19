@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import Boolean, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
@@ -12,7 +12,7 @@ class Project(Base):
     __tablename__ = "project"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)  # FK enforced at DB level by Drizzle
     name: Mapped[str] = mapped_column(String, nullable=False)
 
     # Plot dimensions (metres)
