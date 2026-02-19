@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
+import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth-client";
 import type { GenerateResponse } from "@/lib/layout-types";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -31,6 +33,7 @@ interface LayoutViewerProps {
   plotLength: number;
   roadSide: string;
   northDirection: string;
+  projectId: string;
 }
 
 export function LayoutViewer({
@@ -38,9 +41,34 @@ export function LayoutViewer({
   plotWidth,
   plotLength,
   roadSide,
+  projectId,
 }: LayoutViewerProps) {
+  const { data: session } = useSession();
   const [selectedId, setSelectedId] = useState("A");
   const [floor, setFloor] = useState(0); // 0 = ground, 1 = first
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (!session) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/export/pdf?layout_id=${selectedId}`,
+        { headers: { "X-User-Id": session.user.id } }
+      );
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `planforge-layout-${selectedId}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (!generateData) {
     return (
@@ -61,23 +89,33 @@ export function LayoutViewer({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Layout selector tabs */}
-      <div className="flex flex-wrap gap-2">
-        {generateData.layouts.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setSelectedId(l.id)}
-            className={[
-              "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
-              selectedId === l.id
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background hover:bg-muted",
-            ].join(" ")}
-          >
-            Layout {l.id} — {l.name}
-          </button>
-        ))}
+      {/* Layout selector tabs + download button */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {generateData.layouts.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => setSelectedId(l.id)}
+              className={[
+                "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
+                selectedId === l.id
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-background hover:bg-muted",
+              ].join(" ")}
+            >
+              Layout {l.id} — {l.name}
+            </button>
+          ))}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownload}
+          disabled={downloading || !session}
+        >
+          {downloading ? "Downloading…" : "Download PDF"}
+        </Button>
       </div>
 
       {/* Compliance badge */}

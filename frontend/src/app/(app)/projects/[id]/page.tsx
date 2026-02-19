@@ -106,6 +106,7 @@ export default async function ProjectPage({
           plotLength={parseFloat(project.plotLength)}
           roadSide={project.roadSide}
           northDirection={project.northDirection}
+          projectId={id}
         />
       </main>
     </div>
