@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-
-import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { auth } from "@/lib/auth";
 import { SignOutButton } from "./sign-out-button";
 
 interface Project {

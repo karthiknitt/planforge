@@ -2,18 +2,14 @@ import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-
+import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { project as projectTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import type { GenerateResponse } from "@/lib/layout-types";
-import { Button } from "@/components/ui/button";
 import { LayoutViewer } from "./layout-viewer";
 
-async function fetchLayouts(
-  projectId: string,
-  userId: string
-): Promise<GenerateResponse | null> {
+async function fetchLayouts(projectId: string, userId: string): Promise<GenerateResponse | null> {
   try {
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/generate`,
@@ -26,21 +22,13 @@ async function fetchLayouts(
   }
 }
 
-export default async function ProjectPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  const rows = await db
-    .select()
-    .from(projectTable)
-    .where(eq(projectTable.id, id))
-    .limit(1);
+  const rows = await db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1);
   const project = rows[0];
 
   if (!project || project.userId !== session.user.id) notFound();
@@ -93,8 +81,8 @@ export default async function ProjectPage({
               Setbacks (m)
             </p>
             <p className="mt-0.5 font-medium text-sm">
-              F {project.setbackFront} · Rear {project.setbackRear} · L{" "}
-              {project.setbackLeft} · R {project.setbackRight}
+              F {project.setbackFront} · Rear {project.setbackRear} · L {project.setbackLeft} · R{" "}
+              {project.setbackRight}
             </p>
           </div>
         </div>
