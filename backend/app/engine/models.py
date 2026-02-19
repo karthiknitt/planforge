@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-RoomType = Literal["living", "bedroom", "kitchen", "toilet", "staircase", "parking", "utility"]
+RoomType = Literal["living", "bedroom", "kitchen", "toilet", "staircase", "parking", "utility",
+                   "pooja", "study", "balcony", "dining"]
 
 
 @dataclass
@@ -43,7 +44,7 @@ class ComplianceResult:
 
 @dataclass
 class Layout:
-    id: str          # "A", "B", "C"
+    id: str          # "A", "B", "C", "D", "E", "F"
     name: str
     ground_floor: FloorPlan
     first_floor: FloorPlan
@@ -58,9 +59,20 @@ class PlotConfig:
     setback_rear: float
     setback_left: float
     setback_right: float
-    bhk: int
+    num_bedrooms: int   # 1–4
     toilets: int
     parking: bool
+    city: str = "other"
+    vastu_enabled: bool = False
+    road_width_m: float = 9.0
+    has_pooja: bool = False
+    has_study: bool = False
+    has_balcony: bool = False
+
+    @property
+    def bhk(self) -> int:
+        """Backward-compat alias."""
+        return self.num_bedrooms
 
 
 @dataclass

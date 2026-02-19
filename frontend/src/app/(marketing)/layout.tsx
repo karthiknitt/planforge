@@ -1,13 +1,14 @@
 import { Building2 } from "lucide-react";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "./mobile-nav";
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Sticky Nav */}
-      <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
@@ -36,6 +37,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
 
             {/* Right actions */}
             <div className="hidden md:flex items-center gap-3">
+              <ThemeToggle />
               <Link href="/sign-in">
                 <Button variant="ghost" size="sm" className="text-slate-600 hover:text-[#1e3a5f]">
                   Sign In
@@ -50,7 +52,10 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 </Button>
               </Link>
             </div>
-            <MobileNav />
+            <div className="flex md:hidden items-center gap-2">
+              <ThemeToggle />
+              <MobileNav />
+            </div>
           </div>
         </div>
       </header>

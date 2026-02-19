@@ -41,9 +41,15 @@ async def generate_layouts(
         setback_rear=_to_float(project.setback_rear),
         setback_left=_to_float(project.setback_left),
         setback_right=_to_float(project.setback_right),
-        bhk=project.bhk,
+        num_bedrooms=project.num_bedrooms,
         toilets=project.toilets,
         parking=project.parking,
+        city=getattr(project, "city", "other") or "other",
+        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
+        road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
+        has_pooja=getattr(project, "has_pooja", False) or False,
+        has_study=getattr(project, "has_study", False) or False,
+        has_balcony=getattr(project, "has_balcony", False) or False,
     )
 
     layouts = generate(cfg)

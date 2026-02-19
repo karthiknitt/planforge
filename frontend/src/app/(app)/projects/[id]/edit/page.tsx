@@ -30,9 +30,14 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
         setbackLeft: project.setbackLeft,
         setbackRight: project.setbackRight,
         roadSide: project.roadSide,
-        bhk: project.bhk,
+        numBedrooms: project.numBedrooms,
         toilets: project.toilets,
         parking: project.parking,
+        city: project.city,
+        roadWidthM: project.roadWidthM,
+        hasPooja: project.hasPooja,
+        hasStudy: project.hasStudy,
+        hasBalcony: project.hasBalcony,
       }}
     />
   );

@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 Direction = Literal["N", "S", "E", "W"]
 
+CITIES = Literal["bangalore", "chennai", "delhi", "hyderabad", "pune", "other"]
+
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -17,9 +19,15 @@ class ProjectCreate(BaseModel):
     setback_right: float = Field(ge=0)
     road_side: Direction
     north_direction: Direction
-    bhk: Literal[2, 3]
+    num_bedrooms: int = Field(ge=1, le=4, description="Number of bedrooms (1–4 BHK)")
     toilets: int = Field(ge=1, le=4)
     parking: bool = False
+    city: str = "other"
+    vastu_enabled: bool = False
+    road_width_m: float = Field(default=9.0, ge=3.0, le=60.0)
+    has_pooja: bool = False
+    has_study: bool = False
+    has_balcony: bool = False
 
 
 class ProjectUpdate(BaseModel):
@@ -32,9 +40,15 @@ class ProjectUpdate(BaseModel):
     setback_right: float | None = Field(default=None, ge=0)
     road_side: Direction | None = None
     north_direction: Direction | None = None
-    bhk: Literal[2, 3] | None = None
+    num_bedrooms: int | None = Field(default=None, ge=1, le=4)
     toilets: int | None = Field(default=None, ge=1, le=4)
     parking: bool | None = None
+    city: str | None = None
+    vastu_enabled: bool | None = None
+    road_width_m: float | None = Field(default=None, ge=3.0, le=60.0)
+    has_pooja: bool | None = None
+    has_study: bool | None = None
+    has_balcony: bool | None = None
 
 
 class ProjectRead(BaseModel):
@@ -49,9 +63,15 @@ class ProjectRead(BaseModel):
     setback_right: float
     road_side: str
     north_direction: str
-    bhk: int
+    num_bedrooms: int
     toilets: int
     parking: bool
+    city: str
+    vastu_enabled: bool
+    road_width_m: float
+    has_pooja: bool
+    has_study: bool
+    has_balcony: bool
     created_at: datetime
     updated_at: datetime
 

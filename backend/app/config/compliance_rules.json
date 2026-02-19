@@ -1,10 +1,37 @@
 {
+  "min_plot_length_m": 5.0,
+  "min_plot_width_m": 5.0,
+
   "min_bedroom_sqm": 9.5,
-  "min_kitchen_sqm": 7.0,
-  "min_toilet_sqm": 3.0,
+  "min_bedroom_width_m": 2.4,
+  "min_kitchen_sqm": 4.5,
+  "min_kitchen_width_m": 1.5,
+  "min_toilet_sqm": 2.8,
+  "min_toilet_width_m": 1.2,
+  "min_wc_only_sqm": 1.1,
+  "min_wc_only_width_m": 0.9,
+  "min_corridor_width_m": 0.9,
+  "min_pooja_sqm": 1.5,
+
   "min_stair_width_mm": 900,
+  "stair_tread_min_mm": 250,
+  "stair_tread_max_mm": 300,
+  "stair_riser_min_mm": 150,
+  "stair_riser_max_mm": 190,
+  "min_stair_headroom_m": 2.2,
+
+  "min_habitable_ceiling_m": 2.75,
+  "min_bath_ceiling_m": 2.2,
+
+  "min_window_to_floor_ratio": 0.1,
+  "min_bath_ventilation_sqm": 0.37,
+  "min_kitchen_window_sqm": 1.0,
+
   "external_wall_thickness_mm": 230,
   "internal_wall_thickness_mm": 115,
+  "column_size_mm": 300,
+
   "max_beam_span_m": 4.5,
-  "max_floor_coverage_pct": 70
+  "max_floor_coverage_pct": 70,
+  "default_far": 1.5
 }

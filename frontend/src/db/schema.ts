@@ -1,5 +1,14 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  real,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -7,6 +16,8 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  planTier: text("plan_tier").default("free").notNull(),
+  planExpiresAt: timestamp("plan_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -93,9 +104,16 @@ export const project = pgTable(
     roadSide: text("road_side").notNull(),
     northDirection: text("north_direction").notNull(),
     // Configuration
-    bhk: integer("bhk").notNull(),
+    numBedrooms: integer("num_bedrooms").notNull(),
     toilets: integer("toilets").notNull(),
     parking: boolean("parking").default(false).notNull(),
+    // Extended fields
+    city: text("city").default("other").notNull(),
+    vastuEnabled: boolean("vastu_enabled").default(false).notNull(),
+    roadWidthM: real("road_width_m").default(9.0).notNull(),
+    hasPooja: boolean("has_pooja").default(false).notNull(),
+    hasStudy: boolean("has_study").default(false).notNull(),
+    hasBalcony: boolean("has_balcony").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

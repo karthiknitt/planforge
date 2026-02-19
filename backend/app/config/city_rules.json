@@ -1,0 +1,92 @@
+{
+  "_comment": "City-specific setback and FAR rules. NBC defaults apply for 'other'.",
+
+  "other": {
+    "setback_table": [
+      { "plot_area_max_sqm": 75,   "front": 1.5, "rear": 1.5, "side1": 1.0, "side2": 0.0 },
+      { "plot_area_max_sqm": 150,  "front": 2.0, "rear": 2.0, "side1": 1.0, "side2": 1.0 },
+      { "plot_area_max_sqm": 300,  "front": 3.0, "rear": 3.0, "side1": 1.5, "side2": 1.5 },
+      { "plot_area_max_sqm": 9999, "front": 3.0, "rear": 3.0, "side1": 2.0, "side2": 2.0 }
+    ],
+    "far_by_road_width": [
+      { "road_width_max_m": 9,   "far": 1.50 },
+      { "road_width_max_m": 18,  "far": 1.75 },
+      { "road_width_max_m": 999, "far": 2.00 }
+    ]
+  },
+
+  "bangalore": {
+    "setback_table": [
+      { "plot_area_max_sqm": 75,   "front": 1.5, "rear": 1.5, "side1": 1.0, "side2": 0.0 },
+      { "plot_area_max_sqm": 125,  "front": 3.0, "rear": 3.0, "side1": 1.5, "side2": 1.5 },
+      { "plot_area_max_sqm": 250,  "front": 3.0, "rear": 3.0, "side1": 2.0, "side2": 2.0 },
+      { "plot_area_max_sqm": 9999, "front": 4.0, "rear": 4.0, "side1": 2.5, "side2": 2.5 }
+    ],
+    "far_by_road_width": [
+      { "road_width_max_m": 12,  "far": 1.75 },
+      { "road_width_max_m": 18,  "far": 2.00 },
+      { "road_width_max_m": 999, "far": 2.25 }
+    ]
+  },
+
+  "chennai": {
+    "setback_table": [
+      { "plot_area_max_sqm": 69,   "front": 1.5, "rear": 1.5, "side1": 0.9, "side2": 0.0 },
+      { "plot_area_max_sqm": 139,  "front": 3.0, "rear": 1.5, "side1": 1.2, "side2": 1.2 },
+      { "plot_area_max_sqm": 278,  "front": 4.0, "rear": 3.0, "side1": 1.5, "side2": 1.5 },
+      { "plot_area_max_sqm": 9999, "front": 4.5, "rear": 3.0, "side1": 2.0, "side2": 2.0 }
+    ],
+    "front_by_road_width": [
+      { "road_width_max_m": 9,   "front": 1.5 },
+      { "road_width_max_m": 18,  "front": 3.0 },
+      { "road_width_max_m": 999, "front": 4.5 }
+    ],
+    "far_by_road_width": [
+      { "road_width_max_m": 9,   "far": 1.50 },
+      { "road_width_max_m": 18,  "far": 2.00 },
+      { "road_width_max_m": 999, "far": 2.50 }
+    ]
+  },
+
+  "delhi": {
+    "setback_table": [
+      { "plot_area_max_sqm": 50,   "front": 1.5, "rear": 1.5, "side1": 0.0, "side2": 0.0 },
+      { "plot_area_max_sqm": 100,  "front": 2.0, "rear": 2.0, "side1": 1.0, "side2": 0.0 },
+      { "plot_area_max_sqm": 250,  "front": 3.0, "rear": 3.0, "side1": 2.0, "side2": 2.0 },
+      { "plot_area_max_sqm": 9999, "front": 4.5, "rear": 4.5, "side1": 3.0, "side2": 3.0 }
+    ],
+    "far_by_road_width": [
+      { "road_width_max_m": 9,   "far": 2.00 },
+      { "road_width_max_m": 18,  "far": 3.00 },
+      { "road_width_max_m": 999, "far": 3.50 }
+    ]
+  },
+
+  "hyderabad": {
+    "setback_table": [
+      { "plot_area_max_sqm": 75,   "front": 1.5, "rear": 1.5, "side1": 1.0, "side2": 0.0 },
+      { "plot_area_max_sqm": 150,  "front": 3.0, "rear": 3.0, "side1": 1.5, "side2": 1.5 },
+      { "plot_area_max_sqm": 300,  "front": 3.5, "rear": 3.0, "side1": 2.0, "side2": 2.0 },
+      { "plot_area_max_sqm": 9999, "front": 4.0, "rear": 3.5, "side1": 2.5, "side2": 2.5 }
+    ],
+    "far_by_road_width": [
+      { "road_width_max_m": 12,  "far": 1.50 },
+      { "road_width_max_m": 18,  "far": 2.00 },
+      { "road_width_max_m": 999, "far": 2.25 }
+    ]
+  },
+
+  "pune": {
+    "setback_table": [
+      { "plot_area_max_sqm": 100,  "front": 1.5, "rear": 1.5, "side1": 1.0, "side2": 0.0 },
+      { "plot_area_max_sqm": 200,  "front": 3.0, "rear": 2.0, "side1": 1.5, "side2": 1.5 },
+      { "plot_area_max_sqm": 400,  "front": 3.0, "rear": 3.0, "side1": 2.0, "side2": 2.0 },
+      { "plot_area_max_sqm": 9999, "front": 4.0, "rear": 4.0, "side1": 2.5, "side2": 2.5 }
+    ],
+    "far_by_road_width": [
+      { "road_width_max_m": 9,   "far": 1.50 },
+      { "road_width_max_m": 18,  "far": 1.75 },
+      { "road_width_max_m": 999, "far": 2.00 }
+    ]
+  }
+}
