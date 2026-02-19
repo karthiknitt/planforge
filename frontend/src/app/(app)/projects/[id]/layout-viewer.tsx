@@ -74,16 +74,12 @@ export function LayoutViewer({
     return (
       <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
         <p className="font-medium">Layout engine offline</p>
-        <p className="mt-1 text-sm">
-          Start the backend server and refresh to see floor plans.
-        </p>
+        <p className="mt-1 text-sm">Start the backend server and refresh to see floor plans.</p>
       </div>
     );
   }
 
-  const layout =
-    generateData.layouts.find((l) => l.id === selectedId) ??
-    generateData.layouts[0];
+  const layout = generateData.layouts.find((l) => l.id === selectedId) ?? generateData.layouts[0];
   const floorPlan = floor === 0 ? layout.ground_floor : layout.first_floor;
   const presentTypes = [...new Set(floorPlan.rooms.map((r) => r.type))];
 
@@ -122,9 +118,7 @@ export function LayoutViewer({
       <div
         className={[
           "flex flex-col gap-1.5 rounded-lg border p-3 text-sm",
-          layout.compliance.passed
-            ? "border-green-300 bg-green-50"
-            : "border-red-300 bg-red-50",
+          layout.compliance.passed ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50",
         ].join(" ")}
       >
         <span
@@ -138,16 +132,16 @@ export function LayoutViewer({
 
         {layout.compliance.violations.length > 0 && (
           <ul className="list-inside list-disc space-y-0.5 text-red-700">
-            {layout.compliance.violations.map((v, i) => (
-              <li key={i}>{v}</li>
+            {layout.compliance.violations.map((v) => (
+              <li key={v}>{v}</li>
             ))}
           </ul>
         )}
 
         {layout.compliance.warnings.length > 0 && (
           <ul className="list-inside list-disc space-y-0.5 text-amber-700">
-            {layout.compliance.warnings.map((w, i) => (
-              <li key={i}>{w}</li>
+            {layout.compliance.warnings.map((w) => (
+              <li key={w}>{w}</li>
             ))}
           </ul>
         )}
@@ -185,14 +179,9 @@ export function LayoutViewer({
         {presentTypes.map((type) => (
           <div key={type} className="flex items-center gap-1.5">
             <div
-              className={[
-                "size-3 rounded-sm border",
-                SWATCH[type] ?? SWATCH.utility,
-              ].join(" ")}
+              className={["size-3 rounded-sm border", SWATCH[type] ?? SWATCH.utility].join(" ")}
             />
-            <span className="text-xs text-muted-foreground">
-              {TYPE_LABELS[type] ?? type}
-            </span>
+            <span className="text-xs text-muted-foreground">{TYPE_LABELS[type] ?? type}</span>
           </div>
         ))}
       </div>

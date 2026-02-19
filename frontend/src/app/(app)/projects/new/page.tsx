@@ -58,8 +58,8 @@ export default function NewProjectPage() {
           setback_rear: parseFloat(form.setback_rear),
           setback_left: parseFloat(form.setback_left),
           setback_right: parseFloat(form.setback_right),
-          bhk: parseInt(form.bhk),
-          toilets: parseInt(form.toilets),
+          bhk: parseInt(form.bhk, 10),
+          toilets: parseInt(form.toilets, 10),
         }),
       });
 
@@ -84,7 +84,6 @@ export default function NewProjectPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-
             {/* Project name */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="name">Project name</Label>
@@ -136,7 +135,9 @@ export default function NewProjectPage() {
               <div className="grid grid-cols-2 gap-4">
                 {(["front", "rear", "left", "right"] as const).map((side) => (
                   <div key={side} className="flex flex-col gap-1.5">
-                    <Label htmlFor={`setback_${side}`} className="capitalize">{side}</Label>
+                    <Label htmlFor={`setback_${side}`} className="capitalize">
+                      {side}
+                    </Label>
                     <Input
                       id={`setback_${side}`}
                       type="number"
@@ -155,14 +156,30 @@ export default function NewProjectPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="road_side">Road facing</Label>
-                <Select id="road_side" value={form.road_side} onChange={(e) => set("road_side", e.target.value)}>
-                  {DIRECTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                <Select
+                  id="road_side"
+                  value={form.road_side}
+                  onChange={(e) => set("road_side", e.target.value)}
+                >
+                  {DIRECTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="north_direction">North direction</Label>
-                <Select id="north_direction" value={form.north_direction} onChange={(e) => set("north_direction", e.target.value)}>
-                  {DIRECTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                <Select
+                  id="north_direction"
+                  value={form.north_direction}
+                  onChange={(e) => set("north_direction", e.target.value)}
+                >
+                  {DIRECTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </Select>
               </div>
             </div>
@@ -178,8 +195,16 @@ export default function NewProjectPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="toilets">Toilets</Label>
-                <Select id="toilets" value={form.toilets} onChange={(e) => set("toilets", e.target.value)}>
-                  {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+                <Select
+                  id="toilets"
+                  value={form.toilets}
+                  onChange={(e) => set("toilets", e.target.value)}
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div className="flex flex-col items-start justify-end gap-1.5 pb-1">
@@ -205,7 +230,6 @@ export default function NewProjectPage() {
                 Cancel
               </Button>
             </div>
-
           </form>
         </CardContent>
       </Card>

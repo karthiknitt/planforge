@@ -1,4 +1,4 @@
-import type { ColumnData, FloorPlanData, RoomData } from "@/lib/layout-types";
+import type { FloorPlanData, RoomData } from "@/lib/layout-types";
 
 // ── Viewport constants ────────────────────────────────────────────────────────
 const VP_W = 560;
@@ -8,13 +8,13 @@ const ROAD_H = 20; // height of the road indicator strip
 
 // ── Room colour palette by type ──────────────────────────────────────────────
 const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = {
-  living:    { fill: "#FEF9C3", stroke: "#CA8A04", text: "#713F12" },
-  bedroom:   { fill: "#EDE9FE", stroke: "#7C3AED", text: "#3B0764" },
-  kitchen:   { fill: "#DCFCE7", stroke: "#16A34A", text: "#14532D" },
-  toilet:    { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
+  living: { fill: "#FEF9C3", stroke: "#CA8A04", text: "#713F12" },
+  bedroom: { fill: "#EDE9FE", stroke: "#7C3AED", text: "#3B0764" },
+  kitchen: { fill: "#DCFCE7", stroke: "#16A34A", text: "#14532D" },
+  toilet: { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
   staircase: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
-  parking:   { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
-  utility:   { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  parking: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  utility: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
 };
 
 const color = (type: string) => PALETTE[type] ?? PALETTE.utility;
@@ -41,7 +41,14 @@ function ScaleBar({ x, y, scale }: { x: number; y: number; scale: number }) {
       <line x1={0} y1={0} x2={barPx} y2={0} stroke="#64748B" strokeWidth={2} />
       <line x1={0} y1={-4} x2={0} y2={4} stroke="#64748B" strokeWidth={1.5} />
       <line x1={barPx} y1={-4} x2={barPx} y2={4} stroke="#64748B" strokeWidth={1.5} />
-      <text x={barPx / 2} y={14} textAnchor="middle" fontSize={9} fill="#64748B" fontFamily="sans-serif">
+      <text
+        x={barPx / 2}
+        y={14}
+        textAnchor="middle"
+        fontSize={9}
+        fill="#64748B"
+        fontFamily="sans-serif"
+      >
         {barM} m
       </text>
     </g>
@@ -71,16 +78,13 @@ function RoomLabel({
   const fs = Math.max(7, Math.min(11, roomPxW / 8, roomPxH / 4));
   const c = color(room.type);
 
-  const lines =
-    roomPxH >= 44
-      ? [room.name, `${room.area} m²`]
-      : [`${room.name} · ${room.area}m²`];
+  const lines = roomPxH >= 44 ? [room.name, `${room.area} m²`] : [`${room.name} · ${room.area}m²`];
 
   return (
     <g>
       {lines.map((line, i) => (
         <text
-          key={i}
+          key={line}
           x={cx}
           y={cy + (i - (lines.length - 1) / 2) * (fs + 2)}
           textAnchor="middle"
@@ -225,9 +229,9 @@ export function FloorPlanSVG({
       })}
 
       {/* Column markers */}
-      {floorPlan.columns.map((col, i) => (
+      {floorPlan.columns.map((col) => (
         <rect
-          key={i}
+          key={`${col.x}-${col.y}`}
           x={px(col.x) - 3}
           y={py(col.y) - 3}
           width={6}
