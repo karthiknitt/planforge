@@ -20,14 +20,19 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
 const color = (type: string) => PALETTE[type] ?? PALETTE.utility;
 
 // ── North arrow ───────────────────────────────────────────────────────────────
-function NorthArrow({ x, y }: { x: number; y: number }) {
+// rotation: S→0° (north up), N→180° (north down), W→90° (north right), E→270° (north left)
+const NORTH_ROTATION: Record<string, number> = { S: 0, N: 180, W: 90, E: 270 };
+
+function NorthArrow({ x, y, rotation = 0 }: { x: number; y: number; rotation?: number }) {
   return (
     <g transform={`translate(${x},${y})`}>
       <circle r={14} fill="white" stroke="#94A3B8" strokeWidth={1} />
-      <polygon points="0,-10 -4,4 0,1 4,4" fill="#1E293B" />
-      <text y={16} textAnchor="middle" fontSize={9} fill="#64748B" fontFamily="sans-serif">
-        N
-      </text>
+      <g transform={`rotate(${rotation})`}>
+        <polygon points="0,-10 -4,4 0,1 4,4" fill="#1E293B" />
+        <text y={-14} textAnchor="middle" fontSize={9} fill="#64748B" fontFamily="sans-serif">
+          N
+        </text>
+      </g>
     </g>
   );
 }
@@ -118,6 +123,11 @@ export function FloorPlanSVG({
   roadSide = "S",
   className,
 }: FloorPlanSVGProps) {
+  const northRotation = NORTH_ROTATION[roadSide] ?? 0;
+  // Deduplicate columns by coordinate to avoid duplicate React keys
+  const uniqueColumns = Array.from(
+    new Map(floorPlan.columns.map((c) => [`${c.x}-${c.y}`, c])).values()
+  );
   const availW = VP_W - 2 * PAD;
   const availH = VP_H - 2 * PAD - ROAD_H;
 
@@ -229,7 +239,7 @@ export function FloorPlanSVG({
       })}
 
       {/* Column markers */}
-      {floorPlan.columns.map((col) => (
+      {uniqueColumns.map((col) => (
         <rect
           key={`${col.x}-${col.y}`}
           x={px(col.x) - 3}
@@ -241,7 +251,7 @@ export function FloorPlanSVG({
       ))}
 
       {/* North arrow */}
-      <NorthArrow x={originX + drawW - 2} y={originY + 18} />
+      <NorthArrow x={originX + drawW - 2} y={originY + 18} rotation={northRotation} />
 
       {/* Scale bar */}
       <ScaleBar x={originX + 4} y={originY + drawH - 8} scale={scale} />

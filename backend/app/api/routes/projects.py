@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.project import Project
-from app.schemas.project import ProjectCreate, ProjectRead
+from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 
 router = APIRouter()
 
@@ -28,6 +28,28 @@ async def create_project(
         **body.model_dump(),
     )
     db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectRead)
+async def update_project(
+    project_id: str,
+    body: ProjectUpdate,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> Project:
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if project.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(project, field, value)
+
     await db.commit()
     await db.refresh(project)
     return project

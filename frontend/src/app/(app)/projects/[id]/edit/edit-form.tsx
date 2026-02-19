@@ -11,15 +11,32 @@ import { Select } from "@/components/ui/select";
 import { useSession } from "@/lib/auth-client";
 
 const DIRECTIONS = ["N", "S", "E", "W"] as const;
-
 const OPPOSITE: Record<string, string> = { N: "S", S: "N", E: "W", W: "E" };
 
-/** Convert feet to metres rounded to 3 decimal places */
 function feetToMetres(feet: string): number {
   return Math.round(parseFloat(feet) * 0.3048 * 1000) / 1000;
 }
 
-export default function NewProjectPage() {
+function metresToFeet(metres: string | number): string {
+  return (Math.round((parseFloat(String(metres)) / 0.3048) * 10) / 10).toString();
+}
+
+interface ProjectData {
+  id: string;
+  name: string;
+  plotLength: string;
+  plotWidth: string;
+  setbackFront: string;
+  setbackRear: string;
+  setbackLeft: string;
+  setbackRight: string;
+  roadSide: string;
+  bhk: number;
+  toilets: number;
+  parking: boolean;
+}
+
+export function EditProjectForm({ project }: { project: ProjectData }) {
   const router = useRouter();
   const { data: session } = useSession();
 
@@ -27,17 +44,17 @@ export default function NewProjectPage() {
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
-    name: "",
-    plot_length: "",
-    plot_width: "",
-    setback_front: "5",
-    setback_rear: "5",
-    setback_left: "3",
-    setback_right: "3",
-    road_side: "S",
-    bhk: "2",
-    toilets: "2",
-    parking: false,
+    name: project.name,
+    plot_length: metresToFeet(project.plotLength),
+    plot_width: metresToFeet(project.plotWidth),
+    setback_front: metresToFeet(project.setbackFront),
+    setback_rear: metresToFeet(project.setbackRear),
+    setback_left: metresToFeet(project.setbackLeft),
+    setback_right: metresToFeet(project.setbackRight),
+    road_side: project.roadSide,
+    bhk: String(project.bhk),
+    toilets: String(project.toilets),
+    parking: project.parking,
   });
 
   function set(field: string, value: string | boolean) {
@@ -50,8 +67,8 @@ export default function NewProjectPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects`, {
-        method: "POST",
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${project.id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           "X-User-Id": session!.user.id,
@@ -74,10 +91,11 @@ export default function NewProjectPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail ?? "Failed to create project.");
+        throw new Error(data?.detail ?? "Failed to update project.");
       }
 
-      router.push("/dashboard");
+      router.push(`/projects/${project.id}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setLoading(false);
@@ -88,8 +106,8 @@ export default function NewProjectPage() {
     <div className="mx-auto max-w-2xl px-4 py-10">
       <Card>
         <CardHeader>
-          <CardTitle>New project</CardTitle>
-          <CardDescription>Enter your plot details to generate floor plan options.</CardDescription>
+          <CardTitle>Edit project</CardTitle>
+          <CardDescription>Update your plot details and regenerate floor plans.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -98,7 +116,6 @@ export default function NewProjectPage() {
               <Label htmlFor="name">Project name</Label>
               <Input
                 id="name"
-                placeholder="My House — Trichy"
                 required
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
@@ -116,7 +133,6 @@ export default function NewProjectPage() {
                     type="number"
                     min="16"
                     step="0.1"
-                    placeholder="40"
                     required
                     value={form.plot_length}
                     onChange={(e) => set("plot_length", e.target.value)}
@@ -129,7 +145,6 @@ export default function NewProjectPage() {
                     type="number"
                     min="16"
                     step="0.1"
-                    placeholder="30"
                     required
                     value={form.plot_width}
                     onChange={(e) => set("plot_width", e.target.value)}
@@ -220,9 +235,13 @@ export default function NewProjectPage() {
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={loading || !session}>
-                {loading ? "Saving…" : "Create project"}
+                {loading ? "Saving…" : "Save & regenerate"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard")}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push(`/projects/${project.id}`)}
+              >
                 Cancel
               </Button>
             </div>

@@ -15,15 +15,15 @@ class Project(Base):
     user_id: Mapped[str] = mapped_column(String, nullable=False)  # FK enforced at DB level by Drizzle
     name: Mapped[str] = mapped_column(String, nullable=False)
 
-    # Plot dimensions (metres)
-    plot_length: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
-    plot_width: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+    # Plot dimensions (metres, 3 dp for feet→m conversion precision)
+    plot_length: Mapped[float] = mapped_column(Numeric(7, 3), nullable=False)
+    plot_width: Mapped[float] = mapped_column(Numeric(7, 3), nullable=False)
 
-    # Setbacks (metres)
-    setback_front: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    setback_rear: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    setback_left: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    setback_right: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    # Setbacks (metres, 3 dp)
+    setback_front: Mapped[float] = mapped_column(Numeric(6, 3), nullable=False)
+    setback_rear: Mapped[float] = mapped_column(Numeric(6, 3), nullable=False)
+    setback_left: Mapped[float] = mapped_column(Numeric(6, 3), nullable=False)
+    setback_right: Mapped[float] = mapped_column(Numeric(6, 3), nullable=False)
 
     # Orientation
     road_side: Mapped[str] = mapped_column(String(1), nullable=False)

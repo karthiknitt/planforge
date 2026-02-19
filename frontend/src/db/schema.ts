@@ -81,14 +81,14 @@ export const project = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    // Plot dimensions in metres
-    plotLength: numeric("plot_length", { precision: 6, scale: 2 }).notNull(),
-    plotWidth: numeric("plot_width", { precision: 6, scale: 2 }).notNull(),
-    // Setbacks in metres
-    setbackFront: numeric("setback_front", { precision: 5, scale: 2 }).notNull(),
-    setbackRear: numeric("setback_rear", { precision: 5, scale: 2 }).notNull(),
-    setbackLeft: numeric("setback_left", { precision: 5, scale: 2 }).notNull(),
-    setbackRight: numeric("setback_right", { precision: 5, scale: 2 }).notNull(),
+    // Plot dimensions in metres (3 dp for feet→m conversion precision)
+    plotLength: numeric("plot_length", { precision: 7, scale: 3 }).notNull(),
+    plotWidth: numeric("plot_width", { precision: 7, scale: 3 }).notNull(),
+    // Setbacks in metres (3 dp)
+    setbackFront: numeric("setback_front", { precision: 6, scale: 3 }).notNull(),
+    setbackRear: numeric("setback_rear", { precision: 6, scale: 3 }).notNull(),
+    setbackLeft: numeric("setback_left", { precision: 6, scale: 3 }).notNull(),
+    setbackRight: numeric("setback_right", { precision: 6, scale: 3 }).notNull(),
     // Orientation — N, S, E, W
     roadSide: text("road_side").notNull(),
     northDirection: text("north_direction").notNull(),

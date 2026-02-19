@@ -9,6 +9,10 @@ import { auth } from "@/lib/auth";
 import type { GenerateResponse } from "@/lib/layout-types";
 import { LayoutViewer } from "./layout-viewer";
 
+function metresToFeet(metres: string | number): string {
+  return (Math.round((parseFloat(String(metres)) / 0.3048) * 10) / 10).toFixed(1);
+}
+
 async function fetchLayouts(projectId: string, userId: string): Promise<GenerateResponse | null> {
   try {
     const res = await fetch(
@@ -35,6 +39,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const generateData = await fetchLayouts(id, session.user.id);
 
+  const lengthFt = metresToFeet(project.plotLength);
+  const widthFt = metresToFeet(project.plotWidth);
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b">
@@ -44,6 +51,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </Button>
           <span className="text-muted-foreground">/</span>
           <span className="font-semibold">{project.name}</span>
+          <div className="ml-auto">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/projects/${id}/edit`}>Edit project</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -55,7 +67,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               Plot size
             </p>
             <p className="mt-0.5 font-medium">
-              {project.plotLength} m × {project.plotWidth} m
+              {lengthFt} × {widthFt} ft
+            </p>
+            <p className="text-xs text-muted-foreground">
+              ({project.plotLength} × {project.plotWidth} m)
             </p>
           </div>
           <div>
@@ -72,17 +87,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Orientation
             </p>
-            <p className="mt-0.5 font-medium">
-              Road: {project.roadSide} · North: {project.northDirection}
-            </p>
+            <p className="mt-0.5 font-medium">Road faces {project.roadSide}</p>
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Setbacks (m)
+              Setbacks (ft)
             </p>
             <p className="mt-0.5 font-medium text-sm">
-              F {project.setbackFront} · Rear {project.setbackRear} · L {project.setbackLeft} · R{" "}
-              {project.setbackRight}
+              F {metresToFeet(project.setbackFront)} · Rear {metresToFeet(project.setbackRear)} · L{" "}
+              {metresToFeet(project.setbackLeft)} · R {metresToFeet(project.setbackRight)}
             </p>
           </div>
         </div>
