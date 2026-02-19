@@ -38,6 +38,10 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
         hasPooja: project.hasPooja,
         hasStudy: project.hasStudy,
         hasBalcony: project.hasBalcony,
+        plotShape: project.plotShape,
+        plotFrontWidth: project.plotFrontWidth,
+        plotRearWidth: project.plotRearWidth,
+        plotSideOffset: project.plotSideOffset,
       }}
     />
   );

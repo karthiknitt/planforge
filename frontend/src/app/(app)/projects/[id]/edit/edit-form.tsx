@@ -41,6 +41,10 @@ interface ProjectData {
   hasPooja?: boolean;
   hasStudy?: boolean;
   hasBalcony?: boolean;
+  plotShape?: string;
+  plotFrontWidth?: string | null;
+  plotRearWidth?: string | null;
+  plotSideOffset?: string | null;
 }
 
 /* ── Live plot compass ─────────────────────────────────────────────────────── */
@@ -138,8 +142,11 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
 
   const [form, setForm] = useState({
     name: project.name,
+    plot_shape: project.plotShape ?? "rectangular",
     plot_length: metresToFeet(project.plotLength),
     plot_width: metresToFeet(project.plotWidth),
+    plot_front_width: project.plotFrontWidth ? metresToFeet(project.plotFrontWidth) : "",
+    plot_rear_width: project.plotRearWidth ? metresToFeet(project.plotRearWidth) : "",
     setback_front: metresToFeet(project.setbackFront),
     setback_rear: metresToFeet(project.setbackRear),
     setback_left: metresToFeet(project.setbackLeft),
@@ -173,8 +180,24 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
         },
         body: JSON.stringify({
           name: form.name,
+          plot_shape: form.plot_shape,
           plot_length: feetToMetres(form.plot_length),
-          plot_width: feetToMetres(form.plot_width),
+          plot_width:
+            form.plot_shape === "trapezoid"
+              ? feetToMetres(
+                  String(
+                    Math.max(
+                      parseFloat(form.plot_front_width) || 0,
+                      parseFloat(form.plot_rear_width) || 0
+                    )
+                  )
+                )
+              : feetToMetres(form.plot_width),
+          plot_front_width:
+            form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null,
+          plot_rear_width:
+            form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null,
+          plot_side_offset: 0,
           setback_front: feetToMetres(form.setback_front),
           setback_rear: feetToMetres(form.setback_rear),
           setback_left: feetToMetres(form.setback_left),
@@ -233,9 +256,38 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
         {/* ── 2. Plot & city ────────────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
           <Section num="2" title="Plot Dimensions" />
+
+          {/* Plot shape selector */}
+          <div className="flex flex-col gap-1.5">
+            <Label>Plot shape</Label>
+            <div className="flex gap-3">
+              {(
+                [
+                  { value: "rectangular", label: "Rectangular", desc: "Standard 4-sided plot" },
+                  { value: "trapezoid", label: "Trapezoid", desc: "Different front & rear widths" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => set("plot_shape", opt.value)}
+                  className={[
+                    "flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
+                    form.plot_shape === opt.value
+                      ? "border-[#f97316] bg-[#f97316]/5 ring-1 ring-[#f97316]"
+                      : "border-border bg-background hover:bg-muted",
+                  ].join(" ")}
+                >
+                  <span className="font-medium">{opt.label}</span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="plot_length">Length (feet)</Label>
+              <Label htmlFor="plot_length">Length / Depth (feet)</Label>
               <Input
                 id="plot_length"
                 type="number"
@@ -246,19 +298,61 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                 onChange={(e) => set("plot_length", e.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="plot_width">Width (feet)</Label>
-              <Input
-                id="plot_width"
-                type="number"
-                min="16"
-                step="0.1"
-                required
-                value={form.plot_width}
-                onChange={(e) => set("plot_width", e.target.value)}
-              />
-            </div>
+            {form.plot_shape === "rectangular" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="plot_width">Width (feet)</Label>
+                <Input
+                  id="plot_width"
+                  type="number"
+                  min="16"
+                  step="0.1"
+                  required
+                  value={form.plot_width}
+                  onChange={(e) => set("plot_width", e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <Label className="invisible text-xs">spacer</Label>
+                <p className="flex h-9 items-center text-xs text-muted-foreground">
+                  Enter front &amp; rear widths below
+                </p>
+              </div>
+            )}
           </div>
+
+          {form.plot_shape === "trapezoid" && (
+            <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="plot_front_width">Front Width (feet)</Label>
+                <Input
+                  id="plot_front_width"
+                  type="number"
+                  min="10"
+                  step="0.1"
+                  placeholder="30"
+                  required
+                  value={form.plot_front_width}
+                  onChange={(e) => set("plot_front_width", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Road-facing side</p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="plot_rear_width">Rear Width (feet)</Label>
+                <Input
+                  id="plot_rear_width"
+                  type="number"
+                  min="10"
+                  step="0.1"
+                  placeholder="25"
+                  required
+                  value={form.plot_rear_width}
+                  onChange={(e) => set("plot_rear_width", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Opposite side</p>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="city">City / Compliance rules</Label>
             <Select id="city" value={form.city} onChange={(e) => set("city", e.target.value)}>

@@ -85,14 +85,23 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <div className="flex flex-wrap gap-6 rounded-xl border bg-muted/40 px-5 py-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Plot size
+            Plot size{project.plotShape === "trapezoid" ? " (Trapezoid)" : ""}
           </p>
-          <p className="mt-0.5 font-medium">
-            {lengthFt} × {widthFt} ft
-          </p>
-          <p className="text-xs text-muted-foreground">
-            ({project.plotLength} × {project.plotWidth} m)
-          </p>
+          {project.plotShape === "trapezoid" && project.plotFrontWidth && project.plotRearWidth ? (
+            <p className="mt-0.5 font-medium">
+              {lengthFt} ft deep · Front {metresToFeet(project.plotFrontWidth)} ft · Rear{" "}
+              {metresToFeet(project.plotRearWidth)} ft
+            </p>
+          ) : (
+            <>
+              <p className="mt-0.5 font-medium">
+                {lengthFt} × {widthFt} ft
+              </p>
+              <p className="text-xs text-muted-foreground">
+                ({project.plotLength} × {project.plotWidth} m)
+              </p>
+            </>
+          )}
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -151,6 +160,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         northDirection={project.northDirection}
         projectId={id}
         planTier={planTier}
+        plotShape={project.plotShape}
+        plotFrontWidth={project.plotFrontWidth ? parseFloat(project.plotFrontWidth) : undefined}
+        plotRearWidth={project.plotRearWidth ? parseFloat(project.plotRearWidth) : undefined}
       />
     </main>
   );

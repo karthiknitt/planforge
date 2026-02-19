@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
+import { SectionViewSVG } from "@/components/section-view-svg";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import type { GenerateResponse } from "@/lib/layout-types";
@@ -46,6 +47,9 @@ interface LayoutViewerProps {
   northDirection: string;
   projectId: string;
   planTier: string;
+  plotShape?: string;
+  plotFrontWidth?: number;
+  plotRearWidth?: number;
 }
 
 export function LayoutViewer({
@@ -55,11 +59,14 @@ export function LayoutViewer({
   roadSide,
   projectId,
   planTier,
+  plotShape,
+  plotFrontWidth,
+  plotRearWidth,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const [selectedId, setSelectedId] = useState("A");
   const [floor, setFloor] = useState(0);
-  const [activeTab, setActiveTab] = useState<"plan" | "boq">("plan");
+  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq">("plan");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -218,9 +225,9 @@ export function LayoutViewer({
         )}
       </div>
 
-      {/* Tabs: Floor Plan | BOQ */}
+      {/* Tabs: Floor Plan | Section | BOQ */}
       <div className="flex gap-1 rounded-lg border border-border bg-muted p-1 w-fit">
-        {(["plan", "boq"] as const).map((tab) => (
+        {(["plan", "section", "boq"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -230,7 +237,7 @@ export function LayoutViewer({
               activeTab === tab ? "bg-background shadow-sm" : "hover:bg-background/50",
             ].join(" ")}
           >
-            {tab === "plan" ? "Floor Plan" : "BOQ"}
+            {tab === "plan" ? "Floor Plan" : tab === "section" ? "Section View" : "BOQ"}
           </button>
         ))}
       </div>
@@ -260,6 +267,9 @@ export function LayoutViewer({
             plotLength={plotLength}
             roadSide={roadSide}
             className="max-w-xl rounded-xl border"
+            plotShape={plotShape}
+            plotFrontWidth={plotFrontWidth}
+            plotRearWidth={plotRearWidth}
           />
 
           {/* Room legend */}
@@ -272,6 +282,24 @@ export function LayoutViewer({
                 <span className="text-xs text-muted-foreground">{TYPE_LABELS[type] ?? type}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "section" && (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Parametric section through the building. Dimensions are standard for G+1 Indian
+            residential construction.
+          </p>
+          <SectionViewSVG buildingWidth={plotWidth} className="max-w-xl rounded-xl border" />
+          <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-2 gap-1 sm:grid-cols-3">
+            <span>Floor height: 3.0 m (GF & FF)</span>
+            <span>Slab thickness: 150 mm (RCC)</span>
+            <span>Parapet: 1.0 m above roof</span>
+            <span>External wall: 230 mm brick</span>
+            <span>Foundation: 600 mm below GL</span>
+            <span>Stair: 17R × 175 mm riser</span>
           </div>
         </div>
       )}

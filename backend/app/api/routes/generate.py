@@ -47,9 +47,14 @@ async def generate_layouts(
         city=getattr(project, "city", "other") or "other",
         vastu_enabled=getattr(project, "vastu_enabled", False) or False,
         road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
+        road_side=getattr(project, "road_side", "S") or "S",
         has_pooja=getattr(project, "has_pooja", False) or False,
         has_study=getattr(project, "has_study", False) or False,
         has_balcony=getattr(project, "has_balcony", False) or False,
+        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
+        plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
+        plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
+        plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
     )
 
     layouts = generate(cfg)

@@ -27,7 +27,17 @@ POOJA_D = 1.5   # pooja room depth
 STUDY_W = 2.5   # study room minimum width
 
 
+def _trapezoid_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    usable_width = min(cfg.plot_front_width, cfg.plot_rear_width) - cfg.setback_left - cfg.setback_right - 2 * ewt
+    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    ox = cfg.setback_left + ewt
+    oy = cfg.setback_front + ewt
+    return FloorPlate(ox=ox, oy=oy, width=usable_width, depth=depth)
+
+
 def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    if cfg.plot_shape == "trapezoid" and cfg.plot_front_width > 0 and cfg.plot_rear_width > 0:
+        return _trapezoid_floor_plate(cfg, ewt)
     ox    = cfg.setback_left  + ewt
     oy    = cfg.setback_front + ewt
     width = cfg.plot_width  - cfg.setback_left  - cfg.setback_right  - 2 * ewt

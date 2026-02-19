@@ -329,6 +329,9 @@ interface FloorPlanSVGProps {
   roadSide?: string;
   northDirection?: string;
   className?: string;
+  plotShape?: string;
+  plotFrontWidth?: number;
+  plotRearWidth?: number;
 }
 
 export function FloorPlanSVG({
@@ -337,6 +340,9 @@ export function FloorPlanSVG({
   plotLength,
   roadSide = "S",
   className,
+  plotShape,
+  plotFrontWidth,
+  plotRearWidth,
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -421,16 +427,40 @@ export function FloorPlanSVG({
       </text>
 
       {/* Plot boundary (dashed) */}
-      <rect
-        x={originX}
-        y={originY}
-        width={drawW}
-        height={drawH}
-        fill="white"
-        stroke="#CBD5E1"
-        strokeWidth={1}
-        strokeDasharray="5 3"
-      />
+      {plotShape === "trapezoid" && plotFrontWidth && plotRearWidth ? (
+        (() => {
+          const fw = plotFrontWidth * scale;
+          const rw = plotRearWidth * scale;
+          const fOffset = originX + (drawW - fw) / 2;
+          const rOffset = originX + (drawW - rw) / 2;
+          const points = [
+            `${fOffset},${originY + drawH}`,
+            `${fOffset + fw},${originY + drawH}`,
+            `${rOffset + rw},${originY}`,
+            `${rOffset},${originY}`,
+          ].join(" ");
+          return (
+            <polygon
+              points={points}
+              fill="white"
+              stroke="#CBD5E1"
+              strokeWidth={1}
+              strokeDasharray="5 3"
+            />
+          );
+        })()
+      ) : (
+        <rect
+          x={originX}
+          y={originY}
+          width={drawW}
+          height={drawH}
+          fill="white"
+          stroke="#CBD5E1"
+          strokeWidth={1}
+          strokeDasharray="5 3"
+        />
+      )}
 
       {/* ── Room fills ─────────────────────────────────────────────────── */}
       {rooms.map((room) => {

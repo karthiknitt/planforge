@@ -49,6 +49,13 @@ class Project(Base):
     has_balcony: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
                                                server_default=text("false"))
 
+    # Trapezoid plot support
+    plot_shape:       Mapped[str]            = mapped_column(String(20), default="rectangular",
+                                                              nullable=False, server_default="rectangular")
+    plot_front_width: Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
+    plot_rear_width:  Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
+    plot_side_offset: Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
+
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[DateTime] = mapped_column(

@@ -65,9 +65,14 @@ class PlotConfig:
     city: str = "other"
     vastu_enabled: bool = False
     road_width_m: float = 9.0
+    road_side: str = "S"
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
+    plot_shape: str = "rectangular"       # "rectangular" | "trapezoid"
+    plot_front_width: float = 0.0         # front edge width (m), trapezoid only
+    plot_rear_width: float = 0.0          # rear edge width (m), trapezoid only
+    plot_side_offset: float = 0.0         # rear offset from front left (m)
 
     @property
     def bhk(self) -> int:

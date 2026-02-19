@@ -28,6 +28,10 @@ class ProjectCreate(BaseModel):
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
+    plot_shape: str = "rectangular"
+    plot_front_width: float | None = None
+    plot_rear_width: float | None = None
+    plot_side_offset: float | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -49,6 +53,10 @@ class ProjectUpdate(BaseModel):
     has_pooja: bool | None = None
     has_study: bool | None = None
     has_balcony: bool | None = None
+    plot_shape: str | None = None
+    plot_front_width: float | None = None
+    plot_rear_width: float | None = None
+    plot_side_offset: float | None = None
 
 
 class ProjectRead(BaseModel):
@@ -72,6 +80,10 @@ class ProjectRead(BaseModel):
     has_pooja: bool
     has_study: bool
     has_balcony: bool
+    plot_shape: str = "rectangular"
+    plot_front_width: float | None = None
+    plot_rear_width: float | None = None
+    plot_side_offset: float | None = None
     created_at: datetime
     updated_at: datetime
 

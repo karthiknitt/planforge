@@ -68,6 +68,12 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     min_wc_w    = rules["min_toilet_width_m"]
     min_stair_w = rules["min_stair_width_mm"] / 1000
 
+    min_living     = rules.get("min_living_sqm", 9.5)
+    min_living_w   = rules.get("min_living_width_m", 2.4)
+    min_win_ratio  = rules.get("min_window_to_floor_ratio", 0.1)
+    min_bath_vent  = rules.get("min_bath_ventilation_sqm", 0.37)
+    min_kit_win    = rules.get("min_kitchen_window_sqm", 1.0)
+
     for room in all_rooms:
         if room.type == "bedroom":
             if room.area < min_bed:
@@ -79,6 +85,26 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                     f"{room.name}: width {min(room.width, room.depth):.2f} m "
                     f"< {min_bed_w} m recommended (NBC 2.4 m habitable)"
                 )
+            # Ventilation — 1/10th floor area
+            req_win = round(room.area * min_win_ratio, 2)
+            warnings.append(
+                f"{room.name}: provide ≥ {req_win} sqm window opening for ventilation (NBC 1/10th rule)"
+            )
+
+        if room.type == "living":
+            if room.area < min_living:
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm < {min_living} sqm recommended (NBC habitable room)"
+                )
+            if min(room.width, room.depth) < min_living_w:
+                warnings.append(
+                    f"{room.name}: minimum dimension {min(room.width, room.depth):.2f} m "
+                    f"< {min_living_w} m recommended"
+                )
+            req_win = round(room.area * min_win_ratio, 2)
+            warnings.append(
+                f"{room.name}: provide ≥ {req_win} sqm window opening for ventilation (NBC 1/10th rule)"
+            )
 
         if room.type == "kitchen":
             if room.area < min_kit:
@@ -90,6 +116,9 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                     f"{room.name}: width {min(room.width, room.depth):.2f} m "
                     f"< {min_kit_w} m recommended (NBC)"
                 )
+            warnings.append(
+                f"{room.name}: provide ≥ {min_kit_win} sqm direct external window opening (NBC kitchen ventilation)"
+            )
 
         if room.type == "toilet":
             if room.area < min_wc:
@@ -101,6 +130,9 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                     f"{room.name}: width {min(room.width, room.depth):.2f} m "
                     f"< {min_wc_w} m recommended (NBC)"
                 )
+            warnings.append(
+                f"{room.name}: provide ≥ {min_bath_vent} sqm ventilation opening (NBC bath ventilation)"
+            )
 
     # --- Staircase width ---
     for room in all_rooms:
@@ -156,14 +188,13 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
         if room.y < min_y - tol or room.y + room.depth > max_y + tol:
             violations.append(f"{room.name} extends outside vertical setback boundary")
 
-    # --- Window/ventilation warnings (informational only) ---
-    min_win_ratio = rules.get("min_window_to_floor_ratio", 0.1)
+    # --- Study/dining ventilation warnings ---
     for room in all_rooms:
-        if room.type in ("bedroom", "living", "study", "dining"):
-            required_win = room.area * min_win_ratio
+        if room.type in ("study", "dining"):
+            req_win = round(room.area * min_win_ratio, 2)
             warnings.append(
-                f"{room.name}: provide ≥ {required_win:.2f} sqm window opening (NBC 1/10th floor area)"
-            ) if room.area < 10 else None  # only warn for small rooms as a hint
+                f"{room.name}: provide ≥ {req_win} sqm window opening (NBC 1/10th rule)"
+            )
 
     return ComplianceResult(
         passed=len(violations) == 0,
