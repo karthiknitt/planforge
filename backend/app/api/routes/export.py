@@ -12,8 +12,15 @@ from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.models.project import Project
+from app.models.user import User
 
 router = APIRouter()
+
+
+async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
+    result = await db.execute(select(User).where(User.id == user_id))
+    u = result.scalar_one_or_none()
+    return u.plan_tier if u else "free"
 
 
 def _to_float(v) -> float:
@@ -93,6 +100,10 @@ async def export_dxf(
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    plan = await _get_plan_tier(user_id, db)
+    if plan not in ("basic", "pro"):
+        raise HTTPException(status_code=402, detail="DXF export requires Basic or Pro plan.")
+
     try:
         import ezdxf
     except ImportError:
@@ -260,6 +271,9 @@ async def export_boq(
     boq = engine.calculate(layout, cfg, project_name=project.name)
 
     if fmt == "excel":
+        plan = await _get_plan_tier(user_id, db)
+        if plan != "pro":
+            raise HTTPException(status_code=402, detail="BOQ Excel export requires Pro plan.")
         return _boq_excel_response(boq, project_id, layout_id)
 
     import json

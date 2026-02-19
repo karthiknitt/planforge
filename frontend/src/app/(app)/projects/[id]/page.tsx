@@ -5,7 +5,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
-import { project as projectTable } from "@/db/schema";
+import { project as projectTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import type { GenerateResponse } from "@/lib/layout-types";
 import { LayoutViewer } from "./layout-viewer";
@@ -55,6 +55,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const project = rows[0];
 
   if (!project || project.userId !== session.user.id) notFound();
+
+  const userRows = await db
+    .select({ planTier: userTable.planTier })
+    .from(userTable)
+    .where(eq(userTable.id, session.user.id))
+    .limit(1);
+  const planTier = userRows[0]?.planTier ?? "free";
 
   const generateData = await fetchLayouts(id, session.user.id);
 
@@ -143,6 +150,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         roadSide={project.roadSide}
         northDirection={project.northDirection}
         projectId={id}
+        planTier={planTier}
       />
     </main>
   );

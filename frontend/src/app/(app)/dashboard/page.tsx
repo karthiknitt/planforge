@@ -1,8 +1,11 @@
+import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { db } from "@/db";
+import { user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -41,12 +44,52 @@ export default async function DashboardPage() {
 
   const projects = await fetchProjects(session.user.id);
 
+  const userRows = await db
+    .select({ planTier: userTable.planTier })
+    .from(userTable)
+    .where(eq(userTable.id, session.user.id))
+    .limit(1);
+  const planTier = userRows[0]?.planTier ?? "free";
+
+  const TIER_BADGE = {
+    free: {
+      label: "Free",
+      className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    },
+    basic: {
+      label: "Basic",
+      className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+    },
+    pro: {
+      label: "Pro",
+      className: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    },
+  };
+  const badge = TIER_BADGE[planTier as keyof typeof TIER_BADGE] ?? TIER_BADGE.free;
+
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Welcome, {session.user.name}</h1>
-          <p className="mt-1 text-muted-foreground">Your floor plan projects</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold">Welcome, {session.user.name}</h1>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}>
+              {badge.label}
+            </span>
+          </div>
+          <p className="mt-1 text-muted-foreground">
+            Your floor plan projects
+            {planTier === "free" && (
+              <>
+                {" "}
+                ·{" "}
+                <Link href="/pricing" className="text-foreground underline underline-offset-4">
+                  Upgrade
+                </Link>{" "}
+                for DXF + BOQ Excel
+              </>
+            )}
+          </p>
         </div>
         <Button asChild>
           <Link href="/projects/new">+ New project</Link>

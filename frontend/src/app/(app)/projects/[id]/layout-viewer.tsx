@@ -1,5 +1,7 @@
 "use client";
 
+import { Lock } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
@@ -43,6 +45,7 @@ interface LayoutViewerProps {
   roadSide: string;
   northDirection: string;
   projectId: string;
+  planTier: string;
 }
 
 export function LayoutViewer({
@@ -51,6 +54,7 @@ export function LayoutViewer({
   plotLength,
   roadSide,
   projectId,
+  planTier,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const [selectedId, setSelectedId] = useState("A");
@@ -147,15 +151,24 @@ export function LayoutViewer({
           >
             {downloadingPdf ? "…" : "PDF"}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDownload("dxf")}
-            disabled={downloadingDxf || !session}
-            title="DXF for AutoCAD / DraftSight"
-          >
-            {downloadingDxf ? "…" : "DXF"}
-          </Button>
+          {planTier === "free" ? (
+            <Button variant="outline" size="sm" asChild title="Upgrade to Basic for DXF export">
+              <Link href="/pricing">
+                <Lock className="h-3 w-3 mr-1.5" />
+                DXF
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDownload("dxf")}
+              disabled={downloadingDxf || !session}
+              title="DXF for AutoCAD / DraftSight"
+            >
+              {downloadingDxf ? "…" : "DXF"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -263,7 +276,9 @@ export function LayoutViewer({
         </div>
       )}
 
-      {activeTab === "boq" && <BOQViewer projectId={projectId} layoutId={selectedId} />}
+      {activeTab === "boq" && (
+        <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
+      )}
     </div>
   );
 }

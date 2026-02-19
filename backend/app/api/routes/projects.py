@@ -1,14 +1,21 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.project import Project
+from app.models.user import User
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 
 router = APIRouter()
+
+
+async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
+    result = await db.execute(select(User).where(User.id == user_id))
+    u = result.scalar_one_or_none()
+    return u.plan_tier if u else "free"
 
 
 def get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
@@ -22,6 +29,17 @@ async def create_project(
     user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Project:
+    plan = await _get_plan_tier(user_id, db)
+    if plan == "free":
+        count_result = await db.execute(
+            select(func.count(Project.id)).where(Project.user_id == user_id)
+        )
+        if count_result.scalar_one() >= 3:
+            raise HTTPException(
+                status_code=402,
+                detail="Free plan limited to 3 projects. Upgrade to Basic or Pro.",
+            )
+
     project = Project(
         id=str(uuid.uuid4()),
         user_id=user_id,

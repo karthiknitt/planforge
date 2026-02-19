@@ -1,6 +1,7 @@
 import { CheckCircle, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PricingCheckoutButton } from "@/components/pricing-checkout-button";
 import {
   Accordion,
   AccordionContent,
@@ -15,7 +16,16 @@ export const metadata: Metadata = {
   description: "Simple, transparent pricing for PlanForge floor plan generator.",
 };
 
-const plans = [
+const plans: Array<{
+  name: string;
+  price: string;
+  period: string;
+  tagline: string;
+  highlight: boolean;
+  cta: string;
+  checkoutPlan: "basic" | "pro" | null;
+  features: Array<{ text: string; included: boolean }>;
+}> = [
   {
     name: "Free",
     price: "₹0",
@@ -23,6 +33,7 @@ const plans = [
     tagline: "Try it out, no commitment.",
     highlight: false,
     cta: "Get Started Free",
+    checkoutPlan: null,
     features: [
       { text: "3 saved projects", included: true },
       { text: "All 5 layout archetypes", included: true },
@@ -39,7 +50,8 @@ const plans = [
     period: "/month",
     tagline: "For active builders and designers.",
     highlight: true,
-    cta: "Subscribe",
+    cta: "Subscribe ₹499/mo",
+    checkoutPlan: "basic",
     features: [
       { text: "Unlimited saved projects", included: true },
       { text: "All 5 layout archetypes", included: true },
@@ -56,7 +68,8 @@ const plans = [
     period: "/month",
     tagline: "For professionals delivering to clients.",
     highlight: false,
-    cta: "Subscribe",
+    cta: "Subscribe ₹999/mo",
+    checkoutPlan: "pro",
     features: [
       { text: "Unlimited saved projects", included: true },
       { text: "All 5 layout archetypes", included: true },
@@ -153,17 +166,19 @@ export default function PricingPage() {
 
                 {/* CTA */}
                 <div className="mt-auto pt-2">
-                  <Link href="/sign-up" className="block">
-                    <Button
-                      className={`w-full font-bold ${
-                        plan.highlight
-                          ? "bg-[#f97316] hover:bg-[#ea6c0a] text-white"
-                          : "bg-[#1e3a5f] hover:bg-[#162d4a] text-white"
-                      }`}
-                    >
-                      {plan.cta}
-                    </Button>
-                  </Link>
+                  {plan.checkoutPlan ? (
+                    <PricingCheckoutButton
+                      plan={plan.checkoutPlan}
+                      label={plan.cta}
+                      highlight={plan.highlight}
+                    />
+                  ) : (
+                    <Link href="/sign-up" className="block">
+                      <Button className="w-full font-bold bg-[#1e3a5f] hover:bg-[#162d4a] text-white">
+                        {plan.cta}
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </CardContent>
             </Card>

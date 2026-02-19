@@ -19,9 +19,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-3">
             {session && (
               <>
-                <span className="hidden sm:block text-sm text-muted-foreground">
+                <Link
+                  href="/account"
+                  className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
                   {session.user.email}
-                </span>
+                </Link>
                 <SignOutButton />
               </>
             )}

@@ -1,5 +1,7 @@
 "use client";
 
+import { Lock } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import type { BOQResponse } from "@/lib/layout-types";
@@ -7,9 +9,10 @@ import type { BOQResponse } from "@/lib/layout-types";
 interface BOQViewerProps {
   projectId: string;
   layoutId: string;
+  planTier?: string;
 }
 
-export function BOQViewer({ projectId, layoutId }: BOQViewerProps) {
+export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerProps) {
   const { data: session } = useSession();
   const [boq, setBOQ] = useState<BOQResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,14 +86,25 @@ export function BOQViewer({ projectId, layoutId }: BOQViewerProps) {
         <p className="text-sm font-medium text-muted-foreground">
           Approximate quantities for Layout {boq.layout_id}
         </p>
-        <button
-          type="button"
-          onClick={downloadExcel}
-          disabled={downloading}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 transition-colors"
-        >
-          {downloading ? "Downloading…" : "Export Excel"}
-        </button>
+        {planTier === "pro" ? (
+          <button
+            type="button"
+            onClick={downloadExcel}
+            disabled={downloading}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 transition-colors"
+          >
+            {downloading ? "Downloading…" : "Export Excel"}
+          </button>
+        ) : (
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+            title="Upgrade to Pro for Excel export"
+          >
+            <Lock className="h-3 w-3" />
+            Export Excel
+          </Link>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border">

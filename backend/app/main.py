@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import export, generate, health, projects
+from app.api.routes import export, generate, health, payments, projects
 
 app = FastAPI(title="PlanForge API", version="0.1.0")
 
@@ -17,3 +17,4 @@ app.include_router(health.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(generate.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
+app.include_router(payments.router, prefix="/api")
