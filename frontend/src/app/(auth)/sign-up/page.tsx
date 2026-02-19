@@ -1,5 +1,6 @@
 "use client";
 
+import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -42,61 +43,67 @@ export default function SignUpPage() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle className="text-2xl">PlanForge</CardTitle>
-        <CardDescription>Create your account</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="name">Full name</Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="Ravi Kumar"
-              autoComplete="name"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating account…" : "Create account"}
-          </Button>
-        </form>
-      </CardContent>
-      <CardFooter className="justify-center text-sm text-muted-foreground">
-        Already have an account?&nbsp;
-        <Link href="/sign-in" className="text-foreground underline underline-offset-4">
-          Sign in
-        </Link>
-      </CardFooter>
-    </Card>
+    <div className="flex flex-col items-center">
+      <div className="flex items-center gap-2 mb-6">
+        <Building2 className="h-8 w-8 text-[#1e3a5f]" />
+        <span className="text-2xl font-bold text-[#1e3a5f]">PlanForge</span>
+      </div>
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-2xl">PlanForge</CardTitle>
+          <CardDescription>Create your account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="name">Full name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Ravi Kumar"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating account…" : "Create account"}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="justify-center text-sm text-muted-foreground">
+          Already have an account?&nbsp;
+          <Link href="/sign-in" className="text-foreground underline underline-offset-4">
+            Sign in
+          </Link>
+        </CardFooter>
+      </Card>
+    </div>
   );
 }

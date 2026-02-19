@@ -38,3 +38,27 @@ export interface GenerateResponse {
   project_id: string;
   layouts: LayoutData[];
 }
+
+export interface BOQItem {
+  item: string;
+  description: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface BOQResponse {
+  project_name: string;
+  layout_id: string;
+  items: BOQItem[];
+}
+
+export const CITIES = [
+  { value: "other", label: "Other / NBC Defaults" },
+  { value: "bangalore", label: "Bangalore (BBMP)" },
+  { value: "chennai", label: "Chennai (CMDA)" },
+  { value: "delhi", label: "Delhi (DDA/MCD)" },
+  { value: "hyderabad", label: "Hyderabad (GHMC)" },
+  { value: "pune", label: "Pune (PMC)" },
+] as const;
+
+export type CityValue = (typeof CITIES)[number]["value"];

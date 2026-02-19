@@ -13,8 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PlanForge",
-  description: "Automated floor plan generator for Indian home builders",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://planforge.in"),
+  title: { default: "PlanForge", template: "%s — PlanForge" },
+  description:
+    "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 5 layout variations, PDF & DXF export.",
+  openGraph: {
+    type: "website",
+    siteName: "PlanForge",
+    images: ["/opengraph-image"],
+  },
+  twitter: { card: "summary_large_image" },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
