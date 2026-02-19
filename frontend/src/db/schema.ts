@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -73,9 +73,49 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)]
 );
 
+export const project = pgTable(
+  "project",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // Plot dimensions in metres
+    plotLength: numeric("plot_length", { precision: 6, scale: 2 }).notNull(),
+    plotWidth: numeric("plot_width", { precision: 6, scale: 2 }).notNull(),
+    // Setbacks in metres
+    setbackFront: numeric("setback_front", { precision: 5, scale: 2 }).notNull(),
+    setbackRear: numeric("setback_rear", { precision: 5, scale: 2 }).notNull(),
+    setbackLeft: numeric("setback_left", { precision: 5, scale: 2 }).notNull(),
+    setbackRight: numeric("setback_right", { precision: 5, scale: 2 }).notNull(),
+    // Orientation — N, S, E, W
+    roadSide: text("road_side").notNull(),
+    northDirection: text("north_direction").notNull(),
+    // Configuration
+    bhk: integer("bhk").notNull(),
+    toilets: integer("toilets").notNull(),
+    parking: boolean("parking").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("project_userId_idx").on(table.userId)]
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  projects: many(project),
+}));
+
+export const projectRelations = relations(project, ({ one }) => ({
+  user: one(user, {
+    fields: [project.userId],
+    references: [user.id],
+  }),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

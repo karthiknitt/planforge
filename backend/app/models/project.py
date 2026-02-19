@@ -1,0 +1,38 @@
+import uuid
+
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
+from sqlalchemy.types import DateTime
+
+from app.db import Base
+
+
+class Project(Base):
+    __tablename__ = "project"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Plot dimensions (metres)
+    plot_length: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+    plot_width: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+
+    # Setbacks (metres)
+    setback_front: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    setback_rear: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    setback_left: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    setback_right: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+
+    # Orientation
+    road_side: Mapped[str] = mapped_column(String(1), nullable=False)
+    north_direction: Mapped[str] = mapped_column(String(1), nullable=False)
+
+    # Configuration
+    bhk: Mapped[int] = mapped_column(Integer, nullable=False)
+    toilets: Mapped[int] = mapped_column(Integer, nullable=False)
+    parking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
