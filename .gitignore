@@ -30,8 +30,8 @@ Thumbs.db
 .idea/
 *.swp
 
-# Docker volumes
-postgres_data/
+# Docker data (bind-mounted postgres data directory)
+data/
 
 # Dev server runtime files
 .dev.pids

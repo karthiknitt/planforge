@@ -1,6 +1,7 @@
 import { Building2 } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "./dashboard/sign-out-button";
 
@@ -15,14 +16,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Building2 className="h-5 w-5 text-[#1e3a5f]" />
             <span className="font-bold text-[#1e3a5f]">PlanForge</span>
           </Link>
-          {session && (
-            <div className="flex items-center gap-3">
-              <span className="hidden sm:block text-sm text-muted-foreground">
-                {session.user.email}
-              </span>
-              <SignOutButton />
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {session && (
+              <>
+                <span className="hidden sm:block text-sm text-muted-foreground">
+                  {session.user.email}
+                </span>
+                <SignOutButton />
+              </>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       <div className="flex-1">{children}</div>
