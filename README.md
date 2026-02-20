@@ -1,14 +1,14 @@
 # PlanForge
 
-> G+1 residential floor plan generator for Indian small builders and civil engineers.
+> CAD-grade G+1 residential floor plan generator for Indian small builders and civil engineers.
 
-PlanForge takes a rectangular plot's dimensions, setbacks, and room configuration, and instantly produces three compliant layout variations — with a downloadable, print-ready PDF drawing for each.
+PlanForge takes a plot's dimensions, setbacks, and room configuration and instantly generates three compliant layout variations — complete with SVG preview, section view, Bill of Quantities, PDF drawing, and DXF export.
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.129-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-21%20passed-22c55e)
+![Tests](https://img.shields.io/badge/backend%20tests-21%20passed-22c55e)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
@@ -24,36 +24,70 @@ PlanForge takes a rectangular plot's dimensions, setbacks, and room configuratio
 - [API reference](#api-reference)
 - [Running tests](#running-tests)
 - [Compliance rules](#compliance-rules)
+- [Pricing plans](#pricing-plans)
 - [Roadmap](#roadmap)
 
 ---
 
 ## Features
 
-- **Three layout archetypes** — Front staircase, Centre staircase, Rear staircase — generated deterministically from plot inputs
-- **Indian building compliance** — validates bedroom, kitchen, and toilet minimum areas; stair width; setbacks; and floor coverage percentage
-- **Structural column grid** — columns placed at outer corners, staircase core, and major wall intersections; beam span warnings at > 4.5 m
-- **SVG floor plan preview** — interactive browser preview with colour-coded rooms and a north arrow
-- **PDF export** — two-page A4 drawing (ground floor + first floor) with room labels, area annotations, dimension callouts, north arrow, scale bar, and title block
-- **Project management** — save and retrieve multiple projects per account
-- **Auth** — email/password sign-up and sign-in via Better Auth
+### Layout & Planning
+- **Three layout archetypes** — Front staircase (A), Centre staircase (B), Rear staircase (C), generated deterministically from plot inputs
+- **Rectangular and trapezoid plots** — supports standard rectangular and trapezoidal plots with differing front/rear widths
+- **2BHK and 3BHK** — user selects bedroom count, number of toilets, and parking
+- **Plot input in feet** — all dimensions entered in feet; automatically converted to metres internally with 3-decimal precision
+
+### Compliance Engine
+- Indian building compliance: bedroom ≥ 9.5 m², kitchen ≥ 7 m², toilet ≥ 3 m², stair width ≥ 900 mm
+- Floor coverage percentage (FAR) validation
+- Setback enforcement on all four sides
+- Ventilation and kitchen window checks
+- Beam span warnings at > 4.5 m
+- City-specific rule presets (Bangalore, Chennai, Mumbai, Hyderabad)
+- Rules stored in `compliance_rules.json` — adjustable without code changes
+
+### Vastu Shastra Engine
+- 8-zone Vastu analysis (N / NE / E / SE / S / SW / W / NW)
+- Road-side aware room placement scoring
+- Per-room Vastu violations and warnings surfaced in the UI
+
+### CAD-Grade Drawing Output
+- **SVG floor plan preview** — colour-coded rooms, double-line walls (230 mm external / 115 mm internal), door arcs with D-label, window frame symbols with W-delimiters, column markers, dimension lines, scale bar, north arrow
+- **Section view** — parametric 2D section (ground floor, slab, first floor, parapet) with height annotations
+- **PDF export** — two-page A4 drawing (ground + first floor) at 1:100 scale with title block, room labels, dimensions, and north arrow
+- **DXF export** — AutoCAD-compatible with named layers: `WALL_EXT`, `WALL_INT`, `DOORS`, `WINDOWS`, `COLUMNS`, `DIMENSIONS`, `TEXT`
+
+### Bill of Quantities (BOQ)
+- Per-room area breakdown
+- Estimated concrete, brick, and plaster quantities
+- Excel export (Pro plan)
+
+### Product & Auth
+- **Marketing site** — landing page, pricing page, how-it-works walkthrough
+- **Email/password auth** — sign-up, sign-in, sign-out via Better Auth
+- **Project management** — create, edit, save, and regenerate layouts per project
+- **Dark / light mode** — system-aware theme toggle
+- **Razorpay payments** — Basic (₹499/month) and Pro (₹999/month) plans with HMAC-verified webhook
+- **Feature gating** — Free: 3 projects max; Basic: DXF export unlocked; Pro: Excel BOQ export unlocked
+- **Account page** — plan badge, expiry date, upgrade CTA
 
 ---
 
 ## How it works
 
 ```
-Plot inputs  →  Layout engine  →  Compliance check  →  SVG preview  →  PDF export
-(dimensions,    (3 archetypes,     (violations /         (browser)       (download)
- setbacks,       parametric         warnings)
- BHK config)     slicing)
+Plot inputs  →  Layout engine  →  Compliance + Vastu  →  SVG/Section preview  →  PDF / DXF export
+(feet input,    (3 archetypes,      (violations,            (browser, tabs:          (download)
+ setbacks,       parametric          warnings,               Floor Plan |
+ BHK, city)      slicing)            Vastu zones)            Section View | BOQ)
 ```
 
-1. User enters plot dimensions, setbacks, road side, north direction, BHK count, toilets, and parking preference.
-2. The backend layout engine generates three layouts (A / B / C) using deterministic proportional room slicing.
-3. Each layout is checked against compliance rules loaded from `backend/app/config/compliance_rules.json`.
-4. The frontend renders the floor plans as SVG with colour-coded room types.
-5. The user selects a layout and downloads a 2-page PDF drawing.
+1. User enters plot dimensions in feet, setbacks, road side, BHK count, toilets, parking, and city.
+2. Backend generates three layouts using parametric proportional room slicing.
+3. Each layout is validated against compliance rules and Vastu zone rules.
+4. The frontend renders SVG floor plans with CAD-standard wall and door/window symbols.
+5. User switches between Floor Plan, Section View, and BOQ tabs.
+6. User selects a layout and downloads a PDF drawing or DXF file.
 
 ---
 
@@ -63,15 +97,18 @@ Plot inputs  →  Layout engine  →  Compliance check  →  SVG preview  →  P
 |---|---|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | Styling | Tailwind CSS v4, ShadCN UI |
-| Auth | Better Auth (session-based, Drizzle adapter) |
-| Frontend ORM | Drizzle ORM |
+| Auth | Better Auth (session-based, Drizzle adapter, `nextCookies` plugin) |
+| Frontend ORM | Drizzle ORM + drizzle-kit |
 | Backend | FastAPI, Python 3.12 |
 | Layout engine | Pure Python + Shapely |
 | PDF rendering | ReportLab |
+| DXF export | ezdxf |
 | Database | PostgreSQL 16 |
 | Backend ORM | SQLAlchemy (async) + asyncpg |
+| Payments | Razorpay (order creation + HMAC verification) |
 | Linter / formatter | Biome (frontend) |
 | Package managers | npm (frontend), uv (backend) |
+| E2E testing | Playwright (Chromium) |
 | Infrastructure | Docker Compose |
 
 ---
@@ -83,52 +120,69 @@ PlanForge/
 ├── backend/
 │   ├── app/
 │   │   ├── api/routes/
-│   │   │   ├── export.py       # GET /api/projects/{id}/export/pdf
-│   │   │   ├── generate.py     # GET /api/projects/{id}/generate
-│   │   │   ├── health.py       # GET /api/health
-│   │   │   └── projects.py     # CRUD /api/projects
+│   │   │   ├── export.py        # PDF + DXF + BOQ export endpoints
+│   │   │   ├── generate.py      # Layout generation endpoint
+│   │   │   ├── health.py        # Health check
+│   │   │   ├── payments.py      # Razorpay order + verify
+│   │   │   └── projects.py      # CRUD /api/projects
 │   │   ├── config/
 │   │   │   └── compliance_rules.json
 │   │   ├── engine/
-│   │   │   ├── archetypes.py   # Layout A / B / C room placement
-│   │   │   ├── compliance.py   # Rule checker
-│   │   │   ├── generator.py    # Orchestrates all 3 layouts
-│   │   │   ├── models.py       # Dataclasses: Room, Column, FloorPlan, Layout
-│   │   │   └── pdf.py          # ReportLab PDF renderer
+│   │   │   ├── archetypes.py    # Layout A / B / C room placement
+│   │   │   ├── compliance.py    # Rule checker
+│   │   │   ├── dxf.py           # ezdxf DXF renderer
+│   │   │   ├── generator.py     # Orchestrates all 3 layouts + Vastu
+│   │   │   ├── models.py        # Dataclasses: Room, Column, FloorPlan, Layout
+│   │   │   ├── pdf.py           # ReportLab PDF renderer
+│   │   │   └── vastu.py         # Vastu Shastra zone engine
 │   │   ├── models/
-│   │   │   └── project.py      # SQLAlchemy Project model
-│   │   ├── schemas/            # Pydantic I/O schemas
-│   │   ├── db.py               # Async engine + session factory
-│   │   └── main.py             # FastAPI app + router registration
+│   │   │   ├── project.py       # SQLAlchemy Project model
+│   │   │   └── user.py          # SQLAlchemy User model (plan_tier, plan_expires_at)
+│   │   ├── schemas/             # Pydantic I/O schemas
+│   │   ├── db.py                # Async engine + session factory
+│   │   └── main.py              # FastAPI app + router registration + lifespan
 │   ├── tests/
-│   │   ├── conftest.py         # Async client fixture (SQLite in-memory)
-│   │   ├── test_api_e2e.py     # Full workflow API tests (9 tests)
-│   │   ├── test_engine.py      # Layout engine unit tests (10 tests)
-│   │   └── test_health.py      # Health endpoint tests (2 tests)
+│   │   ├── conftest.py          # Async client fixture (SQLite in-memory)
+│   │   ├── test_api_e2e.py      # Full workflow API tests (9 tests)
+│   │   ├── test_engine.py       # Layout engine unit tests (10 tests)
+│   │   └── test_health.py       # Health endpoint tests (2 tests)
 │   └── pyproject.toml
 │
 ├── frontend/
 │   └── src/
 │       ├── app/
-│       │   ├── (app)/           # Authenticated routes
-│       │   │   ├── dashboard/   # Project list
+│       │   ├── (app)/            # Authenticated routes
+│       │   │   ├── account/      # Plan badge, expiry, upgrade CTA
+│       │   │   ├── dashboard/    # Project list with plan badge
 │       │   │   └── projects/
-│       │   │       ├── [id]/    # Project detail + layout viewer
-│       │   │       └── new/     # Create project form
-│       │   ├── (auth)/          # Sign-in / sign-up pages
-│       │   └── api/auth/        # Better Auth Next.js handler
+│       │   │       ├── [id]/     # Layout viewer (Floor Plan | Section View | BOQ)
+│       │   │       ├── [id]/edit # Edit project + regenerate
+│       │   │       └── new/      # Create project form (feet input)
+│       │   ├── (auth)/           # Sign-in / sign-up pages
+│       │   ├── (marketing)/      # Landing, pricing, how-it-works
+│       │   └── api/auth/         # Better Auth Next.js handler
 │       ├── components/
-│       │   ├── floor-plan-svg.tsx   # SVG renderer
-│       │   └── ui/                  # ShadCN components
-│       ├── db/                  # Drizzle schema + client
+│       │   ├── floor-plan-svg.tsx    # SVG renderer (walls, doors, windows, columns)
+│       │   ├── section-view-svg.tsx  # Parametric section view renderer
+│       │   ├── boq-viewer.tsx        # Bill of Quantities table + Excel export
+│       │   ├── layout-viewer.tsx     # Tabbed viewer (Floor Plan | Section | BOQ)
+│       │   ├── pricing-checkout-button.tsx  # Razorpay checkout client component
+│       │   └── ui/               # ShadCN components
+│       ├── db/                   # Drizzle schema + client
+│       ├── proxy.ts              # Next.js 16 route protection
 │       └── lib/
-│           ├── auth.ts          # Better Auth server instance
-│           └── auth-client.ts   # Better Auth browser client
+│           ├── auth.ts           # Better Auth server instance
+│           └── auth-client.ts    # Better Auth browser client
+│
+├── frontend/tests/e2e/           # Playwright E2E tests
+│   ├── auth.setup.ts             # Creates test user, saves session
+│   ├── public-routes.unauth.spec.ts   # 8 unauthenticated tests
+│   └── app-flows.auth.spec.ts         # 9 authenticated tests
 │
 ├── docker-compose.yml
-├── dev-start.sh                 # Start the full dev stack in one command
-├── dev-stop.sh                  # Stop everything cleanly
-└── CLAUDE.md                    # AI coding assistant context
+├── dev-start.sh                  # Start full dev stack in one command
+├── dev-stop.sh                   # Stop everything cleanly
+└── CLAUDE.md                     # AI coding assistant context
 ```
 
 ---
@@ -157,7 +211,13 @@ cd planforge
 cp frontend/.env.local.example frontend/.env.local
 ```
 
-Open `frontend/.env.local` and fill in the values — see [Environment variables](#environment-variables).
+Open `frontend/.env.local` and fill in the required values — see [Environment variables](#environment-variables).
+
+> **Generate a secure auth secret before running:**
+> ```bash
+> npx @better-auth/cli secret
+> # Paste the output as BETTER_AUTH_SECRET in .env.local
+> ```
 
 ### 3. Install dependencies
 
@@ -175,18 +235,15 @@ cd backend && uv sync
 ./dev-start.sh
 ```
 
-This starts PostgreSQL (waits for the health check), then launches the backend and frontend in the background. Process IDs are saved to `.dev.pids`; logs stream to `.dev-logs/`.
+Starts PostgreSQL (waits for health check), then launches the backend and frontend. PIDs saved to `.dev.pids`; logs stream to `.dev-logs/`.
 
 ```bash
-# Watch logs
 tail -f .dev-logs/backend.log
 tail -f .dev-logs/frontend.log
-
-# Stop everything
-./dev-stop.sh
+./dev-stop.sh   # stop everything
 ```
 
-> **First run only** — apply the database schema before starting the frontend:
+> **First run only** — push the Better Auth schema to the database:
 > ```bash
 > cd frontend
 > DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
@@ -194,8 +251,6 @@ tail -f .dev-logs/frontend.log
 > ```
 
 ### 5. Manual start (optional)
-
-If you prefer to run each service yourself:
 
 ```bash
 # 1. Database
@@ -216,8 +271,6 @@ cd frontend && PORT=3001 npm run dev
 | Backend API | http://localhost:8002 |
 | Swagger / OpenAPI docs | http://localhost:8002/docs |
 
-Sign up, create a project, and click **Download PDF** on the project detail page to export a floor plan.
-
 ---
 
 ## Environment variables
@@ -227,57 +280,63 @@ Sign up, create a project, and click **Download PDF** on the project detail page
 | Variable | Description | Example |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL URL for Drizzle (schema migrations) | `postgresql://planforge:planforge@localhost:5432/planforge` |
-| `BETTER_AUTH_SECRET` | Secret key used to sign sessions (min 32 chars) | `change-me-in-production` |
+| `BETTER_AUTH_SECRET` | ≥ 32-char random secret for session signing | run `npx @better-auth/cli secret` |
 | `BETTER_AUTH_URL` | Canonical base URL of the frontend | `http://localhost:3001` |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | Same value, exposed to the browser | `http://localhost:3001` |
 | `NEXT_PUBLIC_API_URL` | FastAPI backend base URL | `http://localhost:8002` |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Razorpay test/live key (optional — payments only) | `rzp_test_...` |
 
-### `backend/.env` (optional)
+### `backend/.env`
 
-| Variable | Description | Default |
-|---|---|---|
-| `DATABASE_URL` | Async PostgreSQL URL for SQLAlchemy | `postgresql+asyncpg://planforge:planforge@localhost:5432/planforge` |
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Async PostgreSQL URL for SQLAlchemy |
+| `RAZORPAY_KEY_ID` | Razorpay key ID (required for payments) |
+| `RAZORPAY_KEY_SECRET` | Razorpay secret (required for payment HMAC verification) |
 
 ---
 
 ## API reference
 
-All endpoints are prefixed with `/api`. The frontend passes the authenticated user's ID via an `X-User-Id` header.
+All endpoints are prefixed with `/api`. Authenticated endpoints require the user's ID in an `X-User-Id` header.
 
 ### Health
 
 ```
-GET /api/health
-→ 200  { "status": "ok" }
+GET  /api/health  →  200  { "status": "ok" }
 ```
 
 ### Projects
 
 ```
-POST /api/projects        Create a project
-GET  /api/projects        List all projects for the authenticated user
+POST /api/projects          Create a project
+GET  /api/projects          List projects for authenticated user
+GET  /api/projects/{id}     Get a single project
+PUT  /api/projects/{id}     Update project inputs
 ```
 
-**Request body for `POST /api/projects`:**
+**POST / PUT body example:**
 
 ```json
 {
   "name": "My Plot",
-  "plot_length": 12.0,
-  "plot_width": 9.0,
-  "setback_front": 1.5,
-  "setback_rear": 1.5,
-  "setback_left": 1.0,
-  "setback_right": 1.0,
+  "plot_length": 12.192,
+  "plot_width": 9.144,
+  "plot_shape": "rectangular",
+  "setback_front": 1.524,
+  "setback_rear": 1.524,
+  "setback_left": 0.914,
+  "setback_right": 0.914,
   "road_side": "S",
-  "north_direction": "N",
   "bhk": 2,
   "toilets": 2,
-  "parking": false
+  "parking": false,
+  "city": "Chennai",
+  "vastu_enabled": true
 }
 ```
 
-`road_side` and `north_direction` accept `"N"`, `"S"`, `"E"`, or `"W"`. `bhk` accepts `2` or `3`.
+`road_side` accepts `"N"`, `"S"`, `"E"`, `"W"`. `bhk` accepts `2` or `3`. `plot_shape` accepts `"rectangular"` or `"trapezoid"`.
 
 ### Layout generation
 
@@ -286,61 +345,76 @@ GET /api/projects/{id}/generate
 → 200  { "project_id": "...", "layouts": [ ... ] }
 ```
 
-Returns all three layouts. Each layout contains `ground_floor` and `first_floor` floor plans (rooms + columns) and a `compliance` result with any violations or warnings.
+Returns all three layouts. Each includes `ground_floor` and `first_floor` (rooms + columns), a `compliance` result, and an optional `vastu` result.
 
-### PDF export
+### Exports
 
 ```
-GET /api/projects/{id}/export/pdf?layout_id=A
-→ 200  application/pdf
+GET /api/projects/{id}/export/pdf?layout_id=A       → application/pdf   (all plans)
+GET /api/projects/{id}/export/dxf?layout_id=A       → application/dxf   (Basic+ plans)
+GET /api/projects/{id}/export/boq?layout_id=A       → application/json  (all plans)
+GET /api/projects/{id}/export/boq/excel?layout_id=A → application/xlsx  (Pro plan)
 ```
 
-`layout_id` accepts `A`, `B`, or `C` (defaults to `A`). The response includes a `Content-Disposition: attachment` header so browsers trigger a file download automatically.
+`layout_id` accepts `A`, `B`, or `C`.
 
-Full interactive API documentation with request/response schemas is available at [`/docs`](http://localhost:8002/docs).
+### Payments
+
+```
+POST /api/payments/order    Create a Razorpay order
+POST /api/payments/verify   Verify HMAC + activate plan tier
+```
+
+Full interactive docs: [`http://localhost:8002/docs`](http://localhost:8002/docs)
 
 ---
 
 ## Running tests
 
-### Backend
+### Backend (21 tests)
 
 ```bash
 cd backend
 uv run pytest tests/ -v
 ```
 
+Uses an in-memory SQLite database via `tests/conftest.py` — no running PostgreSQL needed.
+
+### Frontend E2E tests (Playwright — 17 tests)
+
+Requires the full dev stack running.
+
+```bash
+docker compose up db -d
+cd frontend
+PORT=3001 npm run dev &
+
+npm run test:e2e          # headless Chromium
+npm run test:e2e:ui       # Playwright interactive UI
+npm run test:e2e:debug    # step-through debugger
 ```
-tests/test_api_e2e.py::test_health_check               PASSED
-tests/test_api_e2e.py::test_create_and_list_project    PASSED
-tests/test_api_e2e.py::test_generate_layouts           PASSED
-tests/test_api_e2e.py::test_export_pdf_all_layouts     PASSED
-tests/test_api_e2e.py::test_full_workflow              PASSED
-tests/test_api_e2e.py::test_missing_user_id_returns_422 PASSED
-tests/test_api_e2e.py::test_invalid_layout_id_returns_404 PASSED
-tests/test_api_e2e.py::test_validation_rejects_bad_payload PASSED
-tests/test_api_e2e.py::test_3bhk_project               PASSED
-tests/test_engine.py  (10 tests)                       PASSED
-tests/test_health.py  (2 tests)                        PASSED
 
-21 passed
-```
+**Test suites:**
 
-The e2e tests use an in-memory SQLite database injected via `tests/conftest.py` — no running PostgreSQL is required.
+| Suite | Coverage |
+|---|---|
+| `auth.setup.ts` | Creates E2E test user, saves session cookies |
+| `public-routes.unauth.spec.ts` | Landing/pricing/how-it-works load without auth; /dashboard redirects; wrong credentials error; duplicate sign-up error; short password blocked |
+| `app-flows.auth.spec.ts` | Dashboard loads; auth redirect from /sign-in; account page plan badge; new project form; sign-out; /pricing accessible when logged in |
 
-### Frontend
+### Frontend type check + lint
 
 ```bash
 cd frontend
-npm run lint       # Biome lint
-npx tsc --noEmit   # TypeScript type check
+npx tsc --noEmit
+npm run lint
 ```
 
 ---
 
 ## Compliance rules
 
-Rules are stored in `backend/app/config/compliance_rules.json` and loaded at runtime — adjust thresholds without touching any Python:
+Stored in `backend/app/config/compliance_rules.json`:
 
 ```json
 {
@@ -355,21 +429,37 @@ Rules are stored in `backend/app/config/compliance_rules.json` and loaded at run
 }
 ```
 
-Layouts that fail any rule are flagged with violation messages shown in the UI. Beam span warnings are surfaced separately and do not block a layout.
+City-specific overrides adjust setback and coverage rules per local bylaws. Layouts failing hard rules are rejected; beam span and ventilation issues surface as warnings.
+
+---
+
+## Pricing plans
+
+| Feature | Free | Basic (₹499/mo) | Pro (₹999/mo) |
+|---|---|---|---|
+| Projects | 3 max | Unlimited | Unlimited |
+| Layout generation | ✓ | ✓ | ✓ |
+| SVG + Section View | ✓ | ✓ | ✓ |
+| BOQ (view) | ✓ | ✓ | ✓ |
+| PDF export | ✓ | ✓ | ✓ |
+| DXF / AutoCAD export | ✗ | ✓ | ✓ |
+| BOQ Excel export | ✗ | ✗ | ✓ |
+
+Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `backend/.env` to enable checkout.
 
 ---
 
 ## Roadmap
 
-The current MVP supports rectangular G+1 plots with 2BHK / 3BHK configurations. Planned expansions:
+MVP is shipped. Planned post-launch expansions:
 
-- [ ] Quadrilateral plot support
-- [ ] Vastu compliance toggle
-- [ ] Extended compliance rules (NBC, local bylaws)
+- [ ] Full quadrilateral (arbitrary 4-sided) plot support
+- [ ] Dynamic constraint solver — replace fixed archetypes with adaptive room placement
 - [ ] Arbitrary room counts and custom room names
-- [ ] Dynamic constraint solver (replace fixed archetypes)
-- [ ] DXF / AutoCAD export
-- [ ] Shareable project links
+- [ ] Reinforcement BOQ — steel takeoff for columns, beams, and slabs
+- [ ] Location-aware building bylaw engine — per-city regulation packs
+- [ ] Shareable project links / public plan viewer
+- [ ] Mobile-responsive layout viewer
 
 ---
 

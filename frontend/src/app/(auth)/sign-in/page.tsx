@@ -39,6 +39,7 @@ export default function SignInPage() {
     }
 
     router.push("/dashboard");
+    router.refresh();
   }
 
   return (

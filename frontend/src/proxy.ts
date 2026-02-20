@@ -1,19 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up"];
+// Routes that require an authenticated session
+const PROTECTED_PATHS = ["/dashboard", "/projects", "/account"];
+// Routes that authenticated users should be redirected away from
+const AUTH_PATHS = ["/sign-in", "/sign-up"];
 const SESSION_COOKIE = "better-auth.session_token";
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasSession = request.cookies.has(SESSION_COOKIE);
 
-  // Redirect authenticated users away from auth pages
-  if (hasSession && PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // Authenticated users hitting /sign-in or /sign-up → send to dashboard
+  if (hasSession && AUTH_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Redirect unauthenticated users away from protected pages
-  if (!hasSession && !PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // Unauthenticated users hitting protected app routes → send to sign-in
+  if (!hasSession && PROTECTED_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL("/sign-in", request.url));
   }
 

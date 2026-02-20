@@ -40,6 +40,7 @@ export default function SignUpPage() {
     }
 
     router.push("/dashboard");
+    router.refresh();
   }
 
   return (
