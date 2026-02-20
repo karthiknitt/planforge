@@ -33,7 +33,7 @@ const NORTH_ROTATION: Record<string, number> = { S: 0, N: 180, W: 90, E: 270 };
 function NorthArrow({ x, y, rotation = 0 }: { x: number; y: number; rotation?: number }) {
   return (
     <g transform={`translate(${x},${y})`}>
-      <circle r={14} fill="white" stroke="#94A3B8" strokeWidth={1} />
+      <circle r={14} fill="white" stroke="#94A3B8" strokeWidth={1} className="svg-north-circle" />
       <g transform={`rotate(${rotation})`}>
         <polygon points="0,-10 -4,4 0,1 4,4" fill="#1E293B" />
         <text y={-14} textAnchor="middle" fontSize={9} fill="#64748B" fontFamily="sans-serif">
@@ -398,12 +398,12 @@ export function FloorPlanSVG({
   return (
     <svg
       viewBox={`0 0 ${VP_W} ${VP_H}`}
-      className={className}
+      className={["floor-plan-svg", className].filter(Boolean).join(" ")}
       style={{ width: "100%", height: "auto" }}
       aria-label="Floor plan diagram"
     >
       {/* Background */}
-      <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} />
+      <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
 
       {/* Road strip */}
       <rect
@@ -413,6 +413,7 @@ export function FloorPlanSVG({
         height={ROAD_H}
         fill="#CBD5E1"
         rx={2}
+        className="svg-road"
       />
       <text
         x={originX + drawW / 2}
@@ -446,6 +447,7 @@ export function FloorPlanSVG({
               stroke="#CBD5E1"
               strokeWidth={1}
               strokeDasharray="5 3"
+              className="svg-plot"
             />
           );
         })()
@@ -459,6 +461,7 @@ export function FloorPlanSVG({
           stroke="#CBD5E1"
           strokeWidth={1}
           strokeDasharray="5 3"
+          className="svg-plot"
         />
       )}
 

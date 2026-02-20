@@ -21,26 +21,26 @@ export function MobileNav() {
       </Button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-16 z-50 border-b bg-white shadow-md">
+        <div className="absolute left-0 right-0 top-16 z-50 border-b border-border bg-background shadow-md">
           <nav className="flex flex-col px-4 py-4 gap-1">
             <Link
               href="/how-it-works"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-[#1e3a5f]"
+              className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground"
             >
               How It Works
             </Link>
             <Link
               href="/pricing"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-[#1e3a5f]"
+              className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground"
             >
               Pricing
             </Link>
             <Link
               href="/sign-in"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-[#1e3a5f]"
+              className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground"
             >
               Sign In
             </Link>

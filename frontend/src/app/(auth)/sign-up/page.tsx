@@ -6,14 +6,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signUp } from "@/lib/auth-client";
@@ -44,67 +36,114 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="flex items-center gap-2 mb-6">
-        <Building2 className="h-8 w-8 text-[#1e3a5f]" />
-        <span className="text-2xl font-bold text-[#1e3a5f]">PlanForge</span>
+    <div className="flex flex-col">
+      {/* Mobile-only logo — hidden when left panel is visible */}
+      <div className="flex items-center gap-2.5 mb-10 lg:hidden">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/20">
+          <Building2 className="h-4 w-4 text-white" />
+        </div>
+        <span
+          className="text-xl font-bold tracking-tight"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          Plan<span className="text-[#f97316]">Forge</span>
+        </span>
       </div>
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">PlanForge</CardTitle>
-          <CardDescription>Create your account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="name">Full name</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Ravi Kumar"
-                autoComplete="name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating account…" : "Create account"}
-            </Button>
-          </form>
-        </CardContent>
-        <CardFooter className="justify-center text-sm text-muted-foreground">
-          Already have an account?&nbsp;
-          <Link href="/sign-in" className="text-foreground underline underline-offset-4">
-            Sign in
-          </Link>
-        </CardFooter>
-      </Card>
+
+      {/* Heading */}
+      <div className="animate-fade-up mb-8">
+        <h1
+          className="text-2xl font-black text-foreground mb-1.5"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          Create your account
+        </h1>
+        <p className="text-sm text-muted-foreground">Free to start. No credit card required.</p>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5 animate-fade-up delay-100">
+        <div className="flex flex-col gap-2">
+          <Label
+            htmlFor="name"
+            className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest"
+          >
+            Full name
+          </Label>
+          <Input
+            id="name"
+            type="text"
+            placeholder="Ravi Kumar"
+            autoComplete="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-11 bg-card/80 border-border/70 focus-visible:ring-[#f97316]/30 focus-visible:border-[#f97316]/50"
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label
+            htmlFor="email"
+            className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest"
+          >
+            Email
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-11 bg-card/80 border-border/70 focus-visible:ring-[#f97316]/30 focus-visible:border-[#f97316]/50"
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label
+            htmlFor="password"
+            className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest"
+          >
+            Password
+          </Label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-11 bg-card/80 border-border/70 focus-visible:ring-[#f97316]/30 focus-visible:border-[#f97316]/50"
+          />
+        </div>
+
+        {error && (
+          <p className="rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          disabled={loading}
+          className="mt-1 h-11 w-full bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold text-sm btn-shine shadow-lg shadow-orange-500/15"
+        >
+          {loading ? "Creating account\u2026" : "Create account"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground animate-fade-up delay-200">
+        Already have an account?{" "}
+        <Link
+          href="/sign-in"
+          className="text-[#f97316] font-semibold hover:underline underline-offset-4"
+        >
+          Sign in &rarr;
+        </Link>
+      </p>
     </div>
   );
 }

@@ -68,11 +68,14 @@ export default async function DashboardPage() {
   const badge = TIER_BADGE[planTier as keyof typeof TIER_BADGE] ?? TIER_BADGE.free;
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-12">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">Welcome, {session.user.name}</h1>
+            <h1
+              className="text-2xl font-bold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >{`Welcome, ${session.user.name}`}</h1>
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}>
               {badge.label}
             </span>
@@ -82,7 +85,7 @@ export default async function DashboardPage() {
             {planTier === "free" && (
               <>
                 {" "}
-                ·{" "}
+                &middot;{" "}
                 <Link href="/pricing" className="text-foreground underline underline-offset-4">
                   Upgrade
                 </Link>{" "}
@@ -91,13 +94,13 @@ export default async function DashboardPage() {
             )}
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-semibold">
           <Link href="/projects/new">+ New project</Link>
         </Button>
       </div>
 
       {projects.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
+        <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
           No projects yet.{" "}
           <Link href="/projects/new" className="text-foreground underline underline-offset-4">
             Create your first project
@@ -107,17 +110,20 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p) => (
-            <div key={p.id} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
+            <div
+              key={p.id}
+              className="feature-card rounded-2xl border border-border bg-card p-5 flex flex-col gap-3 hover:border-primary/30"
+            >
               <div className="font-bold text-base">{p.name}</div>
               <div className="flex flex-wrap gap-1.5">
-                <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-                  {p.plot_length} × {p.plot_width} m
+                <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  {p.plot_length} &times; {p.plot_width} m
                 </span>
-                <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-                  {p.num_bedrooms} BHK · {p.toilets}T{p.parking ? " · Parking" : ""}
+                <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  {p.num_bedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 Parking" : ""}
                 </span>
                 {p.city && p.city !== "other" && (
-                  <span className="inline-flex items-center rounded-md bg-[#1e3a5f]/8 text-[#1e3a5f] px-2 py-0.5 text-xs font-medium capitalize">
+                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium capitalize">
                     {p.city}
                   </span>
                 )}
@@ -130,8 +136,12 @@ export default async function DashboardPage() {
                 })}
               </div>
               <div className="mt-auto flex gap-2 pt-1">
-                <Button size="sm" asChild>
-                  <Link href={`/projects/${p.id}`}>View →</Link>
+                <Button
+                  size="sm"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  asChild
+                >
+                  <Link href={`/projects/${p.id}`}>View &rarr;</Link>
                 </Button>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href={`/projects/${p.id}/edit`}>Edit</Link>

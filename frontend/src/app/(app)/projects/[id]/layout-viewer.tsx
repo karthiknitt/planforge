@@ -103,7 +103,7 @@ export function LayoutViewer({
 
   if (!generateData) {
     return (
-      <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
         <p className="font-medium">Layout engine offline</p>
         <p className="mt-1 text-sm">Start the backend server and refresh to see floor plans.</p>
       </div>
@@ -112,7 +112,7 @@ export function LayoutViewer({
 
   if (generateData.layouts.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
         <p className="font-medium">No compliant layouts could be generated</p>
         <p className="mt-1 text-sm">
           The plot configuration does not produce any layouts that satisfy the building compliance
@@ -139,8 +139,8 @@ export function LayoutViewer({
               className={[
                 "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
                 selectedId === l.id
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background hover:bg-muted",
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-transparent hover:bg-muted",
               ].join(" ")}
             >
               Layout {l.id} — {l.name}
@@ -153,13 +153,20 @@ export function LayoutViewer({
           <Button
             variant="outline"
             size="sm"
+            className="border-border text-foreground hover:bg-muted"
             onClick={() => handleDownload("pdf")}
             disabled={downloadingPdf || !session}
           >
-            {downloadingPdf ? "…" : "PDF"}
+            {downloadingPdf ? "\u2026" : "PDF"}
           </Button>
           {planTier === "free" ? (
-            <Button variant="outline" size="sm" asChild title="Upgrade to Basic for DXF export">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-border text-foreground hover:bg-muted"
+              asChild
+              title="Upgrade to Basic for DXF export"
+            >
               <Link href="/pricing">
                 <Lock className="h-3 w-3 mr-1.5" />
                 DXF
@@ -169,11 +176,12 @@ export function LayoutViewer({
             <Button
               variant="outline"
               size="sm"
+              className="border-border text-foreground hover:bg-muted"
               onClick={() => handleDownload("dxf")}
               disabled={downloadingDxf || !session}
               title="DXF for AutoCAD / DraftSight"
             >
-              {downloadingDxf ? "…" : "DXF"}
+              {downloadingDxf ? "\u2026" : "DXF"}
             </Button>
           )}
         </div>
@@ -190,20 +198,17 @@ export function LayoutViewer({
       <div
         className={[
           "flex flex-col gap-1.5 rounded-lg border p-3 text-sm",
-          layout.compliance.passed ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50",
+          layout.compliance.passed
+            ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
+            : "border-red-500/40 bg-red-500/8 text-red-700 dark:text-red-400",
         ].join(" ")}
       >
-        <span
-          className={[
-            "font-semibold",
-            layout.compliance.passed ? "text-green-700" : "text-red-700",
-          ].join(" ")}
-        >
-          {layout.compliance.passed ? "✓ Compliance passed" : "✗ Compliance failed"}
+        <span className="font-semibold">
+          {layout.compliance.passed ? "\u2713 Compliance passed" : "\u2717 Compliance failed"}
         </span>
 
         {layout.compliance.violations.length > 0 && (
-          <ul className="list-inside list-disc space-y-0.5 text-red-700">
+          <ul className="list-inside list-disc space-y-0.5 text-red-600 dark:text-red-400">
             {layout.compliance.violations.map((v) => (
               <li key={v}>{v}</li>
             ))}
@@ -212,11 +217,11 @@ export function LayoutViewer({
 
         {layout.compliance.warnings.length > 0 && (
           <details className="mt-1">
-            <summary className="cursor-pointer text-xs text-amber-700 font-medium">
+            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-400 font-medium">
               {layout.compliance.warnings.length} warning
               {layout.compliance.warnings.length !== 1 ? "s" : ""}
             </summary>
-            <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-700 text-xs">
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-700 dark:text-amber-400 text-xs">
               {layout.compliance.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
@@ -226,15 +231,17 @@ export function LayoutViewer({
       </div>
 
       {/* Tabs: Floor Plan | Section | BOQ */}
-      <div className="flex gap-1 rounded-lg border border-border bg-muted p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 w-fit">
         {(["plan", "section", "boq"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
             className={[
-              "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
-              activeTab === tab ? "bg-background shadow-sm" : "hover:bg-background/50",
+              "rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
+              activeTab === tab
+                ? "bg-background text-foreground shadow-sm"
+                : "hover:bg-background/50",
             ].join(" ")}
           >
             {tab === "plan" ? "Floor Plan" : tab === "section" ? "Section View" : "BOQ"}
@@ -245,15 +252,17 @@ export function LayoutViewer({
       {activeTab === "plan" && (
         <div className="flex flex-col gap-3">
           {/* Floor toggle */}
-          <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-muted p-1">
+          <div className="flex w-fit items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
             {[0, 1].map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => setFloor(f)}
                 className={[
-                  "rounded-md px-3 py-1 text-sm font-medium transition-colors",
-                  floor === f ? "bg-background shadow-sm" : "hover:bg-background/50",
+                  "rounded-lg px-3 py-1 text-sm font-medium transition-colors",
+                  floor === f
+                    ? "bg-background text-foreground shadow-sm"
+                    : "hover:bg-background/50",
                 ].join(" ")}
               >
                 {f === 0 ? "Ground floor" : "First floor"}
@@ -299,7 +308,7 @@ export function LayoutViewer({
             <span>Parapet: 1.0 m above roof</span>
             <span>External wall: 230 mm brick</span>
             <span>Foundation: 600 mm below GL</span>
-            <span>Stair: 17R × 175 mm riser</span>
+            <span>Stair: 17R x 175 mm riser</span>
           </div>
         </div>
       )}

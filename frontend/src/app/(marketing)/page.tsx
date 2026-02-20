@@ -14,7 +14,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { auth } from "@/lib/auth";
 
 /* ──────────────────────────────────────────────────────────────
@@ -25,13 +24,13 @@ function FloorPlanSVG() {
     <svg
       viewBox="0 0 420 320"
       xmlns="http://www.w3.org/2000/svg"
-      className="w-full h-full"
+      className="w-full h-full floor-plan-svg"
       style={{ fontFamily: "monospace" }}
       aria-label="Sample floor plan — Layout A front staircase"
       role="img"
     >
       {/* Background */}
-      <rect width="420" height="320" fill="#f8fafc" rx="8" />
+      <rect width="420" height="320" fill="var(--svg-bg, #f8fafc)" rx="8" className="svg-bg" />
 
       {/* Outer wall */}
       <rect x="30" y="30" width="360" height="260" fill="none" stroke="#1e3a5f" strokeWidth="4" />
@@ -183,7 +182,7 @@ const features = [
   },
   {
     icon: Building2,
-    title: "1–4 BHK Support",
+    title: "1-4 BHK Support",
     desc: "From compact 1BHK to spacious 4BHK. Optional pooja room, study, and balcony.",
   },
   {
@@ -220,7 +219,7 @@ const steps = [
 const plans = [
   {
     name: "Free",
-    price: "₹0",
+    price: "\u20B90",
     period: "/month",
     perks: ["3 projects", "PDF export"],
     cta: "Get Started",
@@ -228,7 +227,7 @@ const plans = [
   },
   {
     name: "Basic",
-    price: "₹499",
+    price: "\u20B9499",
     period: "/month",
     perks: ["Unlimited projects", "PDF + DXF export"],
     cta: "Subscribe",
@@ -236,7 +235,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "₹999",
+    price: "\u20B9999",
     period: "/month",
     perks: ["Everything in Basic", "BOQ Excel export", "Priority support"],
     cta: "Subscribe",
@@ -265,26 +264,41 @@ export default async function LandingPage() {
   return (
     <>
       {/* ── HERO ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
+      <section className="relative overflow-hidden bg-background border-b border-border/50 min-h-[85vh] flex items-center">
+        {/* Blueprint grid overlay */}
+        <div className="absolute inset-0 bg-blueprint-grid opacity-100" />
+        {/* Radial glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_60%,rgba(249,115,22,0.07)_0%,transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,rgba(249,115,22,0.10)_0%,transparent_50%)]" />
+
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28 w-full">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left: copy */}
+            {/* Left: copy with stagger animations */}
             <div>
-              <Badge className="mb-5 bg-[#1e3a5f]/10 text-[#1e3a5f] border-[#1e3a5f]/20 hover:bg-[#1e3a5f]/10">
-                NBC 2016 Compliant
-              </Badge>
-              <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight text-[#1e3a5f] leading-tight mb-5">
-                Generate G+1 Floor Plans <span className="text-[#f97316]">in Seconds</span>
+              <div className="animate-fade-up delay-100">
+                <Badge className="mb-5 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
+                  NBC 2016 Compliant
+                </Badge>
+              </div>
+              <h1
+                className="animate-fade-up delay-200 text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-[1.08] mb-6"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Generate G+1
+                <br />
+                Floor Plans
+                <br />
+                <span className="text-gradient-orange">in Seconds</span>
               </h1>
-              <p className="text-lg text-slate-600 mb-8 leading-relaxed">
+              <p className="animate-fade-up delay-300 text-lg text-muted-foreground mb-8 leading-relaxed max-w-lg">
                 Input your plot dimensions, get 5 layout variations instantly — each NBC-compliant,
                 export-ready as PDF or DXF. Built for Indian civil engineers and small builders.
               </p>
-              <div className="flex flex-wrap gap-4">
+              <div className="animate-fade-up delay-400 flex flex-wrap gap-4">
                 <Link href="/sign-up">
                   <Button
                     size="lg"
-                    className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold px-8"
+                    className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold px-8 btn-shine shadow-lg shadow-orange-500/20"
                   >
                     Start Free
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -294,28 +308,38 @@ export default async function LandingPage() {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="border-[#1e3a5f] text-[#1e3a5f] hover:bg-[#1e3a5f]/5 font-semibold px-8"
+                    className="border-border text-foreground hover:bg-muted font-semibold px-8"
                   >
                     See How It Works
                   </Button>
                 </Link>
               </div>
-              <p className="mt-4 text-sm text-slate-400">
-                No credit card required. Free forever plan available.
+              <p className="animate-fade-up delay-500 mt-4 text-sm text-muted-foreground/60">
+                No credit card required -- Free forever plan available
               </p>
             </div>
 
             {/* Right: floor plan preview */}
-            <div className="relative">
-              <div className="rounded-xl border-2 border-[#1e3a5f]/10 shadow-2xl shadow-[#1e3a5f]/10 overflow-hidden bg-white p-4">
-                <div className="text-xs font-mono text-slate-400 mb-2 flex items-center gap-2">
-                  <span className="inline-block h-2 w-2 rounded-full bg-[#f97316]" />
-                  Layout A — Front Staircase — 2BHK — Bangalore
+            <div className="animate-scale-in delay-300 relative">
+              <div className="rounded-2xl border border-border/60 shadow-2xl shadow-black/40 overflow-hidden bg-card">
+                <div className="px-4 pt-3 pb-2 border-b border-border/50 bg-muted/30 flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                  </div>
+                  <span
+                    className="text-xs font-medium text-muted-foreground/70 ml-1"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    Layout A -- Front Staircase -- 2BHK -- Bangalore
+                  </span>
                 </div>
-                <FloorPlanSVG />
+                <div className="p-3">
+                  <FloorPlanSVG />
+                </div>
               </div>
-              {/* decorative badges */}
-              <div className="absolute -top-3 -right-3 bg-[#f97316] text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+              <div className="absolute -top-3 -right-3 bg-[#f97316] text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg shadow-orange-500/30 animate-float">
                 5 layouts
               </div>
             </div>
@@ -324,67 +348,77 @@ export default async function LandingPage() {
       </section>
 
       {/* ── FEATURES ── */}
-      <section className="py-20 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-extrabold text-[#1e3a5f] mb-3">
+      <section className="py-24 bg-background relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(249,115,22,0.04)_0%,transparent_60%)]" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2
+              className="text-3xl lg:text-4xl font-bold text-foreground mb-3"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
               Everything you need to design & deliver
             </h2>
-            <p className="text-slate-500 text-lg">
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
               From compliance checks to CAD-ready exports — in one tool.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map(({ icon: Icon, title, desc }) => (
-              <Card
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {features.map(({ icon: Icon, title, desc }, i) => (
+              <div
                 key={title}
-                className="border-slate-100 shadow-sm hover:shadow-md transition-shadow"
+                className="feature-card rounded-2xl border border-border bg-card p-6 animate-fade-up"
+                style={{ animationDelay: `${i * 80}ms` }}
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1e3a5f]/8">
-                      <Icon className="h-5 w-5 text-[#1e3a5f]" />
-                    </div>
-                    <CardTitle className="text-base font-bold text-[#1e3a5f]">{title}</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-slate-600 leading-relaxed">{desc}</p>
-                </CardContent>
-              </Card>
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20 mb-4">
+                  <Icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3
+                  className="text-base font-semibold text-foreground mb-2"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section className="py-20 bg-slate-50 border-y border-slate-100">
+      <section className="py-24 bg-muted/20 border-y border-border/50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-extrabold text-[#1e3a5f] mb-3">How It Works</h2>
-            <p className="text-slate-500 text-lg">Three steps from plot to plan.</p>
+          <div className="text-center mb-16">
+            <h2
+              className="text-3xl lg:text-4xl font-bold text-foreground mb-3"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              How It Works
+            </h2>
+            <p className="text-muted-foreground text-lg">Three steps from plot to plan.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {steps.map((step, i) => (
               <div key={step.num} className="relative flex flex-col items-center text-center">
-                {/* connector line */}
                 {i < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-6 left-[calc(50%+2.5rem)] w-[calc(100%-5rem)] h-px bg-[#1e3a5f]/15" />
+                  <div className="hidden md:block absolute top-6 left-[calc(50%+2.5rem)] w-[calc(100%-5rem)] h-px bg-gradient-to-r from-primary/40 to-primary/10" />
                 )}
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f] text-white font-extrabold text-lg mb-4 z-10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground font-extrabold text-lg mb-4 z-10 shadow-lg shadow-primary/20">
                   {step.num}
                 </div>
-                <h3 className="text-lg font-bold text-[#1e3a5f] mb-2">{step.title}</h3>
-                <p className="text-sm text-slate-600 leading-relaxed">{step.desc}</p>
+                <h3
+                  className="text-lg font-bold text-foreground mb-2"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {step.title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
               </div>
             ))}
           </div>
           <div className="mt-10 text-center">
             <Link href="/how-it-works">
-              <Button
-                variant="outline"
-                className="border-[#1e3a5f] text-[#1e3a5f] hover:bg-[#1e3a5f]/5"
-              >
+              <Button variant="outline" className="border-border text-foreground hover:bg-muted">
                 Full walkthrough
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -394,20 +428,26 @@ export default async function LandingPage() {
       </section>
 
       {/* ── PRICING PREVIEW ── */}
-      <section className="py-20 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-extrabold text-[#1e3a5f] mb-3">Simple Pricing</h2>
-            <p className="text-slate-500 text-lg">Start free. Upgrade when you need more.</p>
+      <section className="py-24 bg-background relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(249,115,22,0.05)_0%,transparent_60%)]" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2
+              className="text-3xl lg:text-4xl font-bold text-foreground mb-3"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Simple Pricing
+            </h2>
+            <p className="text-muted-foreground text-lg">Start free. Upgrade when you need more.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {plans.map((plan) => (
-              <Card
+              <div
                 key={plan.name}
-                className={`relative flex flex-col ${
+                className={`relative flex flex-col rounded-2xl border p-6 ${
                   plan.highlight
-                    ? "border-[#f97316] shadow-xl shadow-[#f97316]/10 scale-105"
-                    : "border-slate-200 shadow-sm"
+                    ? "glow-card border-[#f97316]/50 scale-[1.03]"
+                    : "border-border bg-card"
                 }`}
               >
                 {plan.highlight && (
@@ -415,60 +455,67 @@ export default async function LandingPage() {
                     Most Popular
                   </div>
                 )}
-                <CardHeader className="pb-2 pt-6">
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">
                     {plan.name}
                   </p>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-4xl font-extrabold text-[#1e3a5f]">{plan.price}</span>
-                    <span className="text-slate-400 text-sm">{plan.period}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span
+                      className="text-4xl font-black text-foreground"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {plan.price}
+                    </span>
+                    <span className="text-muted-foreground text-sm">{plan.period}</span>
                   </div>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col gap-4">
-                  <ul className="space-y-2">
-                    {plan.perks.map((p) => (
-                      <li key={p} className="flex items-center gap-2 text-sm text-slate-700">
-                        <CheckCircle className="h-4 w-4 text-[#f97316] flex-shrink-0" />
-                        {p}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-auto pt-2">
-                    <Link href="/sign-up" className="block">
-                      <Button
-                        className={`w-full font-bold ${
-                          plan.highlight
-                            ? "bg-[#f97316] hover:bg-[#ea6c0a] text-white"
-                            : "bg-[#1e3a5f] hover:bg-[#162d4a] text-white"
-                        }`}
-                      >
-                        {plan.cta}
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+                <ul className="space-y-2.5 flex-1 mb-6">
+                  {plan.perks.map((p) => (
+                    <li key={p} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                      <CheckCircle className="h-4 w-4 text-[#f97316] flex-shrink-0" />
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/sign-up" className="block">
+                  <Button
+                    className={`w-full font-bold ${
+                      plan.highlight
+                        ? "bg-[#f97316] hover:bg-[#ea6c0a] text-white btn-shine"
+                        : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                    }`}
+                  >
+                    {plan.cta}
+                  </Button>
+                </Link>
+              </div>
             ))}
           </div>
-          <p className="text-center text-sm text-slate-400 mt-6">
-            <Link href="/pricing" className="text-[#1e3a5f] underline underline-offset-4">
-              See full pricing details →
+          <p className="text-center text-sm text-muted-foreground/60 mt-6">
+            <Link href="/pricing" className="text-primary hover:underline underline-offset-4">
+              See full pricing details &rarr;
             </Link>
           </p>
         </div>
       </section>
 
       {/* ── FINAL CTA ── */}
-      <section className="py-20 bg-[#1e3a5f]">
-        <div className="mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-3xl font-extrabold text-white mb-3">
+      <section className="py-24 relative overflow-hidden bg-gradient-to-br from-[#f97316]/8 via-background to-background border-t border-border/50">
+        <div className="absolute inset-0 bg-blueprint-grid opacity-50" />
+        <div className="relative mx-auto max-w-3xl px-4 text-center">
+          <h2
+            className="text-3xl lg:text-4xl font-black text-foreground mb-3"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             Ready to plan your first project?
           </h2>
-          <p className="text-slate-300 text-lg mb-8">Sign up free — no credit card required.</p>
+          <p className="text-muted-foreground text-lg mb-8">
+            Sign up free — no credit card required.
+          </p>
           <Link href="/sign-up">
             <Button
               size="lg"
-              className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold px-10"
+              className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold px-10 btn-shine shadow-lg shadow-orange-500/20"
             >
               Start Free
               <ArrowRight className="ml-2 h-4 w-4" />

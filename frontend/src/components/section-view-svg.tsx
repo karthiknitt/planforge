@@ -97,12 +97,12 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
   return (
     <svg
       viewBox={`0 0 ${VP_W} ${VP_H}`}
-      className={className}
+      className={["section-view-svg", className].filter(Boolean).join(" ")}
       style={{ width: "100%", height: "auto" }}
       aria-label="Building section view"
     >
       {/* Background */}
-      <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} />
+      <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
 
       {/* ── Ground hatch below GL ─────────────────────────────────── */}
       <rect

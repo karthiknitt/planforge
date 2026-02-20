@@ -7,6 +7,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Tailwind token bridge ──────────────────────────────────────────────── */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -48,80 +49,344 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ─── Light Mode ─────────────────────────────────────────────────────────── */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.98 0.005 255);
+  --foreground: oklch(0.13 0.025 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.13 0.025 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.13 0.025 255);
+  --primary: oklch(0.27 0.09 248); /* Deep navy #1e3a5f */
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.94 0.01 250);
+  --secondary-foreground: oklch(0.27 0.09 248);
+  --muted: oklch(0.94 0.01 250);
+  --muted-foreground: oklch(0.5 0.04 250);
+  --accent: oklch(0.68 0.22 45); /* Orange #f97316 */
+  --accent-foreground: oklch(0.97 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.87 0.015 255);
+  --input: oklch(0.87 0.015 255);
+  --ring: oklch(0.27 0.09 248);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.97 0.005 255);
+  --sidebar-foreground: oklch(0.13 0.025 255);
+  --sidebar-primary: oklch(0.27 0.09 248);
+  --sidebar-primary-foreground: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.94 0.01 250);
+  --sidebar-accent-foreground: oklch(0.27 0.09 248);
+  --sidebar-border: oklch(0.87 0.015 255);
+  --sidebar-ring: oklch(0.27 0.09 248);
+
+  /* SVG dark mode tokens */
+  --svg-bg: #f8fafc;
+  --svg-plot-fill: white;
+  --svg-plot-stroke: #cbd5e1;
+  --svg-road-fill: #cbd5e1;
+  --svg-north-bg: white;
 }
 
+/* ─── Dark Mode — Blueprint Dark ─────────────────────────────────────────── */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.085 0.02 255); /* #070D1E deep navy-black */
+  --foreground: oklch(0.92 0.012 252); /* #E2E8F8 cool off-white */
+  --card: oklch(0.13 0.022 252); /* #0D1529 dark card */
+  --card-foreground: oklch(0.92 0.012 252);
+  --popover: oklch(0.13 0.022 252);
+  --popover-foreground: oklch(0.92 0.012 252);
+  --primary: oklch(0.58 0.19 230); /* Blueprint blue */
+  --primary-foreground: oklch(0.97 0 0);
+  --secondary: oklch(0.18 0.025 252);
+  --secondary-foreground: oklch(0.92 0.012 252);
+  --muted: oklch(0.17 0.02 252);
+  --muted-foreground: oklch(0.54 0.03 252);
+  --accent: oklch(0.68 0.22 45); /* Orange stays */
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.65 0.22 27);
+  --border: oklch(0.22 0.035 252);
+  --input: oklch(0.2 0.025 252);
+  --ring: oklch(0.58 0.19 230);
+  --chart-1: oklch(0.58 0.19 230);
+  --chart-2: oklch(0.68 0.22 45);
+  --chart-3: oklch(0.7 0.15 162);
+  --chart-4: oklch(0.65 0.2 300);
+  --chart-5: oklch(0.65 0.22 27);
+  --sidebar: oklch(0.13 0.022 252);
+  --sidebar-foreground: oklch(0.92 0.012 252);
+  --sidebar-primary: oklch(0.58 0.19 230);
+  --sidebar-primary-foreground: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.18 0.025 252);
+  --sidebar-accent-foreground: oklch(0.92 0.012 252);
+  --sidebar-border: oklch(0.22 0.035 252);
+  --sidebar-ring: oklch(0.58 0.19 230);
+
+  /* SVG dark mode tokens */
+  --svg-bg: #0d1529;
+  --svg-plot-fill: #111e35;
+  --svg-plot-stroke: #2a4a7f;
+  --svg-road-fill: #1a2744;
+  --svg-north-bg: #1a2744;
 }
 
+/* ─── Base styles ─────────────────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body, system-ui, sans-serif);
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display, system-ui, sans-serif);
+    letter-spacing: -0.025em;
+  }
+}
+
+/* ─── SVG dark mode overrides ────────────────────────────────────────────── */
+/* CSS fill property overrides SVG fill attribute */
+.floor-plan-svg .svg-bg {
+  fill: var(--svg-bg);
+}
+.floor-plan-svg .svg-plot {
+  fill: var(--svg-plot-fill);
+  stroke: var(--svg-plot-stroke);
+}
+.floor-plan-svg .svg-road {
+  fill: var(--svg-road-fill);
+}
+.floor-plan-svg .svg-north-circle {
+  fill: var(--svg-north-bg);
+}
+.section-view-svg .svg-bg {
+  fill: var(--svg-bg);
+}
+
+/* ─── Animation keyframes ────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes grid-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 40px 40px;
+  }
+}
+
+@keyframes shine {
+  from {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(250%) skewX(-12deg);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* ─── Animation utilities ────────────────────────────────────────────────── */
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease forwards;
+  opacity: 0;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
+.delay-200 {
+  animation-delay: 200ms;
+}
+.delay-300 {
+  animation-delay: 300ms;
+}
+.delay-400 {
+  animation-delay: 400ms;
+}
+.delay-500 {
+  animation-delay: 500ms;
+}
+.delay-600 {
+  animation-delay: 600ms;
+}
+.delay-700 {
+  animation-delay: 700ms;
+}
+.delay-800 {
+  animation-delay: 800ms;
+}
+
+/* ─── Blueprint grid background ──────────────────────────────────────────── */
+.bg-blueprint-grid {
+  background-image: radial-gradient(circle, rgba(249, 115, 22, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: grid-drift 30s linear infinite;
+}
+
+.bg-blueprint-grid-light {
+  background-image: radial-gradient(circle, rgba(249, 115, 22, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: grid-drift 30s linear infinite;
+}
+
+/* ─── Technical line grid (auth left panel) ──────────────────────────────── */
+.bg-technical-grid {
+  background-image:
+    linear-gradient(rgba(249, 115, 22, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249, 115, 22, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ─── Feature card hover ─────────────────────────────────────────────────── */
+.feature-card {
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.dark .feature-card:hover {
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(249, 115, 22, 0.2);
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.feature-card:hover {
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(30, 58, 95, 0.2);
+  border-color: rgba(30, 58, 95, 0.25);
+}
+
+/* ─── Shine button ───────────────────────────────────────────────────────── */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -75%;
+  width: 45%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  animation: shine 3.5s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+
+/* ─── Gradient text ──────────────────────────────────────────────────────── */
+.text-gradient-blue {
+  background: linear-gradient(135deg, #60a5fa 0%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-orange {
+  background: linear-gradient(135deg, #f97316 0%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Glassmorphism ──────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(13, 21, 41, 0.65);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Glow card (pricing highlight) ─────────────────────────────────────── */
+.glow-card {
+  box-shadow:
+    0 0 0 1px rgba(249, 115, 22, 0.4),
+    0 20px 60px rgba(249, 115, 22, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dark .glow-card {
+  box-shadow:
+    0 0 0 1px rgba(249, 115, 22, 0.5),
+    0 20px 60px rgba(249, 115, 22, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.5);
 }
