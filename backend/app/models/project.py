@@ -56,6 +56,18 @@ class Project(Base):
     plot_rear_width:  Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
     plot_side_offset: Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
 
+    # Multi-floor support (Phase E)
+    num_floors:   Mapped[int]  = mapped_column(Integer, default=1, nullable=False,
+                                                server_default=text("1"))
+    has_stilt:    Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
+                                                server_default=text("false"))
+    has_basement: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
+                                                server_default=text("false"))
+
+    # Arbitrary room config JSON (Phase C)
+    custom_room_config: Mapped[str | None]   = mapped_column(
+        String, nullable=True)   # JSON array of CustomRoomSpec
+
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[DateTime] = mapped_column(

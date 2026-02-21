@@ -14,6 +14,7 @@ const IWT = 0.115; // internal wall (m)
 const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = {
   living: { fill: "#FEF9C3", stroke: "#CA8A04", text: "#713F12" },
   bedroom: { fill: "#EDE9FE", stroke: "#7C3AED", text: "#3B0764" },
+  master_bedroom: { fill: "#F3E8FF", stroke: "#9333EA", text: "#3B0764" },
   kitchen: { fill: "#DCFCE7", stroke: "#16A34A", text: "#14532D" },
   toilet: { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
   staircase: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
@@ -23,6 +24,13 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   study: { fill: "#F0FDF4", stroke: "#15803D", text: "#14532D" },
   balcony: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
   dining: { fill: "#FEFCE8", stroke: "#A16207", text: "#713F12" },
+  // Phase C — new room types
+  servant_quarter: { fill: "#FFF7ED", stroke: "#EA580C", text: "#7C2D12" },
+  home_office: { fill: "#F0FDF4", stroke: "#15803D", text: "#14532D" },
+  gym: { fill: "#FFF1F2", stroke: "#E11D48", text: "#881337" },
+  store_room: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  garage: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  passage: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
 };
 
 const color = (type: string) => PALETTE[type] ?? PALETTE.utility;

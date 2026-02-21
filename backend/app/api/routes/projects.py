@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -23,6 +24,21 @@ def get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
     return x_user_id
 
 
+def _serialize_project_data(data: dict) -> dict:
+    """Serialize list fields (custom_room_config) to JSON strings for DB storage."""
+    crc = data.get("custom_room_config")
+    if crc is not None and not isinstance(crc, str):
+        # Pydantic v2 model instances → dicts → JSON string
+        if isinstance(crc, list):
+            serialized = []
+            for item in crc:
+                serialized.append(item if isinstance(item, dict) else item.model_dump())
+            data["custom_room_config"] = json.dumps(serialized)
+        else:
+            data["custom_room_config"] = None
+    return data
+
+
 @router.post("/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
 async def create_project(
     body: ProjectCreate,
@@ -40,10 +56,11 @@ async def create_project(
                 detail="Free plan limited to 3 projects. Upgrade to Basic or Pro.",
             )
 
+    data = _serialize_project_data(body.model_dump())
     project = Project(
         id=str(uuid.uuid4()),
         user_id=user_id,
-        **body.model_dump(),
+        **data,
     )
     db.add(project)
     await db.commit()
@@ -65,7 +82,8 @@ async def update_project(
     if project.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    for field, value in body.model_dump(exclude_none=True).items():
+    data = _serialize_project_data(body.model_dump(exclude_none=True))
+    for field, value in data.items():
         setattr(project, field, value)
 
     await db.commit()

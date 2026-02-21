@@ -8,6 +8,17 @@ Direction = Literal["N", "S", "E", "W"]
 
 CITIES = Literal["bangalore", "chennai", "delhi", "hyderabad", "pune", "other"]
 
+FloorPreference = Literal["basement", "stilt", "gf", "ff", "sf", "either"]
+
+
+class CustomRoomSpec(BaseModel):
+    """User-defined room added via the advanced room config interface."""
+    type: str
+    name: str | None = None
+    min_area_sqm: float | None = None
+    floor_preference: FloorPreference = "either"
+    mandatory: bool = True
+
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -19,8 +30,8 @@ class ProjectCreate(BaseModel):
     setback_right: float = Field(ge=0)
     road_side: Direction
     north_direction: Direction
-    num_bedrooms: int = Field(ge=1, le=4, description="Number of bedrooms (1–4 BHK)")
-    toilets: int = Field(ge=1, le=4)
+    num_bedrooms: int = Field(ge=1, le=6, description="Number of bedrooms (1–6)")
+    toilets: int = Field(ge=1, le=6)
     parking: bool = False
     city: str = "other"
     vastu_enabled: bool = False
@@ -32,6 +43,12 @@ class ProjectCreate(BaseModel):
     plot_front_width: float | None = None
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
+    # Multi-floor (Phase E)
+    num_floors: int = Field(default=1, ge=1, le=3, description="Number of floors: 1=G, 2=G+1, 3=G+2")
+    has_stilt: bool = False
+    has_basement: bool = False
+    # Arbitrary rooms (Phase C)
+    custom_room_config: list[CustomRoomSpec] | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -44,8 +61,8 @@ class ProjectUpdate(BaseModel):
     setback_right: float | None = Field(default=None, ge=0)
     road_side: Direction | None = None
     north_direction: Direction | None = None
-    num_bedrooms: int | None = Field(default=None, ge=1, le=4)
-    toilets: int | None = Field(default=None, ge=1, le=4)
+    num_bedrooms: int | None = Field(default=None, ge=1, le=6)
+    toilets: int | None = Field(default=None, ge=1, le=6)
     parking: bool | None = None
     city: str | None = None
     vastu_enabled: bool | None = None
@@ -57,6 +74,10 @@ class ProjectUpdate(BaseModel):
     plot_front_width: float | None = None
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
+    num_floors: int | None = Field(default=None, ge=1, le=3)
+    has_stilt: bool | None = None
+    has_basement: bool | None = None
+    custom_room_config: list[CustomRoomSpec] | None = None
 
 
 class ProjectRead(BaseModel):
@@ -84,6 +105,10 @@ class ProjectRead(BaseModel):
     plot_front_width: float | None = None
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
+    num_floors: int = 1
+    has_stilt: bool = False
+    has_basement: bool = False
+    custom_room_config: str | None = None   # raw JSON string from DB
     created_at: datetime
     updated_at: datetime
 

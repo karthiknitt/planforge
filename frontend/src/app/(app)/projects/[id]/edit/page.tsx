@@ -42,6 +42,9 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
         plotFrontWidth: project.plotFrontWidth,
         plotRearWidth: project.plotRearWidth,
         plotSideOffset: project.plotSideOffset,
+        numFloors: project.numFloors,
+        hasStilt: project.hasStilt,
+        hasBasement: project.hasBasement,
       }}
     />
   );

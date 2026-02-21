@@ -1,0 +1,92 @@
+{
+  "living": {
+    "min_area_sqm": 9.5, "max_area_sqm": 30.0,
+    "min_width_m": 2.4, "max_width_m": 8.0,
+    "floor_pref": "gf", "mandatory": true
+  },
+  "dining": {
+    "min_area_sqm": 6.0, "max_area_sqm": 20.0,
+    "min_width_m": 2.0, "max_width_m": 6.0,
+    "floor_pref": "gf", "mandatory": false
+  },
+  "bedroom": {
+    "min_area_sqm": 9.5, "max_area_sqm": 25.0,
+    "min_width_m": 2.4, "max_width_m": 6.0,
+    "floor_pref": "either", "mandatory": true
+  },
+  "master_bedroom": {
+    "min_area_sqm": 12.0, "max_area_sqm": 35.0,
+    "min_width_m": 3.0, "max_width_m": 7.0,
+    "floor_pref": "either", "mandatory": false
+  },
+  "kitchen": {
+    "min_area_sqm": 4.5, "max_area_sqm": 20.0,
+    "min_width_m": 1.8, "max_width_m": 5.0,
+    "floor_pref": "gf", "mandatory": true
+  },
+  "toilet": {
+    "min_area_sqm": 2.8, "max_area_sqm": 10.0,
+    "min_width_m": 1.2, "max_width_m": 3.0,
+    "floor_pref": "either", "mandatory": true
+  },
+  "staircase": {
+    "min_area_sqm": 2.7, "max_area_sqm": 8.0,
+    "min_width_m": 0.9, "max_width_m": 2.5,
+    "floor_pref": "all", "mandatory": true
+  },
+  "parking": {
+    "min_area_sqm": 12.5, "max_area_sqm": 30.0,
+    "min_width_m": 2.75, "max_width_m": 6.0,
+    "floor_pref": "stilt_or_basement", "mandatory": false
+  },
+  "servant_quarter": {
+    "min_area_sqm": 7.5, "max_area_sqm": 18.0,
+    "min_width_m": 2.0, "max_width_m": 4.0,
+    "floor_pref": "gf", "mandatory": false
+  },
+  "gym": {
+    "min_area_sqm": 8.0, "max_area_sqm": 40.0,
+    "min_width_m": 2.5, "max_width_m": 8.0,
+    "floor_pref": "either", "mandatory": false
+  },
+  "home_office": {
+    "min_area_sqm": 7.5, "max_area_sqm": 25.0,
+    "min_width_m": 2.4, "max_width_m": 6.0,
+    "floor_pref": "either", "mandatory": false
+  },
+  "store_room": {
+    "min_area_sqm": 3.0, "max_area_sqm": 12.0,
+    "min_width_m": 1.5, "max_width_m": 4.0,
+    "floor_pref": "basement_or_gf", "mandatory": false
+  },
+  "garage": {
+    "min_area_sqm": 18.0, "max_area_sqm": 50.0,
+    "min_width_m": 3.0, "max_width_m": 8.0,
+    "floor_pref": "stilt_or_basement", "mandatory": false
+  },
+  "utility": {
+    "min_area_sqm": 2.0, "max_area_sqm": 8.0,
+    "min_width_m": 1.2, "max_width_m": 3.0,
+    "floor_pref": "either", "mandatory": false
+  },
+  "passage": {
+    "min_area_sqm": 2.0, "max_area_sqm": 6.0,
+    "min_width_m": 0.9, "max_width_m": 2.0,
+    "floor_pref": "either", "mandatory": false
+  },
+  "pooja": {
+    "min_area_sqm": 2.0, "max_area_sqm": 6.0,
+    "min_width_m": 1.0, "max_width_m": 2.5,
+    "floor_pref": "gf", "mandatory": false
+  },
+  "study": {
+    "min_area_sqm": 7.0, "max_area_sqm": 20.0,
+    "min_width_m": 2.0, "max_width_m": 5.0,
+    "floor_pref": "either", "mandatory": false
+  },
+  "balcony": {
+    "min_area_sqm": 3.0, "max_area_sqm": 12.0,
+    "min_width_m": 1.0, "max_width_m": 4.0,
+    "floor_pref": "either", "mandatory": false
+  }
+}

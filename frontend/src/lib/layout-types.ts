@@ -16,8 +16,10 @@ export interface ColumnData {
 
 export interface FloorPlanData {
   floor: number;
+  floor_type: string;
   rooms: RoomData[];
   columns: ColumnData[];
+  needs_mech_ventilation: boolean;
 }
 
 export interface ComplianceData {
@@ -26,12 +28,24 @@ export interface ComplianceData {
   warnings: string[];
 }
 
+export interface LayoutScoreData {
+  total: number;
+  natural_light: number;
+  adjacency: number;
+  aspect_ratio: number;
+  circulation: number;
+  vastu: number;
+}
+
 export interface LayoutData {
   id: string;
   name: string;
   compliance: ComplianceData;
   ground_floor: FloorPlanData;
   first_floor: FloorPlanData;
+  second_floor: FloorPlanData | null;
+  basement_floor: FloorPlanData | null;
+  score: LayoutScoreData | null;
 }
 
 export interface GenerateResponse {
@@ -52,6 +66,14 @@ export interface BOQResponse {
   items: BOQItem[];
 }
 
+export interface CustomRoomSpec {
+  type: string;
+  name?: string;
+  min_area_sqm?: number;
+  floor_preference?: "basement" | "stilt" | "gf" | "ff" | "sf" | "either";
+  mandatory?: boolean;
+}
+
 export const CITIES = [
   { value: "other", label: "Other / NBC Defaults" },
   { value: "bangalore", label: "Bangalore (BBMP)" },
@@ -62,3 +84,27 @@ export const CITIES = [
 ] as const;
 
 export type CityValue = (typeof CITIES)[number]["value"];
+
+// All known room types
+export const ROOM_TYPES = [
+  { value: "living", label: "Living Room" },
+  { value: "bedroom", label: "Bedroom" },
+  { value: "master_bedroom", label: "Master Bedroom" },
+  { value: "kitchen", label: "Kitchen" },
+  { value: "toilet", label: "Toilet / Bathroom" },
+  { value: "dining", label: "Dining Room" },
+  { value: "staircase", label: "Staircase" },
+  { value: "parking", label: "Parking" },
+  { value: "servant_quarter", label: "Servant Quarter" },
+  { value: "gym", label: "Home Gym" },
+  { value: "home_office", label: "Home Office" },
+  { value: "store_room", label: "Store Room" },
+  { value: "garage", label: "Garage" },
+  { value: "utility", label: "Utility" },
+  { value: "passage", label: "Passage / Corridor" },
+  { value: "pooja", label: "Pooja Room" },
+  { value: "study", label: "Study" },
+  { value: "balcony", label: "Balcony" },
+] as const;
+
+export type RoomTypeValue = (typeof ROOM_TYPES)[number]["value"];

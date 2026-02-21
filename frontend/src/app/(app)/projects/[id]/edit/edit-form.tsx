@@ -45,6 +45,9 @@ interface ProjectData {
   plotFrontWidth?: string | null;
   plotRearWidth?: string | null;
   plotSideOffset?: string | null;
+  numFloors?: number;
+  hasStilt?: boolean;
+  hasBasement?: boolean;
 }
 
 /* ── Live plot compass ─────────────────────────────────────────────────────── */
@@ -160,6 +163,9 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
     has_pooja: project.hasPooja ?? false,
     has_study: project.hasStudy ?? false,
     has_balcony: project.hasBalcony ?? false,
+    num_floors: String(project.numFloors ?? 1),
+    has_stilt: project.hasStilt ?? false,
+    has_basement: project.hasBasement ?? false,
   });
 
   function set(field: string, value: string | boolean) {
@@ -212,6 +218,9 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
           has_pooja: form.has_pooja,
           has_study: form.has_study,
           has_balcony: form.has_balcony,
+          num_floors: parseInt(form.num_floors, 10),
+          has_stilt: form.has_stilt,
+          has_basement: form.has_basement,
         }),
       });
 
@@ -476,9 +485,66 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
           </div>
         </div>
 
-        {/* ── 5. Optional rooms ─────────────────────────────────────────── */}
+        {/* ── 5. Floor configuration ────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          <Section num="5" title="Optional Rooms" />
+          <Section num="5" title="Floor Configuration" />
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>Number of floors</Label>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { value: "1", label: "G" },
+                    { value: "2", label: "G+1" },
+                    { value: "3", label: "G+2" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => set("num_floors", opt.value)}
+                    className={[
+                      "rounded-lg border px-5 py-2 text-sm font-medium transition-colors",
+                      form.num_floors === opt.value
+                        ? "border-[#f97316] bg-[#f97316]/5 ring-1 ring-[#f97316]"
+                        : "border-border bg-background hover:bg-muted",
+                    ].join(" ")}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border bg-background px-4 py-3 text-sm hover:bg-muted transition-colors">
+                <Checkbox
+                  id="has_stilt"
+                  checked={form.has_stilt}
+                  onCheckedChange={(v) => set("has_stilt", !!v)}
+                  className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+                />
+                <Label htmlFor="has_stilt" className="cursor-pointer font-normal">
+                  Stilt floor (parking only)
+                </Label>
+              </div>
+              <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border bg-background px-4 py-3 text-sm hover:bg-muted transition-colors">
+                <Checkbox
+                  id="has_basement"
+                  checked={form.has_basement}
+                  onCheckedChange={(v) => set("has_basement", !!v)}
+                  className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+                />
+                <Label htmlFor="has_basement" className="cursor-pointer font-normal">
+                  Basement (−1)
+                </Label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 6. Optional rooms ─────────────────────────────────────────── */}
+        <div className="flex flex-col gap-4">
+          <Section num="6" title="Optional Rooms" />
           <div className="grid grid-cols-3 gap-3">
             {(
               [

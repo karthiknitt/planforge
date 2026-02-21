@@ -57,7 +57,37 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     if cfg.plot_width < min_width:
         violations.append(f"Plot width {cfg.plot_width} m is below minimum {min_width} m")
 
-    all_rooms = layout.ground_floor.rooms + layout.first_floor.rooms
+    all_floors = [layout.ground_floor, layout.first_floor]
+    if layout.second_floor is not None:
+        all_floors.append(layout.second_floor)
+    if layout.basement_floor is not None:
+        all_floors.append(layout.basement_floor)
+    all_rooms = [r for fp in all_floors for r in fp.rooms]
+
+    # ── Stilt / basement habitable room checks ───────────────────────────────
+    # Stilt floor: no habitable spaces of any kind
+    stilt_banned = {"living", "bedroom", "master_bedroom", "kitchen", "dining",
+                    "study", "home_office", "gym", "servant_quarter"}
+    # Basement: per NBC — habitable rooms not allowed, but gym/store/utility OK
+    basement_banned = {"living", "bedroom", "master_bedroom", "kitchen", "dining",
+                       "study", "home_office", "servant_quarter"}
+
+    if getattr(layout.ground_floor, "floor_type", "ground") == "stilt":
+        for room in layout.ground_floor.rooms:
+            if room.type in stilt_banned:
+                violations.append(
+                    f"Stilt floor violation: {room.name} ({room.type}) is a habitable space. "
+                    "Stilt floors allow only parking, lift lobby, and services."
+                )
+    if layout.basement_floor is not None:
+        for room in layout.basement_floor.rooms:
+            if room.type in basement_banned:
+                violations.append(
+                    f"Basement violation: {room.name} ({room.type}) is not permitted in basement per NBC. "
+                    "Allowed: parking, store_room, utility, gym, home_office (with ventilation)."
+                )
+    if layout.second_floor is not None:
+        warnings.append("G+2 building: structural engineer review required (NBC §6).")
 
     # --- Minimum room areas ---
     min_bed     = rules["min_bedroom_sqm"]
@@ -164,7 +194,13 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
         )
 
     # --- FAR check (city-aware) ---
-    total_built = footprint * 2  # G+1 → two floors
+    # Count habitable floors (basement excluded per most Indian bylaws)
+    habitable_floors = sum([
+        1,  # GF or stilt
+        1,  # FF (always)
+        1 if layout.second_floor is not None else 0,
+    ])
+    total_built = footprint * habitable_floors
     far_limit = get_city_far(cfg.city, cfg.road_width_m, city_data)
     if far_limit is None:
         far_limit = rules.get("default_far", 1.5)
@@ -175,14 +211,17 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
             f"(road width {cfg.road_width_m} m)"
         )
 
-    # --- Room boundary vs. setback lines ---
+    # --- Room boundary vs. setback lines (above-ground floors only) ---
     ewt = rules["external_wall_thickness_mm"] / 1000
     min_x = cfg.setback_left  + ewt
     max_x = cfg.plot_width    - cfg.setback_right - ewt
     min_y = cfg.setback_front + ewt
     max_y = cfg.plot_length   - cfg.setback_rear  - ewt
     tol   = 0.005  # 5 mm floating-point tolerance
+    basement_rooms = set(r.id for r in (layout.basement_floor.rooms if layout.basement_floor else []))
     for room in all_rooms:
+        if room.id in basement_rooms:
+            continue  # basement has no surface setbacks
         if room.x < min_x - tol or room.x + room.width > max_x + tol:
             violations.append(f"{room.name} extends outside horizontal setback boundary")
         if room.y < min_y - tol or room.y + room.depth > max_y + tol:

@@ -119,6 +119,12 @@ export const project = pgTable(
     plotFrontWidth: numeric("plot_front_width", { precision: 8, scale: 3 }),
     plotRearWidth: numeric("plot_rear_width", { precision: 8, scale: 3 }),
     plotSideOffset: numeric("plot_side_offset", { precision: 8, scale: 3 }),
+    // Multi-floor support (Phase E)
+    numFloors: integer("num_floors").default(1).notNull(),
+    hasStilt: boolean("has_stilt").default(false).notNull(),
+    hasBasement: boolean("has_basement").default(false).notNull(),
+    // Arbitrary room config JSON (Phase C)
+    customRoomConfig: text("custom_room_config"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

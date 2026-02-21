@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-RoomType = Literal["living", "bedroom", "kitchen", "toilet", "staircase", "parking", "utility",
-                   "pooja", "study", "balcony", "dining"]
+RoomType = Literal[
+    "living", "bedroom", "master_bedroom", "kitchen", "toilet", "staircase",
+    "parking", "utility", "pooja", "study", "balcony", "dining",
+    "servant_quarter", "gym", "home_office", "store_room", "garage", "passage",
+]
 
 
 @dataclass
@@ -30,9 +33,11 @@ class Column:
 
 @dataclass
 class FloorPlan:
-    floor: int  # 0 = ground, 1 = first
+    floor: int  # -1=basement, 0=stilt/ground, 1=first, 2=second
+    floor_type: str = "ground"   # "basement"|"stilt"|"ground"|"first"|"second"
     rooms: list[Room] = field(default_factory=list)
     columns: list[Column] = field(default_factory=list)
+    needs_mech_ventilation: bool = False
 
 
 @dataclass
@@ -44,11 +49,14 @@ class ComplianceResult:
 
 @dataclass
 class Layout:
-    id: str          # "A", "B", "C", "D", "E", "F"
+    id: str          # "A", "B", "C", "D", "E", "F" or solver-generated
     name: str
     ground_floor: FloorPlan
     first_floor: FloorPlan
     compliance: ComplianceResult
+    second_floor: FloorPlan | None = None
+    basement_floor: FloorPlan | None = None
+    score: LayoutScore | None = None
 
 
 @dataclass
@@ -73,11 +81,43 @@ class PlotConfig:
     plot_front_width: float = 0.0         # front edge width (m), trapezoid only
     plot_rear_width: float = 0.0          # rear edge width (m), trapezoid only
     plot_side_offset: float = 0.0         # rear offset from front left (m)
+    # Multi-floor
+    num_floors: int = 1                   # 1=G, 2=G+1, 3=G+2
+    has_stilt: bool = False               # floor 0 is stilt (parking only)
+    has_basement: bool = False            # add basement floor (-1)
+    # Custom room config (arbitrary rooms, Phase C)
+    custom_room_config: list | None = None  # list of dicts from CustomRoomSpec
 
     @property
     def bhk(self) -> int:
         """Backward-compat alias."""
         return self.num_bedrooms
+
+
+@dataclass
+class RoomSpec:
+    """Specification for a single room used by the CP-SAT solver."""
+    id: str
+    name: str
+    type: str
+    min_area_sqm: float
+    max_area_sqm: float
+    min_width_m: float
+    max_width_m: float
+    floor_preference: str   # "basement"|"stilt"|"gf"|"ff"|"sf"|"either"|"all"
+    mandatory: bool
+    fixed_position: tuple[float, float] | None = None
+
+
+@dataclass
+class LayoutScore:
+    """Scoring breakdown for a generated layout (0–100)."""
+    total: float
+    natural_light: float
+    adjacency: float
+    aspect_ratio: float
+    circulation: float
+    vastu: float
 
 
 @dataclass

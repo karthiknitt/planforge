@@ -66,21 +66,29 @@ async def test_generate_layouts(client):
 
     gen = r.json()
     assert gen["project_id"] == project_id
-    # Should get A, B, C at minimum for a valid plot
-    assert len(gen["layouts"]) >= 3
-    layout_ids = {lay["id"] for lay in gen["layouts"]}
-    assert {"A", "B", "C"}.issubset(layout_ids)
+    # Scorer returns top-ranked layouts — IDs vary based on scores, so check count/structure
+    assert 1 <= len(gen["layouts"]) <= 5
 
     for lay in gen["layouts"]:
+        assert lay["id"], "Layout must have an ID"
         assert len(lay["ground_floor"]["rooms"]) > 0, f"Layout {lay['id']} has no ground floor rooms"
         assert len(lay["first_floor"]["rooms"]) > 0, f"Layout {lay['id']} has no first floor rooms"
         assert len(lay["ground_floor"]["columns"]) > 0, f"Layout {lay['id']} has no columns"
+        # Scorer attaches score to every layout
+        assert lay["score"] is not None, f"Layout {lay['id']} missing score"
+        assert 0 <= lay["score"]["total"] <= 100, f"Score out of range for layout {lay['id']}"
 
 
 async def test_export_pdf_all_layouts(client):
     project_id = await _create_project(client)
 
-    for layout_id in ["A", "B", "C"]:
+    # Get the actual layout IDs from generate — don't assume specific IDs
+    gen_r = await client.get(f"/api/projects/{project_id}/generate", headers=HEADERS)
+    assert gen_r.status_code == 200
+    layout_ids = [lay["id"] for lay in gen_r.json()["layouts"]]
+    assert len(layout_ids) >= 1
+
+    for layout_id in layout_ids:
         r = await client.get(
             f"/api/projects/{project_id}/export/pdf?layout_id={layout_id}",
             headers=HEADERS,
@@ -106,8 +114,11 @@ async def test_full_workflow(client):
     layouts = r.json()["layouts"]
     assert len(layouts) >= 3
 
-    # 3. Export default layout (A)
-    r = await client.get(f"/api/projects/{project_id}/export/pdf", headers=HEADERS)
+    # 3. Export first generated layout (scorer determines which layout IDs are top-ranked)
+    first_layout_id = layouts[0]["id"]
+    r = await client.get(
+        f"/api/projects/{project_id}/export/pdf?layout_id={first_layout_id}", headers=HEADERS
+    )
     assert r.status_code == 200
     assert r.content[:4] == b"%PDF"
 
@@ -137,7 +148,7 @@ async def test_invalid_layout_id_returns_404(client):
 
 
 async def test_validation_rejects_bad_payload(client):
-    bad = {**BASE_PAYLOAD, "num_bedrooms": 5}  # num_bedrooms must be 1–4
+    bad = {**BASE_PAYLOAD, "num_bedrooms": 7}  # num_bedrooms must be 1–6
     r = await client.post("/api/projects", json=bad, headers=HEADERS)
     assert r.status_code == 422
 

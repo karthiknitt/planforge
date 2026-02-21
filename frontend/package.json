@@ -15,6 +15,8 @@
     "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.46",
+    "ai": "^6.0.97",
     "better-auth": "^1.4.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -22,11 +24,13 @@
     "lucide-react": "^0.574.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
+    "openai": "^6.22.0",
     "postgres": "^3.4.8",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.1"
+    "tailwind-merge": "^3.4.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.18",

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel
 
 
 class RoomOut(BaseModel):
@@ -19,8 +19,10 @@ class ColumnOut(BaseModel):
 
 class FloorPlanOut(BaseModel):
     floor: int
+    floor_type: str = "ground"
     rooms: list[RoomOut]
     columns: list[ColumnOut]
+    needs_mech_ventilation: bool = False
 
 
 class ComplianceOut(BaseModel):
@@ -29,12 +31,24 @@ class ComplianceOut(BaseModel):
     warnings: list[str]
 
 
+class LayoutScoreOut(BaseModel):
+    total: float
+    natural_light: float
+    adjacency: float
+    aspect_ratio: float
+    circulation: float
+    vastu: float
+
+
 class LayoutOut(BaseModel):
     id: str
     name: str
     compliance: ComplianceOut
     ground_floor: FloorPlanOut
     first_floor: FloorPlanOut
+    second_floor: FloorPlanOut | None = None
+    basement_floor: FloorPlanOut | None = None
+    score: LayoutScoreOut | None = None
 
 
 class GenerateResponse(BaseModel):

@@ -5,15 +5,18 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
+import { ChatPanel } from "@/components/chat-panel";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { SectionViewSVG } from "@/components/section-view-svg";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
-import type { GenerateResponse } from "@/lib/layout-types";
+import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
 
 const TYPE_LABELS: Record<string, string> = {
   living: "Living / Hall",
   bedroom: "Bedroom",
+  master_bedroom: "Master Bedroom",
   kitchen: "Kitchen",
   toilet: "Toilet",
   staircase: "Staircase",
@@ -23,11 +26,18 @@ const TYPE_LABELS: Record<string, string> = {
   study: "Study",
   balcony: "Balcony",
   dining: "Dining",
+  servant_quarter: "Servant Quarter",
+  home_office: "Home Office",
+  gym: "Gym",
+  store_room: "Store Room",
+  garage: "Garage",
+  passage: "Passage",
 };
 
 const SWATCH: Record<string, string> = {
   living: "bg-yellow-100 border-yellow-400",
   bedroom: "bg-violet-100 border-violet-500",
+  master_bedroom: "bg-purple-100 border-purple-500",
   kitchen: "bg-green-100 border-green-600",
   toilet: "bg-sky-100 border-sky-500",
   staircase: "bg-slate-100 border-slate-400",
@@ -37,7 +47,27 @@ const SWATCH: Record<string, string> = {
   study: "bg-emerald-50 border-emerald-500",
   balcony: "bg-blue-50 border-blue-400",
   dining: "bg-yellow-50 border-yellow-500",
+  servant_quarter: "bg-orange-50 border-orange-500",
+  home_office: "bg-green-50 border-green-500",
+  gym: "bg-red-50 border-red-400",
+  store_room: "bg-slate-50 border-slate-400",
+  garage: "bg-blue-50 border-blue-500",
+  passage: "bg-slate-100 border-slate-400",
 };
+
+function ScoreBadge({ score }: { score: number }) {
+  const color =
+    score >= 75
+      ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/40"
+      : score >= 55
+        ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40"
+        : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/40";
+  return (
+    <span className={`ml-1.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold ${color}`}>
+      {score.toFixed(0)}
+    </span>
+  );
+}
 
 interface LayoutViewerProps {
   generateData: GenerateResponse | null;
@@ -50,6 +80,7 @@ interface LayoutViewerProps {
   plotShape?: string;
   plotFrontWidth?: number;
   plotRearWidth?: number;
+  numFloors?: number;
 }
 
 export function LayoutViewer({
@@ -62,11 +93,12 @@ export function LayoutViewer({
   plotShape,
   plotFrontWidth,
   plotRearWidth,
+  numFloors = 1,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const [selectedId, setSelectedId] = useState("A");
   const [floor, setFloor] = useState(0);
-  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq">("plan");
+  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat">("plan");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -123,7 +155,22 @@ export function LayoutViewer({
   }
 
   const layout = generateData.layouts.find((l) => l.id === selectedId) ?? generateData.layouts[0];
-  const floorPlan = floor === 0 ? layout.ground_floor : layout.first_floor;
+
+  // Build the ordered list of available floors for this layout
+  const availableFloors: { label: string; index: number; plan: FloorPlanData }[] = [];
+  if (layout.basement_floor)
+    availableFloors.push({ label: "Basement", index: -1, plan: layout.basement_floor });
+  availableFloors.push({
+    label: layout.ground_floor.floor_type === "stilt" ? "Stilt Floor" : "Ground Floor",
+    index: 0,
+    plan: layout.ground_floor,
+  });
+  availableFloors.push({ label: "First Floor", index: 1, plan: layout.first_floor });
+  if (layout.second_floor)
+    availableFloors.push({ label: "Second Floor", index: 2, plan: layout.second_floor });
+
+  const currentFloorEntry = availableFloors.find((f) => f.index === floor) ?? availableFloors[1];
+  const floorPlan = currentFloorEntry.plan;
   const presentTypes = [...new Set(floorPlan.rooms.map((r) => r.type))];
 
   return (
@@ -135,7 +182,10 @@ export function LayoutViewer({
             <button
               key={l.id}
               type="button"
-              onClick={() => setSelectedId(l.id)}
+              onClick={() => {
+                setSelectedId(l.id);
+                setFloor(0);
+              }}
               className={[
                 "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
                 selectedId === l.id
@@ -144,6 +194,7 @@ export function LayoutViewer({
               ].join(" ")}
             >
               Layout {l.id} — {l.name}
+              {l.score && <ScoreBadge score={l.score.total} />}
             </button>
           ))}
         </div>
@@ -157,7 +208,7 @@ export function LayoutViewer({
             onClick={() => handleDownload("pdf")}
             disabled={downloadingPdf || !session}
           >
-            {downloadingPdf ? "\u2026" : "PDF"}
+            {downloadingPdf ? "…" : "PDF"}
           </Button>
           {planTier === "free" ? (
             <Button
@@ -181,7 +232,7 @@ export function LayoutViewer({
               disabled={downloadingDxf || !session}
               title="DXF for AutoCAD / DraftSight"
             >
-              {downloadingDxf ? "\u2026" : "DXF"}
+              {downloadingDxf ? "…" : "DXF"}
             </Button>
           )}
         </div>
@@ -194,6 +245,22 @@ export function LayoutViewer({
         </p>
       )}
 
+      {/* Score breakdown for selected layout */}
+      {layout.score && (
+        <div className="flex flex-wrap gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs">
+          <span className="font-semibold text-foreground">
+            Score {layout.score.total.toFixed(0)}/100
+          </span>
+          <span className="text-muted-foreground">
+            Light {layout.score.natural_light.toFixed(0)}
+          </span>
+          <span className="text-muted-foreground">Adj {layout.score.adjacency.toFixed(0)}</span>
+          <span className="text-muted-foreground">AR {layout.score.aspect_ratio.toFixed(0)}</span>
+          <span className="text-muted-foreground">Fill {layout.score.circulation.toFixed(0)}</span>
+          <span className="text-muted-foreground">Vastu {layout.score.vastu.toFixed(0)}</span>
+        </div>
+      )}
+
       {/* Compliance badge */}
       <div
         className={[
@@ -204,7 +271,7 @@ export function LayoutViewer({
         ].join(" ")}
       >
         <span className="font-semibold">
-          {layout.compliance.passed ? "\u2713 Compliance passed" : "\u2717 Compliance failed"}
+          {layout.compliance.passed ? "✓ Compliance passed" : "✗ Compliance failed"}
         </span>
 
         {layout.compliance.violations.length > 0 && (
@@ -230,9 +297,9 @@ export function LayoutViewer({
         )}
       </div>
 
-      {/* Tabs: Floor Plan | Section | BOQ */}
+      {/* Tabs: Floor Plan | Section | BOQ | Chat */}
       <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 w-fit">
-        {(["plan", "section", "boq"] as const).map((tab) => (
+        {(["plan", "section", "boq", "chat"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -244,28 +311,42 @@ export function LayoutViewer({
                 : "hover:bg-background/50",
             ].join(" ")}
           >
-            {tab === "plan" ? "Floor Plan" : tab === "section" ? "Section View" : "BOQ"}
+            {tab === "plan"
+              ? "Floor Plan"
+              : tab === "section"
+                ? "Section View"
+                : tab === "boq"
+                  ? "BOQ"
+                  : "Chat"}
           </button>
         ))}
       </div>
 
       {activeTab === "plan" && (
         <div className="flex flex-col gap-3">
-          {/* Floor toggle */}
+          {/* Dynamic floor toggle */}
           <div className="flex w-fit items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-            {[0, 1].map((f) => (
+            {availableFloors.map((f) => (
               <button
-                key={f}
+                key={f.index}
                 type="button"
-                onClick={() => setFloor(f)}
+                onClick={() => setFloor(f.index)}
                 className={[
                   "rounded-lg px-3 py-1 text-sm font-medium transition-colors",
-                  floor === f
+                  floor === f.index
                     ? "bg-background text-foreground shadow-sm"
                     : "hover:bg-background/50",
                 ].join(" ")}
               >
-                {f === 0 ? "Ground floor" : "First floor"}
+                {f.label}
+                {f.plan.needs_mech_ventilation && (
+                  <span
+                    className="ml-1 text-xs text-amber-600"
+                    title="Mechanical ventilation required"
+                  >
+                    ⚠
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -298,12 +379,12 @@ export function LayoutViewer({
       {activeTab === "section" && (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            Parametric section through the building. Dimensions are standard for G+1 Indian
-            residential construction.
+            Parametric section through the building. Dimensions are standard for Indian residential
+            construction.
           </p>
           <SectionViewSVG buildingWidth={plotWidth} className="max-w-xl rounded-xl border" />
           <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-2 gap-1 sm:grid-cols-3">
-            <span>Floor height: 3.0 m (GF & FF)</span>
+            <span>Floor height: 3.0 m (each floor)</span>
             <span>Slab thickness: 150 mm (RCC)</span>
             <span>Parapet: 1.0 m above roof</span>
             <span>External wall: 230 mm brick</span>
@@ -316,6 +397,22 @@ export function LayoutViewer({
       {activeTab === "boq" && (
         <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
       )}
+
+      {activeTab === "chat" &&
+        (planTier === "pro" ? (
+          <ChatPanel projectId={projectId} currentLayout={layout} />
+        ) : (
+          <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
+            <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
+            <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Conversational layout editing with AI is a Pro feature.
+            </p>
+            <Button asChild className="mt-4" size="sm" variant="outline">
+              <Link href="/pricing">Upgrade to Pro</Link>
+            </Button>
+          </div>
+        ))}
     </div>
   );
 }

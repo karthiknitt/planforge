@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import export, generate, health, payments, projects
+from app.api.routes import export, generate, health, payments, projects, rooms
 from app.db import Base, engine
 # Import all models so SQLAlchemy knows about them before create_all
 import app.models.project  # noqa: F401
@@ -32,3 +32,4 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(generate.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(payments.router, prefix="/api")
+app.include_router(rooms.router, prefix="/api")

@@ -33,12 +33,13 @@ STANDARD_CFG_3BHK = PlotConfig(
 
 def test_layouts_generated():
     layouts = generate(STANDARD_CFG)
-    # Should produce at least A, B, C, D, E (5 archetypes for a standard plot)
-    assert len(layouts) >= 3
-    ids = [lay.id for lay in layouts]
-    # Core archetypes must all appear
-    for expected in ["A", "B", "C"]:
-        assert expected in ids, f"Expected layout {expected} in generated layouts"
+    # Scorer selects top 3 compliant layouts — specific IDs depend on quality ranking
+    assert len(layouts) >= 1, "Should produce at least 1 layout"
+    assert len(layouts) <= 3, "Should return at most top 3 layouts"
+    # All returned layouts must have a score attached (Phase B)
+    for lay in layouts:
+        assert lay.score is not None, f"Layout {lay.id} missing score"
+        assert 0 <= lay.score.total <= 100
 
 
 def test_all_layouts_pass_compliance_2bhk():

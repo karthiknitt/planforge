@@ -8,7 +8,10 @@ from app.db import get_db
 from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.models.project import Project
-from app.schemas.layout import ColumnOut, ComplianceOut, FloorPlanOut, GenerateResponse, LayoutOut, RoomOut
+from app.schemas.layout import (
+    ColumnOut, ComplianceOut, FloorPlanOut,
+    GenerateResponse, LayoutOut, LayoutScoreOut, RoomOut,
+)
 
 router = APIRouter()
 
@@ -19,6 +22,22 @@ def _to_float(v) -> float:
 
 def _user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
     return x_user_id
+
+
+def _floor_plan_out(fp) -> FloorPlanOut:
+    return FloorPlanOut(
+        floor=fp.floor,
+        floor_type=getattr(fp, "floor_type", "ground"),
+        needs_mech_ventilation=getattr(fp, "needs_mech_ventilation", False),
+        rooms=[
+            RoomOut(
+                id=r.id, name=r.name, type=r.type,
+                x=r.x, y=r.y, width=r.width, depth=r.depth, area=r.area,
+            )
+            for r in fp.rooms
+        ],
+        columns=[ColumnOut(x=c.x, y=c.y) for c in fp.columns],
+    )
 
 
 @router.get("/projects/{project_id}/generate", response_model=GenerateResponse)
@@ -33,6 +52,15 @@ async def generate_layouts(
     project = result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    import json
+    custom_room_config = None
+    raw_crc = getattr(project, "custom_room_config", None)
+    if raw_crc:
+        try:
+            custom_room_config = json.loads(raw_crc)
+        except Exception:
+            custom_room_config = None
 
     cfg = PlotConfig(
         plot_length=_to_float(project.plot_length),
@@ -55,6 +83,10 @@ async def generate_layouts(
         plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
         plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
         plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
+        num_floors=getattr(project, "num_floors", 1) or 1,
+        has_stilt=getattr(project, "has_stilt", False) or False,
+        has_basement=getattr(project, "has_basement", False) or False,
+        custom_room_config=custom_room_config,
     )
 
     layouts = generate(cfg)
@@ -70,28 +102,18 @@ async def generate_layouts(
                     violations=lay.compliance.violations,
                     warnings=lay.compliance.warnings,
                 ),
-                ground_floor=FloorPlanOut(
-                    floor=lay.ground_floor.floor,
-                    rooms=[
-                        RoomOut(
-                            id=r.id, name=r.name, type=r.type,
-                            x=r.x, y=r.y, width=r.width, depth=r.depth, area=r.area,
-                        )
-                        for r in lay.ground_floor.rooms
-                    ],
-                    columns=[ColumnOut(x=c.x, y=c.y) for c in lay.ground_floor.columns],
-                ),
-                first_floor=FloorPlanOut(
-                    floor=lay.first_floor.floor,
-                    rooms=[
-                        RoomOut(
-                            id=r.id, name=r.name, type=r.type,
-                            x=r.x, y=r.y, width=r.width, depth=r.depth, area=r.area,
-                        )
-                        for r in lay.first_floor.rooms
-                    ],
-                    columns=[ColumnOut(x=c.x, y=c.y) for c in lay.first_floor.columns],
-                ),
+                ground_floor=_floor_plan_out(lay.ground_floor),
+                first_floor=_floor_plan_out(lay.first_floor),
+                second_floor=_floor_plan_out(lay.second_floor) if lay.second_floor else None,
+                basement_floor=_floor_plan_out(lay.basement_floor) if lay.basement_floor else None,
+                score=LayoutScoreOut(
+                    total=lay.score.total,
+                    natural_light=lay.score.natural_light,
+                    adjacency=lay.score.adjacency,
+                    aspect_ratio=lay.score.aspect_ratio,
+                    circulation=lay.score.circulation,
+                    vastu=lay.score.vastu,
+                ) if lay.score else None,
             )
             for lay in layouts
         ],
