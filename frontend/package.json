@@ -12,7 +12,8 @@
     "format": "biome format --write .",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "seed": "node scripts/seed-test-users.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.46",

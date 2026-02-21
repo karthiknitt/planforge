@@ -21,8 +21,9 @@ Complete technical documentation for contributors and maintainers.
 13. [Agentic interface](#agentic-interface)
 14. [Payments & feature gating](#payments--feature-gating)
 15. [Testing](#testing)
-16. [UI/UX design system](#uiux-design-system)
-17. [Known patterns & gotchas](#known-patterns--gotchas)
+16. [Test seed users](#test-seed-users)
+17. [UI/UX design system](#uiux-design-system)
+18. [Known patterns & gotchas](#known-patterns--gotchas)
 
 ---
 
@@ -668,6 +669,67 @@ npx biome check .             # lint + format check
 npx biome format --write .    # auto-format
 npx tsc --noEmit              # type check
 ```
+
+---
+
+## Test Seed Users
+
+> **Dev/QA only.** These are dummy accounts for testing feature-gated functionality. Never commit real credentials.
+
+Three test users are pre-seeded into the database with different plan tiers so you can verify all gated features without going through the Razorpay payment flow.
+
+### Credentials
+
+| Email | Password | Plan | Features accessible |
+|-------|----------|------|-------------------|
+| `free@planforge.dev` | `Test@1234` | Free | Dashboard, 3 projects max, SVG preview, Section View, BOQ (view), PDF export |
+| `basic@planforge.dev` | `Test@1234` | Basic | All Free features + unlimited projects + DXF export |
+| `pro@planforge.dev` | `Test@1234` | Pro | All Basic features + BOQ Excel export + Agentic chat (room editor, voice input) |
+
+The `basic` and `pro` accounts have `plan_expires_at` set to 2099-12-31 so they never expire during testing.
+
+### Running the seed
+
+Requires the database to be running first.
+
+```bash
+docker compose up db -d
+cd frontend && npm run seed
+```
+
+Output:
+```
+PlanForge — Seeding test users
+DB: postgresql://<creds>@localhost:5432/planforge
+
+  ✓  free@planforge.dev  (free) — created
+  ✓  basic@planforge.dev  (basic) — created
+  ✓  pro@planforge.dev  (pro) — created
+```
+
+The script is **idempotent** — re-running it skips existing users and ensures `plan_tier` is correct (useful if a user's tier was accidentally changed).
+
+### What the seed script does
+
+Located at `frontend/scripts/seed-test-users.mjs`:
+
+1. Checks if each email already exists in the `user` table
+2. If new: generates a `userId`, hashes the password using the exact same Scrypt parameters that Better Auth / oslo uses (`N=16384 r=8 p=1`, 64-byte key, base64 encoded), inserts into `user` and `account` tables
+3. If exists: updates `plan_tier` only (password unchanged)
+
+### Password hash format
+
+Better Auth uses `oslo/password` Scrypt internally. The stored format in the `account.password` column is:
+
+```
+<base64(scrypt(password, salt, 64, N=16384, r=8, p=1))>:<16-char-alphanumeric-salt>
+```
+
+Total length: 88 (base64) + 1 (colon) + 16 (salt) = **105 characters**.
+
+### Data persistence
+
+The PostgreSQL data is stored in `./data/postgres/` (bind-mount, not a named volume). This directory survives `docker compose down -v` and container restarts. The seed users persist as long as this directory exists.
 
 ---
 
