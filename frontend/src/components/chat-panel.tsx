@@ -1,8 +1,9 @@
 "use client";
 
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { Mic, MicOff, RotateCcw, Send } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,33 +20,47 @@ interface ChatPanelProps {
 export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPanelProps) {
   const { data: session } = useSession();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState("");
 
-  const { messages, input, setInput, handleInputChange, handleSubmit, isLoading, append } = useChat(
-    {
-      api: `/api/agent/${projectId}`,
-      body: {
-        layoutState: currentLayout,
-        userId: session?.user.id,
-      },
-      onFinish: (msg) => {
-        // If any tool result contains a "layout" key, propagate it upward
-        if (msg.parts) {
-          for (const part of msg.parts) {
-            if (part.type === "tool-result" && typeof part.result === "object") {
-              const result = part.result as Record<string, unknown>;
-              if (result.layout && onLayoutUpdate) {
-                onLayoutUpdate(result.layout as LayoutData);
-              }
-            }
+  // Refs for dynamic values so the transport always sends the latest state
+  // without needing to recreate the transport (which would lose message history)
+  const sessionRef = useRef(session);
+  const layoutRef = useRef(currentLayout);
+  sessionRef.current = session;
+  layoutRef.current = currentLayout;
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: `/api/agent/${projectId}`,
+        prepareSendMessagesRequest: ({ messages }) => ({
+          body: {
+            messages,
+            layoutState: layoutRef.current,
+            userId: sessionRef.current?.user.id,
+          },
+        }),
+      }),
+    [projectId]
+  );
+
+  const { messages, sendMessage, status } = useChat({
+    transport,
+    onFinish: ({ message }) => {
+      // Check tool results for layout updates
+      for (const part of message.parts ?? []) {
+        if (part.type === "dynamic-tool" && part.state === "output-available") {
+          const output = part.output as Record<string, unknown> | null;
+          if (output?.layout && onLayoutUpdate) {
+            onLayoutUpdate(output.layout as LayoutData);
           }
         }
-        // Scroll to bottom
-        setTimeout(() => {
-          scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-        }, 50);
-      },
-    }
-  );
+      }
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      }, 50);
+    },
+  });
 
   const {
     status: voiceStatus,
@@ -56,11 +71,19 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
   });
 
   const sendUndo = useCallback(() => {
-    append({ role: "user", content: "Undo the last change" });
-  }, [append]);
+    sendMessage({ text: "Undo the last change" });
+  }, [sendMessage]);
 
+  const isLoading = status === "submitted" || status === "streaming";
   const isRecording = voiceStatus === "recording";
   const isTranscribing = voiceStatus === "transcribing";
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    sendMessage({ text: input });
+    setInput("");
+  };
 
   return (
     <div className="flex flex-col h-[520px] rounded-xl border border-border bg-background overflow-hidden">
@@ -109,7 +132,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
             >
               {/* Tool call indicators */}
               {msg.parts
-                ?.filter((p) => p.type === "tool-invocation")
+                ?.filter((p) => p.type === "dynamic-tool")
                 .map((part) => {
                   const toolPart = part as { toolCallId?: string; toolName?: string };
                   return (
@@ -121,7 +144,12 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
                     </div>
                   );
                 })}
-              <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+              <p className="whitespace-pre-wrap leading-relaxed">
+                {msg.parts
+                  ?.filter((p) => p.type === "text")
+                  .map((p) => (p as { text: string }).text)
+                  .join("")}
+              </p>
             </div>
           </div>
         ))}
@@ -164,7 +192,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
 
         <Input
           value={input}
-          onChange={handleInputChange}
+          onChange={(e) => setInput(e.target.value)}
           placeholder={
             isRecording
               ? "Recording… click mic to stop"

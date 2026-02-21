@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { streamText } from "ai";
+import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import { z } from "zod";
 
 export const maxDuration = 30;
@@ -60,15 +60,17 @@ export async function POST(req: Request, { params }: { params: Params }) {
     /redesign|optimize|rearrange all|vastu layout|redo|completely/i.test(lastMsg);
   const model = anthropic(isComplex ? "claude-opus-4-6" : "claude-sonnet-4-6");
 
+  const modelMessages = await convertToModelMessages(messages);
+
   const result = streamText({
     model,
     system: buildSystemPrompt(layoutState),
-    messages,
-    maxSteps: 10,
+    messages: modelMessages,
+    stopWhen: stepCountIs(10),
     tools: {
       get_room_list: {
         description: "List all rooms on a floor or all floors",
-        parameters: z.object({
+        inputSchema: z.object({
           floor: z.enum(["gf", "ff", "sf", "basement", "all"]).describe("Which floor to list"),
         }),
         execute: async ({ floor }) => {
@@ -81,7 +83,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       get_room_details: {
         description: "Get details for a specific room by ID",
-        parameters: z.object({ room_id: z.string() }),
+        inputSchema: z.object({ room_id: z.string() }),
         execute: async ({ room_id }) => {
           const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/${room_id}`, {
             headers,
@@ -92,7 +94,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       get_compliance_status: {
         description: "Check current compliance status of the layout",
-        parameters: z.object({}),
+        inputSchema: z.object({}),
         execute: async () => {
           const res = await fetch(`${BACKEND}/api/projects/${projectId}/compliance`, { headers });
           return res.json();
@@ -101,7 +103,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       get_available_space: {
         description: "Get available (unoccupied) space on a floor",
-        parameters: z.object({
+        inputSchema: z.object({
           floor: z.enum(["gf", "ff", "sf", "basement"]),
         }),
         execute: async ({ floor }) => {
@@ -115,7 +117,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       move_room: {
         description: "Move a room to new coordinates. Validates no overlap and setback compliance.",
-        parameters: z.object({
+        inputSchema: z.object({
           room_id: z.string(),
           new_x: z.number().describe("New X position in metres"),
           new_y: z.number().describe("New Y position in metres"),
@@ -132,7 +134,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       resize_room: {
         description: "Resize a room. Validates area minimums and no overlaps.",
-        parameters: z.object({
+        inputSchema: z.object({
           room_id: z.string(),
           new_width: z.number().optional().describe("New width in metres"),
           new_depth: z.number().optional().describe("New depth in metres"),
@@ -149,7 +151,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       swap_rooms: {
         description: "Swap the positions of two rooms on the same floor",
-        parameters: z.object({
+        inputSchema: z.object({
           room_id_a: z.string(),
           room_id_b: z.string(),
         }),
@@ -165,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       add_room: {
         description: "Add a new room to a floor at a specified or auto-placed location",
-        parameters: z.object({
+        inputSchema: z.object({
           floor: z.enum(["gf", "ff", "sf", "basement"]),
           type: z.string().describe("Room type e.g. bedroom, gym, store_room"),
           name: z.string().optional(),
@@ -186,7 +188,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       remove_room: {
         description: "Remove a room from the layout",
-        parameters: z.object({ room_id: z.string() }),
+        inputSchema: z.object({ room_id: z.string() }),
         execute: async ({ room_id }) => {
           const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/${room_id}`, {
             method: "DELETE",
@@ -198,7 +200,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
       undo_last_change: {
         description: "Undo the last room modification",
-        parameters: z.object({}),
+        inputSchema: z.object({}),
         execute: async () => {
           const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/undo`, {
             method: "POST",
@@ -210,5 +212,5 @@ export async function POST(req: Request, { params }: { params: Params }) {
     },
   });
 
-  return result.toDataStreamResponse();
+  return result.toUIMessageStreamResponse();
 }
