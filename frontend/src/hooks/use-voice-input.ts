@@ -37,8 +37,9 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
           form.append("audio", blob, "recording.webm");
 
           const res = await fetch("/api/transcribe", { method: "POST", body: form });
-          if (!res.ok) throw new Error("Transcription failed");
-          const { text } = await res.json();
+          const json = await res.json();
+          if (!res.ok) throw new Error(json?.error ?? "Transcription failed");
+          const { text } = json;
           if (text?.trim()) onTranscript(text.trim());
         } catch (err) {
           setError(err instanceof Error ? err.message : "Transcription failed");

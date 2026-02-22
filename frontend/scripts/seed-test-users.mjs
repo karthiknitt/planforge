@@ -10,8 +10,8 @@
  * Requires PostgreSQL to be running (docker compose up db -d).
  * The script is idempotent — safe to run multiple times.
  *
- * Password hash format replicates oslo/password Scrypt (used by Better Auth):
- *   <base64(scrypt(password, salt, 64, N=16384 r=8 p=1))>:<salt>
+ * Password hash format matches better-auth @noble/hashes/scrypt:
+ *   <hex(16-byte-salt)>:<hex(scrypt(password, salt, 64, N=16384 r=16 p=1))>
  */
 
 import { scrypt, randomBytes } from "node:crypto";
@@ -20,14 +20,10 @@ import postgres from "postgres";
 
 const scryptAsync = promisify(scrypt);
 
-// Matches oslo alphabet("a-z", "A-Z", "0-9")
-const ALPHABET =
-  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-/** Unbiased random string — same algorithm as oslo generateRandomString */
 function generateId(length = 21) {
+  const ALPHABET =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   const result = [];
-  // 62 chars: threshold = floor(256/62)*62 = 248 (rejection sampling, no bias)
   while (result.length < length) {
     const bytes = randomBytes(length * 3);
     for (const byte of bytes) {
@@ -39,13 +35,20 @@ function generateId(length = 21) {
 }
 
 /**
- * Replicates oslo/password Scrypt.hash()
- * Format: base64(64-byte-key) + ":" + salt
+ * Replicates better-auth @noble/hashes/scrypt hashPassword()
+ * Format: hex(16-byte-salt) + ":" + hex(64-byte-key)
+ * Params: N=16384, r=16, p=1, dkLen=64
  */
 async function hashPassword(password) {
-  const salt = generateId(16);
-  const key = await scryptAsync(password, salt, 64, { N: 16384, r: 8, p: 1 });
-  return `${Buffer.from(key).toString("base64")}:${salt}`;
+  const saltBytes = randomBytes(16);
+  const salt = saltBytes.toString("hex");
+  const key = await scryptAsync(password.normalize("NFKC"), salt, 64, {
+    N: 16384,
+    r: 16,
+    p: 1,
+    maxmem: 128 * 16384 * 16 * 2, // matches @noble/hashes/scrypt default
+  });
+  return `${salt}:${key.toString("hex")}`;
 }
 
 // ── Test users ────────────────────────────────────────────────────────────────
@@ -92,7 +95,9 @@ async function seed() {
       await sql`SELECT id FROM "user" WHERE email = ${u.email}`;
 
     if (existing.length > 0) {
-      // User already exists — ensure plan_tier is correct
+      // User already exists — update plan_tier and re-hash password
+      const existingUserId = existing[0].id;
+      const hashedPassword = await hashPassword(u.password);
       await sql`
         UPDATE "user"
         SET plan_tier = ${u.planTier},
@@ -100,7 +105,12 @@ async function seed() {
             updated_at = ${now}
         WHERE email = ${u.email}
       `;
-      console.log(`  ↻  ${u.email}  (${u.planTier}) — already exists, plan updated`);
+      await sql`
+        UPDATE account
+        SET password = ${hashedPassword}, updated_at = ${now}
+        WHERE user_id = ${existingUserId} AND provider_id = 'credential'
+      `;
+      console.log(`  ↻  ${u.email}  (${u.planTier}) — plan + password updated`);
       continue;
     }
 

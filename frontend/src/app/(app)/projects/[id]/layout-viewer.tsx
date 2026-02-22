@@ -8,7 +8,6 @@ import { BOQViewer } from "@/components/boq-viewer";
 import { ChatPanel } from "@/components/chat-panel";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { SectionViewSVG } from "@/components/section-view-svg";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
@@ -93,10 +92,12 @@ export function LayoutViewer({
   plotShape,
   plotFrontWidth,
   plotRearWidth,
-  numFloors = 1,
+  numFloors: _numFloors = 1,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
-  const [selectedId, setSelectedId] = useState("A");
+  // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
+  const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
+  const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
   const [floor, setFloor] = useState(0);
   const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat">("plan");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -154,7 +155,9 @@ export function LayoutViewer({
     );
   }
 
-  const layout = generateData.layouts.find((l) => l.id === selectedId) ?? generateData.layouts[0];
+  const baseLayout =
+    generateData.layouts.find((l) => l.id === selectedId) ?? generateData.layouts[0];
+  const layout = liveLayout ?? baseLayout;
 
   // Build the ordered list of available floors for this layout
   const availableFloors: { label: string; index: number; plan: FloorPlanData }[] = [];
@@ -185,6 +188,7 @@ export function LayoutViewer({
               onClick={() => {
                 setSelectedId(l.id);
                 setFloor(0);
+                setLiveLayout(null);
               }}
               className={[
                 "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
@@ -400,7 +404,38 @@ export function LayoutViewer({
 
       {activeTab === "chat" &&
         (planTier === "pro" ? (
-          <ChatPanel projectId={projectId} currentLayout={layout} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Left: live floor plan preview */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">Live Layout Preview</p>
+                {liveLayout && (
+                  <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                    ● AI updated
+                  </span>
+                )}
+              </div>
+              <FloorPlanSVG
+                floorPlan={floor === 1 ? layout.first_floor : layout.ground_floor}
+                plotWidth={plotWidth}
+                plotLength={plotLength}
+                roadSide={roadSide}
+                className="rounded-xl border"
+                plotShape={plotShape}
+                plotFrontWidth={plotFrontWidth}
+                plotRearWidth={plotRearWidth}
+              />
+              <p className="text-xs text-muted-foreground">
+                Showing {floor === 1 ? "First" : "Ground"} Floor — switches in the Floor Plan tab
+              </p>
+            </div>
+            {/* Right: chat panel */}
+            <ChatPanel
+              projectId={projectId}
+              currentLayout={layout}
+              onLayoutUpdate={(updated) => setLiveLayout(updated)}
+            />
+          </div>
         ) : (
           <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
             <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
