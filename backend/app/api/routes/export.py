@@ -1,5 +1,5 @@
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
@@ -139,11 +139,11 @@ async def export_dxf(
 def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     import ezdxf
     from ezdxf import colors
+    from ezdxf.enums import TextEntityAlignment
 
     doc = ezdxf.new("R2010")
     doc.header["$INSUNITS"] = 6  # metres
 
-    # Define layers
     layer_defs = [
         ("A-WALL-BRICK", colors.RED,    0.50),
         ("A-WALL-INT",   colors.YELLOW, 0.35),
@@ -162,42 +162,45 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
 
     msp = doc.modelspace()
 
-    ewt = 0.23
-    iwt = 0.115
+    # Collect all floor plans (including optional second/basement floors)
+    floor_plans = [layout.ground_floor, layout.first_floor]
+    if layout.second_floor:
+        floor_plans.append(layout.second_floor)
+    if layout.basement_floor:
+        floor_plans.append(layout.basement_floor)
 
-    for floor_plan in [layout.ground_floor, layout.first_floor]:
-        z_offset = 0.0 if floor_plan.floor == 0 else 3.0  # first floor elevated 3 m
+    for floor_plan in floor_plans:
+        z_offset = float(floor_plan.floor) * 3.0
 
         # ── Rooms as closed polylines ────────────────────────────────────────
         for room in floor_plan.rooms:
             pts = [
-                (room.x, room.y, z_offset),
-                (room.x + room.width, room.y, z_offset),
-                (room.x + room.width, room.y + room.depth, z_offset),
-                (room.x, room.y + room.depth, z_offset),
+                (room.x, room.y),
+                (room.x + room.width, room.y),
+                (room.x + room.width, room.y + room.depth),
+                (room.x, room.y + room.depth),
             ]
-            layer = "A-WALL-BRICK" if room.type in ("living", "bedroom", "kitchen") else "A-WALL-INT"
+            layer = "A-WALL-BRICK" if room.type in ("living", "bedroom", "master_bedroom", "kitchen") else "A-WALL-INT"
             msp.add_lwpolyline(
-                [(p[0], p[1]) for p in pts],
+                pts,
                 close=True,
                 dxfattribs={"layer": layer, "elevation": z_offset},
             )
-            # Room label
+            # Room label — use MTEXT for multiline support
             cx = room.x + room.width / 2
             cy = room.y + room.depth / 2
-            msp.add_text(
-                f"{room.name}\n{room.area}m²",
+            msp.add_mtext(
+                f"{room.name}\\P{room.area}m²",
                 dxfattribs={
                     "layer": "TEXT",
-                    "height": 0.25,
+                    "char_height": 0.25,
                     "insert": (cx, cy, z_offset),
-                    "halign": 1,
-                    "valign": 2,
+                    "attachment_point": 5,  # MIDDLE_CENTER
                 },
             )
 
         # ── Columns ─────────────────────────────────────────────────────────
-        half = 0.15  # 300 mm / 2
+        half = 0.15
         seen = set()
         for col in floor_plan.columns:
             key = (round(col.x, 2), round(col.y, 2))
@@ -216,7 +219,7 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 dxfattribs={"layer": "S-COLUMN", "elevation": z_offset},
             )
 
-        # ── Overall dimension lines ──────────────────────────────────────────
+        # ── Overall dimension lines (2D points only) ────────────────────────
         rooms = floor_plan.rooms
         if rooms:
             min_x = min(r.x for r in rooms)
@@ -224,33 +227,32 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
             min_y = min(r.y for r in rooms)
             max_y = max(r.y + r.depth for r in rooms)
 
-            # Width dimension below
             dim_offset = 1.5
             msp.add_linear_dim(
-                base=(min_x, min_y - dim_offset, z_offset),
-                p1=(min_x, min_y, z_offset),
-                p2=(max_x, min_y, z_offset),
+                base=(min_x, min_y - dim_offset),
+                p1=(min_x, min_y),
+                p2=(max_x, min_y),
                 angle=0,
                 dxfattribs={"layer": "DIM-LINE"},
-            )
-            # Depth dimension left
+            ).render()
             msp.add_linear_dim(
-                base=(min_x - dim_offset, min_y, z_offset),
-                p1=(min_x, min_y, z_offset),
-                p2=(min_x, max_y, z_offset),
+                base=(min_x - dim_offset, min_y),
+                p1=(min_x, min_y),
+                p2=(min_x, max_y),
                 angle=90,
                 dxfattribs={"layer": "DIM-LINE"},
-            )
+            ).render()
 
-    # Title annotation in modelspace
-    msp.add_text(
+    # Title annotation
+    msp.add_mtext(
         f"PlanForge | {project_name} | Layout {layout.id} — {layout.name}",
-        dxfattribs={"layer": "TEXT", "height": 0.5, "insert": (0, -3, 0)},
+        dxfattribs={"layer": "TEXT", "char_height": 0.5, "insert": (0, -3, 0)},
     )
 
-    buf = BytesIO()
-    doc.write(buf)
-    return buf.getvalue()
+    # ezdxf writes DXF as text (not binary) — use StringIO then encode
+    text_buf = StringIO()
+    doc.write(text_buf)
+    return text_buf.getvalue().encode("utf-8")
 
 
 # ── BOQ export ────────────────────────────────────────────────────────────────

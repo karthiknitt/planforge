@@ -183,8 +183,35 @@ cd frontend && npx drizzle-kit migrate
 
 ---
 
+## Known Issues & Review Backlog
+
+### Fixed (session 8, 2026-02-22) — verify in testing
+
+1. **DXF export crash** — `ezdxf doc.write()` requires `StringIO` (text mode), not `BytesIO`. Fixed in `backend/app/api/routes/export.py`. Also switched `TEXT` → `MTEXT` for multiline labels, 2D points for dimensions, added `.render()`.
+2. **Agent chat "Thinking" then disappears** — Multiple AI SDK v6 migration bugs:
+   - `convertToModelMessages()` not awaited (was passing Promise to model)
+   - `inputSchema` used instead of wrong `parameters` in `tool()`
+   - UIMessage `.content` property doesn't exist in v6 (only `.parts[]`)
+   - Tool invocation state is `"output-available"` not `"result"`
+   - Error responses returned as JSON instead of stream (useChat can't parse)
+3. **Agent model fallback** — Added runtime fallback: if Anthropic fails (billing/quota), automatically retries with OpenAI `gpt-5.2`. Uses `createUIMessageStream` with a for-loop over models.
+4. **SVG column duplicate keys** — `floorPlan.columns.map` could produce duplicate React keys. Fixed with index-based keys (columns already deduped via Map).
+
+### Needs Verification
+
+- **Voice transcription** — Switched from AI SDK `experimental_transcribe` to direct OpenAI SDK (`openai` package). User reported "returns default text every time" but also noted possible mic issue. Needs retest with working mic.
+  - File: `frontend/src/app/api/transcribe/route.ts`
+  - Depends on: valid `OPENAI_API_KEY` in `.env.local`
+
+### Open / Deferred
+
+- **Anthropic billing** — User's Anthropic API balance is insufficient. Agent falls back to OpenAI `gpt-5.2` automatically when this happens. Top up Anthropic credits when ready.
+- **PydanticDeprecatedSince20 warning** — `backend/app/config/settings.py` uses class-based `config` on `BaseSettings`. Should migrate to `ConfigDict`. Non-blocking.
+
+---
+
 ## Testing
 
-- Backend: pytest (via `uv run pytest`)
+- Backend: pytest (via `uv run pytest`) — 49/49 passing
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts

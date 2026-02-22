@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Mic, MicOff, RotateCcw, Send } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,8 +22,6 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
   const scrollRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
 
-  // Refs for dynamic values so the transport always sends the latest state
-  // without needing to recreate the transport (which would lose message history)
   const sessionRef = useRef(session);
   const layoutRef = useRef(currentLayout);
   sessionRef.current = session;
@@ -44,12 +42,23 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
     [projectId]
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const [agentError, setAgentError] = useState<string | null>(null);
+
+  const {
+    messages,
+    sendMessage,
+    status,
+    error: chatError,
+  } = useChat({
     transport,
+    onError: (err) => {
+      console.error("[ChatPanel] useChat error:", err);
+      setAgentError(err instanceof Error ? err.message : "Agent failed to respond. Try again.");
+    },
     onFinish: ({ message }) => {
-      // Check tool results for layout updates
+      setAgentError(null);
       for (const part of message.parts ?? []) {
-        if (part.type === "dynamic-tool" && part.state === "output-available") {
+        if (part.type === "tool-invocation" && part.state === "output-available") {
           const output = part.output as Record<string, unknown> | null;
           if (output?.layout && onLayoutUpdate) {
             onLayoutUpdate(output.layout as LayoutData);
@@ -61,6 +70,11 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
       }, 50);
     },
   });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages.length and status are intentional scroll triggers
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages.length, status]);
 
   const {
     status: voiceStatus,
@@ -78,12 +92,25 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
   const isRecording = voiceStatus === "recording";
   const isTranscribing = voiceStatus === "transcribing";
 
+  const displayError = agentError ?? chatError?.message ?? voiceError;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+    setAgentError(null);
     sendMessage({ text: input });
     setInput("");
   };
+
+  function getMessageText(msg: (typeof messages)[number]): string {
+    if (!msg.parts || msg.parts.length === 0) {
+      return "";
+    }
+    return msg.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+  }
 
   return (
     <div className="flex flex-col h-[520px] rounded-xl border border-border bg-background overflow-hidden">
@@ -107,52 +134,55 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
-        {messages.length === 0 && (
+        {messages.length === 0 && !isLoading && (
           <div className="text-center text-muted-foreground text-sm py-12">
             <p className="font-medium">Start a conversation</p>
             <p className="mt-1 text-xs">
-              Try: &quot;Make the master bedroom larger&quot; or &quot;Move the kitchen to the
-              ground floor&quot;
+              Type or click <strong>Speak</strong> to use voice.
+            </p>
+            <p className="mt-1 text-xs">
+              Try: &quot;Make the master bedroom larger&quot; or &quot;Add a dining room on the
+              first floor&quot;
             </p>
           </div>
         )}
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+        {messages.map((msg) => {
+          const text = getMessageText(msg);
+          const toolParts = msg.parts?.filter((p) => p.type === "tool-invocation") ?? [];
+          const hasContent = text || toolParts.length > 0;
+
+          if (!hasContent && msg.role === "assistant") return null;
+
+          return (
             <div
-              className={[
-                "max-w-[80%] rounded-xl px-3 py-2 text-sm",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-foreground",
-              ].join(" ")}
+              key={msg.id}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              {/* Tool call indicators */}
-              {msg.parts
-                ?.filter((p) => p.type === "dynamic-tool")
-                .map((part) => {
-                  const toolPart = part as { toolCallId?: string; toolName?: string };
+              <div
+                className={[
+                  "max-w-[80%] rounded-xl px-3 py-2 text-sm",
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground",
+                ].join(" ")}
+              >
+                {toolParts.map((part) => {
+                  const tp = part as { toolCallId?: string; toolName?: string };
                   return (
                     <div
-                      key={toolPart.toolCallId ?? toolPart.toolName ?? part.type}
+                      key={tp.toolCallId ?? tp.toolName ?? "tool"}
                       className="mb-1 text-xs opacity-70 italic"
                     >
-                      {`⚙ ${toolPart.toolName ?? "tool"}…`}
+                      {`⚙ ${tp.toolName ?? "tool"}…`}
                     </div>
                   );
                 })}
-              <p className="whitespace-pre-wrap leading-relaxed">
-                {msg.parts
-                  ?.filter((p) => p.type === "text")
-                  .map((p) => (p as { text: string }).text)
-                  .join("")}
-              </p>
+                {text && <p className="whitespace-pre-wrap leading-relaxed">{text}</p>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && (
           <div className="flex justify-start">
@@ -163,9 +193,12 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
         )}
       </div>
 
-      {/* Voice error */}
-      {voiceError && (
-        <p className="px-4 py-1.5 text-xs text-destructive border-t border-border">{voiceError}</p>
+      {/* Agent / voice errors */}
+      {displayError && (
+        <div className="px-4 py-2 text-xs text-destructive border-t border-border bg-destructive/5">
+          <p className="font-medium">Error</p>
+          <p>{displayError}</p>
+        </div>
       )}
 
       {/* Input bar */}
@@ -177,9 +210,9 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
           type="button"
           onClick={toggleVoice}
           disabled={isTranscribing}
-          title={isRecording ? "Stop recording" : "Start voice input"}
+          title={isRecording ? "Stop recording" : "Click to speak"}
           className={[
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors",
+            "flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
             isRecording
               ? "border-red-500 bg-red-500/10 text-red-600 animate-pulse"
               : isTranscribing
@@ -187,7 +220,21 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
                 : "border-border text-muted-foreground hover:bg-muted",
           ].join(" ")}
         >
-          {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          {isRecording ? (
+            <>
+              <MicOff className="h-3.5 w-3.5" />
+              Stop
+            </>
+          ) : isTranscribing ? (
+            <>
+              <Mic className="h-3.5 w-3.5" />…
+            </>
+          ) : (
+            <>
+              <Mic className="h-3.5 w-3.5" />
+              Speak
+            </>
+          )}
         </button>
 
         <Input
