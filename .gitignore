@@ -36,3 +36,6 @@ data/
 # Dev server runtime files
 .dev.pids
 .dev-logs/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json

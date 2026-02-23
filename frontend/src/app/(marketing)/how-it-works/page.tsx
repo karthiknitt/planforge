@@ -1,13 +1,10 @@
 import {
   ArrowRight,
-  Building2,
   CheckCircle,
   Download,
   Eye,
   FileSpreadsheet,
   FileText,
-  LayoutGrid,
-  MapPin,
   Settings2,
   Zap,
 } from "lucide-react";
@@ -15,6 +12,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FadeIn } from "@/components/motion/fade-in";
+import { SlideIn } from "@/components/motion/slide-in";
 
 export const metadata: Metadata = {
   title: "How It Works — PlanForge",
@@ -40,8 +39,10 @@ const steps = [
       "Optional rooms: pooja room, study, balcony",
     ],
     visual: (
-      <div className="rounded-xl border border-slate-100 bg-white shadow-lg p-6 space-y-4">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Plot Details</p>
+      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-6 space-y-4">
+        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">
+          Plot Details
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {[
             ["Length", "9.0 m"],
@@ -54,13 +55,13 @@ const steps = [
             ["Optional", "Pooja, Study"],
           ].map(([label, val]) => (
             <div key={label} className="flex flex-col">
-              <span className="text-xs text-slate-400">{label}</span>
-              <span className="text-sm font-semibold text-[#1e3a5f]">{val}</span>
+              <span className="text-xs text-muted-foreground/60">{label}</span>
+              <span className="text-sm font-semibold text-foreground">{val}</span>
             </div>
           ))}
         </div>
         <div className="pt-2">
-          <Button className="w-full bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold text-sm">
+          <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm">
             Generate Layouts
             <Zap className="ml-2 h-3.5 w-3.5" />
           </Button>
@@ -84,8 +85,8 @@ const steps = [
       "Compliance warnings shown per layout (not blocking — informational)",
     ],
     visual: (
-      <div className="rounded-xl border border-slate-100 bg-white shadow-lg p-5 space-y-3">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
+        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">
           Generated Layouts
         </p>
         {[
@@ -94,13 +95,13 @@ const steps = [
           "C — Rear Staircase",
           "D — Corner Entry",
           "E — Open Plan",
-        ].map((name, i) => (
+        ].map((name) => (
           <div
             key={name}
-            className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
+            className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
           >
-            <span className="text-sm font-medium text-[#1e3a5f]">{name}</span>
-            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+            <span className="text-sm font-medium text-foreground">{name}</span>
+            <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 text-xs">
               NBC ✓
             </Badge>
           </div>
@@ -124,22 +125,22 @@ const steps = [
       "Room labels with area in sqm",
     ],
     visual: (
-      <div className="rounded-xl border border-slate-100 bg-white shadow-lg p-4">
+      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-4">
         <div className="flex gap-2 mb-3">
           <button
             type="button"
-            className="px-3 py-1 rounded bg-[#1e3a5f] text-white text-xs font-semibold"
+            className="px-3 py-1 rounded bg-primary text-primary-foreground text-xs font-semibold"
           >
             Ground Floor
           </button>
           <button
             type="button"
-            className="px-3 py-1 rounded bg-slate-100 text-slate-500 text-xs font-semibold"
+            className="px-3 py-1 rounded bg-muted text-muted-foreground text-xs font-semibold"
           >
             First Floor
           </button>
         </div>
-        {/* Mini floor plan */}
+        {/* Mini floor plan — dark-mode friendly */}
         <svg
           viewBox="0 0 200 160"
           className="w-full"
@@ -147,41 +148,41 @@ const steps = [
           aria-label="Floor plan preview"
           role="img"
         >
-          <rect width="200" height="160" fill="#f8fafc" rx="4" />
+          <rect width="200" height="160" fill="#0d1424" rx="4" />
           <rect
             x="10"
             y="10"
             width="180"
             height="140"
             fill="none"
-            stroke="#1e3a5f"
-            strokeWidth="3"
+            stroke="#60a5fa"
+            strokeWidth="2.5"
           />
-          <line x1="100" y1="10" x2="100" y2="100" stroke="#1e3a5f" strokeWidth="1.5" />
-          <line x1="10" y1="100" x2="190" y2="100" stroke="#1e3a5f" strokeWidth="1.5" />
-          <rect x="12" y="12" width="86" height="86" fill="#dbeafe" fillOpacity="0.7" />
-          <rect x="102" y="12" width="86" height="86" fill="#dcfce7" fillOpacity="0.7" />
-          <rect x="12" y="102" width="86" height="46" fill="#fee2e2" fillOpacity="0.7" />
-          <rect x="102" y="102" width="86" height="46" fill="#fce7f3" fillOpacity="0.7" />
-          <text x="55" y="58" textAnchor="middle" fontSize="7" fill="#1e40af" fontWeight="600">
+          <line x1="100" y1="10" x2="100" y2="100" stroke="#60a5fa" strokeWidth="1.2" />
+          <line x1="10" y1="100" x2="190" y2="100" stroke="#60a5fa" strokeWidth="1.2" />
+          <rect x="12" y="12" width="86" height="86" fill="#1e40af" fillOpacity="0.3" />
+          <rect x="102" y="12" width="86" height="86" fill="#166534" fillOpacity="0.3" />
+          <rect x="12" y="102" width="86" height="46" fill="#9f1239" fillOpacity="0.3" />
+          <rect x="102" y="102" width="86" height="46" fill="#4c1d95" fillOpacity="0.3" />
+          <text x="55" y="58" textAnchor="middle" fontSize="7" fill="#93c5fd" fontWeight="600">
             Living
           </text>
-          <text x="145" y="58" textAnchor="middle" fontSize="7" fill="#166534" fontWeight="600">
+          <text x="145" y="58" textAnchor="middle" fontSize="7" fill="#86efac" fontWeight="600">
             Bedroom 1
           </text>
-          <text x="55" y="126" textAnchor="middle" fontSize="7" fill="#9f1239" fontWeight="600">
+          <text x="55" y="126" textAnchor="middle" fontSize="7" fill="#fda4af" fontWeight="600">
             Kitchen
           </text>
-          <text x="145" y="126" textAnchor="middle" fontSize="7" fill="#9d174d" fontWeight="600">
+          <text x="145" y="126" textAnchor="middle" fontSize="7" fill="#c4b5fd" fontWeight="600">
             Bedroom 2
           </text>
-          <rect x="85" y="10" width="30" height="3" fill="#93c5fd" />
+          <rect x="85" y="10" width="30" height="2.5" fill="#60a5fa" />
           <polygon
             points="190,14 193,20 190,18 187,20"
-            fill="#1e3a5f"
+            fill="#f97316"
             transform="translate(-5, 0)"
           />
-          <text x="185" y="28" fontSize="6" fill="#1e3a5f" fontWeight="700">
+          <text x="185" y="28" fontSize="6" fill="#f97316" fontWeight="700">
             N
           </text>
         </svg>
@@ -201,35 +202,37 @@ const steps = [
       "Works on Free plan (PDF only) — DXF and BOQ with Basic/Pro",
     ],
     visual: (
-      <div className="rounded-xl border border-slate-100 bg-white shadow-lg p-5 space-y-3">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Export Options</p>
+      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
+        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">
+          Export Options
+        </p>
         {[
           {
             icon: FileText,
             label: "PDF — 1:100 scale",
             badge: "Free",
-            color: "bg-slate-100 text-slate-600",
+            color: "bg-muted text-muted-foreground",
           },
           {
             icon: FileText,
             label: "DXF — 9 named layers",
             badge: "Basic+",
-            color: "bg-blue-50 text-blue-700",
+            color: "bg-primary/10 text-primary/70 border border-primary/20",
           },
           {
             icon: FileSpreadsheet,
             label: "BOQ Excel — 11 items",
             badge: "Pro",
-            color: "bg-orange-50 text-orange-700",
+            color: "bg-primary/15 text-primary border border-primary/25",
           },
         ].map(({ icon: Icon, label, badge, color }) => (
           <div
             key={label}
-            className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2.5"
+            className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
           >
             <div className="flex items-center gap-2">
-              <Icon className="h-4 w-4 text-[#1e3a5f]" />
-              <span className="text-sm font-medium text-[#1e3a5f]">{label}</span>
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">{label}</span>
             </div>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>
               {badge}
@@ -258,21 +261,24 @@ const specs = [
 
 export default function HowItWorksPage() {
   return (
-    <div className="bg-white">
+    <div className="bg-background">
       {/* Header */}
-      <section className="py-20 bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
-        <div className="mx-auto max-w-4xl px-4 text-center">
-          <Badge className="mb-5 bg-[#1e3a5f]/10 text-[#1e3a5f] border-[#1e3a5f]/20 hover:bg-[#1e3a5f]/10">
+      <section className="py-20 bg-gradient-to-b from-muted/40 to-background border-b border-border/50">
+        <FadeIn className="mx-auto max-w-4xl px-4 text-center">
+          <Badge className="mb-5 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
             From plot to plan
           </Badge>
-          <h1 className="text-4xl lg:text-5xl font-extrabold text-[#1e3a5f] mb-4">
+          <h1
+            className="text-4xl lg:text-5xl font-extrabold text-foreground mb-4"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             From Plot to Plan in 3 Steps
           </h1>
-          <p className="text-xl text-slate-500 leading-relaxed">
+          <p className="text-xl text-muted-foreground leading-relaxed">
             PlanForge takes your site data and delivers NBC-compliant floor plans ready for
             construction or client handover.
           </p>
-        </div>
+        </FadeIn>
       </section>
 
       {/* Step sections */}
@@ -285,32 +291,46 @@ export default function HowItWorksPage() {
               return (
                 <div
                   key={step.num}
-                  className={`grid lg:grid-cols-2 gap-12 items-center ${reverse ? "lg:grid-flow-col-dense" : ""}`}
+                  className={`grid md:grid-cols-2 gap-12 items-center ${reverse ? "md:grid-flow-col-dense" : ""}`}
                 >
-                  {/* Text side */}
-                  <div className={reverse ? "lg:col-start-2" : ""}>
+                  {/* Text side — slides in from the side it visually sits on */}
+                  <SlideIn
+                    from={reverse ? "right" : "left"}
+                    className={reverse ? "lg:col-start-2" : ""}
+                  >
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1e3a5f] text-white font-extrabold text-sm">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-extrabold text-sm shadow-lg shadow-primary/20">
                         {step.num}
                       </div>
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f97316]/10">
-                        <Icon className="h-5 w-5 text-[#f97316]" />
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
+                        <Icon className="h-5 w-5 text-primary" />
                       </div>
                     </div>
-                    <h2 className="text-2xl font-extrabold text-[#1e3a5f] mb-1">{step.title}</h2>
-                    <p className="text-slate-500 mb-6">{step.subtitle}</p>
+                    <h2
+                      className="text-2xl font-extrabold text-foreground mb-1"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {step.title}
+                    </h2>
+                    <p className="text-muted-foreground mb-6">{step.subtitle}</p>
                     <ul className="space-y-2.5">
                       {step.points.map((p) => (
                         <li key={p} className="flex items-start gap-2.5">
-                          <CheckCircle className="h-4 w-4 text-[#f97316] flex-shrink-0 mt-0.5" />
-                          <span className="text-sm text-slate-700">{p}</span>
+                          <CheckCircle className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                          <span className="text-sm text-foreground/80">{p}</span>
                         </li>
                       ))}
                     </ul>
-                  </div>
+                  </SlideIn>
 
-                  {/* Visual side */}
-                  <div className={reverse ? "lg:col-start-1" : ""}>{step.visual}</div>
+                  {/* Visual side — slides in from the opposite direction */}
+                  <SlideIn
+                    from={reverse ? "left" : "right"}
+                    delay={0.1}
+                    className={reverse ? "lg:col-start-1" : ""}
+                  >
+                    {step.visual}
+                  </SlideIn>
                 </div>
               );
             })}
@@ -319,46 +339,55 @@ export default function HowItWorksPage() {
       </section>
 
       {/* Technical specs */}
-      <section className="py-16 bg-slate-50 border-y border-slate-100">
+      <section className="py-16 bg-muted/20 border-y border-border/50">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-extrabold text-[#1e3a5f] mb-8 text-center">
-            Technical Specifications
-          </h2>
-          <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm bg-white">
+          <FadeIn>
+            <h2
+              className="text-2xl font-extrabold text-foreground mb-8 text-center"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Technical Specifications
+            </h2>
+          </FadeIn>
+          <FadeIn delay={0.1} className="overflow-hidden rounded-xl border border-border shadow-sm bg-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#1e3a5f] text-white">
+                <tr className="bg-primary text-primary-foreground">
                   <th className="text-left px-6 py-3 font-semibold w-1/2">Feature</th>
                   <th className="text-left px-6 py-3 font-semibold">Detail</th>
                 </tr>
               </thead>
               <tbody>
                 {specs.map(([feature, detail], i) => (
-                  <tr key={feature} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                    <td className="px-6 py-3 font-medium text-[#1e3a5f]">{feature}</td>
-                    <td className="px-6 py-3 text-slate-600">{detail}</td>
+                  <tr key={feature} className={i % 2 === 0 ? "bg-card" : "bg-muted/20"}>
+                    <td className="px-6 py-3 font-medium text-foreground">{feature}</td>
+                    <td className="px-6 py-3 text-muted-foreground">{detail}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </FadeIn>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 bg-[#1e3a5f]">
-        <div className="mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-3xl font-extrabold text-white mb-3">
+      <section className="py-20 relative overflow-hidden bg-gradient-to-br from-primary/12 via-muted/20 to-background border-t border-border/50">
+        <div className="absolute inset-0 bg-blueprint-grid opacity-40" />
+        <FadeIn className="relative mx-auto max-w-3xl px-4 text-center">
+          <h2
+            className="text-3xl font-extrabold text-foreground mb-3"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             Start planning your first project
           </h2>
-          <p className="text-slate-300 mb-8">
+          <p className="text-muted-foreground mb-8">
             Free to start. No installation. Runs in your browser.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/sign-up">
               <Button
                 size="lg"
-                className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold px-10"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-10 btn-shine shadow-lg shadow-primary/20"
               >
                 Get Started Free
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -368,13 +397,13 @@ export default function HowItWorksPage() {
               <Button
                 size="lg"
                 variant="outline"
-                className="border-white text-white hover:bg-white/10 font-semibold px-8"
+                className="border-border text-foreground hover:bg-muted font-semibold px-8"
               >
                 View Pricing
               </Button>
             </Link>
           </div>
-        </div>
+        </FadeIn>
       </section>
     </div>
   );

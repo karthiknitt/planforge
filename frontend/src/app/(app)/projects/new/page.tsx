@@ -54,8 +54,9 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
         y="20"
         width="80"
         height="80"
-        fill="#EFF6FF"
-        stroke="#CBD5E1"
+        fill="transparent"
+        stroke="currentColor"
+        className="text-border"
         strokeWidth="1.5"
         strokeDasharray="4 2"
       />
@@ -73,7 +74,7 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
         ROAD
       </text>
       <g transform={`translate(60,60) rotate(${northAngle})`}>
-        <polygon points="0,-16 -4,0 0,-4 4,0" fill="#1e3a5f" />
+        <polygon points="0,-16 -4,0 0,-4 4,0" fill="currentColor" className="text-foreground" />
         <polygon points="0,16 -4,0 0,4 4,0" fill="#CBD5E1" />
       </g>
       {(() => {
@@ -88,7 +89,8 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
             dominantBaseline="middle"
             fontSize="8"
             fontWeight="700"
-            fill="#1e3a5f"
+            fill="currentColor"
+            className="text-foreground"
             fontFamily="sans-serif"
           >
             N
@@ -103,10 +105,10 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
 function Section({ num, title }: { num: string; title: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f97316]/10 text-xs font-bold text-[#f97316]">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
         {num}
       </span>
-      <span className="text-sm font-semibold text-[#1e3a5f] tracking-wide uppercase">{title}</span>
+      <span className="text-sm font-semibold text-foreground tracking-wide uppercase">{title}</span>
       <Separator className="flex-1" />
     </div>
   );
@@ -349,15 +351,15 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
+    <div className="mx-auto max-w-3xl px-4 py-10">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#1e3a5f]">New Project</h1>
+        <h1 className="text-2xl font-bold text-foreground">New Project</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Enter your plot details to generate NBC-compliant floor plan options.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-8 md:rounded-2xl md:border md:border-border md:bg-card/30 md:p-8">
         {/* ── 1. Project name ───────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
           <Section num="1" title="Project" />
@@ -393,7 +395,7 @@ export default function NewProjectPage() {
                   className={[
                     "flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
                     form.plot_shape === opt.value
-                      ? "border-[#f97316] bg-[#f97316]/5 ring-1 ring-[#f97316]"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
                       : "border-border bg-background hover:bg-muted",
                   ].join(" ")}
                 >
@@ -494,7 +496,7 @@ export default function NewProjectPage() {
         <div className="flex flex-col gap-4">
           <Section num="3" title="Orientation & Setbacks" />
           <div className="flex gap-6 items-start">
-            <div className="shrink-0 w-28 h-28 rounded-xl border bg-slate-50 p-1.5">
+            <div className="shrink-0 w-28 h-28 rounded-xl border bg-card p-1.5">
               <PlotCompass roadSide={form.road_side} />
             </div>
             <div className="flex-1 flex flex-col gap-4">
@@ -578,7 +580,7 @@ export default function NewProjectPage() {
                   className={[
                     "flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
                     form.num_floors === opt.value
-                      ? "border-[#f97316] bg-[#f97316]/5 text-[#f97316]"
+                      ? "border-primary bg-primary/5 text-primary"
                       : "border-border hover:bg-muted",
                   ].join(" ")}
                 >
@@ -594,7 +596,7 @@ export default function NewProjectPage() {
                 id="has_stilt"
                 checked={form.has_stilt}
                 onCheckedChange={(v) => set("has_stilt", !!v)}
-                className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
               <div>
                 <Label htmlFor="has_stilt" className="cursor-pointer font-normal">
@@ -608,7 +610,7 @@ export default function NewProjectPage() {
                 id="has_basement"
                 checked={form.has_basement}
                 onCheckedChange={(v) => set("has_basement", !!v)}
-                className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
               <div>
                 <Label htmlFor="has_basement" className="cursor-pointer font-normal">
@@ -626,7 +628,7 @@ export default function NewProjectPage() {
             </div>
           )}
           {form.has_basement && (
-            <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-xs text-blue-700 dark:text-blue-400">
+            <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
               Basement allows parking, gym, store room, and utility. Mechanical ventilation required
               (no natural light).
             </div>
@@ -700,7 +702,7 @@ export default function NewProjectPage() {
                       id="parking"
                       checked={form.parking}
                       onCheckedChange={(v) => set("parking", !!v)}
-                      className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                     />
                     <Label htmlFor="parking" className="cursor-pointer font-normal">
                       Parking
@@ -725,7 +727,7 @@ export default function NewProjectPage() {
                       id={field}
                       checked={form[field]}
                       onCheckedChange={(v) => set(field, !!v)}
-                      className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                     />
                     <Label htmlFor={field} className="cursor-pointer font-normal">
                       {label}
@@ -774,7 +776,7 @@ export default function NewProjectPage() {
               id="vastu_enabled"
               checked={form.vastu_enabled}
               onCheckedChange={(v) => set("vastu_enabled", !!v)}
-              className="border-[#1e3a5f]/30 data-[state=checked]:bg-[#1e3a5f] data-[state=checked]:border-[#1e3a5f]"
+              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
             />
             <Label htmlFor="vastu_enabled" className="cursor-pointer font-normal">
               Apply Vastu Shastra rules
@@ -793,7 +795,7 @@ export default function NewProjectPage() {
           <button
             type="submit"
             disabled={loading || !session}
-            className="flex-1 rounded-md bg-[#f97316] px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#ea6c0a] disabled:opacity-50 transition-colors"
+            className="flex-1 rounded-md bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground btn-shine shadow-md shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading ? "Creating project…" : "Create project & generate layouts"}
           </button>

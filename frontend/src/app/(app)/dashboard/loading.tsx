@@ -11,7 +11,7 @@ export default function DashboardLoading() {
           <div className="h-9 w-28 animate-pulse rounded-md bg-muted" />
         </div>
         {/* Card skeletons */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
               <div className="h-5 w-3/4 animate-pulse rounded-md bg-muted" />

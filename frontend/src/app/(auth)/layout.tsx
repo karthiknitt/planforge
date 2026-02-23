@@ -1,4 +1,5 @@
-import { Building2, FileText, LayoutGrid, ShieldCheck } from "lucide-react";
+import { FileText, LayoutGrid, ShieldCheck } from "lucide-react";
+import { PlanForgeIcon } from "@/components/logo";
 import Link from "next/link";
 
 const features = [
@@ -34,26 +35,26 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {/* Technical grid overlay */}
         <div className="absolute inset-0 bg-technical-grid" />
         {/* Ambient amber glow */}
-        <div className="absolute -top-48 -left-48 w-[500px] h-[500px] rounded-full bg-[#f97316] opacity-[0.04] blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-[#f97316] opacity-[0.025] blur-3xl pointer-events-none" />
+        <div className="absolute -top-48 -left-48 w-[500px] h-[500px] rounded-full bg-primary opacity-[0.04] blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-primary opacity-[0.025] blur-3xl pointer-events-none" />
 
         <div className="relative flex flex-col h-full p-10 xl:p-12">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 w-fit group">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:scale-105">
-              <Building2 className="h-4 w-4 text-white" />
+          <Link href="/" className="flex items-center gap-3 w-fit group">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:scale-105">
+              <PlanForgeIcon className="h-5 w-5 text-white" />
             </div>
             <span
-              className="text-xl font-bold tracking-tight"
+              className="text-2xl font-black tracking-tight"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Plan<span className="text-[#f97316]">Forge</span>
+              Plan<span className="text-primary">Forge</span>
             </span>
           </Link>
 
           {/* Centre content */}
           <div className="flex-1 flex flex-col justify-center pt-6 pb-4">
-            <p className="text-xs font-bold text-[#f97316] uppercase tracking-[0.2em] mb-4">
+            <p className="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-4">
               For Indian Builders
             </p>
             <h2
@@ -62,7 +63,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             >
               Plot dimensions in.
               <br />
-              Floor plans <span className="text-[#f97316]">out.</span>
+              Floor plans <span className="text-primary">out.</span>
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed mb-8 max-w-xs">
               Generate NBC 2016–compliant G+1 residential layouts with export-ready PDF and DXF
@@ -72,8 +73,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <ul className="space-y-3.5">
               {features.map(({ icon: Icon, label }) => (
                 <li key={label} className="flex items-center gap-3 text-sm">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#f97316]/10 ring-1 ring-[#f97316]/20 flex-shrink-0">
-                    <Icon className="h-3.5 w-3.5 text-[#f97316]" />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/20 flex-shrink-0">
+                    <Icon className="h-3.5 w-3.5 text-primary" />
                   </div>
                   <span className="text-muted-foreground">{label}</span>
                 </li>
@@ -109,33 +110,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                   strokeOpacity="0.45"
                 />
                 {/* Internal walls */}
-                <line
-                  x1="120"
-                  y1="10"
-                  x2="120"
-                  y2="105"
-                  stroke="#f97316"
-                  strokeWidth="0.75"
-                  strokeOpacity="0.3"
-                />
-                <line
-                  x1="15"
-                  y1="105"
-                  x2="225"
-                  y2="105"
-                  stroke="#f97316"
-                  strokeWidth="0.75"
-                  strokeOpacity="0.3"
-                />
-                <line
-                  x1="168"
-                  y1="105"
-                  x2="168"
-                  y2="155"
-                  stroke="#f97316"
-                  strokeWidth="0.75"
-                  strokeOpacity="0.3"
-                />
+                <line x1="120" y1="10" x2="120" y2="105" stroke="#f97316" strokeWidth="0.75" strokeOpacity="0.3" />
+                <line x1="15" y1="105" x2="225" y2="105" stroke="#f97316" strokeWidth="0.75" strokeOpacity="0.3" />
+                <line x1="168" y1="105" x2="168" y2="155" stroke="#f97316" strokeWidth="0.75" strokeOpacity="0.3" />
                 {/* Room tints */}
                 <rect x="16" y="11" width="103" height="93" fill="#f97316" fillOpacity="0.04" />
                 <rect x="121" y="11" width="103" height="93" fill="#f97316" fillOpacity="0.04" />
@@ -169,23 +146,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                   />
                 ))}
                 {/* Dimension line */}
-                <line
-                  x1="15"
-                  y1="162"
-                  x2="225"
-                  y2="162"
-                  stroke="#f97316"
-                  strokeWidth="0.4"
-                  strokeOpacity="0.3"
-                />
-                <text
-                  x="120"
-                  y="165"
-                  textAnchor="middle"
-                  fontSize="5.5"
-                  fill="#f97316"
-                  fillOpacity="0.4"
-                >
+                <line x1="15" y1="162" x2="225" y2="162" stroke="#f97316" strokeWidth="0.4" strokeOpacity="0.3" />
+                <text x="120" y="165" textAnchor="middle" fontSize="5.5" fill="#f97316" fillOpacity="0.4">
                   9.0 m
                 </text>
               </svg>
@@ -199,9 +161,23 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </aside>
 
       {/* ── Right form panel ──────────────────────────────────── */}
-      <div className="flex flex-1 items-center justify-center px-6 py-16 relative overflow-hidden">
-        <div className="absolute inset-0 bg-blueprint-grid opacity-[0.18]" />
-        <div className="relative w-full max-w-sm">{children}</div>
+      <div className="flex flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:py-16 relative overflow-hidden bg-background">
+        {/* Blueprint grid — visible below lg where left panel is hidden */}
+        <div className="absolute inset-0 bg-blueprint-grid opacity-[0.18] lg:opacity-0 pointer-events-none" />
+
+        {/* Ambient glow on mobile/tablet */}
+        <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-primary opacity-[0.04] blur-3xl pointer-events-none lg:hidden" />
+
+        {/* Form card:
+            - Mobile: no card, just centered content
+            - sm–lg: card panel with shadow + border for visual containment
+            - lg+: no card needed (left panel provides context) */}
+        <div className="relative w-full max-w-sm">
+          {/* Card wrapper visible on sm–lg only */}
+          <div className="sm:rounded-2xl sm:border sm:border-border/60 sm:bg-card/80 sm:backdrop-blur-sm sm:shadow-2xl sm:shadow-black/10 sm:px-8 sm:py-10 lg:bg-transparent lg:border-0 lg:shadow-none lg:px-0 lg:py-0 lg:backdrop-blur-none">
+            {children}
+          </div>
+        </div>
       </div>
     </div>
   );

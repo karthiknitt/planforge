@@ -8,8 +8,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { FadeIn } from "@/components/motion/fade-in";
+import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 
 export const metadata: Metadata = {
   title: "Pricing — PlanForge",
@@ -107,42 +110,57 @@ const faqs = [
 
 export default function PricingPage() {
   return (
-    <div className="py-20 bg-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <h1 className="text-4xl font-extrabold text-[#1e3a5f] mb-3">
+    <div className="bg-background">
+      {/* Header */}
+      <section className="py-20 bg-gradient-to-b from-muted/40 to-background border-b border-border/50">
+        <FadeIn className="mx-auto max-w-4xl px-4 text-center">
+          <Badge className="mb-5 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
+            Transparent pricing
+          </Badge>
+          <h1
+            className="text-4xl lg:text-5xl font-extrabold text-foreground mb-3"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             Simple, Transparent Pricing
           </h1>
-          <p className="text-xl text-slate-500">Start free. Upgrade when you need more.</p>
-        </div>
+          <p className="text-xl text-muted-foreground">
+            Start free. Upgrade when you need more.
+          </p>
+        </FadeIn>
+      </section>
 
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Pricing cards */}
-        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-20">
+        <StaggerChildren className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto py-16">
           {plans.map((plan) => (
+            <StaggerItem key={plan.name}>
             <Card
-              key={plan.name}
-              className={`relative flex flex-col ${
+              className={`relative flex flex-col transition-all h-full ${
                 plan.highlight
-                  ? "border-[#f97316] shadow-2xl shadow-[#f97316]/10 scale-[1.03]"
-                  : "border-slate-200 shadow-sm"
+                  ? "border-primary shadow-2xl shadow-primary/10 scale-[1.03] bg-card"
+                  : "border-border/60 shadow-sm bg-card/80"
               }`}
             >
               {plan.highlight && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#f97316] text-white text-xs font-bold px-5 py-1.5 rounded-full shadow">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-5 py-1.5 rounded-full shadow-lg shadow-primary/30">
                   Most Popular
                 </div>
               )}
 
               <CardHeader className="pt-8 pb-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+                <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest mb-1">
                   {plan.name}
                 </p>
                 <div className="flex items-baseline gap-1 mb-1">
-                  <span className="text-5xl font-extrabold text-[#1e3a5f]">{plan.price}</span>
-                  <span className="text-slate-400 text-sm">{plan.period}</span>
+                  <span
+                    className="text-5xl font-extrabold text-foreground"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {plan.price}
+                  </span>
+                  <span className="text-muted-foreground/60 text-sm">{plan.period}</span>
                 </div>
-                <p className="text-sm text-slate-500">{plan.tagline}</p>
+                <p className="text-sm text-muted-foreground">{plan.tagline}</p>
               </CardHeader>
 
               <CardContent className="flex-1 flex flex-col gap-6">
@@ -151,12 +169,12 @@ export default function PricingPage() {
                   {plan.features.map((f) => (
                     <li key={f.text} className="flex items-start gap-3">
                       {f.included ? (
-                        <CheckCircle className="h-4 w-4 text-[#f97316] flex-shrink-0 mt-0.5" />
+                        <CheckCircle className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                       ) : (
-                        <X className="h-4 w-4 text-slate-300 flex-shrink-0 mt-0.5" />
+                        <X className="h-4 w-4 text-muted-foreground/30 flex-shrink-0 mt-0.5" />
                       )}
                       <span
-                        className={`text-sm ${f.included ? "text-slate-700" : "text-slate-400"}`}
+                        className={`text-sm ${f.included ? "text-foreground/80" : "text-muted-foreground/50"}`}
                       >
                         {f.text}
                       </span>
@@ -174,7 +192,10 @@ export default function PricingPage() {
                     />
                   ) : (
                     <Link href="/sign-up" className="block">
-                      <Button className="w-full font-bold bg-[#1e3a5f] hover:bg-[#162d4a] text-white">
+                      <Button
+                        variant="outline"
+                        className="w-full font-bold border-border text-foreground hover:bg-muted"
+                      >
                         {plan.cta}
                       </Button>
                     </Link>
@@ -182,42 +203,56 @@ export default function PricingPage() {
                 </div>
               </CardContent>
             </Card>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerChildren>
 
         {/* FAQ */}
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-2xl font-extrabold text-[#1e3a5f] mb-8 text-center">
-            Frequently Asked Questions
-          </h2>
+        <div className="max-w-3xl mx-auto pb-16">
+          <FadeIn>
+            <h2
+              className="text-2xl font-extrabold text-foreground mb-8 text-center"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Frequently Asked Questions
+            </h2>
+          </FadeIn>
           <Accordion type="single" collapsible className="space-y-2">
             {faqs.map((faq) => (
               <AccordionItem
                 key={faq.q}
                 value={faq.q}
-                className="border border-slate-100 rounded-lg px-5 shadow-sm"
+                className="border border-border/60 bg-card/50 rounded-lg px-5 shadow-sm"
               >
-                <AccordionTrigger className="text-left text-sm font-semibold text-[#1e3a5f] hover:no-underline py-4">
+                <AccordionTrigger className="text-left text-sm font-semibold text-foreground hover:no-underline py-4">
                   {faq.q}
                 </AccordionTrigger>
-                <AccordionContent className="text-sm text-slate-600 leading-relaxed pb-4">
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed pb-4">
                   {faq.a}
                 </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
         </div>
+      </div>
 
-        {/* Bottom CTA */}
-        <div className="mt-16 text-center">
-          <p className="text-slate-500 mb-4">Still have questions?</p>
+      {/* Bottom CTA */}
+      <section className="py-16 relative overflow-hidden bg-gradient-to-br from-primary/10 via-muted/20 to-background border-t border-border/50">
+        <div className="absolute inset-0 bg-blueprint-grid opacity-30" />
+        <FadeIn className="relative text-center px-4">
+          <p className="text-muted-foreground mb-5 text-lg">
+            Still have questions? Start for free — no credit card required.
+          </p>
           <Link href="/sign-up">
-            <Button className="bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold px-8">
+            <Button
+              size="lg"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-10 btn-shine shadow-lg shadow-primary/20"
+            >
               Start Free — No Credit Card Needed
             </Button>
           </Link>
-        </div>
-      </div>
+        </FadeIn>
+      </section>
     </div>
   );
 }

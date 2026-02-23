@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "-p", "3001"],
+      "port": 3001,
+      "cwd": "frontend"
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "app.main:app", "--reload", "--port", "8002"],
+      "port": 8002,
+      "cwd": "backend"
+    },
+    {
+      "name": "database",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "db"],
+      "port": 5432
+    }
+  ]
+}

@@ -91,8 +91,8 @@ export function PricingCheckoutButton({ plan, label, highlight }: PricingCheckou
       <Button
         className={`w-full font-bold ${
           highlight
-            ? "bg-[#f97316] hover:bg-[#ea6c0a] text-white"
-            : "bg-[#1e3a5f] hover:bg-[#162d4a] text-white"
+            ? "bg-primary hover:bg-primary/90 text-primary-foreground btn-shine shadow-md shadow-primary/20"
+            : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
         }`}
         onClick={handleCheckout}
         disabled={loading}

@@ -9,7 +9,7 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="md:hidden">
+    <div className="sm:hidden">
       <Button
         type="button"
         variant="ghost"
@@ -21,37 +21,39 @@ export function MobileNav() {
       </Button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-16 z-50 border-b border-border bg-background shadow-md">
-          <nav className="flex flex-col px-4 py-4 gap-1">
+        <div className="absolute left-0 right-0 top-16 z-50 border-b border-border bg-background/95 backdrop-blur-xl shadow-lg">
+          <nav className="flex flex-col px-4 py-4 gap-1 max-w-7xl mx-auto">
             <Link
               href="/how-it-works"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               How It Works
             </Link>
             <Link
               href="/pricing"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               Pricing
             </Link>
             <Link
               href="/sign-in"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               Sign In
             </Link>
-            <Link href="/sign-up" onClick={() => setOpen(false)}>
-              <Button
-                size="sm"
-                className="w-full mt-1 bg-[#f97316] hover:bg-[#ea6c0a] text-white font-semibold"
-              >
-                Get Started Free
-              </Button>
-            </Link>
+            <div className="pt-2 pb-1">
+              <Link href="/sign-up" onClick={() => setOpen(false)}>
+                <Button
+                  size="sm"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine"
+                >
+                  Get Started Free
+                </Button>
+              </Link>
+            </div>
           </nav>
         </div>
       )}

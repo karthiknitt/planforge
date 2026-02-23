@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2 } from "lucide-react";
+import { PlanForgeIcon } from "@/components/logo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -39,13 +39,13 @@ export default function SignUpPage() {
       {/* Mobile-only logo — hidden when left panel is visible */}
       <div className="flex items-center gap-2.5 mb-10 lg:hidden">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/20">
-          <Building2 className="h-4 w-4 text-white" />
+          <PlanForgeIcon className="h-4 w-4 text-white" />
         </div>
         <span
           className="text-xl font-bold tracking-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          Plan<span className="text-[#f97316]">Forge</span>
+          Plan<span className="text-primary">Forge</span>
         </span>
       </div>
 
@@ -77,7 +77,7 @@ export default function SignUpPage() {
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-11 bg-card/80 border-border/70 focus-visible:ring-[#f97316]/30 focus-visible:border-[#f97316]/50"
+            className="h-11 bg-card/80 border-border/70 focus-visible:ring-primary/30 focus-visible:border-primary/50"
           />
         </div>
 
@@ -96,7 +96,7 @@ export default function SignUpPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-11 bg-card/80 border-border/70 focus-visible:ring-[#f97316]/30 focus-visible:border-[#f97316]/50"
+            className="h-11 bg-card/80 border-border/70 focus-visible:ring-primary/30 focus-visible:border-primary/50"
           />
         </div>
 
@@ -115,7 +115,7 @@ export default function SignUpPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="h-11 bg-card/80 border-border/70 focus-visible:ring-[#f97316]/30 focus-visible:border-[#f97316]/50"
+            className="h-11 bg-card/80 border-border/70 focus-visible:ring-primary/30 focus-visible:border-primary/50"
           />
         </div>
 
@@ -128,7 +128,7 @@ export default function SignUpPage() {
         <Button
           type="submit"
           disabled={loading}
-          className="mt-1 h-11 w-full bg-[#f97316] hover:bg-[#ea6c0a] text-white font-bold text-sm btn-shine shadow-lg shadow-orange-500/15"
+          className="mt-1 h-11 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm btn-shine shadow-lg shadow-primary/20"
         >
           {loading ? "Creating account\u2026" : "Create account"}
         </Button>
@@ -138,7 +138,7 @@ export default function SignUpPage() {
         Already have an account?{" "}
         <Link
           href="/sign-in"
-          className="text-[#f97316] font-semibold hover:underline underline-offset-4"
+          className="text-primary font-semibold hover:underline underline-offset-4"
         >
           Sign in &rarr;
         </Link>
