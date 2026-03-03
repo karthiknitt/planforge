@@ -206,7 +206,7 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         bld_w = max(r.x + r.width  for r in rooms) - bld_x
         bld_d = max(r.y + r.depth  for r in rooms) - bld_y
 
-        # ── 2A: Double-line walls ────────────────────────────────────────────
+        # ── 2A: Double-line walls + ANSI hatch fill ──────────────────────────
         walls = build_walls_from_rooms(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
         for wall in walls:
             dx = wall.x2 - wall.x1
@@ -227,6 +227,22 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 (wall.x2 - h * px, wall.y2 - h * py, z_offset),
                 dxfattribs={"layer": layer},
             )
+            # HATCH fill: ANSI31 (45° diagonal) for brick, ANSI37 (crosshatch) for partition
+            hatch_corners = [
+                (wall.x1 + h * px, wall.y1 + h * py),
+                (wall.x2 + h * px, wall.y2 + h * py),
+                (wall.x2 - h * px, wall.y2 - h * py),
+                (wall.x1 - h * px, wall.y1 - h * py),
+            ]
+            try:
+                hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z_offset})
+                hatch.set_pattern_fill(
+                    "ANSI31" if wall.thickness >= ewt_m else "ANSI37",
+                    scale=0.05,
+                )
+                hatch.paths.add_polyline_path(hatch_corners, is_closed=True)
+            except Exception:
+                pass  # hatch is cosmetic — skip on older ezdxf versions
 
         # ── 2B: Door symbols (line + arc at room adjacencies) ───────────────
         door_w = 0.9
