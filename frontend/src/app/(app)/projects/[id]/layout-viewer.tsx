@@ -79,6 +79,7 @@ interface LayoutViewerProps {
   plotShape?: string;
   plotFrontWidth?: number;
   plotRearWidth?: number;
+  plotCorners?: [number, number][];
   numFloors?: number;
 }
 
@@ -92,6 +93,7 @@ export function LayoutViewer({
   plotShape,
   plotFrontWidth,
   plotRearWidth,
+  plotCorners,
   numFloors: _numFloors = 1,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
@@ -364,6 +366,7 @@ export function LayoutViewer({
             plotShape={plotShape}
             plotFrontWidth={plotFrontWidth}
             plotRearWidth={plotRearWidth}
+            plotCorners={plotCorners}
           />
 
           {/* Room legend */}
@@ -424,6 +427,7 @@ export function LayoutViewer({
                 plotShape={plotShape}
                 plotFrontWidth={plotFrontWidth}
                 plotRearWidth={plotRearWidth}
+                plotCorners={plotCorners}
               />
               <p className="text-xs text-muted-foreground">
                 Showing {floor === 1 ? "First" : "Ground"} Floor — switches in the Floor Plan tab

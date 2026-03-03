@@ -340,6 +340,7 @@ interface FloorPlanSVGProps {
   plotShape?: string;
   plotFrontWidth?: number;
   plotRearWidth?: number;
+  plotCorners?: [number, number][];
 }
 
 export function FloorPlanSVG({
@@ -351,6 +352,7 @@ export function FloorPlanSVG({
   plotShape,
   plotFrontWidth,
   plotRearWidth,
+  plotCorners,
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -436,7 +438,18 @@ export function FloorPlanSVG({
       </text>
 
       {/* Plot boundary (dashed) */}
-      {plotShape === "trapezoid" && plotFrontWidth && plotRearWidth ? (
+      {plotShape === "quadrilateral" && plotCorners && plotCorners.length === 4 ? (
+        <polygon
+          points={plotCorners
+            .map(([cx, cy]) => `${px(cx)},${py(cy)}`)
+            .join(" ")}
+          fill="white"
+          stroke="#CBD5E1"
+          strokeWidth={1}
+          strokeDasharray="5 3"
+          className="svg-plot"
+        />
+      ) : plotShape === "trapezoid" && plotFrontWidth && plotRearWidth ? (
         (() => {
           const fw = plotFrontWidth * scale;
           const rw = plotRearWidth * scale;

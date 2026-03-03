@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Float, Integer, Numeric, String, text
+from sqlalchemy import Boolean, Float, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
@@ -63,6 +63,9 @@ class Project(Base):
                                                 server_default=text("false"))
     has_basement: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
                                                 server_default=text("false"))
+
+    # Quadrilateral plot corners — JSON-encoded list of 4 (x,y) tuples (metres)
+    plot_corners: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Arbitrary room config JSON (Phase C)
     custom_room_config: Mapped[str | None]   = mapped_column(

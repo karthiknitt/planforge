@@ -45,6 +45,7 @@ interface ProjectData {
   plotFrontWidth?: string | null;
   plotRearWidth?: string | null;
   plotSideOffset?: string | null;
+  plotCorners?: string | null;
   numFloors?: number;
   hasStilt?: boolean;
   hasBasement?: boolean;
@@ -145,6 +146,55 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const _initCorners = (): { x: string; y: string }[] => {
+    if (project.plotCorners) {
+      try {
+        const parsed = JSON.parse(project.plotCorners) as [number, number][];
+        return parsed.map(([x, y]) => ({ x: String(x), y: String(y) }));
+      } catch {
+        /* fall through */
+      }
+    }
+    return [
+      { x: "0", y: "0" },
+      { x: "", y: "0" },
+      { x: "", y: "" },
+      { x: "0", y: "" },
+    ];
+  };
+  const [quadCorners, setQuadCorners] = useState(_initCorners);
+
+  function setQuadCorner(idx: number, field: "x" | "y", value: string) {
+    setQuadCorners((prev) => prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c)));
+  }
+
+  function isConvex(pts: [number, number][]): boolean {
+    const n = pts.length;
+    let sign = 0;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % n];
+      const [x3, y3] = pts[(i + 2) % n];
+      const cross = (x2 - x1) * (y3 - y2) - (y2 - y1) * (x3 - x2);
+      if (cross !== 0) {
+        const s = cross > 0 ? 1 : -1;
+        if (sign === 0) sign = s;
+        else if (s !== sign) return false;
+      }
+    }
+    return true;
+  }
+
+  function polygonArea(pts: [number, number][]): number {
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % pts.length];
+      area += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(area) / 2;
+  }
+
   const [form, setForm] = useState({
     name: project.name,
     plot_shape: project.plotShape ?? "rectangular",
@@ -186,44 +236,67 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
           "Content-Type": "application/json",
           "X-User-Id": session!.user.id,
         },
-        body: JSON.stringify({
-          name: form.name,
-          plot_shape: form.plot_shape,
-          plot_length: feetToMetres(form.plot_length),
-          plot_width:
-            form.plot_shape === "trapezoid"
-              ? feetToMetres(
-                  String(
-                    Math.max(
-                      parseFloat(form.plot_front_width) || 0,
-                      parseFloat(form.plot_rear_width) || 0
+        body: JSON.stringify(
+          (() => {
+            const base: Record<string, unknown> = {
+              name: form.name,
+              plot_shape: form.plot_shape,
+              plot_side_offset: 0,
+            };
+            if (form.plot_shape === "quadrilateral") {
+              const pts = quadCorners.map(
+                (c) => [parseFloat(c.x) || 0, parseFloat(c.y) || 0] as [number, number]
+              );
+              if (!isConvex(pts))
+                throw new Error("Quadrilateral corners must form a convex polygon.");
+              if (polygonArea(pts) < 30) throw new Error("Plot area must be at least 30 sqm.");
+              const xs = pts.map(([x]) => x);
+              const ys = pts.map(([, y]) => y);
+              base.plot_corners = pts;
+              base.plot_length = Math.max(...ys);
+              base.plot_width = Math.max(...xs);
+              base.plot_front_width = null;
+              base.plot_rear_width = null;
+            } else {
+              base.plot_length = feetToMetres(form.plot_length);
+              base.plot_width =
+                form.plot_shape === "trapezoid"
+                  ? feetToMetres(
+                      String(
+                        Math.max(
+                          parseFloat(form.plot_front_width) || 0,
+                          parseFloat(form.plot_rear_width) || 0
+                        )
+                      )
                     )
-                  )
-                )
-              : feetToMetres(form.plot_width),
-          plot_front_width:
-            form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null,
-          plot_rear_width:
-            form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null,
-          plot_side_offset: 0,
-          setback_front: feetToMetres(form.setback_front),
-          setback_rear: feetToMetres(form.setback_rear),
-          setback_left: feetToMetres(form.setback_left),
-          setback_right: feetToMetres(form.setback_right),
-          road_side: form.road_side,
-          north_direction: OPPOSITE[form.road_side],
-          num_bedrooms: parseInt(form.num_bedrooms, 10),
-          toilets: parseInt(form.toilets, 10),
-          parking: form.parking,
-          city: form.city,
-          road_width_m: Math.round(parseFloat(form.road_width_m) * 0.3048),
-          has_pooja: form.has_pooja,
-          has_study: form.has_study,
-          has_balcony: form.has_balcony,
-          num_floors: parseInt(form.num_floors, 10),
-          has_stilt: form.has_stilt,
-          has_basement: form.has_basement,
-        }),
+                  : feetToMetres(form.plot_width);
+              base.plot_front_width =
+                form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null;
+              base.plot_rear_width =
+                form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null;
+            }
+            return {
+              ...base,
+              setback_front: feetToMetres(form.setback_front),
+              setback_rear: feetToMetres(form.setback_rear),
+              setback_left: feetToMetres(form.setback_left),
+              setback_right: feetToMetres(form.setback_right),
+              road_side: form.road_side,
+              north_direction: OPPOSITE[form.road_side],
+              num_bedrooms: parseInt(form.num_bedrooms, 10),
+              toilets: parseInt(form.toilets, 10),
+              parking: form.parking,
+              city: form.city,
+              road_width_m: Math.round(parseFloat(form.road_width_m) * 0.3048),
+              has_pooja: form.has_pooja,
+              has_study: form.has_study,
+              has_balcony: form.has_balcony,
+              num_floors: parseInt(form.num_floors, 10),
+              has_stilt: form.has_stilt,
+              has_basement: form.has_basement,
+            };
+          })()
+        ),
       });
 
       if (!res.ok) {
@@ -249,7 +322,10 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-8 md:rounded-2xl md:border md:border-border md:bg-card/30 md:p-8">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-8 md:rounded-2xl md:border md:border-border md:bg-card/30 md:p-8"
+      >
         {/* ── 1. Project name ───────────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
           <Section num="1" title="Project" />
@@ -276,7 +352,12 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                 [
                   { value: "rectangular", label: "Rectangular", desc: "Standard 4-sided plot" },
                   { value: "trapezoid", label: "Trapezoid", desc: "Different front & rear widths" },
-                ] as const
+                  {
+                    value: "quadrilateral",
+                    label: "Quadrilateral",
+                    desc: "Any convex 4-corner shape",
+                  },
+                ] as { value: string; label: string; desc: string }[]
               ).map((opt) => (
                 <button
                   key={opt.value}
@@ -296,41 +377,43 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="plot_length">Length / Depth (feet)</Label>
-              <Input
-                id="plot_length"
-                type="number"
-                min="16"
-                step="0.1"
-                required
-                value={form.plot_length}
-                onChange={(e) => set("plot_length", e.target.value)}
-              />
-            </div>
-            {form.plot_shape === "rectangular" ? (
+          {form.plot_shape !== "quadrilateral" && (
+            <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="plot_width">Width (feet)</Label>
+                <Label htmlFor="plot_length">Length / Depth (feet)</Label>
                 <Input
-                  id="plot_width"
+                  id="plot_length"
                   type="number"
                   min="16"
                   step="0.1"
                   required
-                  value={form.plot_width}
-                  onChange={(e) => set("plot_width", e.target.value)}
+                  value={form.plot_length}
+                  onChange={(e) => set("plot_length", e.target.value)}
                 />
               </div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                <Label className="invisible text-xs">spacer</Label>
-                <p className="flex h-9 items-center text-xs text-muted-foreground">
-                  Enter front &amp; rear widths below
-                </p>
-              </div>
-            )}
-          </div>
+              {form.plot_shape === "rectangular" ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="plot_width">Width (feet)</Label>
+                  <Input
+                    id="plot_width"
+                    type="number"
+                    min="16"
+                    step="0.1"
+                    required
+                    value={form.plot_width}
+                    onChange={(e) => set("plot_width", e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="invisible text-xs">spacer</Label>
+                  <p className="flex h-9 items-center text-xs text-muted-foreground">
+                    Enter front &amp; rear widths below
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {form.plot_shape === "trapezoid" && (
             <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4">
@@ -364,6 +447,50 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               </div>
             </div>
           )}
+          {form.plot_shape === "quadrilateral" && (
+            <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Corner coordinates (metres, CCW from front-left)
+              </p>
+              {(
+                [
+                  { label: "Front-Left (0, 0 — fixed)", idx: 0 },
+                  { label: "Front-Right", idx: 1 },
+                  { label: "Rear-Right", idx: 2 },
+                  { label: "Rear-Left", idx: 3 },
+                ] as const
+              ).map(({ label, idx }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <span className="w-36 shrink-0 text-xs font-medium text-foreground">{label}</span>
+                  <div className="flex gap-2">
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">X (m)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={quadCorners[idx].x}
+                        disabled={idx === 0}
+                        onChange={(e) => setQuadCorner(idx, "x", e.target.value)}
+                        className="w-24"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">Y (m)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={quadCorners[idx].y}
+                        disabled={idx === 0}
+                        onChange={(e) => setQuadCorner(idx, "y", e.target.value)}
+                        className="w-24"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="city">City / Compliance rules</Label>
             <Select id="city" value={form.city} onChange={(e) => set("city", e.target.value)}>

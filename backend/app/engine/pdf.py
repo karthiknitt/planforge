@@ -99,7 +99,16 @@ def _draw_floor(
     c.setDash(5, 3)
     c.setStrokeColor(HexColor("#CBD5E1"))
     c.setLineWidth(0.75)
-    c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
+    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners and len(cfg.plot_corners) == 4:
+        pts = [(ox + cx * scale, oy + cy * scale) for cx, cy in cfg.plot_corners]
+        p = c.beginPath()
+        p.moveTo(*pts[0])
+        for pt in pts[1:]:
+            p.lineTo(*pt)
+        p.close()
+        c.drawPath(p, stroke=1, fill=0)
+    else:
+        c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
 
     # ── Room fills (coloured backgrounds) ─────────────────────────────────────

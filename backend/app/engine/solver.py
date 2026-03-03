@@ -62,6 +62,57 @@ def _mm(metres: float) -> int:
     return int(round(metres * SCALE))
 
 
+def _quad_plate_and_planes(
+    cfg: PlotConfig, ewt: float
+) -> tuple[int, int, int, int, list[tuple[int, int, int]]]:
+    """For a quadrilateral plot: return (bw, bd, ox, oy, half_planes).
+
+    half_planes is a list of (dx, dy, rhs) where for every room corner (rx, ry)
+    in solver coords (mm, relative to plate origin):  dx*ry - dy*rx >= rhs
+    """
+    from shapely.geometry import Polygon
+
+    poly = Polygon(cfg.plot_corners)
+    avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+    inset = poly.buffer(-(avg_sb + ewt), join_style="mitre")
+    if inset.is_empty:
+        return 0, 0, 0, 0, []
+
+    minx, miny, maxx, maxy = inset.bounds
+    bw = _mm(maxx - minx)
+    bd = _mm(maxy - miny)
+    ox = _mm(minx)
+    oy = _mm(miny)
+
+    coords = list(inset.exterior.coords)[:-1]  # drop closing duplicate
+    # Ensure CCW winding (interior = left of each directed edge)
+    # Signed area via shoelace: positive → CCW, negative → CW
+    n_c = len(coords)
+    area2 = sum(
+        coords[i][0] * coords[(i + 1) % n_c][1] - coords[(i + 1) % n_c][0] * coords[i][1]
+        for i in range(n_c)
+    )
+    if area2 < 0:  # CW — reverse to CCW
+        coords = coords[::-1]
+
+    planes: list[tuple[int, int, int]] = []
+    n = len(coords)
+    for i in range(n):
+        p1 = coords[i]
+        p2 = coords[(i + 1) % n]
+        dx = round((p2[0] - p1[0]) * SCALE)
+        dy = round((p2[1] - p1[1]) * SCALE)
+        cx = round(p1[0] * SCALE)
+        cy = round(p1[1] * SCALE)
+        # Translate to solver coords: plot_mm = ox + solver_mm
+        # dx*(oy+ry) - dy*(ox+rx) >= dx*cy - dy*cx
+        # => dx*ry - dy*rx >= dx*cy - dy*cx - dx*oy + dy*ox
+        rhs = dx * cy - dy * cx - dx * oy + dy * ox
+        planes.append((dx, dy, rhs))
+
+    return bw, bd, ox, oy, planes
+
+
 def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
     """Determine which rooms to solve for based on PlotConfig."""
     rooms = []
@@ -135,14 +186,17 @@ def _solve_one(
     """Run a single CP-SAT solve and return a Layout if successful."""
 
     # Buildable plate dimensions in mm
-    bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
-    bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
+    quad_planes: list[tuple[int, int, int]] = []
+    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
+        bw, bd, ox, oy, quad_planes = _quad_plate_and_planes(cfg, ewt)
+    else:
+        bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
+        bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
+        ox = _mm(cfg.setback_left + ewt)
+        oy = _mm(cfg.setback_front + ewt)
 
     if bw <= 0 or bd <= 0:
         return None
-
-    ox = _mm(cfg.setback_left + ewt)
-    oy = _mm(cfg.setback_front + ewt)
 
     model = cp_model.CpModel()
     room_vars: list[_RoomVar] = []
@@ -195,6 +249,18 @@ def _solve_one(
         )
         room_vars.append(rv)
         (gf_vars if floor == 0 else ff_vars).append(rv)
+
+    # Quadrilateral half-plane constraints — all 4 corners of each room inside inset polygon
+    if quad_planes:
+        for rv in room_vars:
+            for corner_x, corner_y in [
+                (rv.x, rv.y),
+                (rv.x + rv.w, rv.y),
+                (rv.x, rv.y + rv.d),
+                (rv.x + rv.w, rv.y + rv.d),
+            ]:
+                for dx, dy, rhs in quad_planes:
+                    model.add(dx * corner_y - dy * corner_x >= rhs)
 
     # No-overlap per floor
     if gf_vars:
