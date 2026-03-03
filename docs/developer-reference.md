@@ -814,3 +814,54 @@ Even if the parent is a Server Component, `ThemeToggle` must be `"use client"` s
 ### Layout IDs from solver
 
 The CP-SAT solver assigns IDs like `"solver-front-0"`, `"solver-mid-0"`, `"solver-rear-0"`. Do not assume `"A"`, `"B"`, `"C"`. All UI code and tests use the IDs from the generate response.
+
+### OR-Tools interval var (OR-Tools 9.x breaking change)
+
+`new_interval_var(x, w, x+w, name)` fails in OR-Tools 9.x because `x+w` is a two-`IntVar` sum (not affine). Fix: introduce explicit end var:
+
+```python
+ex = model.new_int_var(0, horizon, f"{name}_end")
+model.add(ex == x + w)
+model.new_interval_var(x, w, ex, name)
+```
+
+### DXF HATCH fill
+
+```python
+hatch = msp.add_hatch(dxfattribs={"layer": layer_name})
+hatch.set_pattern_fill("ANSI31", scale=0.05)
+hatch.paths.add_polyline_path(corners, is_closed=True)
+```
+`corners` is a list of 2-tuples. Wrap in `try/except` — hatch is non-critical.
+
+### Road width input (frontend)
+
+The "new project" form stores road width in **feet** in React state (user-facing unit), then converts to metres on submit (`ft * 0.3048`). This is intentional — Indian builders think in feet.
+
+---
+
+## Session Log
+
+### 2026-03-03 — OR-Tools Solver Fix, DXF Hatch, Quad Plot, Road Width
+
+**What was built:**
+
+- **OR-Tools 9.x solver fix** — `new_interval_var()` end argument must be an affine expression, not a two-`IntVar` sum. Fixed by introducing explicit `end_var` IntVars. Solver now reliably produces 3 diverse layouts.
+- **DXF HATCH fills** — wall area fill using `msp.add_hatch()` + `set_pattern_fill("ANSI31")` + polyline path. `ANSI37` for slab fill. Non-critical: wrapped in `try/except`.
+- **Quadrilateral plot compliance fix** — `compliance.py` now uses the same Shapely avg-setback inset geometry as `_quad_floor_plate()` (was using rectangular setbacks inconsistently).
+- **Pydantic ConfigDict migration** — confirmed already using `model_config = ConfigDict(env_file=".env")`, CLAUDE.md was stale.
+- **Road width input UX fix** — new project form stores road width in feet in React state; converts to metres (`× 0.3048`) on form submit to match backend expectation.
+- **Test suite** — 55/55 pytest tests passing on main.
+
+**Key files changed:**
+
+- `backend/app/engine/solver.py` — OR-Tools 9.x interval var fix; 3 layouts verified
+- `backend/app/api/routes/export.py` — DXF HATCH fills for wall areas
+- `backend/app/engine/compliance.py` — quad setback consistency fix
+- `frontend/src/app/(app)/projects/new/page.tsx` — road width ft state + submit conversion
+
+**Patterns established:**
+
+- Never pass `x + w` (two-IntVar sum) directly as OR-Tools interval end — always create explicit end IntVar
+- DXF HATCH: always use polyline path (not edge path) for simple polygons
+- Quad plot compliance and geometry must use the same inset calculation path or compliance results are meaningless
