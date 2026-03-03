@@ -196,6 +196,44 @@ export default function NewProjectPage() {
   const [loading, setLoading] = useState(false);
   const [configMode, setConfigMode] = useState<"basic" | "advanced">("basic");
   const [customRooms, setCustomRooms] = useState<CustomRoomSpec[]>([]);
+  // Quadrilateral corners: [FL fixed, FR, RR, RL] in metres
+  const [quadCorners, setQuadCorners] = useState([
+    { x: "0", y: "0" }, // Front-Left (fixed)
+    { x: "", y: "0" }, // Front-Right
+    { x: "", y: "" }, // Rear-Right
+    { x: "0", y: "" }, // Rear-Left
+  ]);
+
+  function setQuadCorner(idx: number, field: "x" | "y", value: string) {
+    setQuadCorners((prev) => prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c)));
+  }
+
+  function isConvex(pts: [number, number][]): boolean {
+    const n = pts.length;
+    let sign = 0;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % n];
+      const [x3, y3] = pts[(i + 2) % n];
+      const cross = (x2 - x1) * (y3 - y2) - (y2 - y1) * (x3 - x2);
+      if (cross !== 0) {
+        const s = cross > 0 ? 1 : -1;
+        if (sign === 0) sign = s;
+        else if (s !== sign) return false;
+      }
+    }
+    return true;
+  }
+
+  function polygonArea(pts: [number, number][]): number {
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % pts.length];
+      area += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(area) / 2;
+  }
 
   const [form, setForm] = useState({
     name: "",
@@ -278,8 +316,33 @@ export default function NewProjectPage() {
       const payload: Record<string, unknown> = {
         name: form.name,
         plot_shape: form.plot_shape,
-        plot_length: feetToMetres(form.plot_length),
-        plot_width:
+        plot_side_offset: 0,
+      };
+
+      if (form.plot_shape === "quadrilateral") {
+        const pts = quadCorners.map(
+          (c) => [parseFloat(c.x) || 0, parseFloat(c.y) || 0] as [number, number]
+        );
+        if (!isConvex(pts)) {
+          setError("Quadrilateral corners must form a convex polygon.");
+          setLoading(false);
+          return;
+        }
+        if (polygonArea(pts) < 30) {
+          setError("Plot area must be at least 30 sqm.");
+          setLoading(false);
+          return;
+        }
+        const xs = pts.map(([x]) => x);
+        const ys = pts.map(([, y]) => y);
+        payload.plot_corners = pts;
+        payload.plot_length = Math.max(...ys);
+        payload.plot_width = Math.max(...xs);
+        payload.plot_front_width = null;
+        payload.plot_rear_width = null;
+      } else {
+        payload.plot_length = feetToMetres(form.plot_length);
+        payload.plot_width =
           form.plot_shape === "trapezoid"
             ? feetToMetres(
                 String(
@@ -289,12 +352,14 @@ export default function NewProjectPage() {
                   )
                 )
               )
-            : feetToMetres(form.plot_width),
-        plot_front_width:
-          form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null,
-        plot_rear_width:
-          form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null,
-        plot_side_offset: 0,
+            : feetToMetres(form.plot_width);
+        payload.plot_front_width =
+          form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null;
+        payload.plot_rear_width =
+          form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null;
+      }
+
+      Object.assign(payload, {
         setback_front: feetToMetres(form.setback_front),
         setback_rear: feetToMetres(form.setback_rear),
         setback_left: feetToMetres(form.setback_left),
@@ -308,7 +373,7 @@ export default function NewProjectPage() {
         num_floors: parseInt(form.num_floors, 10),
         has_stilt: form.has_stilt,
         has_basement: form.has_basement,
-      };
+      });
 
       if (configMode === "advanced") {
         // Advanced mode: pass custom_room_config, derive num_bedrooms/toilets from it
@@ -359,7 +424,10 @@ export default function NewProjectPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-8 md:rounded-2xl md:border md:border-border md:bg-card/30 md:p-8">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-8 md:rounded-2xl md:border md:border-border md:bg-card/30 md:p-8"
+      >
         {/* ── 1. Project name ───────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
           <Section num="1" title="Project" />
@@ -386,6 +454,11 @@ export default function NewProjectPage() {
                 [
                   { value: "rectangular", label: "Rectangular", desc: "Standard 4-sided plot" },
                   { value: "trapezoid", label: "Trapezoid", desc: "Different front & rear widths" },
+                  {
+                    value: "quadrilateral",
+                    label: "Quadrilateral",
+                    desc: "Any convex 4-corner shape",
+                  },
                 ] as const
               ).map((opt) => (
                 <button
@@ -474,6 +547,46 @@ export default function NewProjectPage() {
                 />
                 <p className="text-xs text-muted-foreground">Opposite side</p>
               </div>
+            </div>
+          )}
+
+          {form.plot_shape === "quadrilateral" && (
+            <div className="rounded-lg border bg-muted/30 p-4 flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground">
+                Enter 4 corner coordinates in metres (CCW: Front-Left → Front-Right → Rear-Right →
+                Rear-Left). Front-Left is fixed at (0, 0).
+              </p>
+              {(["Front-Left (fixed)", "Front-Right", "Rear-Right", "Rear-Left"] as const).map(
+                (label, idx) => (
+                  <div key={label} className="grid grid-cols-[140px_1fr_1fr] items-center gap-3">
+                    <span className="text-sm font-medium">{label}</span>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">X (metres)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="0"
+                        disabled={idx === 0}
+                        required={idx > 0}
+                        value={quadCorners[idx].x}
+                        onChange={(e) => setQuadCorner(idx, "x", e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">Y (metres)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="0"
+                        disabled={idx === 0 || idx === 1}
+                        required={idx > 1}
+                        value={quadCorners[idx].y}
+                        onChange={(e) => setQuadCorner(idx, "y", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )
+              )}
             </div>
           )}
 

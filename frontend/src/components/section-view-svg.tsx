@@ -88,8 +88,6 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
   }
 
   const dimColor = "#94A3B8";
-  const wallColor = "#1E293B";
-  const slabColor = "#475569";
   const foundColor = "#92400E";
   const groundColor = "#D97706";
   const textColor = "#334155";
@@ -101,6 +99,25 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
       style={{ width: "100%", height: "auto" }}
       aria-label="Building section view"
     >
+      <defs>
+        {/* Wall hatch: 45° diagonal lines on masonry dark background */}
+        <pattern id="wall-hatch" width="6" height="6" patternUnits="userSpaceOnUse">
+          <rect width="6" height="6" fill="#1E293B" />
+          <line x1="0" y1="6" x2="6" y2="0" stroke="#334155" strokeWidth="1.2" />
+          <line x1="-6" y1="6" x2="0" y2="0" stroke="#334155" strokeWidth="1.2" />
+          <line x1="6" y1="6" x2="12" y2="0" stroke="#334155" strokeWidth="1.2" />
+        </pattern>
+        {/* Slab hatch: crosshatch on concrete slate background */}
+        <pattern id="slab-hatch" width="6" height="6" patternUnits="userSpaceOnUse">
+          <rect width="6" height="6" fill="#475569" />
+          <line x1="0" y1="6" x2="6" y2="0" stroke="#64748B" strokeWidth="1" />
+          <line x1="-6" y1="6" x2="0" y2="0" stroke="#64748B" strokeWidth="1" />
+          <line x1="6" y1="6" x2="12" y2="0" stroke="#64748B" strokeWidth="1" />
+          <line x1="0" y1="0" x2="6" y2="6" stroke="#64748B" strokeWidth="1" />
+          <line x1="-6" y1="0" x2="0" y2="6" stroke="#64748B" strokeWidth="1" />
+          <line x1="6" y1="0" x2="12" y2="6" stroke="#64748B" strokeWidth="1" />
+        </pattern>
+      </defs>
       {/* Background */}
       <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
 
@@ -140,7 +157,7 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
         y={sy(EL_FF_TOP)}
         width={sw(EWT)}
         height={sy(EL_GL) - sy(EL_FF_TOP)}
-        fill={wallColor}
+        fill="url(#wall-hatch)"
         opacity={0.85}
       />
       {/* ── Right external wall ───────────────────────────────────── */}
@@ -149,7 +166,7 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
         y={sy(EL_FF_TOP)}
         width={sw(EWT)}
         height={sy(EL_GL) - sy(EL_FF_TOP)}
-        fill={wallColor}
+        fill="url(#wall-hatch)"
         opacity={0.85}
       />
 
@@ -159,7 +176,7 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
         y={sy(EL_FF_SLAB_TOP)}
         width={bPx}
         height={sw(SLAB_T)}
-        fill={slabColor}
+        fill="url(#slab-hatch)"
         opacity={0.9}
       />
 
@@ -169,7 +186,7 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
         y={sy(EL_ROOF_TOP)}
         width={bPx}
         height={sw(SLAB_T)}
-        fill={slabColor}
+        fill="url(#slab-hatch)"
         opacity={0.9}
       />
 
@@ -180,7 +197,7 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
         y={sy(EL_PARAPET_TOP)}
         width={sw(EWT)}
         height={sw(PARAPET_H)}
-        fill={wallColor}
+        fill="url(#wall-hatch)"
         opacity={0.7}
       />
       {/* Right parapet */}
@@ -189,7 +206,7 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
         y={sy(EL_PARAPET_TOP)}
         width={sw(EWT)}
         height={sw(PARAPET_H)}
-        fill={wallColor}
+        fill="url(#wall-hatch)"
         opacity={0.7}
       />
 
@@ -367,11 +384,11 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
 
       {/* ── Legend ───────────────────────────────────────────────── */}
       <g transform={`translate(${PAD_X}, ${VP_H - 18})`}>
-        <rect x={0} y={-9} width={12} height={9} fill={wallColor} opacity={0.85} />
+        <rect x={0} y={-9} width={12} height={9} fill="url(#wall-hatch)" opacity={0.85} />
         <text x={16} y={0} fontSize={8} fill={textColor} fontFamily="sans-serif">
           Masonry wall
         </text>
-        <rect x={80} y={-9} width={12} height={9} fill={slabColor} opacity={0.9} />
+        <rect x={80} y={-9} width={12} height={9} fill="url(#slab-hatch)" opacity={0.9} />
         <text x={96} y={0} fontSize={8} fill={textColor} fontFamily="sans-serif">
           RCC slab
         </text>

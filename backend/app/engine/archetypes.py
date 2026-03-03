@@ -35,7 +35,27 @@ def _trapezoid_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     return FloorPlate(ox=ox, oy=oy, width=usable_width, depth=depth)
 
 
+def _quad_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    from shapely.geometry import Polygon
+    poly = Polygon(cfg.plot_corners)
+    if not poly.is_valid or not poly.is_simple:
+        raise ValueError("Quadrilateral corners do not form a valid simple polygon")
+    avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+    inset = poly.buffer(-(avg_sb + ewt), join_style="mitre")
+    if inset.is_empty:
+        raise ValueError("Quadrilateral plot too small for given setbacks and wall thickness")
+    minx, miny, maxx, maxy = inset.bounds
+    return FloorPlate(
+        ox=round(minx, 3),
+        oy=round(miny, 3),
+        width=round(maxx - minx, 3),
+        depth=round(maxy - miny, 3),
+    )
+
+
 def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
+        return _quad_floor_plate(cfg, ewt)
     if cfg.plot_shape == "trapezoid" and cfg.plot_front_width > 0 and cfg.plot_rear_width > 0:
         return _trapezoid_floor_plate(cfg, ewt)
     ox    = cfg.setback_left  + ewt

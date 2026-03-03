@@ -1,3 +1,4 @@
+import json as _json
 from decimal import Decimal
 from io import BytesIO, StringIO
 
@@ -53,6 +54,7 @@ def _cfg_from_project(project: Project) -> PlotConfig:
         plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
         plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
         plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
+        plot_corners=_json.loads(project.plot_corners) if getattr(project, "plot_corners", None) else None,
     )
 
 
@@ -145,15 +147,16 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     doc.header["$INSUNITS"] = 6  # metres
 
     layer_defs = [
-        ("A-WALL-BRICK", colors.RED,    0.50),
-        ("A-WALL-INT",   colors.YELLOW, 0.35),
-        ("A-DOOR",       colors.CYAN,   0.25),
-        ("A-WINDOW",     colors.BLUE,   0.25),
-        ("S-COLUMN",     colors.WHITE,  0.35),
-        ("S-BEAM",       colors.WHITE,  0.35),
-        ("S-GRID",       colors.GRAY,   0.18),
-        ("DIM-LINE",     colors.GRAY,   0.18),
-        ("TEXT",         colors.WHITE,  0.18),
+        ("PLOT-BOUNDARY", colors.GREEN,  0.25),
+        ("A-WALL-BRICK",  colors.RED,    0.50),
+        ("A-WALL-INT",    colors.YELLOW, 0.35),
+        ("A-DOOR",        colors.CYAN,   0.25),
+        ("A-WINDOW",      colors.BLUE,   0.25),
+        ("S-COLUMN",      colors.WHITE,  0.35),
+        ("S-BEAM",        colors.WHITE,  0.35),
+        ("S-GRID",        colors.GRAY,   0.18),
+        ("DIM-LINE",      colors.GRAY,   0.18),
+        ("TEXT",          colors.WHITE,  0.18),
     ]
     for lname, color, lw in layer_defs:
         layer = doc.layers.new(lname)
@@ -162,6 +165,22 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
 
     msp = doc.modelspace()
 
+    # ── Plot boundary ─────────────────────────────────────────────────────────
+    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners and len(cfg.plot_corners) == 4:
+        boundary_pts = [(float(x), float(y)) for x, y in cfg.plot_corners]
+    else:
+        boundary_pts = [
+            (0.0, 0.0),
+            (cfg.plot_width, 0.0),
+            (cfg.plot_width, cfg.plot_length),
+            (0.0, cfg.plot_length),
+        ]
+    msp.add_lwpolyline(
+        boundary_pts,
+        close=True,
+        dxfattribs={"layer": "PLOT-BOUNDARY", "linetype": "DASHED"},
+    )
+
     # Collect all floor plans (including optional second/basement floors)
     floor_plans = [layout.ground_floor, layout.first_floor]
     if layout.second_floor:
@@ -169,24 +188,126 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if layout.basement_floor:
         floor_plans.append(layout.basement_floor)
 
+    import math
+    from app.engine.cad_elements import build_walls_from_rooms, build_windows
+
+    ewt_m = 0.23   # external wall thickness (m)
+    iwt_m = 0.115  # internal (half-brick) wall thickness
+
     for floor_plan in floor_plans:
         z_offset = float(floor_plan.floor) * 3.0
+        rooms = floor_plan.rooms
+        if not rooms:
+            continue
 
-        # ── Rooms as closed polylines ────────────────────────────────────────
-        for room in floor_plan.rooms:
-            pts = [
-                (room.x, room.y),
-                (room.x + room.width, room.y),
-                (room.x + room.width, room.y + room.depth),
-                (room.x, room.y + room.depth),
-            ]
-            layer = "A-WALL-BRICK" if room.type in ("living", "bedroom", "master_bedroom", "kitchen") else "A-WALL-INT"
-            msp.add_lwpolyline(
-                pts,
-                close=True,
-                dxfattribs={"layer": layer, "elevation": z_offset},
+        # Buildable bounds derived from actual room extents
+        bld_x = min(r.x for r in rooms)
+        bld_y = min(r.y for r in rooms)
+        bld_w = max(r.x + r.width  for r in rooms) - bld_x
+        bld_d = max(r.y + r.depth  for r in rooms) - bld_y
+
+        # ── 2A: Double-line walls ────────────────────────────────────────────
+        walls = build_walls_from_rooms(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
+        for wall in walls:
+            dx = wall.x2 - wall.x1
+            dy = wall.y2 - wall.y1
+            seg_len = math.hypot(dx, dy)
+            if seg_len < 0.001:
+                continue
+            px, py = -dy / seg_len, dx / seg_len  # perpendicular unit vector
+            h = wall.thickness / 2
+            layer = "A-WALL-BRICK" if wall.thickness >= ewt_m else "A-WALL-INT"
+            msp.add_line(
+                (wall.x1 + h * px, wall.y1 + h * py, z_offset),
+                (wall.x2 + h * px, wall.y2 + h * py, z_offset),
+                dxfattribs={"layer": layer},
             )
-            # Room label — use MTEXT for multiline support
+            msp.add_line(
+                (wall.x1 - h * px, wall.y1 - h * py, z_offset),
+                (wall.x2 - h * px, wall.y2 - h * py, z_offset),
+                dxfattribs={"layer": layer},
+            )
+
+        # ── 2B: Door symbols (line + arc at room adjacencies) ───────────────
+        door_w = 0.9
+        placed_doors: set = set()
+        for i, ra in enumerate(rooms):
+            for j, rb in enumerate(rooms):
+                if j <= i:
+                    continue
+                # Vertical shared wall: ra right-edge ≈ rb left-edge
+                if abs(ra.x + ra.width - rb.x) < 0.05:
+                    y_lo = max(ra.y, rb.y)
+                    y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                    if y_hi - y_lo > door_w + 0.1:
+                        wx = ra.x + ra.width
+                        my = (y_lo + y_hi) / 2
+                        key = (round(wx, 2), round(my, 2), "v")
+                        if key not in placed_doors:
+                            placed_doors.add(key)
+                            hy = my - door_w / 2
+                            msp.add_line((wx, hy, z_offset), (wx, hy + door_w, z_offset), dxfattribs={"layer": "A-DOOR"})
+                            msp.add_arc(center=(wx, hy), radius=door_w, start_angle=90, end_angle=180, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
+                elif abs(rb.x + rb.width - ra.x) < 0.05:
+                    y_lo = max(ra.y, rb.y)
+                    y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                    if y_hi - y_lo > door_w + 0.1:
+                        wx = rb.x + rb.width
+                        my = (y_lo + y_hi) / 2
+                        key = (round(wx, 2), round(my, 2), "v")
+                        if key not in placed_doors:
+                            placed_doors.add(key)
+                            hy = my - door_w / 2
+                            msp.add_line((wx, hy, z_offset), (wx, hy + door_w, z_offset), dxfattribs={"layer": "A-DOOR"})
+                            msp.add_arc(center=(wx, hy + door_w), radius=door_w, start_angle=270, end_angle=360, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
+                # Horizontal shared wall: ra top ≈ rb bottom
+                if abs(ra.y + ra.depth - rb.y) < 0.05:
+                    x_lo = max(ra.x, rb.x)
+                    x_hi = min(ra.x + ra.width, rb.x + rb.width)
+                    if x_hi - x_lo > door_w + 0.1:
+                        wy = ra.y + ra.depth
+                        mx = (x_lo + x_hi) / 2
+                        key = (round(mx, 2), round(wy, 2), "h")
+                        if key not in placed_doors:
+                            placed_doors.add(key)
+                            hx = mx - door_w / 2
+                            msp.add_line((hx, wy, z_offset), (hx + door_w, wy, z_offset), dxfattribs={"layer": "A-DOOR"})
+                            msp.add_arc(center=(hx, wy), radius=door_w, start_angle=0, end_angle=90, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
+                elif abs(rb.y + rb.depth - ra.y) < 0.05:
+                    x_lo = max(ra.x, rb.x)
+                    x_hi = min(ra.x + ra.width, rb.x + rb.width)
+                    if x_hi - x_lo > door_w + 0.1:
+                        wy = rb.y + rb.depth
+                        mx = (x_lo + x_hi) / 2
+                        key = (round(mx, 2), round(wy, 2), "h")
+                        if key not in placed_doors:
+                            placed_doors.add(key)
+                            hx = mx - door_w / 2
+                            msp.add_line((hx, wy, z_offset), (hx + door_w, wy, z_offset), dxfattribs={"layer": "A-DOOR"})
+                            msp.add_arc(center=(hx + door_w, wy), radius=door_w, start_angle=90, end_angle=180, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
+
+        # ── 2C: Window symbols (3 parallel lines on exterior walls) ─────────
+        windows = build_windows(rooms, bld_x, bld_y, bld_w, bld_d)
+        win_gap = 0.04  # 40 mm between the 3 window lines
+        for win in windows:
+            hw = win.width / 2
+            if win.is_horizontal:
+                for off in (-win_gap, 0.0, win_gap):
+                    msp.add_line(
+                        (win.cx - hw, win.cy + off, z_offset),
+                        (win.cx + hw, win.cy + off, z_offset),
+                        dxfattribs={"layer": "A-WINDOW"},
+                    )
+            else:
+                for off in (-win_gap, 0.0, win_gap):
+                    msp.add_line(
+                        (win.cx + off, win.cy - hw, z_offset),
+                        (win.cx + off, win.cy + hw, z_offset),
+                        dxfattribs={"layer": "A-WINDOW"},
+                    )
+
+        # ── Room labels ──────────────────────────────────────────────────────
+        for room in rooms:
             cx = room.x + room.width / 2
             cy = room.y + room.depth / 2
             msp.add_mtext(
@@ -199,9 +320,9 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 },
             )
 
-        # ── Columns ─────────────────────────────────────────────────────────
+        # ── Columns ──────────────────────────────────────────────────────────
         half = 0.15
-        seen = set()
+        seen: set = set()
         for col in floor_plan.columns:
             key = (round(col.x, 2), round(col.y, 2))
             if key in seen:
@@ -219,29 +340,26 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 dxfattribs={"layer": "S-COLUMN", "elevation": z_offset},
             )
 
-        # ── Overall dimension lines (2D points only) ────────────────────────
-        rooms = floor_plan.rooms
-        if rooms:
-            min_x = min(r.x for r in rooms)
-            max_x = max(r.x + r.width for r in rooms)
-            min_y = min(r.y for r in rooms)
-            max_y = max(r.y + r.depth for r in rooms)
-
-            dim_offset = 1.5
-            msp.add_linear_dim(
-                base=(min_x, min_y - dim_offset),
-                p1=(min_x, min_y),
-                p2=(max_x, min_y),
-                angle=0,
-                dxfattribs={"layer": "DIM-LINE"},
-            ).render()
-            msp.add_linear_dim(
-                base=(min_x - dim_offset, min_y),
-                p1=(min_x, min_y),
-                p2=(min_x, max_y),
-                angle=90,
-                dxfattribs={"layer": "DIM-LINE"},
-            ).render()
+        # ── Overall dimension lines ──────────────────────────────────────────
+        min_x = min(r.x for r in rooms)
+        max_x = max(r.x + r.width  for r in rooms)
+        min_y = min(r.y for r in rooms)
+        max_y = max(r.y + r.depth  for r in rooms)
+        dim_offset = 1.5
+        msp.add_linear_dim(
+            base=(min_x, min_y - dim_offset),
+            p1=(min_x, min_y),
+            p2=(max_x, min_y),
+            angle=0,
+            dxfattribs={"layer": "DIM-LINE"},
+        ).render()
+        msp.add_linear_dim(
+            base=(min_x - dim_offset, min_y),
+            p1=(min_x, min_y),
+            p2=(min_x, max_y),
+            angle=90,
+            dxfattribs={"layer": "DIM-LINE"},
+        ).render()
 
     # Title annotation
     msp.add_mtext(

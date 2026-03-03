@@ -184,7 +184,11 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     buildable_w = cfg.plot_width  - cfg.setback_left  - cfg.setback_right
     buildable_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
     footprint   = buildable_w * buildable_d
-    plot_area   = cfg.plot_width * cfg.plot_length
+    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
+        from shapely.geometry import Polygon as _Polygon
+        plot_area = _Polygon(cfg.plot_corners).area
+    else:
+        plot_area = cfg.plot_width * cfg.plot_length
     coverage_pct = (footprint / plot_area) * 100
 
     max_cov = rules["max_floor_coverage_pct"]
@@ -213,10 +217,21 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
 
     # --- Room boundary vs. setback lines (above-ground floors only) ---
     ewt = rules["external_wall_thickness_mm"] / 1000
-    min_x = cfg.setback_left  + ewt
-    max_x = cfg.plot_width    - cfg.setback_right - ewt
-    min_y = cfg.setback_front + ewt
-    max_y = cfg.plot_length   - cfg.setback_rear  - ewt
+    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
+        # Derive boundary from the same Shapely inset used by _quad_floor_plate
+        from shapely.geometry import Polygon as _Polygon
+        _poly = _Polygon(cfg.plot_corners)
+        _avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        _inset = _poly.buffer(-(_avg_sb + ewt), join_style="mitre")
+        if _inset.is_empty:
+            violations.append("Plot too small after setbacks — no buildable area")
+            return ComplianceResult(passed=False, violations=violations, warnings=warnings)
+        min_x, min_y, max_x, max_y = _inset.bounds
+    else:
+        min_x = cfg.setback_left  + ewt
+        max_x = cfg.plot_width    - cfg.setback_right - ewt
+        min_y = cfg.setback_front + ewt
+        max_y = cfg.plot_length   - cfg.setback_rear  - ewt
     tol   = 0.005  # 5 mm floating-point tolerance
     basement_rooms = set(r.id for r in (layout.basement_floor.rooms if layout.basement_floor else []))
     for room in all_rooms:

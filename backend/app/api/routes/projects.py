@@ -25,10 +25,9 @@ def get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
 
 
 def _serialize_project_data(data: dict) -> dict:
-    """Serialize list fields (custom_room_config) to JSON strings for DB storage."""
+    """Serialize list fields (custom_room_config, plot_corners) to JSON strings for DB storage."""
     crc = data.get("custom_room_config")
     if crc is not None and not isinstance(crc, str):
-        # Pydantic v2 model instances → dicts → JSON string
         if isinstance(crc, list):
             serialized = []
             for item in crc:
@@ -36,6 +35,11 @@ def _serialize_project_data(data: dict) -> dict:
             data["custom_room_config"] = json.dumps(serialized)
         else:
             data["custom_room_config"] = None
+
+    corners = data.get("plot_corners")
+    if corners is not None and not isinstance(corners, str):
+        data["plot_corners"] = json.dumps(corners) if isinstance(corners, list) else None
+
     return data
 
 

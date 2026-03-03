@@ -77,10 +77,11 @@ class PlotConfig:
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
-    plot_shape: str = "rectangular"       # "rectangular" | "trapezoid"
+    plot_shape: str = "rectangular"       # "rectangular" | "trapezoid" | "quadrilateral"
     plot_front_width: float = 0.0         # front edge width (m), trapezoid only
     plot_rear_width: float = 0.0          # rear edge width (m), trapezoid only
     plot_side_offset: float = 0.0         # rear offset from front left (m)
+    plot_corners: list[tuple[float, float]] | None = None  # 4 pts CCW: FL, FR, RR, RL (metres)
     # Multi-floor
     num_floors: int = 1                   # 1=G, 2=G+1, 3=G+2
     has_stilt: bool = False               # floor 0 is stilt (parking only)

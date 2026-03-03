@@ -62,6 +62,14 @@ async def generate_layouts(
         except Exception:
             custom_room_config = None
 
+    plot_corners = None
+    raw_corners = getattr(project, "plot_corners", None)
+    if raw_corners:
+        try:
+            plot_corners = [tuple(pt) for pt in json.loads(raw_corners)]
+        except Exception:
+            plot_corners = None
+
     cfg = PlotConfig(
         plot_length=_to_float(project.plot_length),
         plot_width=_to_float(project.plot_width),
@@ -83,6 +91,7 @@ async def generate_layouts(
         plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
         plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
         plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
+        plot_corners=plot_corners,
         num_floors=getattr(project, "num_floors", 1) or 1,
         has_stilt=getattr(project, "has_stilt", False) or False,
         has_basement=getattr(project, "has_basement", False) or False,
