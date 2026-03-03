@@ -227,8 +227,13 @@ def _solve_one(
         y = model.new_int_var(0, bd - min_d, f"y_{rd['id']}")
         w = model.new_int_var(min_w, max_w, f"w_{rd['id']}")
         d = model.new_int_var(min_d, max_d, f"d_{rd['id']}")
-        ix = model.new_interval_var(x, w, x + w, f"ix_{rd['id']}")
-        iy = model.new_interval_var(y, d, y + d, f"iy_{rd['id']}")
+        # OR-Tools 9.x: new_interval_var end must be an IntVar (affine), not x+w (two-var sum)
+        ex = model.new_int_var(min_w, bw, f"ex_{rd['id']}")
+        ey = model.new_int_var(min_d, bd, f"ey_{rd['id']}")
+        model.add(ex == x + w)
+        model.add(ey == y + d)
+        ix = model.new_interval_var(x, w, ex, f"ix_{rd['id']}")
+        iy = model.new_interval_var(y, d, ey, f"iy_{rd['id']}")
 
         # Bounds: x+w <= bw, y+d <= bd
         model.add(x + w <= bw)
