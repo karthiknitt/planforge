@@ -33,6 +33,10 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
         setStatus("transcribing");
         try {
           const blob = new Blob(chunksRef.current, { type: mimeType });
+          if (blob.size < 1500) {
+            setStatus("idle");
+            return;
+          }
           const form = new FormData();
           form.append("audio", blob, "recording.webm");
 

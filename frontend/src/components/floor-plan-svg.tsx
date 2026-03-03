@@ -620,11 +620,11 @@ export function FloorPlanSVG({
         })}
 
       {/* ── Column markers ────────────────────────────────────────────── */}
-      {uniqueCols.map((col) => {
+      {uniqueCols.map((col, idx) => {
         const colPx = Math.max(4, 0.3 * scale);
         return (
           <rect
-            key={`col-${col.x.toFixed(3)}-${col.y.toFixed(3)}`}
+            key={`col-${idx}`}
             x={px(col.x) - colPx / 2}
             y={py(col.y) - colPx / 2}
             width={colPx}
