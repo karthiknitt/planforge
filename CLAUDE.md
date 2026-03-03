@@ -203,15 +203,23 @@ cd frontend && npx drizzle-kit migrate
   - File: `frontend/src/app/api/transcribe/route.ts`
   - Depends on: valid `OPENAI_API_KEY` in `.env.local`
 
+### Fixed (session 9, 2026-03-03)
+
+5. **Quadrilateral plot support** — Full convex quad support: `plot_corners` field, Shapely inset geometry, CP-SAT half-plane constraints, compliance boundary consistency fix. 6 new tests added.
+6. **DXF CAD layer** — Double-line walls, door symbols (line+arc), window symbols (3 parallel lines), ANSI31/ANSI37 hatch fill for wall areas.
+7. **Section view hatching** — SVG `<defs>` with `wall-hatch` (45° diagonal) and `slab-hatch` (crosshatch) patterns applied to wall/slab rects.
+8. **OR-Tools solver API (OR-Tools 9.x)** — `new_interval_var(x, w, x+w, name)` broke because `x+w` is a two-IntVar sum (not affine). Fixed by introducing explicit end IntVars: `model.add(ex == x + w)`. Solver now produces 3 layouts.
+9. **Pydantic ConfigDict** — Already fixed (uses `model_config = ConfigDict(env_file=".env")`). CLAUDE.md was stale.
+
 ### Open / Deferred
 
-- **Anthropic billing** — User's Anthropic API balance is insufficient. Agent falls back to OpenAI `gpt-5.2` automatically when this happens. Top up Anthropic credits when ready.
-- **PydanticDeprecatedSince20 warning** — `backend/app/config/settings.py` uses class-based `config` on `BaseSettings`. Should migrate to `ConfigDict`. Non-blocking.
+- **Anthropic billing** — User's Anthropic API balance is insufficient. Agent falls back to OpenAI `gpt-5.2` automatically. Top up when ready.
+- **Voice transcription** — Code uses direct OpenAI SDK (Whisper). Needs retest with working mic + valid `OPENAI_API_KEY` in `.env.local`.
 
 ---
 
 ## Testing
 
-- Backend: pytest (via `uv run pytest`) — 49/49 passing
+- Backend: pytest (via `uv run pytest`) — 55/55 passing
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts
