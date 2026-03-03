@@ -251,7 +251,7 @@ export default function NewProjectPage() {
     toilets: "2",
     parking: false,
     city: "other",
-    road_width_m: "9",
+    road_width_m: "30",
     has_pooja: false,
     has_study: false,
     has_balcony: false,
@@ -367,7 +367,7 @@ export default function NewProjectPage() {
         road_side: form.road_side,
         north_direction: OPPOSITE[form.road_side],
         city: form.city,
-        road_width_m: parseFloat(form.road_width_m),
+        road_width_m: Math.round(parseFloat(form.road_width_m) * 0.3048),
         vastu_enabled: form.vastu_enabled,
         // Multi-floor
         num_floors: parseInt(form.num_floors, 10),
@@ -637,9 +637,7 @@ export default function NewProjectPage() {
                     step="1"
                     placeholder="30"
                     value={form.road_width_m}
-                    onChange={(e) =>
-                      set("road_width_m", String(Math.round(parseFloat(e.target.value) * 0.3048)))
-                    }
+                    onChange={(e) => set("road_width_m", e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">Affects FAR for some cities.</p>
                 </div>
