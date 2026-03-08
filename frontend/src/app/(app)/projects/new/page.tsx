@@ -105,11 +105,16 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
 function Section({ num, title }: { num: string; title: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary ring-1 ring-primary/15">
         {num}
       </span>
-      <span className="text-sm font-semibold text-foreground tracking-wide uppercase">{title}</span>
-      <Separator className="flex-1" />
+      <span
+        className="text-sm font-bold text-foreground tracking-wide uppercase"
+        style={{ fontFamily: "var(--font-display)" }}
+      >
+        {title}
+      </span>
+      <Separator className="flex-1 bg-border/40" />
     </div>
   );
 }
@@ -416,17 +421,22 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">New Project</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-10 sm:py-14">
+      <div className="mb-10">
+        <h1
+          className="text-2xl sm:text-3xl font-black text-foreground mb-2"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          New Project
+        </h1>
+        <p className="text-sm text-muted-foreground/60">
           Enter your plot details to generate NBC-compliant floor plan options.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col gap-8 md:rounded-2xl md:border md:border-border md:bg-card/30 md:p-8"
+        className="flex flex-col gap-10 md:rounded-2xl md:border md:border-border/40 md:bg-card/20 md:p-8 lg:p-10"
       >
         {/* ── 1. Project name ───────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
@@ -902,18 +912,18 @@ export default function NewProjectPage() {
           </p>
         )}
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-3 pt-4 border-t border-border/30">
           <button
             type="submit"
             disabled={loading || !session}
-            className="flex-1 rounded-md bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground btn-shine shadow-md shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="flex-1 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground btn-shine shadow-lg shadow-primary/15 hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Creating project…" : "Create project & generate layouts"}
+            {loading ? "Creating project\u2026" : "Create project & generate layouts"}
           </button>
           <button
             type="button"
             onClick={() => router.push("/dashboard")}
-            className="rounded-md border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
+            className="rounded-xl border border-border/50 px-5 py-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
             Cancel
           </button>

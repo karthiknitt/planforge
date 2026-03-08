@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { FadeIn } from "@/components/motion/fade-in";
 import { SlideIn } from "@/components/motion/slide-in";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "How It Works — PlanForge",
@@ -263,18 +263,18 @@ export default function HowItWorksPage() {
   return (
     <div className="bg-background">
       {/* Header */}
-      <section className="py-20 bg-gradient-to-b from-muted/40 to-background border-b border-border/50">
+      <section className="py-20 lg:py-24 bg-gradient-to-b from-card/30 to-background border-b border-border/30">
         <FadeIn className="mx-auto max-w-4xl px-4 text-center">
-          <Badge className="mb-5 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
-            From plot to plan
-          </Badge>
+          <p className="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-4">
+            How It Works
+          </p>
           <h1
-            className="text-4xl lg:text-5xl font-extrabold text-foreground mb-4"
+            className="text-4xl lg:text-5xl font-black text-foreground mb-4"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            From Plot to Plan in 3 Steps
+            From Plot to Plan in 4 Steps
           </h1>
-          <p className="text-xl text-muted-foreground leading-relaxed">
+          <p className="text-lg text-muted-foreground/70 leading-relaxed max-w-xl mx-auto">
             PlanForge takes your site data and delivers NBC-compliant floor plans ready for
             construction or client handover.
           </p>
@@ -282,9 +282,9 @@ export default function HowItWorksPage() {
       </section>
 
       {/* Step sections */}
-      <section className="py-16">
+      <section className="py-20 lg:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="space-y-24">
+          <div className="space-y-28 lg:space-y-32">
             {steps.map((step, i) => {
               const Icon = step.icon;
               const reverse = i % 2 !== 0;
@@ -298,16 +298,16 @@ export default function HowItWorksPage() {
                     from={reverse ? "right" : "left"}
                     className={reverse ? "lg:col-start-2" : ""}
                   >
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-extrabold text-sm shadow-lg shadow-primary/20">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-black text-sm shadow-lg shadow-primary/15">
                         {step.num}
                       </div>
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
-                        <Icon className="h-5 w-5 text-primary" />
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/8 ring-1 ring-primary/15">
+                        <Icon className="h-5 w-5 text-primary/70" />
                       </div>
                     </div>
                     <h2
-                      className="text-2xl font-extrabold text-foreground mb-1"
+                      className="text-2xl font-black text-foreground mb-2"
                       style={{ fontFamily: "var(--font-display)" }}
                     >
                       {step.title}
@@ -339,7 +339,7 @@ export default function HowItWorksPage() {
       </section>
 
       {/* Technical specs */}
-      <section className="py-16 bg-muted/20 border-y border-border/50">
+      <section className="py-20 bg-card/20 border-y border-border/30">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <h2
@@ -349,7 +349,10 @@ export default function HowItWorksPage() {
               Technical Specifications
             </h2>
           </FadeIn>
-          <FadeIn delay={0.1} className="overflow-hidden rounded-xl border border-border shadow-sm bg-card">
+          <FadeIn
+            delay={0.1}
+            className="overflow-hidden rounded-xl border border-border shadow-sm bg-card"
+          >
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-primary text-primary-foreground">
@@ -371,7 +374,7 @@ export default function HowItWorksPage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 relative overflow-hidden bg-gradient-to-br from-primary/12 via-muted/20 to-background border-t border-border/50">
+      <section className="py-20 lg:py-24 relative overflow-hidden bg-gradient-to-br from-primary/[0.06] via-card/20 to-background border-t border-border/30">
         <div className="absolute inset-0 bg-blueprint-grid opacity-40" />
         <FadeIn className="relative mx-auto max-w-3xl px-4 text-center">
           <h2

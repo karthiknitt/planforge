@@ -154,7 +154,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground/35 mt-5">
+          <p className="text-xs text-muted-foreground/60 mt-5">
             © {new Date().getFullYear()} PlanForge. Trusted by builders across India.
           </p>
         </div>
