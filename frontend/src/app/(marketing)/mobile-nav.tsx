@@ -1,15 +1,15 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="sm:hidden">
+    <div className="md:hidden">
       <Button
         type="button"
         variant="ghost"

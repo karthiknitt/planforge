@@ -1,5 +1,5 @@
-import { FileText, LayoutGrid, ShieldCheck } from "lucide-react";
 import { PlanForgeIcon } from "@/components/logo";
+import { FileText, LayoutGrid, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 const features = [
@@ -41,7 +41,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="relative flex flex-col h-full p-10 xl:p-12">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 w-fit group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:scale-105">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:scale-105">
               <PlanForgeIcon className="h-5 w-5 text-white" />
             </div>
             <span
@@ -73,10 +73,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <ul className="space-y-3.5">
               {features.map(({ icon: Icon, label }) => (
                 <li key={label} className="flex items-center gap-3 text-sm">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/20 flex-shrink-0">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20 flex-shrink-0">
                     <Icon className="h-3.5 w-3.5 text-primary" />
                   </div>
-                  <span className="text-muted-foreground">{label}</span>
+                  <span className="text-foreground/80">{label}</span>
                 </li>
               ))}
             </ul>
@@ -162,19 +162,16 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       {/* ── Right form panel ──────────────────────────────────── */}
       <div className="flex flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:py-16 relative overflow-hidden bg-background">
-        {/* Blueprint grid — visible below lg where left panel is hidden */}
-        <div className="absolute inset-0 bg-blueprint-grid opacity-[0.18] lg:opacity-0 pointer-events-none" />
+        {/* Blueprint grid always visible as subtle bg */}
+        <div className="absolute inset-0 bg-blueprint-grid opacity-[0.15] pointer-events-none" />
 
-        {/* Ambient glow on mobile/tablet */}
-        <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-primary opacity-[0.04] blur-3xl pointer-events-none lg:hidden" />
+        {/* Ambient glow */}
+        <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-primary opacity-[0.04] blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full bg-primary opacity-[0.03] blur-3xl pointer-events-none" />
 
-        {/* Form card:
-            - Mobile: no card, just centered content
-            - sm–lg: card panel with shadow + border for visual containment
-            - lg+: no card needed (left panel provides context) */}
+        {/* Form card — always has a card wrapper for visual containment */}
         <div className="relative w-full max-w-sm">
-          {/* Card wrapper visible on sm–lg only */}
-          <div className="sm:rounded-2xl sm:border sm:border-border/60 sm:bg-card/80 sm:backdrop-blur-sm sm:shadow-2xl sm:shadow-black/10 sm:px-8 sm:py-10 lg:bg-transparent lg:border-0 lg:shadow-none lg:px-0 lg:py-0 lg:backdrop-blur-none">
+          <div className="rounded-2xl border border-border/60 bg-card/90 backdrop-blur-sm shadow-2xl shadow-black/20 px-7 py-9 sm:px-8 sm:py-10">
             {children}
           </div>
         </div>
