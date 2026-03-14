@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 const PROTECTED_PATHS = ["/dashboard", "/projects", "/account"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
   const isAuthPath = AUTH_PATHS.some((p) => pathname.startsWith(p));
