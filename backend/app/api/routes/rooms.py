@@ -150,6 +150,21 @@ class SwapRequest(BaseModel):
     room_id_b: str
 
 
+class RoomEditItem(BaseModel):
+    id: str
+    type: str
+    name: str
+    x: float
+    y: float
+    width: float
+    height: float   # frontend sends "height" = backend "depth"
+    floor: str = "gf"
+
+
+class ComplianceCheckRequest(BaseModel):
+    rooms: list[RoomEditItem]
+
+
 # ── Helper: load/init state ───────────────────────────────────────────────────
 async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) -> dict:
     key = _session_key(project_id, user_id)
@@ -173,6 +188,10 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
             vastu_enabled=getattr(project, "vastu_enabled", False) or False,
             road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
             road_side=getattr(project, "road_side", "S") or "S",
+            plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
+            cutout_corner=getattr(project, "cutout_corner", None),
+            cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
+            cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
         )
         layouts = generate(cfg)
         if not layouts:
@@ -472,6 +491,10 @@ async def check_compliance(
         city=getattr(project, "city", "other") or "other",
         vastu_enabled=getattr(project, "vastu_enabled", False) or False,
         road_side=getattr(project, "road_side", "S") or "S",
+        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
+        cutout_corner=getattr(project, "cutout_corner", None),
+        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
+        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
     )
     layout = Layout(
         id="live", name="Live",
@@ -484,6 +507,112 @@ async def check_compliance(
     rules = load_rules()
     result = check(layout, cfg, rules)
     return {"passed": result.passed, "violations": result.violations, "warnings": result.warnings}
+
+
+@router.post("/layouts/{layout_id}/compliance-check")
+async def compliance_check_rooms(
+    layout_id: str,
+    body: ComplianceCheckRequest,
+    x_project_id: str = Header(..., alias="X-Project-Id"),
+    user_id: str = Depends(_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Live compliance check for edited rooms.
+
+    Accepts a flat list of rooms (all floors) from the frontend edit mode.
+    Returns violations/warnings plus per-room issue mapping so the UI can
+    highlight specific rooms in red.
+    """
+    project = await _get_project(x_project_id, user_id, db)
+
+    from app.engine.compliance import check, load_rules
+    from app.engine.models import (Column, ComplianceResult, FloorPlan, Layout,
+                                    PlotConfig, Room)
+
+    floor_map_in = {
+        "gf": ("ground_floor", 0, "ground"),
+        "ff": ("first_floor", 1, "first"),
+        "sf": ("second_floor", 2, "second"),
+        "basement": ("basement_floor", -1, "basement"),
+    }
+
+    # Group rooms by floor
+    floor_rooms: dict[str, list[Room]] = {
+        "ground_floor": [],
+        "first_floor": [],
+        "second_floor": [],
+        "basement_floor": [],
+    }
+    for item in body.rooms:
+        fk, _fnum, _ftype = floor_map_in.get(item.floor, ("ground_floor", 0, "ground"))
+        floor_rooms[fk].append(
+            Room(
+                id=item.id,
+                name=item.name,
+                type=item.type,  # type: ignore[arg-type]
+                x=item.x,
+                y=item.y,
+                width=item.width,
+                depth=item.height,  # frontend uses "height"
+            )
+        )
+
+    def _make_floor(key: str, fnum: int, ftype: str) -> FloorPlan:
+        return FloorPlan(floor=fnum, floor_type=ftype, rooms=floor_rooms[key])
+
+    gf = _make_floor("ground_floor", 0, "ground")
+    ff = _make_floor("first_floor", 1, "first")
+    sf = _make_floor("second_floor", 2, "second") if floor_rooms["second_floor"] else None
+    bf = _make_floor("basement_floor", -1, "basement") if floor_rooms["basement_floor"] else None
+
+    cfg = PlotConfig(
+        plot_length=_to_float(project.plot_length),
+        plot_width=_to_float(project.plot_width),
+        setback_front=_to_float(project.setback_front),
+        setback_rear=_to_float(project.setback_rear),
+        setback_left=_to_float(project.setback_left),
+        setback_right=_to_float(project.setback_right),
+        num_bedrooms=project.num_bedrooms,
+        toilets=project.toilets,
+        parking=project.parking,
+        city=getattr(project, "city", "other") or "other",
+        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
+        road_side=getattr(project, "road_side", "S") or "S",
+        municipality=getattr(project, "municipality", None),
+        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
+        cutout_corner=getattr(project, "cutout_corner", None),
+        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
+        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
+    )
+
+    layout = Layout(
+        id=layout_id,
+        name="Edit Check",
+        ground_floor=gf,
+        first_floor=ff,
+        second_floor=sf,
+        basement_floor=bf,
+        compliance=ComplianceResult(passed=True),
+    )
+    rules = load_rules()
+    result = check(layout, cfg, rules)
+
+    # Build per-room issue map — match violation/warning text to room names
+    room_issues: dict[str, list[str]] = {}
+    all_rooms_flat = {item.id: item.name for item in body.rooms}
+    for issue in result.violations + result.warnings:
+        for rid, rname in all_rooms_flat.items():
+            if issue.startswith(rname + ":") or issue.startswith(rname + " "):
+                if rid not in room_issues:
+                    room_issues[rid] = []
+                room_issues[rid].append(issue)
+
+    return {
+        "passed": result.passed,
+        "violations": result.violations,
+        "warnings": result.warnings,
+        "room_issues": room_issues,
+    }
 
 
 @router.post("/projects/{project_id}/rooms/undo")
