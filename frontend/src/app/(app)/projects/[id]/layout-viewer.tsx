@@ -303,6 +303,20 @@ export function LayoutViewer({
         )}
       </div>
 
+      {/* Space utilisation notes */}
+      {layout.space_notes && layout.space_notes.length > 0 && (
+        <details className="rounded-lg border border-blue-400/30 bg-blue-500/8 p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-blue-700 dark:text-blue-400">
+            ℹ️ {layout.space_notes.length} space optimisation{layout.space_notes.length !== 1 ? "s" : ""} applied
+          </summary>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-blue-700/80 dark:text-blue-400/80 text-xs">
+            {layout.space_notes.map((note, i) => (
+              <li key={i}>{note}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {/* Tabs: Floor Plan | Section | BOQ | Chat */}
       <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 w-fit">
         {(["plan", "section", "boq", "chat"] as const).map((tab) => (

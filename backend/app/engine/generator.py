@@ -2,10 +2,200 @@ from __future__ import annotations
 
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
 from .compliance import check, load_rules
-from .models import Layout, PlotConfig
+from .models import FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
 from .solver import solve_layouts
 from .vastu import check_vastu
+
+
+# ── Blank area detection & filling ────────────────────────────────────────────
+
+_ROOM_COUNTER: dict[str, int] = {}
+
+
+def _next_id(prefix: str) -> str:
+    _ROOM_COUNTER[prefix] = _ROOM_COUNTER.get(prefix, 0) + 1
+    return f"{prefix}_{_ROOM_COUNTER[prefix]}"
+
+
+def _plate_box(cfg: PlotConfig, ewt: float):
+    """Return a Shapely box for the usable floor plate."""
+    from shapely.geometry import box
+    ox = cfg.setback_left + ewt
+    oy = cfg.setback_front + ewt
+    w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
+    d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    return box(ox, oy, ox + w, oy + d)
+
+
+def _fill_blank_areas(
+    floor_plan: FloorPlan,
+    cfg: PlotConfig,
+    ewt: float,
+    is_topmost: bool,
+) -> list[str]:
+    """
+    Detect unoccupied space in ``floor_plan`` and fill it intelligently.
+
+    For the topmost occupied floor, leftover area becomes an open terrace.
+    For other floors, the fill room type is chosen by area:
+      < 0.5 m²  → ignore
+      0.5–3 m²  → store_room (small utility pocket)
+      3–7 m²    → utility / laundry
+      > 7 m²    → expand the adjacent largest room (stretch its depth/width)
+
+    Returns a list of human-readable notes about what was added/changed.
+    """
+    from shapely.geometry import box
+    from shapely.ops import unary_union
+
+    notes: list[str] = []
+    rooms = floor_plan.rooms
+    if not rooms:
+        return notes
+
+    plate = _plate_box(cfg, ewt)
+    occupied = unary_union([box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms])
+    leftover = plate.difference(occupied)
+
+    if leftover.is_empty or leftover.area < 0.5:
+        return notes
+
+    # Decompose MultiPolygon into individual pieces
+    if hasattr(leftover, "geoms"):
+        regions = [g for g in leftover.geoms if g.area >= 0.5]
+    else:
+        regions = [leftover] if leftover.area >= 0.5 else []
+
+    for region in regions:
+        area = round(region.area, 2)
+        minx, miny, maxx, maxy = region.bounds
+        rw = round(maxx - minx, 3)
+        rd = round(maxy - miny, 3)
+
+        if area < 0.5:
+            continue
+
+        # Skip non-rectangular leftovers — bounding-box rooms would overlap existing rooms.
+        # A region is "usable" if its area fills ≥ 70 % of its own bounding box.
+        bbox_area = rw * rd
+        if bbox_area > 0 and (area / bbox_area) < 0.70:
+            _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+            continue
+
+        if is_topmost:
+            # Top floor leftover → open terrace (minimum 1.5 m in each dimension)
+            if rw >= 1.5 and rd >= 1.5:
+                room_id = _next_id("open_terrace")
+                floor_plan.rooms.append(Room(
+                    id=room_id,
+                    name="Open Terrace",
+                    type="balcony",  # closest existing type for compliance purposes
+                    x=round(minx, 3),
+                    y=round(miny, 3),
+                    width=rw,
+                    depth=rd,
+                ))
+                notes.append(
+                    f"Open Terrace ({rw:.1f}×{rd:.1f} m, {area:.1f} m²) added to "
+                    f"utilise remaining space on top floor."
+                )
+            else:
+                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+
+        elif area < 3.0:
+            # Small gap → store room
+            if rw >= 0.8 and rd >= 0.8:
+                room_id = _next_id("store_auto")
+                floor_plan.rooms.append(Room(
+                    id=room_id,
+                    name="Store Room",
+                    type="store_room",
+                    x=round(minx, 3),
+                    y=round(miny, 3),
+                    width=rw,
+                    depth=rd,
+                ))
+                notes.append(
+                    f"Store Room ({rw:.1f}×{rd:.1f} m, {area:.1f} m²) added to fill "
+                    f"unused gap on floor {floor_plan.floor}."
+                )
+            else:
+                # Too narrow to be a named room — absorb into the closest adjacent room
+                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+
+        elif area < 7.0:
+            # Medium gap → utility / laundry
+            if rw >= 1.5 and rd >= 1.5:
+                room_id = _next_id("utility_auto")
+                floor_plan.rooms.append(Room(
+                    id=room_id,
+                    name="Utility / Laundry",
+                    type="utility",
+                    x=round(minx, 3),
+                    y=round(miny, 3),
+                    width=rw,
+                    depth=rd,
+                ))
+                notes.append(
+                    f"Utility/Laundry room ({rw:.1f}×{rd:.1f} m, {area:.1f} m²) added to "
+                    f"fill unused space on floor {floor_plan.floor}."
+                )
+            else:
+                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+
+        else:
+            # Large gap → expand adjacent room (prefer the largest neighbouring room)
+            _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+
+    return notes
+
+
+def _absorb_into_adjacent(
+    floor_plan: FloorPlan,
+    region,
+    minx: float, miny: float, maxx: float, maxy: float,
+    notes: list[str],
+) -> None:
+    """Expand the largest room that shares an edge with the leftover region."""
+    tol = 0.05
+    candidates = []
+    for room in floor_plan.rooms:
+        # Shares right edge with leftover's left edge
+        if abs(room.x + room.width - minx) < tol and room.y < maxy and room.y + room.depth > miny:
+            candidates.append((room, "right"))
+        # Shares top edge with leftover's bottom edge
+        elif abs(room.y + room.depth - miny) < tol and room.x < maxx and room.x + room.width > minx:
+            candidates.append((room, "top"))
+        # Shares left edge with leftover's right edge
+        elif abs(room.x - maxx) < tol and room.y < maxy and room.y + room.depth > miny:
+            candidates.append((room, "left"))
+        # Shares bottom edge with leftover's top edge
+        elif abs(room.y - maxy) < tol and room.x < maxx and room.x + room.width > minx:
+            candidates.append((room, "bottom"))
+
+    if not candidates:
+        return
+
+    # Pick the candidate with the largest area
+    best_room, direction = max(candidates, key=lambda rc: rc[0].area)
+    old_area = best_room.area
+
+    if direction == "right":
+        best_room.width = round(best_room.width + (maxx - minx), 3)
+    elif direction == "top":
+        best_room.depth = round(best_room.depth + (maxy - miny), 3)
+    elif direction == "left":
+        best_room.x = round(minx, 3)
+        best_room.width = round(best_room.width + (maxx - minx), 3)
+    elif direction == "bottom":
+        best_room.y = round(miny, 3)
+        best_room.depth = round(best_room.depth + (maxy - miny), 3)
+
+    notes.append(
+        f"{best_room.name} expanded from {old_area:.1f} m² → {best_room.area:.1f} m² "
+        f"to absorb unused space on floor {floor_plan.floor}."
+    )
 
 
 def generate(cfg: PlotConfig) -> list[Layout]:
@@ -59,5 +249,31 @@ def generate(cfg: PlotConfig) -> list[Layout]:
 
     all_layouts = solver_layouts + archetype_layouts
 
+    # ── Fill blank areas in every passing layout ──────────────────────────────
+    ewt = rules["external_wall_thickness_mm"] / 1000
+    for layout in all_layouts:
+        floor_plans = [layout.ground_floor, layout.first_floor]
+        if layout.second_floor:
+            floor_plans.append(layout.second_floor)
+
+        # Determine topmost occupied floor index
+        topmost_floor = max(fp.floor for fp in floor_plans if fp.rooms)
+
+        space_notes: list[str] = []
+        _ROOM_COUNTER.clear()  # reset per-layout to keep IDs readable
+
+        for fp in floor_plans:
+            if not fp.rooms:
+                continue
+            is_top = fp.floor == topmost_floor
+            notes = _fill_blank_areas(fp, cfg, ewt, is_topmost=is_top)
+            space_notes.extend(notes)
+
+        layout.space_notes = space_notes
+
     # ── Score and select top 3 ────────────────────────────────────────────────
-    return rank_and_select(all_layouts, cfg, top_n=3)
+    top = rank_and_select(all_layouts, cfg, top_n=3)
+    # Remap IDs to stable "A", "B", "C" so the export route default works
+    for layout, letter in zip(top, ["A", "B", "C"]):
+        layout.id = letter
+    return top

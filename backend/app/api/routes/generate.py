@@ -123,6 +123,7 @@ async def generate_layouts(
                     circulation=lay.score.circulation,
                     vastu=lay.score.vastu,
                 ) if lay.score else None,
+                space_notes=getattr(lay, "space_notes", []),
             )
             for lay in layouts
         ],

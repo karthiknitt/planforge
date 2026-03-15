@@ -188,10 +188,15 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         ("A-FURNITURE",     colors.BLUE,    0.18),
         ("DIM-SETBACK",     colors.GRAY,    0.18),
     ]
+    # Structural layers are frozen by default so architectural drawing stays clean
+    structural_layers = {"S-COLUMN", "S-BEAM", "S-GRID"}
+
     for lname, color, lw in layer_defs:
         lyr = doc.layers.new(lname)
         lyr.color = color
         lyr.lineweight = int(lw * 100)
+        if lname in structural_layers:
+            lyr.freeze()
 
     # Register DASHED linetype (used by plot boundary and structural grid)
     if "DASHED" not in doc.linetypes:

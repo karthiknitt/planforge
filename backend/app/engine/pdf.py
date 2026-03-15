@@ -41,13 +41,29 @@ WIN_LW   = 0.75 # window line lineweight (pt)
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def render_pdf(project_name: str, layout: Layout, cfg: PlotConfig, num_bedrooms: int) -> bytes:
-    """Return raw PDF bytes containing ground floor and first floor pages."""
+    """Return raw PDF bytes.
+
+    Page order:
+      1. Ground Floor architectural plan
+      2. First Floor architectural plan
+      3. Ground Floor structural (beam & column) layout
+      4. First Floor structural (beam & column) layout
+    """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
+
+    # ── Architectural pages ────────────────────────────────────────────────────
     for floor_plan in [layout.ground_floor, layout.first_floor]:
         floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
         _draw_floor(c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label)
         c.showPage()
+
+    # ── Structural pages ───────────────────────────────────────────────────────
+    for floor_plan in [layout.ground_floor, layout.first_floor]:
+        floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
+        _draw_structural_floor(c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label)
+        c.showPage()
+
     c.save()
     return buf.getvalue()
 
@@ -169,6 +185,9 @@ def _draw_floor(
         c.rect(bx + half_ewt, by + half_ewt,
                bw - 2 * half_ewt, bh - 2 * half_ewt, fill=0, stroke=1)
 
+        # ── Staircase treads ──────────────────────────────────────────────────
+        _draw_staircase_treads(c, rooms, scale, ox, oy)
+
         # ── Window symbols on exterior walls ──────────────────────────────────
         _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y)
 
@@ -221,6 +240,44 @@ def _draw_floor(
     # ── Title block ───────────────────────────────────────────────────────────
     _draw_title_block(c, project_name, layout.id, layout.name, floor_label, cfg,
                       num_bedrooms, scale, page_w)
+
+
+def _draw_staircase_treads(c, rooms, scale, ox, oy):
+    """Draw horizontal tread lines + mid cut-line + UP label for staircase rooms."""
+    c.setStrokeColor(HexColor("#94A3B8"))
+    c.setLineWidth(0.5)
+    c.setDash()
+
+    for room in rooms:
+        if room.type != "staircase":
+            continue
+        rx = ox + room.x * scale
+        ry = oy + room.y * scale
+        rw = room.width * scale
+        rh = room.depth * scale
+
+        tread_h = max(4, min(10, scale * 0.3))
+        num_treads = max(3, int(rh / tread_h))
+        step = rh / num_treads
+
+        for i in range(1, num_treads):
+            ly = ry + i * step
+            c.line(rx, ly, rx + rw, ly)
+
+        # Cut line (dashed, mid-height)
+        mid_y = ry + rh / 2
+        c.setDash(4, 2)
+        c.setLineWidth(1.0)
+        c.setStrokeColor(HexColor("#64748B"))
+        c.line(rx, mid_y, rx + rw, mid_y)
+        c.setDash()
+        c.setLineWidth(0.5)
+        c.setStrokeColor(HexColor("#94A3B8"))
+
+        # UP label
+        c.setFillColor(HexColor("#64748B"))
+        c.setFont("Helvetica-Bold", max(5, scale * 0.12))
+        c.drawCentredString(rx + rw / 2, mid_y + 4, "UP")
 
 
 def _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y):
@@ -365,6 +422,174 @@ def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
     c.setFillColor(HexColor("#64748B"))
     c.setFont("Helvetica-Bold", 6)
     c.drawCentredString(cx, cy - r - 7, "N")
+
+
+def _draw_structural_floor(
+    c: canvas.Canvas,
+    floor_plan: FloorPlan,
+    layout: Layout,
+    cfg: PlotConfig,
+    project_name: str,
+    num_bedrooms: int,
+    floor_label: str,
+) -> None:
+    """Render a separate structural (beam & column) layout page."""
+    page_w, page_h = A4
+    scale, ox, oy, plot_px, plot_py = _compute_layout(cfg, page_w, page_h)
+
+    # Background
+    c.setFillColor(HexColor("#F8FAFC"))
+    c.rect(0, TITLE_H, page_w, page_h - TITLE_H, fill=1, stroke=0)
+
+    # Road strip
+    road_y = TITLE_H + MARGIN
+    c.setFillColor(HexColor("#E2E8F0"))
+    c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
+    c.setFillColor(HexColor("#94A3B8"))
+    c.setFont("Helvetica", 7)
+    c.drawCentredString(ox + plot_px / 2, road_y + ROAD_H / 2 - 3, "ROAD")
+
+    # Plot boundary
+    c.setDash(5, 3)
+    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setLineWidth(0.75)
+    c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
+    c.setDash()
+
+    rooms = floor_plan.rooms
+    if not rooms:
+        _draw_title_block(
+            c, project_name, layout.id, layout.name,
+            f"{floor_label} — Structural", cfg, num_bedrooms, scale, page_w,
+        )
+        return
+
+    min_x = min(r.x for r in rooms)
+    max_x = max(r.x + r.width for r in rooms)
+    min_y = min(r.y for r in rooms)
+    max_y = max(r.y + r.depth for r in rooms)
+
+    # Room outlines — light gray, no fill
+    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setLineWidth(0.5)
+    c.setDash()
+    for room in rooms:
+        rx = ox + room.x * scale
+        ry = oy + room.y * scale
+        rw = room.width * scale
+        rh = room.depth * scale
+        c.rect(rx, ry, rw, rh, fill=0, stroke=1)
+
+    # Structural grid dashed lines
+    xs = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
+    ys = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
+
+    c.setStrokeColor(HexColor("#94A3B8"))
+    c.setLineWidth(0.4)
+    c.setDash(4, 3)
+    bx_lo = ox + min_x * scale
+    bx_hi = ox + max_x * scale
+    by_lo = oy + min_y * scale
+    by_hi = oy + max_y * scale
+    ext = 8  # pt extension past building
+
+    for x in xs:
+        px_x = ox + x * scale
+        c.line(px_x, by_lo - ext, px_x, by_hi + ext)
+    for y in ys:
+        px_y = oy + y * scale
+        c.line(bx_lo - ext, px_y, bx_hi + ext, px_y)
+    c.setDash()
+
+    # Grid bubble labels (A, B, C… / 1, 2, 3…)
+    import string as _string
+    bubble_r = 6  # pt
+    c.setStrokeColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.setLineWidth(0.6)
+
+    for i, x in enumerate(xs):
+        lbl = _string.ascii_uppercase[i % 26]
+        px_x = ox + x * scale
+        for bubble_y in [by_lo - ext - bubble_r - 2, by_hi + ext + bubble_r + 2]:
+            c.circle(px_x, bubble_y, bubble_r, fill=1, stroke=1)
+            c.setFillColor(HexColor("#334155"))
+            c.setFont("Helvetica-Bold", 6)
+            c.drawCentredString(px_x, bubble_y - 2.5, lbl)
+            c.setFillColor(HexColor("#FFFFFF"))
+
+    for j, y in enumerate(ys):
+        lbl = str(j + 1)
+        px_y = oy + y * scale
+        for bubble_x in [bx_lo - ext - bubble_r - 2, bx_hi + ext + bubble_r + 2]:
+            c.circle(bubble_x, px_y, bubble_r, fill=1, stroke=1)
+            c.setFillColor(HexColor("#334155"))
+            c.setFont("Helvetica-Bold", 6)
+            c.drawCentredString(bubble_x, px_y - 2.5, lbl)
+            c.setFillColor(HexColor("#FFFFFF"))
+
+    # Beam lines — connect columns that share the same X or Y
+    cols = floor_plan.columns
+    if cols:
+        seen: set[tuple] = set()
+        col_xs: dict[float, list] = {}
+        col_ys: dict[float, list] = {}
+        unique_cols = []
+        for col in cols:
+            key = (round(col.x, 2), round(col.y, 2))
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_cols.append(col)
+            col_xs.setdefault(round(col.x, 2), []).append(col)
+            col_ys.setdefault(round(col.y, 2), []).append(col)
+
+        c.setStrokeColor(HexColor("#1E293B"))
+        c.setLineWidth(1.5)
+        c.setDash()
+
+        # Vertical beams (same X, different Y — sort by Y, connect pairs)
+        for _x, col_list in col_xs.items():
+            if len(col_list) < 2:
+                continue
+            sorted_cols = sorted(col_list, key=lambda col: col.y)
+            for k in range(len(sorted_cols) - 1):
+                c1, c2 = sorted_cols[k], sorted_cols[k + 1]
+                c.line(ox + c1.x * scale, oy + c1.y * scale,
+                       ox + c2.x * scale, oy + c2.y * scale)
+
+        # Horizontal beams (same Y, different X)
+        for _y, col_list in col_ys.items():
+            if len(col_list) < 2:
+                continue
+            sorted_cols = sorted(col_list, key=lambda col: col.x)
+            for k in range(len(sorted_cols) - 1):
+                c1, c2 = sorted_cols[k], sorted_cols[k + 1]
+                c.line(ox + c1.x * scale, oy + c1.y * scale,
+                       ox + c2.x * scale, oy + c2.y * scale)
+
+        # Column squares with numbers
+        col_sz = max(5, 0.3 * scale)
+        c.setFillColor(HexColor("#1E293B"))
+        for idx, col in enumerate(unique_cols):
+            cx = ox + col.x * scale
+            cy = oy + col.y * scale
+            c.rect(cx - col_sz / 2, cy - col_sz / 2, col_sz, col_sz, fill=1, stroke=0)
+            # Column label
+            c.setFillColor(HexColor("#FFFFFF"))
+            c.setFont("Helvetica-Bold", max(4, col_sz * 0.55))
+            c.drawCentredString(cx, cy - col_sz * 0.2, f"C{idx + 1}")
+            c.setFillColor(HexColor("#1E293B"))
+
+    # Scale bar + north arrow
+    _draw_scale_bar(c, ox + 4, oy + 16, scale)
+    _draw_north_arrow(c, ox + plot_px - 16, oy + plot_py - 16, 12)
+
+    # Structural title block
+    _draw_title_block(
+        c, project_name, layout.id, layout.name,
+        f"{floor_label} — Beam/Column Layout", cfg, num_bedrooms, scale, page_w,
+    )
 
 
 def _draw_title_block(

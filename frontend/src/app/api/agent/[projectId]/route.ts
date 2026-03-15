@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import {
   convertToModelMessages,
@@ -229,13 +229,25 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
 
-  if (!hasAnthropic && !hasOpenAI) {
+  if (!hasAnthropic && !hasOpenAI && !hasOpenRouter) {
     return Response.json(
-      { error: "No AI API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env.local" },
+      {
+        error:
+          "No AI API key configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY in .env.local",
+      },
       { status: 503 }
     );
   }
+
+  // OpenRouter client — OpenAI-compatible API, different baseURL
+  const openrouterClient = hasOpenRouter
+    ? createOpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY ?? "",
+        baseURL: "https://openrouter.ai/api/v1",
+      })
+    : null;
 
   const requestedId =
     typeof selectedModel === "string" && selectedModel ? selectedModel : DEFAULT_MODEL_ID;
@@ -243,16 +255,28 @@ export async function POST(req: Request, { params }: { params: Params }) {
   const provider = getModelProvider(requestedId);
   const models: { model: LanguageModel; label: string }[] = [];
 
-  if (provider === "anthropic" && hasAnthropic) {
+  if (provider === "openrouter" && openrouterClient) {
+    models.push({ model: openrouterClient(requestedId), label: requestedId });
+    // Fallback chain for OpenRouter failures
+    if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: "claude-sonnet-fallback" });
+    else if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
+  } else if (provider === "anthropic" && hasAnthropic) {
     models.push({ model: anthropic(requestedId), label: requestedId });
     if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
+    else if (hasOpenRouter && openrouterClient)
+      models.push({ model: openrouterClient("deepseek/deepseek-chat-v3-0324"), label: "deepseek-fallback" });
   } else if (provider === "openai" && hasOpenAI) {
     models.push({ model: openai(requestedId), label: requestedId });
     if (hasAnthropic)
       models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
+    else if (hasOpenRouter && openrouterClient)
+      models.push({ model: openrouterClient("deepseek/deepseek-chat-v3-0324"), label: "deepseek-fallback" });
   } else {
+    // No matching provider available — try all in priority order
     if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
     if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2" });
+    if (hasOpenRouter && openrouterClient)
+      models.push({ model: openrouterClient("deepseek/deepseek-chat-v3-0324"), label: "deepseek" });
   }
 
   const backendHeaders: Record<string, string> = {

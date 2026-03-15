@@ -57,6 +57,7 @@ class Layout:
     second_floor: FloorPlan | None = None
     basement_floor: FloorPlan | None = None
     score: LayoutScore | None = None
+    space_notes: list[str] = field(default_factory=list)  # auto-fill notes for user
 
 
 @dataclass

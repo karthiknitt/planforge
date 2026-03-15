@@ -31,6 +31,7 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   store_room: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
   garage: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
   passage: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
+  open_terrace: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
 };
 
 const color = (type: string) => PALETTE[type] ?? PALETTE.utility;
@@ -198,6 +199,333 @@ function WindowSymbol({
       </text>
     </g>
   );
+}
+
+// ── Staircase treads ──────────────────────────────────────────────────────────
+function StaircaseSymbol({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const x0 = px(room.x);
+  const x1 = px(room.x + room.width);
+  const y0 = py(room.y + room.depth); // top in SVG (y flipped)
+  const y1 = py(room.y);              // bottom in SVG
+  const h = Math.abs(y1 - y0);
+  const treadH = Math.max(4, Math.min(10, scale * 0.3));
+  const numTreads = Math.max(3, Math.floor(h / treadH));
+  const step = h / numTreads;
+
+  const lines: React.ReactNode[] = [];
+  for (let i = 1; i < numTreads; i++) {
+    const ly = y0 + i * step;
+    lines.push(
+      <line key={i} x1={x0} y1={ly} x2={x1} y2={ly} stroke="#94A3B8" strokeWidth={0.6} />,
+    );
+  }
+  // Cut line (diagonal cross-hatching line with UP arrow)
+  const midY = (y0 + y1) / 2;
+  return (
+    <g>
+      {lines}
+      {/* Cut line */}
+      <line x1={x0} y1={midY} x2={x1} y2={midY} stroke="#64748B" strokeWidth={1.2} strokeDasharray="4 2" />
+      {/* UP label */}
+      <text
+        x={(x0 + x1) / 2}
+        y={midY - 4}
+        textAnchor="middle"
+        fontSize={Math.max(6, scale * 0.12)}
+        fontFamily="sans-serif"
+        fill="#64748B"
+        fontWeight="600"
+      >
+        UP
+      </text>
+    </g>
+  );
+}
+
+// ── Furniture symbols (SVG equivalents of DXF cad_advanced.py) ────────────────
+
+function FurnitureBed({
+  room,
+  px,
+  py,
+  scale,
+  isMaster,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+  isMaster: boolean;
+}) {
+  const margin = 0.15;
+  const bedW = Math.min(isMaster ? 1.8 : 1.2, room.width - 2 * margin);
+  const bedD = Math.min(2.0, room.depth - margin);
+  if (bedW < 0.5 || bedD < 0.5) return null;
+
+  const bx = room.x + (room.width - bedW) / 2;
+  const by = room.y + room.depth - margin - bedD;
+  const rx = px(bx);
+  const ry = py(by + bedD);
+  const rw = bedW * scale;
+  const rh = bedD * scale;
+
+  return (
+    <g stroke="#7C3AED" strokeWidth={0.7} fill="none" opacity={0.7}>
+      <rect x={rx} y={ry} width={rw} height={rh} />
+      {/* Headboard */}
+      <rect x={rx} y={ry} width={rw} height={0.1 * scale} fill="#7C3AED" opacity={0.3} />
+      {/* Pillow arc */}
+      <path
+        d={`M ${rx + rw / 2 - Math.min(0.35, bedW / 3) * scale} ${ry + 0.25 * scale}
+            A ${Math.min(0.35, bedW / 3) * scale} ${0.15 * scale} 0 0 1
+            ${rx + rw / 2 + Math.min(0.35, bedW / 3) * scale} ${ry + 0.25 * scale}`}
+        strokeLinecap="round"
+      />
+    </g>
+  );
+}
+
+function FurnitureLiving({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const margin = 0.2;
+  const sofaW = Math.min(2.4, room.width - 2 * margin);
+  const sofaD = 0.9;
+  if (sofaW < 1.0) return null;
+
+  const sx = room.x + (room.width - sofaW) / 2;
+  const sy = room.y + room.depth - margin - sofaD;
+  const tvW = Math.min(1.8, room.width - 2 * margin);
+  const tvX = room.x + (room.width - tvW) / 2;
+
+  return (
+    <g stroke="#CA8A04" strokeWidth={0.7} fill="none" opacity={0.7}>
+      {/* Sofa body */}
+      <rect x={px(sx)} y={py(sy + sofaD)} width={sofaW * scale} height={sofaD * scale} />
+      {/* Armrests */}
+      <rect x={px(sx)} y={py(sy + sofaD)} width={0.3 * scale} height={sofaD * scale} fill="#CA8A04" fillOpacity={0.15} />
+      <rect x={px(sx + sofaW - 0.3)} y={py(sy + sofaD)} width={0.3 * scale} height={sofaD * scale} fill="#CA8A04" fillOpacity={0.15} />
+      {/* TV unit */}
+      <rect x={px(tvX)} y={py(room.y + margin + 0.4)} width={tvW * scale} height={0.4 * scale} fill="#CA8A04" fillOpacity={0.1} />
+    </g>
+  );
+}
+
+function FurnitureDining({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const margin = 0.4;
+  const tW = Math.min(1.8, room.width - 2 * margin);
+  const tD = Math.min(0.9, room.depth - 2 * margin);
+  if (tW < 0.8 || tD < 0.5) return null;
+
+  const tx = room.x + (room.width - tW) / 2;
+  const ty = room.y + (room.depth - tD) / 2;
+  const chairR = 0.22 * scale;
+  const gap = 0.08 * scale;
+  const numChairs = tW >= 1.5 ? 3 : 2;
+
+  const chairs: React.ReactNode[] = [];
+  for (let i = 0; i < numChairs; i++) {
+    const cxVal = px(tx + (tW / (numChairs + 1)) * (i + 1));
+    chairs.push(
+      <circle key={`b${i}`} cx={cxVal} cy={py(ty) + gap + chairR} r={chairR} />,
+      <circle key={`t${i}`} cx={cxVal} cy={py(ty + tD) - gap - chairR} r={chairR} />,
+    );
+  }
+
+  return (
+    <g stroke="#A16207" strokeWidth={0.7} fill="none" opacity={0.7}>
+      <rect x={px(tx)} y={py(ty + tD)} width={tW * scale} height={tD * scale} />
+      {chairs}
+      <circle cx={px(tx) - gap - chairR} cy={py(ty + tD / 2)} r={chairR} />
+      <circle cx={px(tx + tW) + gap + chairR} cy={py(ty + tD / 2)} r={chairR} />
+    </g>
+  );
+}
+
+function FurnitureKitchen({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const margin = 0.05;
+  const cw = 0.6;
+  if (room.width < 1.2 || room.depth < 1.2) return null;
+
+  const rx = room.x;
+  const ry = room.y;
+  const rw = room.width;
+  const rd = room.depth;
+  const rearY = ry + rd - margin - cw;
+  const leftLen = rd - 2 * margin - cw;
+
+  return (
+    <g stroke="#16A34A" strokeWidth={0.7} fill="none" opacity={0.7}>
+      {/* Rear counter */}
+      <rect
+        x={px(rx + margin)}
+        y={py(rearY + cw)}
+        width={(rw - 2 * margin) * scale}
+        height={cw * scale}
+        fill="#16A34A"
+        fillOpacity={0.1}
+      />
+      {/* Left counter */}
+      {leftLen > 0.5 && (
+        <rect
+          x={px(rx + margin)}
+          y={py(ry + margin + leftLen)}
+          width={cw * scale}
+          height={leftLen * scale}
+          fill="#16A34A"
+          fillOpacity={0.1}
+        />
+      )}
+      {/* Sink circle */}
+      <circle
+        cx={px(rx + margin + (rw - 2 * margin) - 0.65 + 0.275)}
+        cy={py(rearY + cw / 2)}
+        r={0.18 * scale}
+      />
+      {/* Stove burners */}
+      {[
+        [rx + margin + 0.1 + (Math.min(0.6, (rw - 2 * margin) * 0.4)) * 0.3, rearY + cw * 0.3],
+        [rx + margin + 0.1 + (Math.min(0.6, (rw - 2 * margin) * 0.4)) * 0.7, rearY + cw * 0.3],
+      ].map(([bx, by], i) => (
+        <circle key={i} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
+      ))}
+    </g>
+  );
+}
+
+function FurnitureToilet({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const margin = 0.08;
+  if (room.width < 0.8 || room.depth < 0.8) return null;
+
+  const rx = room.x;
+  const ry = room.y;
+  const rw = room.width;
+  const rd = room.depth;
+  const wcCx = rx + margin + 0.2;
+  const wcCy = ry + rd - margin - 0.15;
+  const r = 0.18 * scale;
+
+  return (
+    <g stroke="#0284C7" strokeWidth={0.7} fill="none" opacity={0.7}>
+      {/* WC tank */}
+      <rect x={px(wcCx - 0.175)} y={py(wcCy + 0.15)} width={0.35 * scale} height={0.15 * scale} fill="#0284C7" fillOpacity={0.15} />
+      {/* WC bowl arc */}
+      <path
+        d={`M ${px(wcCx) - r} ${py(wcCy)} A ${r} ${r} 0 0 0 ${px(wcCx) + r} ${py(wcCy)}`}
+        strokeLinecap="round"
+      />
+      <line x1={px(wcCx) - r} y1={py(wcCy)} x2={px(wcCx) + r} y2={py(wcCy)} />
+      {/* Basin */}
+      <circle cx={px(rx + rw - margin - 0.2)} cy={py(ry + margin + 0.2)} r={0.18 * scale} />
+    </g>
+  );
+}
+
+function FurnitureParking({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const margin = 0.3;
+  const carW = Math.min(2.0, room.width - 2 * margin);
+  const carD = Math.min(4.5, room.depth - 2 * margin);
+  if (carW < 0.5 || carD < 0.5) return null;
+
+  const cx = room.x + (room.width - carW) / 2;
+  const cy = room.y + (room.depth - carD) / 2;
+
+  return (
+    <g stroke="#94A3B8" strokeWidth={0.7} fill="none" opacity={0.6}>
+      <rect x={px(cx)} y={py(cy + carD)} width={carW * scale} height={carD * scale} strokeDasharray="3 2" />
+    </g>
+  );
+}
+
+function RoomFurniture({
+  room,
+  px,
+  py,
+  scale,
+}: {
+  room: { x: number; y: number; width: number; depth: number; type: string };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  switch (room.type) {
+    case "bedroom":
+      return <FurnitureBed room={room} px={px} py={py} scale={scale} isMaster={false} />;
+    case "master_bedroom":
+      return <FurnitureBed room={room} px={px} py={py} scale={scale} isMaster={true} />;
+    case "living":
+      return <FurnitureLiving room={room} px={px} py={py} scale={scale} />;
+    case "dining":
+      return <FurnitureDining room={room} px={px} py={py} scale={scale} />;
+    case "kitchen":
+      return <FurnitureKitchen room={room} px={px} py={py} scale={scale} />;
+    case "toilet":
+    case "bathroom":
+      return <FurnitureToilet room={room} px={px} py={py} scale={scale} />;
+    case "parking":
+    case "garage":
+      return <FurnitureParking room={room} px={px} py={py} scale={scale} />;
+    default:
+      return null;
+  }
 }
 
 // ── Door symbol (line + quarter-arc + D label) ────────────────────────────────
@@ -631,6 +959,20 @@ export function FloorPlanSVG({
 
           return <DoorSymbol key={`d-${room.id}`} hx={hx} hy={hy} doorPx={doorPx} wall={wall} />;
         })}
+
+      {/* ── Staircase treads ──────────────────────────────────────────── */}
+      {rooms
+        .filter((r) => r.type === "staircase")
+        .map((room) => (
+          <StaircaseSymbol key={`stair-${room.id}`} room={room} px={px} py={py} scale={scale} />
+        ))}
+
+      {/* ── Room furniture ────────────────────────────────────────────── */}
+      {rooms
+        .filter((r) => r.width * scale >= 30 && r.depth * scale >= 30)
+        .map((room) => (
+          <RoomFurniture key={`furn-${room.id}`} room={room} px={px} py={py} scale={scale} />
+        ))}
 
       {/* ── Column markers ────────────────────────────────────────────── */}
       {uniqueCols.map((col, idx) => {

@@ -23,7 +23,7 @@ import {
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useSession } from "@/lib/auth-client";
 import type { LayoutData } from "@/lib/layout-types";
-import { DEFAULT_MODEL_ID, MODEL_OPTIONS } from "@/lib/models";
+import { DEFAULT_MODEL_ID, MODEL_GROUPS, MODEL_OPTIONS } from "@/lib/models";
 
 interface ChatPanelProps {
   projectId: string;
@@ -163,7 +163,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
               disabled={isLoading}
               className="h-7 gap-1.5 px-2 text-xs font-normal"
             >
-              {selectedModelOption && <ModelSelectorLogo provider={selectedModelOption.provider} />}
+              {selectedModelOption && <ModelSelectorLogo logoId={selectedModelOption.logoId} />}
               <span>{selectedModelOption?.label ?? "Select model"}</span>
               <span className="text-muted-foreground">▾</span>
             </Button>
@@ -173,41 +173,31 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
             <ModelSelectorList>
               <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
 
-              <ModelSelectorGroup heading="Anthropic">
-                {MODEL_OPTIONS.filter((m) => m.provider === "anthropic").map((m) => (
-                  <ModelSelectorItem
-                    key={m.id}
-                    value={m.id}
-                    onSelect={() => {
-                      setSelectedModel(m.id);
-                      setModelSelectorOpen(false);
-                    }}
-                  >
-                    <ModelSelectorLogo provider="anthropic" />
-                    <ModelSelectorName>{m.label}</ModelSelectorName>
-                    <span className="text-xs text-muted-foreground">{m.description}</span>
-                  </ModelSelectorItem>
-                ))}
-              </ModelSelectorGroup>
-
-              <ModelSelectorSeparator />
-
-              <ModelSelectorGroup heading="OpenAI">
-                {MODEL_OPTIONS.filter((m) => m.provider === "openai").map((m) => (
-                  <ModelSelectorItem
-                    key={m.id}
-                    value={m.id}
-                    onSelect={() => {
-                      setSelectedModel(m.id);
-                      setModelSelectorOpen(false);
-                    }}
-                  >
-                    <ModelSelectorLogo provider="openai" />
-                    <ModelSelectorName>{m.label}</ModelSelectorName>
-                    <span className="text-xs text-muted-foreground">{m.description}</span>
-                  </ModelSelectorItem>
-                ))}
-              </ModelSelectorGroup>
+              {MODEL_GROUPS.map((group, gi) => {
+                const groupModels = MODEL_OPTIONS.filter((m) => m.group === group);
+                if (groupModels.length === 0) return null;
+                return (
+                  <span key={group}>
+                    {gi > 0 && <ModelSelectorSeparator />}
+                    <ModelSelectorGroup heading={group}>
+                      {groupModels.map((m) => (
+                        <ModelSelectorItem
+                          key={m.id}
+                          value={`${m.label} ${m.description} ${m.id}`}
+                          onSelect={() => {
+                            setSelectedModel(m.id);
+                            setModelSelectorOpen(false);
+                          }}
+                        >
+                          <ModelSelectorLogo logoId={m.logoId} />
+                          <ModelSelectorName>{m.label}</ModelSelectorName>
+                          <span className="text-xs text-muted-foreground">{m.description}</span>
+                        </ModelSelectorItem>
+                      ))}
+                    </ModelSelectorGroup>
+                  </span>
+                );
+              })}
             </ModelSelectorList>
           </ModelSelectorContent>
         </ModelSelector>

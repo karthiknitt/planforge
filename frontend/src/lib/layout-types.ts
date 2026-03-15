@@ -46,6 +46,7 @@ export interface LayoutData {
   second_floor: FloorPlanData | null;
   basement_floor: FloorPlanData | null;
   score: LayoutScoreData | null;
+  space_notes: string[];
 }
 
 export interface GenerateResponse {

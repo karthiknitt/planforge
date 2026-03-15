@@ -49,6 +49,7 @@ class LayoutOut(BaseModel):
     second_floor: FloorPlanOut | None = None
     basement_floor: FloorPlanOut | None = None
     score: LayoutScoreOut | None = None
+    space_notes: list[str] = []
 
 
 class GenerateResponse(BaseModel):
