@@ -50,6 +50,7 @@ async function fetchLayouts(projectId: string, userId: string): Promise<Generate
 
 interface LayoutSectionProps {
   projectId: string;
+  projectName: string;
   userId: string;
   plotWidth: number;
   plotLength: number;
@@ -64,6 +65,7 @@ interface LayoutSectionProps {
 
 async function LayoutSection({
   projectId,
+  projectName,
   userId,
   plotWidth,
   plotLength,
@@ -84,6 +86,7 @@ async function LayoutSection({
       roadSide={roadSide}
       northDirection={northDirection}
       projectId={projectId}
+      projectName={projectName}
       planTier={planTier}
       plotShape={plotShape}
       plotFrontWidth={plotFrontWidth}
@@ -278,6 +281,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <Suspense fallback={<GeneratingFallback />}>
         <LayoutSection
           projectId={id}
+          projectName={project.name}
           userId={session.user.id}
           plotWidth={parseFloat(project.plotWidth)}
           plotLength={parseFloat(project.plotLength)}

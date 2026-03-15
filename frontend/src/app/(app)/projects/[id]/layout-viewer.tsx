@@ -8,6 +8,7 @@ import { BOQViewer } from "@/components/boq-viewer";
 import { ChatPanel } from "@/components/chat-panel";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { SectionViewSVG } from "@/components/section-view-svg";
+import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
@@ -75,6 +76,7 @@ interface LayoutViewerProps {
   roadSide: string;
   northDirection: string;
   projectId: string;
+  projectName: string;
   planTier: string;
   plotShape?: string;
   plotFrontWidth?: number;
@@ -89,6 +91,7 @@ export function LayoutViewer({
   plotLength,
   roadSide,
   projectId,
+  projectName,
   planTier,
   plotShape,
   plotFrontWidth,
@@ -205,8 +208,8 @@ export function LayoutViewer({
           ))}
         </div>
 
-        {/* Export buttons */}
-        <div className="flex gap-2">
+        {/* Export + share buttons */}
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -241,6 +244,7 @@ export function LayoutViewer({
               {downloadingDxf ? "…" : "DXF"}
             </Button>
           )}
+          <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
         </div>
       </div>
 
@@ -311,8 +315,8 @@ export function LayoutViewer({
             {layout.space_notes.length !== 1 ? "s" : ""} applied
           </summary>
           <ul className="mt-2 list-inside list-disc space-y-1 text-blue-700/80 dark:text-blue-400/80 text-xs">
-            {layout.space_notes.map((note, i) => (
-              <li key={i}>{note}</li>
+            {layout.space_notes.map((note) => (
+              <li key={note}>{note}</li>
             ))}
           </ul>
         </details>
