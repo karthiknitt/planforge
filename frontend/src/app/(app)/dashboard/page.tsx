@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Building2, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -7,35 +7,10 @@ import { redirect } from "next/navigation";
 import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
-import { user as userTable } from "@/db/schema";
+import { project as projectTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Dashboard" };
-
-interface Project {
-  id: string;
-  name: string;
-  plot_length: number;
-  plot_width: number;
-  num_bedrooms: number;
-  toilets: number;
-  parking: boolean;
-  city: string | null;
-  created_at: string;
-}
-
-async function fetchProjects(userId: string): Promise<Project[]> {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects`, {
-      headers: { "X-User-Id": userId },
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
 
 const TIER_BADGE = {
   free: {
@@ -59,13 +34,18 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  const projects = await fetchProjects(session.user.id);
-
-  const userRows = await db
-    .select({ planTier: userTable.planTier })
-    .from(userTable)
-    .where(eq(userTable.id, session.user.id))
-    .limit(1);
+  const [projects, userRows] = await Promise.all([
+    db
+      .select()
+      .from(projectTable)
+      .where(eq(projectTable.userId, session.user.id))
+      .orderBy(desc(projectTable.createdAt)),
+    db
+      .select({ planTier: userTable.planTier })
+      .from(userTable)
+      .where(eq(userTable.id, session.user.id))
+      .limit(1),
+  ]);
   const planTier = userRows[0]?.planTier ?? "free";
   const badge = TIER_BADGE[planTier as keyof typeof TIER_BADGE] ?? TIER_BADGE.free;
 
@@ -169,10 +149,10 @@ export default async function DashboardPage() {
                 {/* Tags */}
                 <div className="flex flex-wrap gap-1.5">
                   <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.plot_length} &times; {p.plot_width} m
+                    {p.plotLength} &times; {p.plotWidth} m
                   </span>
                   <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.num_bedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
+                    {p.numBedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
                   </span>
                   {p.city && p.city !== "other" && (
                     <span className="inline-flex items-center rounded-full bg-primary/8 text-primary/70 px-2 py-0.5 text-[11px] font-medium capitalize">
@@ -184,7 +164,7 @@ export default async function DashboardPage() {
                 {/* Footer */}
                 <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
                   <span className="text-[11px] text-muted-foreground/70">
-                    {new Date(p.created_at).toLocaleDateString("en-IN", {
+                    {new Date(p.createdAt).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
