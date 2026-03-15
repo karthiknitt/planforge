@@ -61,6 +61,18 @@ async def create_project(
             )
 
     data = _serialize_project_data(body.model_dump())
+
+    # 4BHK minimum plot area guard
+    num_bedrooms = data.get("num_bedrooms", 2)
+    if num_bedrooms >= 4:
+        plot_length = data.get("plot_length", 0) or 0
+        plot_width = data.get("plot_width", 0) or 0
+        if float(plot_length) * float(plot_width) < 200:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="4BHK requires minimum 200 sqm plot area",
+            )
+
     project = Project(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -87,6 +99,18 @@ async def update_project(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     data = _serialize_project_data(body.model_dump(exclude_none=True))
+
+    # 4BHK minimum plot area guard (check merged values: patch may update bedrooms or dimensions)
+    merged_bedrooms = data.get("num_bedrooms", project.num_bedrooms)
+    if merged_bedrooms >= 4:
+        merged_length = float(data.get("plot_length") or project.plot_length or 0)
+        merged_width = float(data.get("plot_width") or project.plot_width or 0)
+        if merged_length * merged_width < 200:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="4BHK requires minimum 200 sqm plot area",
+            )
+
     for field, value in data.items():
         setattr(project, field, value)
 

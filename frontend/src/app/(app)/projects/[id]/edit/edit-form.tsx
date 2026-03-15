@@ -622,11 +622,17 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                 value={form.num_bedrooms}
                 onChange={(e) => set("num_bedrooms", e.target.value)}
               >
-                <option value="1">1 BHK</option>
-                <option value="2">2 BHK</option>
-                <option value="3">3 BHK</option>
-                <option value="4">4 BHK</option>
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <option key={n} value={n}>
+                    {n} BHK
+                  </option>
+                ))}
               </Select>
+              {parseInt(form.num_bedrooms, 10) >= 4 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  4BHK requires minimum 200 sqm (≈ 2,150 sq ft) plot area
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="toilets">Toilets</Label>

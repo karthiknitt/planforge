@@ -245,11 +245,34 @@ async def test_3bhk_project(client):
 
 
 async def test_4bhk_project(client):
-    payload = {**BASE_PAYLOAD, "name": "4BHK Plot", "num_bedrooms": 4, "toilets": 4}
+    # 4BHK requires ≥200 sqm — use 15×15 m (225 sqm) plot
+    payload = {
+        **BASE_PAYLOAD,
+        "name": "4BHK Plot",
+        "plot_length": 15.0,
+        "plot_width": 15.0,
+        "num_bedrooms": 4,
+        "toilets": 4,
+    }
     project_id = await _create_project(client, payload)
     r = await client.get(f"/api/projects/{project_id}/generate", headers=HEADERS)
     assert r.status_code == 200
     assert len(r.json()["layouts"]) >= 1
+
+
+async def test_4bhk_small_plot_rejected(client):
+    """4BHK on a 10×10 m (100 sqm) plot must be rejected with 422."""
+    payload = {
+        **BASE_PAYLOAD,
+        "name": "4BHK Small Plot",
+        "plot_length": 10.0,
+        "plot_width": 10.0,
+        "num_bedrooms": 4,
+        "toilets": 3,
+    }
+    r = await client.post("/api/projects", json=payload, headers=HEADERS)
+    assert r.status_code == 422
+    assert "200 sqm" in r.json()["detail"]
 
 
 async def test_optional_rooms(client):

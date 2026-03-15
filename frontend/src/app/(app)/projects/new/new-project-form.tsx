@@ -842,6 +842,11 @@ export default function NewProjectPage() {
                       </option>
                     ))}
                   </Select>
+                  {parseInt(form.num_bedrooms, 10) >= 4 && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      4BHK requires minimum 200 sqm (≈ 2,150 sq ft) plot area
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="toilets">Toilets</Label>

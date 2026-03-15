@@ -142,3 +142,29 @@ def test_1bhk_generates_layouts():
     )
     layouts = generate(cfg_1bhk)
     assert len(layouts) >= 1, "1 BHK should generate at least one layout"
+
+
+def test_4bhk_large_plot():
+    """4BHK on a 15 m × 15 m (225 sqm) plot should generate at least one layout
+    and at least one layout must contain ≥4 bedrooms."""
+    cfg_4bhk = PlotConfig(
+        plot_width=15.0,
+        plot_length=15.0,
+        setback_front=1.5,
+        setback_rear=1.5,
+        setback_left=1.0,
+        setback_right=1.0,
+        num_bedrooms=4,
+        toilets=3,
+        parking=False,
+    )
+    layouts = generate(cfg_4bhk)
+    assert len(layouts) >= 1, "4 BHK on 15×15 m plot should produce at least one layout"
+    bedroom_counts = []
+    for lay in layouts:
+        all_rooms = lay.ground_floor.rooms + lay.first_floor.rooms
+        bedrooms = [r for r in all_rooms if r.type == "bedroom"]
+        bedroom_counts.append(len(bedrooms))
+    assert max(bedroom_counts) >= 4, (
+        f"Expected at least one layout with ≥4 bedrooms for 4BHK, got counts: {bedroom_counts}"
+    )
