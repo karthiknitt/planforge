@@ -88,7 +88,8 @@ async def export_pdf(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Layout {layout_id!r} not found")
 
-    pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
+    annotations = getattr(project, "annotations", None) or {}
+    pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms, annotations=annotations or None)
 
     return Response(
         content=pdf_bytes,

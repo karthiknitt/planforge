@@ -147,7 +147,13 @@ WIN_LW   = 0.75 # window line lineweight (pt)
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def render_pdf(project_name: str, layout: Layout, cfg: PlotConfig, num_bedrooms: int) -> bytes:
+def render_pdf(
+    project_name: str,
+    layout: Layout,
+    cfg: PlotConfig,
+    num_bedrooms: int,
+    annotations: dict | None = None,
+) -> bytes:
     """Return raw PDF bytes.
 
     Page order:
@@ -162,7 +168,8 @@ def render_pdf(project_name: str, layout: Layout, cfg: PlotConfig, num_bedrooms:
     # ── Architectural pages ────────────────────────────────────────────────────
     for floor_plan in [layout.ground_floor, layout.first_floor]:
         floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
-        _draw_floor(c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label)
+        _draw_floor(c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label,
+                    annotations=annotations)
         c.showPage()
 
     # ── Structural pages ───────────────────────────────────────────────────────
@@ -202,6 +209,7 @@ def _draw_floor(
     project_name: str,
     num_bedrooms: int,
     floor_label: str,
+    annotations: dict | None = None,
 ) -> None:
     page_w, page_h = A4
     scale, ox, oy, plot_px, plot_py = _compute_layout(cfg, page_w, page_h)
@@ -469,6 +477,10 @@ def _draw_floor(
                 c.setFont("Helvetica", fs)
                 c.drawCentredString(cx_pt, cy_pt - fs * 0.3, f"{room.name} \u00b7 {room.area}m\u00b2")
 
+    # ── Annotation notes ──────────────────────────────────────────────────────
+    if annotations:
+        _draw_annotations(c, floor_plan.rooms, annotations, scale, ox, oy)
+
     # ── Dimension lines ───────────────────────────────────────────────────────
     _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py)
 
@@ -631,6 +643,38 @@ def _draw_doors_in_gaps(
             c.line(hx, wy, hx, wy + door_px)
             # Quarter-circle arc: centred on hinge, sweeping 90° into room
             c.arc(hx, wy, hx + door_px, wy + door_px, 90, 90)
+
+
+def _draw_annotations(c: canvas.Canvas, rooms, annotations: dict, scale: float, ox: float, oy: float) -> None:
+    """Render engineer annotation notes near room centres in the PDF."""
+    room_map = {r.id: r for r in rooms}
+    for room_id, ann in annotations.items():
+        note = ann.get("note", "")
+        if not note:
+            continue
+        room = room_map.get(room_id)
+        if room is None:
+            continue
+        cx = ox + (room.x + room.width / 2) * scale
+        cy = oy + (room.y + room.depth / 2) * scale
+        # Offset slightly below room centre so it doesn't overlap the room name
+        note_y = cy - 8
+        truncated = (note[:40] + "…") if len(note) > 40 else note
+        label = f"Note: {truncated}"
+        fs = 5
+        c.setFont("Helvetica", fs)
+        text_w = c.stringWidth(label, "Helvetica", fs)
+        pad = 3
+        rect_w = text_w + 2 * pad
+        rect_h = fs + 2 * pad
+        # Light grey background rectangle
+        c.setFillColor(HexColor("#F1F5F9"))
+        c.setStrokeColor(HexColor("#94A3B8"))
+        c.setLineWidth(0.4)
+        c.rect(cx - rect_w / 2, note_y - pad, rect_w, rect_h, fill=1, stroke=1)
+        # Text
+        c.setFillColor(HexColor("#475569"))
+        c.drawCentredString(cx, note_y + 1, label)
 
 
 def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py):

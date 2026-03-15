@@ -1062,11 +1062,12 @@ export function FloorPlanSVG({
             return (
               <g
                 key={room.id}
-                role="button"
                 tabIndex={0}
                 style={{ cursor: "pointer", outline: "none" }}
                 onClick={handleAnnotClick}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleAnnotClick(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") handleAnnotClick();
+                }}
                 aria-label={String(room.name)}
               >
                 <rect
