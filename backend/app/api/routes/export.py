@@ -4,10 +4,12 @@ from io import BytesIO, StringIO
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
 from app.engine.boq import QuantityEngine
 from app.engine.generator import generate
 from app.engine.models import PlotConfig
@@ -94,6 +96,59 @@ async def export_pdf(
         headers={
             "Content-Disposition":
                 f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
+        },
+    )
+
+
+# ── Approval PDF export ───────────────────────────────────────────────────────
+
+class ApprovalPdfRequest(BaseModel):
+    owner_name: str
+    survey_number: str
+    locality: str
+    engineer_name: str
+    license_number: str
+    municipality: str | None = None
+
+
+@router.post("/projects/{project_id}/export/approval-pdf")
+async def export_approval_pdf(
+    project_id: str,
+    body: ApprovalPdfRequest,
+    layout_id: str = "A",
+    user_id: str = Depends(_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    project = await _get_project(project_id, user_id, db)
+    cfg = _cfg_from_project(project)
+
+    layouts = generate(cfg)
+    layout = next((lay for lay in layouts if lay.id == layout_id), None)
+    if layout is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Layout {layout_id!r} not found",
+        )
+
+    municipality = body.municipality or getattr(project, "municipality", None) or ""
+    owner = OwnerInfo(
+        owner_name=body.owner_name,
+        survey_number=body.survey_number,
+        locality=body.locality,
+        engineer_name=body.engineer_name,
+        license_number=body.license_number,
+        municipality=municipality,
+    )
+
+    pdf_bytes = generate_approval_pdf(layout, cfg, owner, layout_id)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="planforge-approval-{project_id}-layout-{layout_id}.pdf"'
+            )
         },
     )
 

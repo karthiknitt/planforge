@@ -25,9 +25,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSession } from "@/lib/auth-client";
 import type {
@@ -300,6 +303,19 @@ export function LayoutViewer({
   const [shareError, setShareError] = useState("");
   const [copied, setCopied] = useState(false);
 
+  // ── Approval PDF state ────────────────────────────────────────────────────
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [approvalForm, setApprovalForm] = useState({
+    owner_name: "",
+    survey_number: "",
+    locality: "",
+    engineer_name: "",
+    license_number: "",
+    municipality: municipality ?? "",
+  });
+  const [downloadingApprovalPdf, setDownloadingApprovalPdf] = useState(false);
+  const [approvalPdfError, setApprovalPdfError] = useState("");
+
   // ── Version History state ──────────────────────────────────────────────────
   const [historyOpen, setHistoryOpen] = useState(false);
   const [revisions, setRevisions] = useState<RevisionListItem[]>([]);
@@ -436,6 +452,43 @@ export function LayoutViewer({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // fallback: select the input text
+    }
+  }
+
+  async function handleDownloadApprovalPdf() {
+    if (!session) return;
+    setDownloadingApprovalPdf(true);
+    setApprovalPdfError("");
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
+        {
+          method: "POST",
+          headers: {
+            "X-User-Id": session.user.id,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(approvalForm),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          (data as { detail?: string })?.detail ?? `Approval PDF export failed (${res.status})`
+        );
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `planforge-approval-${projectId}-layout-${selectedId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setApprovalDialogOpen(false);
+    } catch (err) {
+      setApprovalPdfError(err instanceof Error ? err.message : "Approval PDF download failed");
+    } finally {
+      setDownloadingApprovalPdf(false);
     }
   }
 
@@ -594,6 +647,16 @@ export function LayoutViewer({
               {downloadingDxf ? "…" : "DXF"}
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-border text-foreground hover:bg-muted"
+            onClick={() => setApprovalDialogOpen(true)}
+            disabled={!session}
+            title="Download municipality approval drawing package (CMDA/BBMP/GHMC format)"
+          >
+            Approval PDF
+          </Button>
           <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
           <Button
             variant="outline"
@@ -648,6 +711,101 @@ export function LayoutViewer({
           <p className="text-xs text-muted-foreground">
             The link shows all layout options with floor plans, section view, and compliance status.
           </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval PDF dialog */}
+      <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Municipality Approval Drawing Package</DialogTitle>
+            <DialogDescription>
+              Generates a 4-page PDF formatted for CMDA / BBMP / GHMC submission. Fill in the
+              project details required by the municipality.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="apr-owner">Owner Name</Label>
+                <Input
+                  id="apr-owner"
+                  value={approvalForm.owner_name}
+                  onChange={(e) => setApprovalForm((f) => ({ ...f, owner_name: e.target.value }))}
+                  placeholder="e.g. Rajan Kumar"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="apr-survey">Survey / Plot No.</Label>
+                <Input
+                  id="apr-survey"
+                  value={approvalForm.survey_number}
+                  onChange={(e) =>
+                    setApprovalForm((f) => ({ ...f, survey_number: e.target.value }))
+                  }
+                  placeholder="e.g. 42/A"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="apr-locality">Locality / Area</Label>
+              <Input
+                id="apr-locality"
+                value={approvalForm.locality}
+                onChange={(e) => setApprovalForm((f) => ({ ...f, locality: e.target.value }))}
+                placeholder="e.g. Anna Nagar, Chennai"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="apr-engineer">Engineer / Architect Name</Label>
+                <Input
+                  id="apr-engineer"
+                  value={approvalForm.engineer_name}
+                  onChange={(e) =>
+                    setApprovalForm((f) => ({ ...f, engineer_name: e.target.value }))
+                  }
+                  placeholder="e.g. Er. S. Venkatesh"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="apr-license">License No.</Label>
+                <Input
+                  id="apr-license"
+                  value={approvalForm.license_number}
+                  onChange={(e) =>
+                    setApprovalForm((f) => ({ ...f, license_number: e.target.value }))
+                  }
+                  placeholder="e.g. TN/2024/1234"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="apr-municipality">Municipality / Authority</Label>
+              <Input
+                id="apr-municipality"
+                value={approvalForm.municipality}
+                onChange={(e) => setApprovalForm((f) => ({ ...f, municipality: e.target.value }))}
+                placeholder="e.g. Chennai (CMDA)"
+              />
+            </div>
+            {approvalPdfError && (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {approvalPdfError}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApprovalDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDownloadApprovalPdf}
+              disabled={downloadingApprovalPdf || !session}
+            >
+              {downloadingApprovalPdf ? "Generating…" : "Download Approval PDF"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
