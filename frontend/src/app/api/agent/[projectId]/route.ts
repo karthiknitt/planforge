@@ -263,6 +263,9 @@ export async function POST(req: Request, { params }: { params: Params }) {
       })
     : null;
 
+  // Configurable OpenRouter fallback model (env var) — defaults to claude-3.5-sonnet
+  const openrouterFallbackModel = process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet";
+
   const requestedId =
     typeof selectedModel === "string" && selectedModel ? selectedModel : DEFAULT_MODEL_ID;
 
@@ -280,8 +283,8 @@ export async function POST(req: Request, { params }: { params: Params }) {
     if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
     else if (hasOpenRouter && openrouterClient)
       models.push({
-        model: openrouterClient("deepseek/deepseek-chat-v3-0324"),
-        label: "deepseek-fallback",
+        model: openrouterClient(openrouterFallbackModel),
+        label: `openrouter-fallback(${openrouterFallbackModel})`,
       });
   } else if (provider === "openai" && hasOpenAI) {
     models.push({ model: openai(requestedId), label: requestedId });
@@ -289,15 +292,18 @@ export async function POST(req: Request, { params }: { params: Params }) {
       models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
     else if (hasOpenRouter && openrouterClient)
       models.push({
-        model: openrouterClient("deepseek/deepseek-chat-v3-0324"),
-        label: "deepseek-fallback",
+        model: openrouterClient(openrouterFallbackModel),
+        label: `openrouter-fallback(${openrouterFallbackModel})`,
       });
   } else {
     // No matching provider available — try all in priority order
     if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
     if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2" });
     if (hasOpenRouter && openrouterClient)
-      models.push({ model: openrouterClient("deepseek/deepseek-chat-v3-0324"), label: "deepseek" });
+      models.push({
+        model: openrouterClient(openrouterFallbackModel),
+        label: `openrouter(${openrouterFallbackModel})`,
+      });
   }
 
   const backendHeaders: Record<string, string> = {
