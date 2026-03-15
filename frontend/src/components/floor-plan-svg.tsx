@@ -1,3 +1,4 @@
+import { FurnitureOverlay } from "@/components/furniture-overlay";
 import type { FloorPlanData, RoomData } from "@/lib/layout-types";
 
 // ── Viewport constants ────────────────────────────────────────────────────────
@@ -785,6 +786,7 @@ interface FloorPlanSVGProps {
   plotRearWidth?: number;
   plotCorners?: [number, number][];
   showVastuZones?: boolean;
+  showFurniture?: boolean;
 }
 
 // ── Vastu zone colors (3×3 grid) ─────────────────────────────────────────────
@@ -844,6 +846,7 @@ export function FloorPlanSVG({
   plotRearWidth,
   plotCorners,
   showVastuZones = false,
+  showFurniture = false,
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -1260,6 +1263,17 @@ export function FloorPlanSVG({
 
       {/* ── Scale bar ─────────────────────────────────────────────────── */}
       <ScaleBar x={originX + 4} y={originY + drawH - 10} scale={scale} />
+
+      {/* ── Furniture overlay (presentation mode) ─────────────────────── */}
+      {showFurniture && (
+        <FurnitureOverlay
+          rooms={rooms}
+          scale={scale}
+          offsetX={originX}
+          offsetY={originY}
+          plotHeightPx={drawH}
+        />
+      )}
     </svg>
   );
 }

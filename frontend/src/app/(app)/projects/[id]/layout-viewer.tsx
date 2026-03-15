@@ -290,6 +290,7 @@ export function LayoutViewer({
     "plan"
   );
   const [showVastuZones, setShowVastuZones] = useState(false);
+  const [showFurniture, setShowFurniture] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -802,21 +803,35 @@ export function LayoutViewer({
             ))}
           </div>
 
-          {/* Vastu zone overlay toggle */}
-          {vastuEnabled && (
+          {/* Floor plan toolbar: Vastu zones + Furnish toggles */}
+          <div className="flex flex-wrap gap-2">
+            {vastuEnabled && (
+              <button
+                type="button"
+                onClick={() => setShowVastuZones((v) => !v)}
+                className={[
+                  "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  showVastuZones
+                    ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                    : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+                ].join(" ")}
+              >
+                {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setShowVastuZones((v) => !v)}
+              onClick={() => setShowFurniture((v) => !v)}
               className={[
                 "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showVastuZones
-                  ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                showFurniture
+                  ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
                   : "border-border bg-transparent text-muted-foreground hover:bg-muted",
               ].join(" ")}
             >
-              {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
+              {showFurniture ? "Hide Furniture" : "Furnish"}
             </button>
-          )}
+          </div>
 
           <FloorPlanSVG
             floorPlan={floorPlan}
@@ -829,6 +844,7 @@ export function LayoutViewer({
             plotRearWidth={plotRearWidth}
             plotCorners={plotCorners}
             showVastuZones={showVastuZones}
+            showFurniture={showFurniture}
           />
 
           {/* Room legend */}
