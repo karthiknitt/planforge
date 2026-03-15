@@ -33,6 +33,12 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 How It Works
               </Link>
               <Link
+                href="/gallery"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+              >
+                Gallery
+              </Link>
+              <Link
                 href="/pricing"
                 className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
               >
@@ -105,6 +111,12 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   How It Works
+                </Link>
+                <Link
+                  href="/gallery"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Floor Plan Gallery
                 </Link>
                 <Link
                   href="/pricing"

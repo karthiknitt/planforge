@@ -31,6 +31,13 @@ export function MobileNav() {
               How It Works
             </Link>
             <Link
+              href="/gallery"
+              onClick={() => setOpen(false)}
+              className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              Gallery
+            </Link>
+            <Link
               href="/pricing"
               onClick={() => setOpen(false)}
               className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
