@@ -311,6 +311,8 @@ export function LayoutViewer({
   );
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
+  const [showElectrical, setShowElectrical] = useState(false);
+  const [showPlumbing, setShowPlumbing] = useState(false);
 
   // ── Annotation state ───────────────────────────────────────────────────────
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -1360,6 +1362,30 @@ export function LayoutViewer({
             </button>
             <button
               type="button"
+              onClick={() => setShowElectrical((v) => !v)}
+              className={[
+                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                showElectrical
+                  ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+              ].join(" ")}
+            >
+              {showElectrical ? "Hide Electrical" : "Electrical"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPlumbing((v) => !v)}
+              className={[
+                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                showPlumbing
+                  ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+              ].join(" ")}
+            >
+              {showPlumbing ? "Hide Plumbing" : "Plumbing"}
+            </button>
+            <button
+              type="button"
               onClick={() => setAnnotationMode((v) => !v)}
               className={[
                 "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -1402,6 +1428,8 @@ export function LayoutViewer({
             plotCorners={plotCorners}
             showVastuZones={showVastuZones}
             showFurniture={showFurniture}
+            showElectrical={showElectrical}
+            showPlumbing={showPlumbing}
             annotationMode={annotationMode}
             annotations={annotationList}
             onAnnotationClick={handleAnnotationClick}

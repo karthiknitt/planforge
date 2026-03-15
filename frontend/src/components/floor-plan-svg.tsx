@@ -1,4 +1,6 @@
+import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
+import { PlumbingOverlay } from "@/components/plumbing-overlay";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FloorPlanData, RoomData } from "@/lib/layout-types";
 
@@ -797,6 +799,8 @@ interface FloorPlanSVGProps {
   plotCorners?: [number, number][];
   showVastuZones?: boolean;
   showFurniture?: boolean;
+  showElectrical?: boolean;
+  showPlumbing?: boolean;
   annotationMode?: boolean;
   annotations?: Annotation[];
   onAnnotationClick?: (roomId: string, roomName: string, x: number, y: number) => void;
@@ -860,6 +864,8 @@ export function FloorPlanSVG({
   plotCorners,
   showVastuZones = false,
   showFurniture = false,
+  showElectrical = false,
+  showPlumbing = false,
   annotationMode = false,
   annotations = [],
   onAnnotationClick,
@@ -1315,6 +1321,28 @@ export function FloorPlanSVG({
         {/* ── Furniture overlay (presentation mode) ─────────────────────── */}
         {showFurniture && (
           <FurnitureOverlay
+            rooms={rooms}
+            scale={scale}
+            offsetX={originX}
+            offsetY={originY}
+            plotHeightPx={drawH}
+          />
+        )}
+
+        {/* ── Electrical overlay ─────────────────────────────────────────── */}
+        {showElectrical && (
+          <ElectricalOverlay
+            rooms={rooms}
+            scale={scale}
+            offsetX={originX}
+            offsetY={originY}
+            plotHeightPx={drawH}
+          />
+        )}
+
+        {/* ── Plumbing overlay ───────────────────────────────────────────── */}
+        {showPlumbing && (
+          <PlumbingOverlay
             rooms={rooms}
             scale={scale}
             offsetX={originX}
