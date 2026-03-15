@@ -89,13 +89,29 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     if layout.second_floor is not None:
         warnings.append("G+2 building: structural engineer review required (NBC §6).")
 
-    # --- Minimum room areas ---
+    # --- Minimum/maximum room areas ---
     min_bed     = rules["min_bedroom_sqm"]
     min_bed_w   = rules["min_bedroom_width_m"]
     min_kit     = rules["min_kitchen_sqm"]
     min_kit_w   = rules["min_kitchen_width_m"]
+    max_kit     = rules.get("max_kitchen_sqm", 15.0)
     min_wc      = rules["min_toilet_sqm"]
     min_wc_w    = rules["min_toilet_width_m"]
+    max_wc      = rules.get("max_toilet_sqm", 6.0)
+    min_wc_only = rules.get("min_wc_only_sqm", 1.1)
+    max_wc_only = rules.get("max_wc_only_sqm", 2.5)
+    min_wc_only_w = rules.get("min_wc_only_width_m", 0.9)
+    min_bath_m  = rules.get("min_bathroom_master_sqm", 4.5)
+    max_bath_m  = rules.get("max_bathroom_master_sqm", 9.0)
+    min_bath_m_w = rules.get("min_bathroom_master_width_m", 1.8)
+    max_pooja   = rules.get("max_pooja_sqm", 4.5)
+    min_pooja_w = rules.get("min_pooja_width_m", 0.9)
+    min_p4w     = rules.get("min_parking_4w_sqm", 12.5)
+    min_p4w_w   = rules.get("min_parking_4w_width_m", 2.5)
+    max_p4w     = rules.get("max_parking_4w_sqm", 30.0)
+    min_p2w     = rules.get("min_parking_2w_sqm", 2.5)
+    min_p2w_w   = rules.get("min_parking_2w_width_m", 1.0)
+    max_p2w     = rules.get("max_parking_2w_sqm", 9.0)
     min_stair_w = rules["min_stair_width_mm"] / 1000
 
     min_living     = rules.get("min_living_sqm", 9.5)
@@ -104,16 +120,23 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     min_bath_vent  = rules.get("min_bath_ventilation_sqm", 0.37)
     min_kit_win    = rules.get("min_kitchen_window_sqm", 1.0)
 
+    # Collect master_bedroom and toilet room sets for adjacency check
+    master_beds = [r for r in all_rooms if r.type == "master_bedroom"]
+    bath_types  = {"toilet", "wc_only", "bathroom_master"}
+    bath_rooms  = [r for r in all_rooms if r.type in bath_types]
+
     for room in all_rooms:
-        if room.type == "bedroom":
-            if room.area < min_bed:
+        if room.type in ("bedroom", "master_bedroom"):
+            min_b = rules.get("min_master_bedroom_sqm", 12.0) if room.type == "master_bedroom" else min_bed
+            min_bw = rules.get("min_master_bedroom_width_m", 3.0) if room.type == "master_bedroom" else min_bed_w
+            if room.area < min_b:
                 violations.append(
-                    f"{room.name}: {room.area:.1f} sqm < {min_bed} sqm minimum (NBC)"
+                    f"{room.name}: {room.area:.1f} sqm < {min_b} sqm minimum (NBC)"
                 )
-            if min(room.width, room.depth) < min_bed_w:
+            if min(room.width, room.depth) < min_bw:
                 warnings.append(
                     f"{room.name}: width {min(room.width, room.depth):.2f} m "
-                    f"< {min_bed_w} m recommended (NBC 2.4 m habitable)"
+                    f"< {min_bw} m recommended (NBC 2.4 m habitable)"
                 )
             # Ventilation — 1/10th floor area
             req_win = round(room.area * min_win_ratio, 2)
@@ -141,6 +164,10 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                 violations.append(
                     f"{room.name}: {room.area:.1f} sqm < {min_kit} sqm minimum (NBC)"
                 )
+            if room.area > max_kit:
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_kit} sqm — unusually large for a residential kitchen"
+                )
             if min(room.width, room.depth) < min_kit_w:
                 warnings.append(
                     f"{room.name}: width {min(room.width, room.depth):.2f} m "
@@ -155,6 +182,10 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                 violations.append(
                     f"{room.name}: {room.area:.1f} sqm < {min_wc} sqm minimum (NBC)"
                 )
+            if room.area > max_wc:
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_wc} sqm — consider using bathroom_master type for large bathrooms"
+                )
             if min(room.width, room.depth) < min_wc_w:
                 warnings.append(
                     f"{room.name}: width {min(room.width, room.depth):.2f} m "
@@ -162,6 +193,92 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                 )
             warnings.append(
                 f"{room.name}: provide ≥ {min_bath_vent} sqm ventilation opening (NBC bath ventilation)"
+            )
+
+        if room.type == "wc_only":
+            if room.area < min_wc_only:
+                violations.append(
+                    f"{room.name}: {room.area:.1f} sqm < {min_wc_only} sqm minimum for WC-only"
+                )
+            if room.area > max_wc_only:
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_wc_only} sqm — too large for a WC-only; use 'toilet' type"
+                )
+            if min(room.width, room.depth) < min_wc_only_w:
+                violations.append(
+                    f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_wc_only_w} m minimum"
+                )
+            warnings.append(
+                f"{room.name}: provide ≥ {min_bath_vent} sqm ventilation opening (NBC)"
+            )
+
+        if room.type == "bathroom_master":
+            if room.area < min_bath_m:
+                violations.append(
+                    f"{room.name}: {room.area:.1f} sqm < {min_bath_m} sqm minimum for master bathroom"
+                )
+            if room.area > max_bath_m:
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_bath_m} sqm — unusually large"
+                )
+            if min(room.width, room.depth) < min_bath_m_w:
+                warnings.append(
+                    f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_bath_m_w} m recommended"
+                )
+            warnings.append(
+                f"{room.name}: provide ≥ {min_bath_vent} sqm ventilation opening (NBC)"
+            )
+
+        if room.type == "pooja":
+            if min(room.width, room.depth) < min_pooja_w:
+                warnings.append(
+                    f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_pooja_w} m — too narrow"
+                )
+            if room.area > max_pooja:
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_pooja} sqm — unusually large for a pooja room"
+                )
+
+        if room.type == "parking_4w":
+            if room.area < min_p4w:
+                violations.append(
+                    f"{room.name}: {room.area:.1f} sqm < {min_p4w} sqm minimum for car parking (NBC 2.5 m × 5.0 m)"
+                )
+            if room.area > max_p4w:
+                warnings.append(f"{room.name}: {room.area:.1f} sqm > {max_p4w} sqm — unusually large car bay")
+            if min(room.width, room.depth) < min_p4w_w:
+                violations.append(
+                    f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_p4w_w} m minimum (car)"
+                )
+
+        if room.type == "parking_2w":
+            if room.area < min_p2w:
+                violations.append(
+                    f"{room.name}: {room.area:.1f} sqm < {min_p2w} sqm minimum for 2-wheeler parking"
+                )
+            if room.area > max_p2w:
+                warnings.append(f"{room.name}: {room.area:.1f} sqm > {max_p2w} sqm — consider splitting into separate bays")
+            if min(room.width, room.depth) < min_p2w_w:
+                violations.append(
+                    f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_p2w_w} m minimum (2-wheeler)"
+                )
+
+    # --- Master bedroom attached bathroom check ---
+    tol = 0.15  # 15 cm adjacency tolerance
+    for mb in master_beds:
+        has_attached = False
+        for b in bath_rooms:
+            # Rooms are adjacent if they share an edge (within tol)
+            x_overlap = mb.x < b.x + b.width + tol and b.x < mb.x + mb.width + tol
+            y_overlap = mb.y < b.y + b.depth + tol and b.y < mb.y + mb.depth + tol
+            x_touch   = (abs(mb.x - (b.x + b.width)) < tol or abs(b.x - (mb.x + mb.width)) < tol)
+            y_touch   = (abs(mb.y - (b.y + b.depth)) < tol or abs(b.y - (mb.y + mb.depth)) < tol)
+            if (x_touch and y_overlap) or (y_touch and x_overlap):
+                has_attached = True
+                break
+        if not has_attached:
+            warnings.append(
+                f"{mb.name}: no attached toilet/bathroom detected — Indian practice recommends an en-suite bath"
             )
 
     # --- Staircase width ---

@@ -1,92 +1,119 @@
 {
   "living": {
-    "min_area_sqm": 9.5, "max_area_sqm": 30.0,
-    "min_width_m": 2.4, "max_width_m": 8.0,
-    "floor_pref": "gf", "mandatory": true
+    "min_area_sqm": 9.5,  "max_area_sqm": 30.0,
+    "min_width_m": 2.4,   "max_width_m": 8.0,
+    "floor_pref": "gf",   "mandatory": true
   },
   "dining": {
-    "min_area_sqm": 6.0, "max_area_sqm": 20.0,
-    "min_width_m": 2.0, "max_width_m": 6.0,
-    "floor_pref": "gf", "mandatory": false
+    "min_area_sqm": 6.0,  "max_area_sqm": 18.0,
+    "min_width_m": 2.0,   "max_width_m": 5.5,
+    "floor_pref": "gf",   "mandatory": false
   },
   "bedroom": {
-    "min_area_sqm": 9.5, "max_area_sqm": 25.0,
-    "min_width_m": 2.4, "max_width_m": 6.0,
-    "floor_pref": "either", "mandatory": true
+    "min_area_sqm": 9.5,  "max_area_sqm": 22.0,
+    "min_width_m": 2.4,   "max_width_m": 5.5,
+    "floor_pref": "either","mandatory": true
   },
   "master_bedroom": {
-    "min_area_sqm": 12.0, "max_area_sqm": 35.0,
-    "min_width_m": 3.0, "max_width_m": 7.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 12.0, "max_area_sqm": 28.0,
+    "min_width_m": 3.0,   "max_width_m": 6.0,
+    "floor_pref": "either","mandatory": false
   },
   "kitchen": {
-    "min_area_sqm": 4.5, "max_area_sqm": 20.0,
-    "min_width_m": 1.8, "max_width_m": 5.0,
-    "floor_pref": "gf", "mandatory": true
+    "min_area_sqm": 4.5,  "max_area_sqm": 15.0,
+    "min_width_m": 1.8,   "max_width_m": 4.5,
+    "floor_pref": "gf",   "mandatory": true
   },
   "toilet": {
-    "min_area_sqm": 2.8, "max_area_sqm": 10.0,
-    "min_width_m": 1.2, "max_width_m": 3.0,
-    "floor_pref": "either", "mandatory": true
+    "comment": "Combined WC + wash basin + shower — standard Indian bathroom",
+    "min_area_sqm": 2.8,  "max_area_sqm": 6.0,
+    "min_width_m": 1.2,   "max_width_m": 2.5,
+    "floor_pref": "either","mandatory": true
+  },
+  "wc_only": {
+    "comment": "WC + wash basin only — no shower/bath — toilet pod or guest WC",
+    "min_area_sqm": 1.1,  "max_area_sqm": 2.5,
+    "min_width_m": 0.9,   "max_width_m": 1.5,
+    "floor_pref": "either","mandatory": false
+  },
+  "bathroom_master": {
+    "comment": "Attached master bathroom — WC + basin + shower + optional bathtub",
+    "min_area_sqm": 4.5,  "max_area_sqm": 9.0,
+    "min_width_m": 1.8,   "max_width_m": 3.0,
+    "floor_pref": "either","mandatory": false
   },
   "staircase": {
-    "min_area_sqm": 2.7, "max_area_sqm": 8.0,
-    "min_width_m": 0.9, "max_width_m": 2.5,
-    "floor_pref": "all", "mandatory": true
+    "min_area_sqm": 2.7,  "max_area_sqm": 8.0,
+    "min_width_m": 0.9,   "max_width_m": 2.5,
+    "floor_pref": "all",  "mandatory": true
   },
   "parking": {
+    "comment": "Generic parking — use parking_4w or parking_2w for new projects",
     "min_area_sqm": 12.5, "max_area_sqm": 30.0,
-    "min_width_m": 2.75, "max_width_m": 6.0,
-    "floor_pref": "stilt_or_basement", "mandatory": false
+    "min_width_m": 2.5,   "max_width_m": 6.0,
+    "floor_pref": "stilt_or_basement","mandatory": false
+  },
+  "parking_4w": {
+    "comment": "4-wheeler car parking — NBC min 2.5 m × 5.0 m",
+    "min_area_sqm": 12.5, "max_area_sqm": 30.0,
+    "min_width_m": 2.5,   "max_width_m": 6.0,
+    "floor_pref": "stilt_or_basement","mandatory": false
+  },
+  "parking_2w": {
+    "comment": "2-wheeler motorcycle/scooter bay — 1.0 m × 2.5 m per bike",
+    "min_area_sqm": 2.5,  "max_area_sqm": 9.0,
+    "min_width_m": 1.0,   "max_width_m": 3.0,
+    "floor_pref": "stilt_or_basement","mandatory": false
   },
   "servant_quarter": {
-    "min_area_sqm": 7.5, "max_area_sqm": 18.0,
-    "min_width_m": 2.0, "max_width_m": 4.0,
-    "floor_pref": "gf", "mandatory": false
+    "min_area_sqm": 7.5,  "max_area_sqm": 18.0,
+    "min_width_m": 2.0,   "max_width_m": 4.0,
+    "floor_pref": "gf",   "mandatory": false
   },
   "gym": {
-    "min_area_sqm": 8.0, "max_area_sqm": 40.0,
-    "min_width_m": 2.5, "max_width_m": 8.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 8.0,  "max_area_sqm": 40.0,
+    "min_width_m": 2.5,   "max_width_m": 8.0,
+    "floor_pref": "either","mandatory": false
   },
   "home_office": {
-    "min_area_sqm": 7.5, "max_area_sqm": 25.0,
-    "min_width_m": 2.4, "max_width_m": 6.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 7.5,  "max_area_sqm": 20.0,
+    "min_width_m": 2.4,   "max_width_m": 5.5,
+    "floor_pref": "either","mandatory": false
   },
   "store_room": {
-    "min_area_sqm": 3.0, "max_area_sqm": 12.0,
-    "min_width_m": 1.5, "max_width_m": 4.0,
-    "floor_pref": "basement_or_gf", "mandatory": false
+    "min_area_sqm": 2.0,  "max_area_sqm": 10.0,
+    "min_width_m": 1.2,   "max_width_m": 3.5,
+    "floor_pref": "basement_or_gf","mandatory": false
   },
   "garage": {
     "min_area_sqm": 18.0, "max_area_sqm": 50.0,
-    "min_width_m": 3.0, "max_width_m": 8.0,
-    "floor_pref": "stilt_or_basement", "mandatory": false
+    "min_width_m": 3.0,   "max_width_m": 8.0,
+    "floor_pref": "stilt_or_basement","mandatory": false
   },
   "utility": {
-    "min_area_sqm": 2.0, "max_area_sqm": 8.0,
-    "min_width_m": 1.2, "max_width_m": 3.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 2.0,  "max_area_sqm": 8.0,
+    "min_width_m": 1.2,   "max_width_m": 3.0,
+    "floor_pref": "either","mandatory": false
   },
   "passage": {
-    "min_area_sqm": 2.0, "max_area_sqm": 6.0,
-    "min_width_m": 0.9, "max_width_m": 2.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 1.5,  "max_area_sqm": 6.0,
+    "min_width_m": 0.9,   "max_width_m": 2.0,
+    "floor_pref": "either","mandatory": false
   },
   "pooja": {
-    "min_area_sqm": 2.0, "max_area_sqm": 6.0,
-    "min_width_m": 1.0, "max_width_m": 2.5,
-    "floor_pref": "gf", "mandatory": false
+    "comment": "Pooja room — small, close to main entrance; max 4.5 sqm",
+    "min_area_sqm": 1.5,  "max_area_sqm": 4.5,
+    "min_width_m": 0.9,   "max_width_m": 2.0,
+    "floor_pref": "gf",   "mandatory": false
   },
   "study": {
-    "min_area_sqm": 7.0, "max_area_sqm": 20.0,
-    "min_width_m": 2.0, "max_width_m": 5.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 6.0,  "max_area_sqm": 18.0,
+    "min_width_m": 2.0,   "max_width_m": 5.0,
+    "floor_pref": "either","mandatory": false
   },
   "balcony": {
-    "min_area_sqm": 3.0, "max_area_sqm": 12.0,
-    "min_width_m": 1.0, "max_width_m": 4.0,
-    "floor_pref": "either", "mandatory": false
+    "min_area_sqm": 2.0,  "max_area_sqm": 10.0,
+    "min_width_m": 1.0,   "max_width_m": 3.5,
+    "floor_pref": "either","mandatory": false
   }
 }

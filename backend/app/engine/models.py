@@ -4,8 +4,15 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 RoomType = Literal[
-    "living", "bedroom", "master_bedroom", "kitchen", "toilet", "staircase",
-    "parking", "utility", "pooja", "study", "balcony", "dining",
+    "living", "bedroom", "master_bedroom", "kitchen",
+    "toilet",           # combined WC + wash basin + shower
+    "wc_only",          # WC + wash basin only (no shower/bath)
+    "bathroom_master",  # master en-suite: WC + basin + shower (+ optional tub)
+    "staircase",
+    "parking",          # generic — prefer parking_4w / parking_2w for new layouts
+    "parking_4w",       # car parking (min 2.5 m × 5.0 m per NBC)
+    "parking_2w",       # 2-wheeler bay (1.0 m × 2.5 m per bike)
+    "utility", "pooja", "study", "balcony", "dining",
     "servant_quarter", "gym", "home_office", "store_room", "garage", "passage",
 ]
 

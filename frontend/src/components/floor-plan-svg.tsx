@@ -16,9 +16,13 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   bedroom: { fill: "#EDE9FE", stroke: "#7C3AED", text: "#3B0764" },
   master_bedroom: { fill: "#F3E8FF", stroke: "#9333EA", text: "#3B0764" },
   kitchen: { fill: "#DCFCE7", stroke: "#16A34A", text: "#14532D" },
-  toilet: { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
+  toilet:          { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
+  wc_only:         { fill: "#BAE6FD", stroke: "#0284C7", text: "#0C4A6E" },
+  bathroom_master: { fill: "#BFDBFE", stroke: "#1D4ED8", text: "#1E3A8A" },
   staircase: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
-  parking: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  parking:    { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  parking_4w: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
+  parking_2w: { fill: "#E7E5E4", stroke: "#78716C", text: "#44403C" },
   utility: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
   pooja: { fill: "#FFF7ED", stroke: "#EA580C", text: "#7C2D12" },
   study: { fill: "#F0FDF4", stroke: "#15803D", text: "#14532D" },
@@ -469,7 +473,7 @@ function FurnitureToilet({
   );
 }
 
-function FurnitureParking({
+function FurnitureBathtub({
   room,
   px,
   py,
@@ -480,7 +484,60 @@ function FurnitureParking({
   py: (v: number) => number;
   scale: number;
 }) {
-  const margin = 0.3;
+  // Bathtub: 1.7 m × 0.75 m, placed along the longest wall
+  const tubL = Math.min(1.7, room.width - 0.3);
+  const tubW = Math.min(0.75, room.depth * 0.45);
+  if (tubL < 0.8 || tubW < 0.3) return null;
+  // Place along the top wall (rear)
+  const tx = room.x + (room.width - tubL) / 2;
+  const ty = room.y + room.depth - tubW - 0.1;
+  const rx = px(tx);
+  const ry = py(ty + tubW);
+  const tw = tubL * scale;
+  const th = tubW * scale;
+  const rr = Math.min(tw, th) * 0.35; // corner radius for rounded tub
+  return (
+    <g stroke="#1D4ED8" strokeWidth={0.8} fill="#DBEAFE" opacity={0.7}>
+      <rect x={rx} y={ry} width={tw} height={th} rx={rr} ry={rr} />
+      {/* tap end indicator */}
+      <circle cx={rx + tw * 0.5} cy={ry + th * 0.15} r={Math.min(tw, th) * 0.1} fill="#1D4ED8" />
+    </g>
+  );
+}
+
+function FurnitureParking({
+  room,
+  px,
+  py,
+  scale,
+  is2w = false,
+}: {
+  room: { x: number; y: number; width: number; depth: number };
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+  is2w?: boolean;
+}) {
+  const margin = 0.2;
+  if (is2w) {
+    // 2-wheeler: 1.0 m × 2.2 m silhouette
+    const bW = Math.min(0.8, room.width - 2 * margin);
+    const bD = Math.min(2.0, room.depth - 2 * margin);
+    if (bW < 0.3 || bD < 0.5) return null;
+    const bx = room.x + (room.width - bW) / 2;
+    const by = room.y + (room.depth - bD) / 2;
+    return (
+      <g stroke="#78716C" strokeWidth={0.7} fill="none" opacity={0.6}>
+        <ellipse
+          cx={px(bx + bW / 2)} cy={py(by + bD / 2)}
+          rx={(bW / 2) * scale} ry={(bD / 2) * scale}
+          strokeDasharray="3 2"
+        />
+        {/* wheel marks */}
+        <line x1={px(bx + bW / 2)} y1={py(by + bD * 0.15)} x2={px(bx + bW / 2)} y2={py(by + bD * 0.85)} strokeWidth={1.2} />
+      </g>
+    );
+  }
   const carW = Math.min(2.0, room.width - 2 * margin);
   const carD = Math.min(4.5, room.depth - 2 * margin);
   if (carW < 0.5 || carD < 0.5) return null;
@@ -518,11 +575,21 @@ function RoomFurniture({
     case "kitchen":
       return <FurnitureKitchen room={room} px={px} py={py} scale={scale} />;
     case "toilet":
-    case "bathroom":
+    case "wc_only":
       return <FurnitureToilet room={room} px={px} py={py} scale={scale} />;
+    case "bathroom_master":
+      return (
+        <g>
+          <FurnitureToilet room={room} px={px} py={py} scale={scale} />
+          <FurnitureBathtub room={room} px={px} py={py} scale={scale} />
+        </g>
+      );
     case "parking":
+    case "parking_4w":
     case "garage":
-      return <FurnitureParking room={room} px={px} py={py} scale={scale} />;
+      return <FurnitureParking room={room} px={px} py={py} scale={scale} is2w={false} />;
+    case "parking_2w":
+      return <FurnitureParking room={room} px={px} py={py} scale={scale} is2w={true} />;
     default:
       return null;
   }
