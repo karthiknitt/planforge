@@ -44,6 +44,7 @@ import type {
   GenerateResponse,
   LayoutData,
 } from "@/lib/layout-types";
+import { useLocale } from "@/lib/locale-context";
 
 interface RevisionListItem {
   id: number;
@@ -302,6 +303,7 @@ export function LayoutViewer({
   initialApproval,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
+  const { locale } = useLocale();
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
@@ -1433,6 +1435,7 @@ export function LayoutViewer({
             annotationMode={annotationMode}
             annotations={annotationList}
             onAnnotationClick={handleAnnotationClick}
+            locale={locale}
           />
 
           {/* Room legend */}
@@ -1507,6 +1510,7 @@ export function LayoutViewer({
                 plotFrontWidth={plotFrontWidth}
                 plotRearWidth={plotRearWidth}
                 plotCorners={plotCorners}
+                locale={locale}
               />
               <p className="text-xs text-muted-foreground">
                 Showing {floor === 1 ? "First" : "Ground"} Floor — switches in the Floor Plan tab

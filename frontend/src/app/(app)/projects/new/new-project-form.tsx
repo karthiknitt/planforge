@@ -542,7 +542,7 @@ export default function NewProjectPage() {
               <div className="flex flex-col gap-1.5">
                 <Label className="invisible text-xs">spacer</Label>
                 <p className="flex h-9 items-center text-xs text-muted-foreground">
-                  Enter front & rear widths below
+                  {t("project.enterWidthsBelow")}
                 </p>
               </div>
             )}
@@ -583,41 +583,43 @@ export default function NewProjectPage() {
 
           {form.plot_shape === "quadrilateral" && (
             <div className="rounded-lg border bg-muted/30 p-4 flex flex-col gap-3">
-              <p className="text-xs text-muted-foreground">
-                Enter 4 corner coordinates in metres (CCW: Front-Left → Front-Right → Rear-Right →
-                Rear-Left). Front-Left is fixed at (0, 0).
-              </p>
-              {(["Front-Left (fixed)", "Front-Right", "Rear-Right", "Rear-Left"] as const).map(
-                (label, idx) => (
-                  <div key={label} className="grid grid-cols-[140px_1fr_1fr] items-center gap-3">
-                    <span className="text-sm font-medium">{label}</span>
-                    <div className="flex flex-col gap-1">
-                      <Label className="text-xs">X (metres)</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        placeholder="0"
-                        disabled={idx === 0}
-                        required={idx > 0}
-                        value={quadCorners[idx].x}
-                        onChange={(e) => setQuadCorner(idx, "x", e.target.value)}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Label className="text-xs">Y (metres)</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        placeholder="0"
-                        disabled={idx === 0 || idx === 1}
-                        required={idx > 1}
-                        value={quadCorners[idx].y}
-                        onChange={(e) => setQuadCorner(idx, "y", e.target.value)}
-                      />
-                    </div>
+              <p className="text-xs text-muted-foreground">{t("project.quadHint")}</p>
+              {(
+                [
+                  t("project.frontLeft"),
+                  t("project.frontRight"),
+                  t("project.rearRight"),
+                  t("project.rearLeft"),
+                ] as const
+              ).map((label, idx) => (
+                <div key={label} className="grid grid-cols-[140px_1fr_1fr] items-center gap-3">
+                  <span className="text-sm font-medium">{label}</span>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs">{t("project.xMetres")}</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="0"
+                      disabled={idx === 0}
+                      required={idx > 0}
+                      value={quadCorners[idx].x}
+                      onChange={(e) => setQuadCorner(idx, "x", e.target.value)}
+                    />
                   </div>
-                )
-              )}
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs">{t("project.yMetres")}</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="0"
+                      disabled={idx === 0 || idx === 1}
+                      required={idx > 1}
+                      value={quadCorners[idx].y}
+                      onChange={(e) => setQuadCorner(idx, "y", e.target.value)}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -646,14 +648,12 @@ export default function NewProjectPage() {
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Applies bye-law specific ground coverage, FAR, and height limits.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("project.municipalityHint")}</p>
           </div>
 
           {form.municipality === "Other" && (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="municipality_other">Specify authority name</Label>
+              <Label htmlFor="municipality_other">{t("project.specifyAuthority")}</Label>
               <input
                 id="municipality_other"
                 type="text"
@@ -668,7 +668,7 @@ export default function NewProjectPage() {
 
         {/* ── 3. Orientation & setbacks ──────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          <Section num="3" title="Orientation & Setbacks" />
+          <Section num="3" title={t("project.orientationSetbacks")} />
           <div className="flex gap-6 items-start">
             <div className="shrink-0 w-28 h-28 rounded-xl border bg-card p-1.5">
               <PlotCompass roadSide={form.road_side} />
@@ -676,7 +676,7 @@ export default function NewProjectPage() {
             <div className="flex-1 flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="road_side">Road facing</Label>
+                  <Label htmlFor="road_side">{t("project.roadFacing")}</Label>
                   <Select
                     id="road_side"
                     value={form.road_side}
@@ -690,7 +690,7 @@ export default function NewProjectPage() {
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="road_width_m">Road width (ft)</Label>
+                  <Label htmlFor="road_width_m">{t("project.roadWidth")}</Label>
                   <Input
                     id="road_width_m"
                     type="number"
@@ -700,7 +700,7 @@ export default function NewProjectPage() {
                     value={form.road_width_m}
                     onChange={(e) => set("road_width_m", e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">Affects FAR for some cities.</p>
+                  <p className="text-xs text-muted-foreground">{t("project.roadWidthHint")}</p>
                 </div>
               </div>
             </div>
@@ -708,7 +708,7 @@ export default function NewProjectPage() {
 
           <div className="rounded-lg border bg-muted/30 p-4">
             <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
-              Setbacks (feet)
+              {t("project.setbacks")}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {(["front", "rear", "left", "right"] as const).map((side) => (
@@ -733,17 +733,17 @@ export default function NewProjectPage() {
 
         {/* ── 4. Floor configuration (Phase E) ──────────────────────── */}
         <div className="flex flex-col gap-4">
-          <Section num="4" title="Floor Configuration" />
+          <Section num="4" title={t("project.floorConfiguration")} />
 
           <div className="flex flex-col gap-2">
-            <Label>Number of floors</Label>
+            <Label>{t("project.numFloors")}</Label>
             <div className="flex gap-2">
               {(
                 [
-                  { value: "1", label: "G (Single)" },
-                  { value: "2", label: "G+1 (Two)" },
-                  { value: "3", label: "G+2 (Three)" },
-                ] as const
+                  { value: "1", label: t("project.gSingle") },
+                  { value: "2", label: t("project.g1Two") },
+                  { value: "3", label: t("project.g2Three") },
+                ] as Array<{ value: "1" | "2" | "3"; label: string }>
               ).map((opt) => (
                 <button
                   key={opt.value}
@@ -772,9 +772,9 @@ export default function NewProjectPage() {
               />
               <div>
                 <Label htmlFor="has_stilt" className="cursor-pointer font-normal">
-                  Stilt floor
+                  {t("project.stiltFloor")}
                 </Label>
-                <p className="text-xs text-muted-foreground">Ground floor = parking only</p>
+                <p className="text-xs text-muted-foreground">{t("project.stiltFloorDesc")}</p>
               </div>
             </div>
             <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border bg-background px-4 py-3 text-sm hover:bg-muted transition-colors">
@@ -786,36 +786,33 @@ export default function NewProjectPage() {
               />
               <div>
                 <Label htmlFor="has_basement" className="cursor-pointer font-normal">
-                  Basement (−1)
+                  {t("project.basementMinus1")}
                 </Label>
-                <p className="text-xs text-muted-foreground">Parking, gym, store allowed</p>
+                <p className="text-xs text-muted-foreground">{t("project.basementDesc")}</p>
               </div>
             </div>
           </div>
 
           {form.has_stilt && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
-              Stilt floor only allows parking, lift lobby, pump room, and electric room — no
-              habitable spaces.
+              {t("project.stiltWarning")}
             </div>
           )}
           {form.has_basement && (
             <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-              Basement allows parking, gym, store room, and utility. Mechanical ventilation required
-              (no natural light).
+              {t("project.basementNote")}
             </div>
           )}
           {form.num_floors === "3" && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
-              G+2 buildings require a structural engineer's review. PlanForge will generate layouts
-              but cannot certify structural adequacy.
+              {t("project.g2Warning")}
             </div>
           )}
         </div>
 
         {/* ── 5. Room configuration ─────────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          <Section num="5" title="Room Configuration" />
+          <Section num="5" title={t("project.roomConfiguration")} />
 
           {/* Mode toggle */}
           <div className="flex w-fit items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
@@ -831,7 +828,7 @@ export default function NewProjectPage() {
                     : "hover:bg-background/50",
                 ].join(" ")}
               >
-                {mode === "basic" ? "Basic" : "Advanced"}
+                {mode === "basic" ? t("project.basic") : t("project.advanced")}
               </button>
             ))}
           </div>
@@ -840,7 +837,7 @@ export default function NewProjectPage() {
             <>
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="num_bedrooms">Bedrooms</Label>
+                  <Label htmlFor="num_bedrooms">{t("project.bedrooms")}</Label>
                   <Select
                     id="num_bedrooms"
                     value={form.num_bedrooms}
@@ -854,12 +851,12 @@ export default function NewProjectPage() {
                   </Select>
                   {parseInt(form.num_bedrooms, 10) >= 4 && (
                     <p className="text-xs text-amber-700 dark:text-amber-400">
-                      4BHK requires minimum 200 sqm (≈ 2,150 sq ft) plot area
+                      {t("project.bhkWarning")}
                     </p>
                   )}
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="toilets">Toilets</Label>
+                  <Label htmlFor="toilets">{t("project.toilets")}</Label>
                   <Select
                     id="toilets"
                     value={form.toilets}
@@ -882,7 +879,7 @@ export default function NewProjectPage() {
                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                     />
                     <Label htmlFor="parking" className="cursor-pointer font-normal">
-                      Parking
+                      {t("project.parking")}
                     </Label>
                   </div>
                 </div>
@@ -891,9 +888,9 @@ export default function NewProjectPage() {
               <div className="grid grid-cols-3 gap-3">
                 {(
                   [
-                    { field: "has_pooja", label: "Pooja room" },
-                    { field: "has_study", label: "Study room" },
-                    { field: "has_balcony", label: "Balcony" },
+                    { field: "has_pooja", label: t("project.poojaRoom") },
+                    { field: "has_study", label: t("project.studyRoom") },
+                    { field: "has_balcony", label: t("project.balcony") },
                   ] as const
                 ).map(({ field, label }) => (
                   <div
@@ -916,9 +913,9 @@ export default function NewProjectPage() {
           ) : (
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-medium text-muted-foreground px-1">
-                <span>Room type / name</span>
-                <span>Min area (m²)</span>
-                <span>Floor preference</span>
+                <span>{t("project.roomType")}</span>
+                <span>{t("project.minArea")}</span>
+                <span>{t("project.floorPreference")}</span>
                 <span />
               </div>
               {customRooms.map((room, idx) => (
@@ -937,11 +934,11 @@ export default function NewProjectPage() {
                 className="flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground hover:bg-muted transition-colors w-full"
               >
                 <Plus className="h-4 w-4" />
-                Add room
+                {t("project.addRoom")}
               </button>
               {customRooms.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">
-                  No rooms added. Click "Add room" to start.
+                  {t("project.noRoomsAdded")}
                 </p>
               )}
             </div>
@@ -951,11 +948,9 @@ export default function NewProjectPage() {
           <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
             <div>
               <Label htmlFor="vastu_enabled" className="font-medium">
-                Vastu Compliance
+                {t("project.vastu")}
               </Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Check room placement against Vastu Shastra principles
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("project.vastuDesc")}</p>
             </div>
             <Switch
               id="vastu_enabled"
@@ -965,8 +960,7 @@ export default function NewProjectPage() {
           </div>
           {form.vastu_enabled && (
             <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-xs text-orange-700 dark:text-orange-400">
-              Vastu analysis checks room zones against Vastu Shastra principles (NE sacred zone, SE
-              kitchen, SW master bedroom, etc.) and flags violations in layout compliance.
+              {t("project.vastuEnabled")}
             </div>
           )}
         </div>
@@ -984,14 +978,14 @@ export default function NewProjectPage() {
             disabled={loading || !session}
             className="flex-1 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground btn-shine shadow-lg shadow-primary/15 hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Creating project\u2026" : "Create project & generate layouts"}
+            {loading ? t("project.creating") : t("project.createProject")}
           </button>
           <button
             type="button"
             onClick={() => router.push("/dashboard")}
             className="rounded-xl border border-border/50 px-5 py-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
-            Cancel
+            {t("project.cancel")}
           </button>
         </div>
       </form>

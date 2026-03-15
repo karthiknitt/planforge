@@ -3,6 +3,8 @@ import { FurnitureOverlay } from "@/components/furniture-overlay";
 import { PlumbingOverlay } from "@/components/plumbing-overlay";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FloorPlanData, RoomData } from "@/lib/layout-types";
+import type { Locale } from "@/lib/locale-context";
+import { getRoomName } from "@/lib/room-names";
 
 // ── Annotation data structure ─────────────────────────────────────────────────
 export interface Annotation {
@@ -99,11 +101,13 @@ function RoomLabel({
   px,
   py,
   scale,
+  locale = "en",
 }: {
   room: RoomData;
   px: (v: number) => number;
   py: (v: number) => number;
   scale: number;
+  locale?: Locale;
 }) {
   const cx = px(room.x + room.width / 2);
   const cy = py(room.y + room.depth / 2);
@@ -114,7 +118,9 @@ function RoomLabel({
 
   const fs = Math.max(7, Math.min(11, roomPxW / 8, roomPxH / 4));
   const c = color(room.type);
-  const lines = roomPxH >= 44 ? [room.name, `${room.area} m²`] : [`${room.name} · ${room.area}m²`];
+  const displayName = getRoomName(room.type, locale);
+  const lines =
+    roomPxH >= 44 ? [displayName, `${room.area} m²`] : [`${displayName} · ${room.area}m²`];
 
   return (
     <g>
@@ -804,6 +810,7 @@ interface FloorPlanSVGProps {
   annotationMode?: boolean;
   annotations?: Annotation[];
   onAnnotationClick?: (roomId: string, roomName: string, x: number, y: number) => void;
+  locale?: Locale;
 }
 
 // ── Vastu zone colors (3×3 grid) ─────────────────────────────────────────────
@@ -869,6 +876,7 @@ export function FloorPlanSVG({
   annotationMode = false,
   annotations = [],
   onAnnotationClick,
+  locale = "en",
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -1260,7 +1268,14 @@ export function FloorPlanSVG({
 
         {/* ── Room labels ───────────────────────────────────────────────── */}
         {rooms.map((room) => (
-          <RoomLabel key={`lbl-${room.id}`} room={room} px={px} py={py} scale={scale} />
+          <RoomLabel
+            key={`lbl-${room.id}`}
+            room={room}
+            px={px}
+            py={py}
+            scale={scale}
+            locale={locale}
+          />
         ))}
 
         {/* ── Internal room dimensions ──────────────────────────────────── */}

@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { FloorPlanData, LayoutData } from "@/lib/layout-types";
+import { type Locale, useLocale } from "@/lib/locale-context";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ interface PanelProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  locale?: Locale;
 }
 
 function LayoutPanel({
@@ -119,6 +121,7 @@ function LayoutPanel({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  locale = "en",
 }: PanelProps) {
   const layout = layouts.find((l) => l.id === selectedId) ?? layouts[0];
   const floors = getAvailableFloors(layout);
@@ -209,6 +212,7 @@ function LayoutPanel({
         plotFrontWidth={plotFrontWidth}
         plotRearWidth={plotRearWidth}
         plotCorners={plotCorners}
+        locale={locale}
       />
     </div>
   );
@@ -379,6 +383,7 @@ export function LayoutCompareView({
   plotCorners,
 }: LayoutCompareViewProps) {
   // Default: first two layouts
+  const { locale } = useLocale();
   const [leftId, setLeftId] = useState<string>(layouts[0]?.id ?? "");
   const [rightId, setRightId] = useState<string>(layouts[1]?.id ?? layouts[0]?.id ?? "");
   const [leftFloor, setLeftFloor] = useState<string>("ground");
@@ -415,6 +420,7 @@ export function LayoutCompareView({
           plotFrontWidth={plotFrontWidth}
           plotRearWidth={plotRearWidth}
           plotCorners={plotCorners}
+          locale={locale}
         />
         <LayoutPanel
           layouts={layouts}
@@ -432,6 +438,7 @@ export function LayoutCompareView({
           plotFrontWidth={plotFrontWidth}
           plotRearWidth={plotRearWidth}
           plotCorners={plotCorners}
+          locale={locale}
         />
       </div>
 
