@@ -1,6 +1,7 @@
-import { CheckCircle, X } from "lucide-react";
+import { CheckCircle, Package, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CreditPackButton } from "@/components/credit-pack-button";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 import { PricingCheckoutButton } from "@/components/pricing-checkout-button";
@@ -82,6 +83,17 @@ const plans: Array<{
       { text: "Priority support", included: true },
     ],
   },
+];
+
+const creditPacks: Array<{
+  packId: "pack_1" | "pack_3" | "pack_7";
+  credits: number;
+  price: string;
+  badge?: string;
+}> = [
+  { packId: "pack_1", credits: 1, price: "₹99" },
+  { packId: "pack_3", credits: 3, price: "₹249", badge: "Best value" },
+  { packId: "pack_7", credits: 7, price: "₹499" },
 ];
 
 const faqs = [
@@ -212,6 +224,73 @@ export default function PricingPage() {
             </StaggerItem>
           ))}
         </StaggerChildren>
+
+        {/* Credit Packs */}
+        <FadeIn>
+          <div className="max-w-3xl mx-auto pb-16">
+            <div className="rounded-2xl border border-border/60 bg-card/80 shadow-sm overflow-hidden">
+              {/* Header */}
+              <div className="px-8 py-6 border-b border-border/60 bg-muted/30 flex items-center gap-3">
+                <Package className="h-5 w-5 text-primary flex-shrink-0" />
+                <div>
+                  <h2
+                    className="text-lg font-extrabold text-foreground"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    Pay Per Project — No subscription needed
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Buy project credits and use them whenever you need. Credits never expire.
+                  </p>
+                </div>
+              </div>
+
+              {/* Packs */}
+              <div className="divide-y divide-border/50">
+                {creditPacks.map((pack) => (
+                  <div
+                    key={pack.packId}
+                    className="px-8 py-5 flex items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-base font-bold text-foreground">
+                        {pack.credits} Project{pack.credits > 1 ? "s" : ""}
+                      </span>
+                      {pack.badge && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                          {pack.badge}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span
+                        className="text-2xl font-extrabold text-foreground"
+                        style={{ fontFamily: "var(--font-display)" }}
+                      >
+                        {pack.price}
+                      </span>
+                      <div className="w-32">
+                        <CreditPackButton
+                          packId={pack.packId}
+                          label="Buy Now"
+                          highlight={!!pack.badge}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer note */}
+              <div className="px-8 py-4 bg-muted/20 border-t border-border/60">
+                <p className="text-xs text-muted-foreground">
+                  Each credit lets you save 1 project beyond the free 3-project limit. PDF export
+                  included. DXF and BOQ Excel require Basic or Pro subscription.
+                </p>
+              </div>
+            </div>
+          </div>
+        </FadeIn>
 
         {/* FAQ */}
         <div className="max-w-3xl mx-auto pb-20">

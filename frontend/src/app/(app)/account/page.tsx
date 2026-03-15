@@ -31,13 +31,18 @@ export default async function AccountPage() {
   if (!session) redirect("/sign-in");
 
   const userRows = await db
-    .select({ planTier: userTable.planTier, planExpiresAt: userTable.planExpiresAt })
+    .select({
+      planTier: userTable.planTier,
+      planExpiresAt: userTable.planExpiresAt,
+      projectCredits: userTable.projectCredits,
+    })
     .from(userTable)
     .where(eq(userTable.id, session.user.id))
     .limit(1);
 
   const planTier = userRows[0]?.planTier ?? "free";
   const planExpiresAt = userRows[0]?.planExpiresAt ?? null;
+  const projectCredits = userRows[0]?.projectCredits ?? 0;
   const badge = TIER_BADGE[planTier as keyof typeof TIER_BADGE] ?? TIER_BADGE.free;
 
   /* User initials for avatar */
@@ -115,17 +120,30 @@ export default async function AccountPage() {
               </div>
             )}
             {planTier === "free" && (
-              <div className="mt-1 pt-1 border-t border-border/60">
-                <p className="text-xs text-muted-foreground mb-3">
-                  Unlock DXF export and BOQ Excel with Basic or Pro.
-                </p>
-                <Button
-                  asChild
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/20"
-                >
-                  <Link href="/pricing">Upgrade Plan</Link>
-                </Button>
-              </div>
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Project credits</span>
+                  <span className="font-semibold text-foreground">
+                    {projectCredits > 0
+                      ? `${projectCredits} project${projectCredits !== 1 ? "s" : ""}`
+                      : "None"}
+                  </span>
+                </div>
+                <div className="mt-1 pt-1 border-t border-border/60 flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Unlock DXF export and BOQ Excel with Basic or Pro.
+                  </p>
+                  <Button
+                    asChild
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/20"
+                  >
+                    <Link href="/pricing">Upgrade Plan</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full font-semibold">
+                    <Link href="/pricing#credit-packs">Buy more credits</Link>
+                  </Button>
+                </div>
+              </>
             )}
             {planTier !== "free" && (
               <p className="text-xs text-muted-foreground mt-1">

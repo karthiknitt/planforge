@@ -1,4 +1,4 @@
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -13,3 +13,4 @@ class User(Base):
     plan_expires_at: Mapped[DateTime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    project_credits: Mapped[int] = mapped_column(Integer, default=0)

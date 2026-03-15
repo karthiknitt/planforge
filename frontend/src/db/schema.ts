@@ -18,6 +18,7 @@ export const user = pgTable("user", {
   image: text("image"),
   planTier: text("plan_tier").default("free").notNull(),
   planExpiresAt: timestamp("plan_expires_at"),
+  projectCredits: integer("project_credits").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -129,6 +130,12 @@ export const project = pgTable(
     municipality: text("municipality"),
     // Arbitrary room config JSON (Phase C)
     customRoomConfig: text("custom_room_config"),
+    // Share link token (public read-only access)
+    shareToken: text("share_token").unique(),
+    // Client approval workflow — None | "pending" | "approved" | "changes_requested"
+    approvalStatus: text("approval_status"),
+    approvalNote: text("approval_note"),
+    approvalUpdatedAt: timestamp("approval_updated_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

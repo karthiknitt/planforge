@@ -1,7 +1,9 @@
 import json
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,9 +15,13 @@ from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 router = APIRouter()
 
 
-async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
+async def _get_user(user_id: str, db: AsyncSession) -> User | None:
     result = await db.execute(select(User).where(User.id == user_id))
-    u = result.scalar_one_or_none()
+    return result.scalar_one_or_none()
+
+
+async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
+    u = await _get_user(user_id, db)
     return u.plan_tier if u else "free"
 
 
@@ -49,16 +55,22 @@ async def create_project(
     user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Project:
-    plan = await _get_plan_tier(user_id, db)
+    user = await _get_user(user_id, db)
+    plan = user.plan_tier if user else "free"
     if plan == "free":
         count_result = await db.execute(
             select(func.count(Project.id)).where(Project.user_id == user_id)
         )
-        if count_result.scalar_one() >= 3:
+        project_count = count_result.scalar_one()
+        credits = user.project_credits if user else 0
+        if project_count >= 3 and credits <= 0:
             raise HTTPException(
                 status_code=402,
-                detail="Free plan limited to 3 projects. Upgrade to Basic or Pro.",
+                detail="Purchase credits or upgrade to Basic",
             )
+        if project_count >= 3 and credits > 0:
+            # Deduct one credit for this project
+            user.project_credits = credits - 1
 
     data = _serialize_project_data(body.model_dump())
 
@@ -130,3 +142,47 @@ async def list_projects(
         .order_by(Project.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+# ── Annotation routes ─────────────────────────────────────────────────────────
+
+class AnnotationItem(BaseModel):
+    room_id: str
+    room_name: str
+    note: str
+    x: float
+    y: float
+
+
+@router.get("/projects/{project_id}/annotations", response_model=dict[str, Any])
+async def get_annotations(
+    project_id: str,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if project.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    return project.annotations or {}
+
+
+@router.put("/projects/{project_id}/annotations", response_model=dict[str, Any])
+async def put_annotations(
+    project_id: str,
+    body: dict[str, Any],
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if project.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    project.annotations = body
+    await db.commit()
+    await db.refresh(project)
+    return project.annotations or {}
