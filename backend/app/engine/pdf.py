@@ -10,6 +10,113 @@ from reportlab.pdfgen import canvas
 
 from app.engine.models import FloorPlan, Layout, PlotConfig
 
+# ---------------------------------------------------------------------------
+# Internal CAD drawing helpers (ReportLab, not ezdxf)
+# ---------------------------------------------------------------------------
+
+def _pdf_draw_double_line_wall(
+    c: canvas.Canvas,
+    x1: float, y1: float, x2: float, y2: float,
+    thickness_px: float,
+    gaps_px: list[tuple[float, float]],
+    lw: float,
+) -> None:
+    """
+    Draw a double-line wall segment in PDF coordinates with optional opening gaps.
+
+    Parameters
+    ----------
+    c           : ReportLab canvas
+    x1,y1,x2,y2: wall endpoints in PDF points
+    thickness_px: total wall thickness in points
+    gaps_px     : list of (start, end) distances along the wall to leave open
+    lw          : line width
+    """
+    dx = x2 - x1
+    dy = y2 - y1
+    length = math.hypot(dx, dy)
+    if length < 0.5:
+        return
+
+    # Unit vector along wall and perpendicular
+    ux = dx / length
+    uy = dy / length
+    px = -uy   # perpendicular
+    py = ux
+    h = thickness_px / 2
+
+    # Sort and clamp gaps
+    gaps_sorted = sorted(gaps_px)
+    # Build solid segments
+    segments: list[tuple[float, float]] = []
+    pos = 0.0
+    for gs, ge in gaps_sorted:
+        gs = max(gs, 0.0)
+        ge = min(ge, length)
+        if gs > pos + 0.5:
+            segments.append((pos, gs))
+        pos = max(pos, ge)
+    if pos < length - 0.5:
+        segments.append((pos, length))
+    if not segments:
+        return
+
+    c.setLineWidth(lw)
+    c.setDash()
+    for seg_start, seg_end in segments:
+        t0 = seg_start / length
+        t1 = seg_end / length
+        # Outer line (away from origin perpendicular)
+        c.line(
+            x1 + t0 * dx + h * px, y1 + t0 * dy + h * py,
+            x1 + t1 * dx + h * px, y1 + t1 * dy + h * py,
+        )
+        # Inner line
+        c.line(
+            x1 + t0 * dx - h * px, y1 + t0 * dy - h * py,
+            x1 + t1 * dx - h * px, y1 + t1 * dy - h * py,
+        )
+
+
+def _pdf_draw_door_arc(
+    c: canvas.Canvas,
+    hinge_x: float, hinge_y: float,
+    door_px: float,
+    wall_is_horizontal: bool,
+    swing_into_room: bool,
+) -> None:
+    """
+    Draw door leaf line + quarter-circle swing arc in PDF coordinates.
+
+    hinge_x/y   : hinge point in PDF points
+    door_px     : door width in points
+    wall_is_horizontal : True = door on horizontal wall (N/S), leaf goes up/down
+                         False = door on vertical wall (E/W), leaf goes left/right
+    swing_into_room : controls which side the arc swings toward
+    """
+    c.setDash()
+    if wall_is_horizontal:
+        # Door leaf goes vertically (into the room above the wall)
+        direction = 1 if swing_into_room else -1
+        leaf_end_x = hinge_x + door_px
+        leaf_end_y = hinge_y
+        c.line(hinge_x, hinge_y, leaf_end_x, leaf_end_y)
+        # Quarter-circle arc centered at hinge, radius = door width
+        # Arc from 0° to 90° (counterclockwise into room)
+        if swing_into_room:
+            c.arc(hinge_x, hinge_y, hinge_x + door_px * 2, hinge_y + door_px * 2, 90, 90)
+        else:
+            c.arc(hinge_x - door_px * 2, hinge_y - door_px * 2, hinge_x, hinge_y, 0, 90)
+    else:
+        # Door leaf goes horizontally (into the room to the right of the wall)
+        leaf_end_x = hinge_x
+        leaf_end_y = hinge_y + door_px
+        c.line(hinge_x, hinge_y, leaf_end_x, leaf_end_y)
+        if swing_into_room:
+            c.arc(hinge_x, hinge_y, hinge_x + door_px * 2, hinge_y + door_px * 2, 0, 90)
+        else:
+            c.arc(hinge_x - door_px * 2, hinge_y - door_px * 2, hinge_x, hinge_y, 270, 90)
+
 # ── Colour palette (fill, stroke) ────────────────────────────────────────────
 PALETTE: dict[str, tuple[str, str]] = {
     "living":    ("#FEF9C3", "#CA8A04"),
@@ -139,9 +246,9 @@ def _draw_floor(
         c.setDash()
         c.rect(rx, ry, rw, rh, fill=1, stroke=0)
 
-    # ── Internal walls (double lines between rooms) ───────────────────────────
-    iwt = 0.115
-    ewt = 0.23
+    # ── Walls, doors, windows (CAD-accurate) ─────────────────────────────────
+    iwt = 0.115   # internal wall thickness (m)
+    ewt = 0.23    # external wall thickness (m)
     rooms = floor_plan.rooms
     if rooms:
         xs = sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
@@ -152,47 +259,181 @@ def _draw_floor(
         min_y = min(r.y for r in rooms)
         max_y = max(r.y + r.depth for r in rooms)
 
-        c.setStrokeColor(HexColor("#334155"))
-        c.setLineWidth(INT_LW)
-        c.setDash()
+        # Build door-gap information: for each shared internal wall, mark a
+        # 0.9 m door opening at the centre of the shared segment.
+        door_w_m = 0.9
+        # vertical_gaps[x_coord] = list of (y_start, y_end) openings in metres
+        vertical_door_gaps: dict[float, list[tuple[float, float]]] = {}
+        # horizontal_gaps[y_coord] = list of (x_start, x_end)
+        horizontal_door_gaps: dict[float, list[tuple[float, float]]] = {}
+        habitable_door = {"living", "bedroom", "master_bedroom", "kitchen",
+                          "study", "dining", "utility", "pooja"}
 
-        # Vertical interior dividers
+        for i, ra in enumerate(rooms):
+            for j, rb in enumerate(rooms):
+                if j <= i:
+                    continue
+                # Vertical shared wall (ra right ≈ rb left)
+                if abs(ra.x + ra.width - rb.x) < 0.05:
+                    if ra.type in habitable_door or rb.type in habitable_door:
+                        y_lo = max(ra.y, rb.y)
+                        y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                        if y_hi - y_lo > door_w_m + 0.1:
+                            mid = (y_lo + y_hi) / 2
+                            wx = round(ra.x + ra.width, 3)
+                            vertical_door_gaps.setdefault(wx, []).append(
+                                (mid - door_w_m / 2, mid + door_w_m / 2)
+                            )
+                elif abs(rb.x + rb.width - ra.x) < 0.05:
+                    if ra.type in habitable_door or rb.type in habitable_door:
+                        y_lo = max(ra.y, rb.y)
+                        y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                        if y_hi - y_lo > door_w_m + 0.1:
+                            mid = (y_lo + y_hi) / 2
+                            wx = round(rb.x + rb.width, 3)
+                            vertical_door_gaps.setdefault(wx, []).append(
+                                (mid - door_w_m / 2, mid + door_w_m / 2)
+                            )
+                # Horizontal shared wall (ra top ≈ rb bottom)
+                if abs(ra.y + ra.depth - rb.y) < 0.05:
+                    if ra.type in habitable_door or rb.type in habitable_door:
+                        x_lo = max(ra.x, rb.x)
+                        x_hi = min(ra.x + ra.width, rb.x + rb.width)
+                        if x_hi - x_lo > door_w_m + 0.1:
+                            mid = (x_lo + x_hi) / 2
+                            wy = round(ra.y + ra.depth, 3)
+                            horizontal_door_gaps.setdefault(wy, []).append(
+                                (mid - door_w_m / 2, mid + door_w_m / 2)
+                            )
+                elif abs(rb.y + rb.depth - ra.y) < 0.05:
+                    if ra.type in habitable_door or rb.type in habitable_door:
+                        x_lo = max(ra.x, rb.x)
+                        x_hi = min(ra.x + ra.width, rb.x + rb.width)
+                        if x_hi - x_lo > door_w_m + 0.1:
+                            mid = (x_lo + x_hi) / 2
+                            wy = round(rb.y + rb.depth, 3)
+                            horizontal_door_gaps.setdefault(wy, []).append(
+                                (mid - door_w_m / 2, mid + door_w_m / 2)
+                            )
+
+        # Build window-gap information for external walls: 1.2 m window at room centre
+        win_w_m = 1.2
+        habitable_win = {"living", "bedroom", "master_bedroom", "kitchen", "study", "dining"}
+        # external_h_gaps[y_coord] = list of (x_start, x_end) for horizontal walls
+        external_h_win_gaps: dict[float, list[tuple[float, float]]] = {}
+        # external_v_gaps[x_coord] = list of (y_start, y_end) for vertical walls
+        external_v_win_gaps: dict[float, list[tuple[float, float]]] = {}
+
+        for room in rooms:
+            if room.type not in habitable_win:
+                continue
+            rcx = room.x + room.width / 2
+            rcy = room.y + room.depth / 2
+            ww_h = min(win_w_m, room.width * 0.6)
+            ww_v = min(win_w_m, room.depth * 0.6)
+            tol = 0.05
+            if abs(room.y - min_y) < tol:
+                wy = round(min_y, 3)
+                external_h_win_gaps.setdefault(wy, []).append(
+                    (rcx - ww_h / 2, rcx + ww_h / 2)
+                )
+            if abs(room.y + room.depth - max_y) < tol:
+                wy = round(max_y, 3)
+                external_h_win_gaps.setdefault(wy, []).append(
+                    (rcx - ww_h / 2, rcx + ww_h / 2)
+                )
+            if abs(room.x - min_x) < tol:
+                wx = round(min_x, 3)
+                external_v_win_gaps.setdefault(wx, []).append(
+                    (rcy - ww_v / 2, rcy + ww_v / 2)
+                )
+            if abs(room.x + room.width - max_x) < tol:
+                wx = round(max_x, 3)
+                external_v_win_gaps.setdefault(wx, []).append(
+                    (rcx - ww_h / 2, rcx + ww_h / 2)
+                )
+
+        c.setStrokeColor(HexColor("#334155"))
+
+        # ── Internal double-line walls with door gaps ──────────────────────────
+        iwt_px = iwt * scale
         for x in xs[1:-1]:  # skip outer edges
             px1 = ox + x * scale
             py1 = oy + min_y * scale
             py2 = oy + max_y * scale
-            c.line(px1 - (iwt * scale / 2), py1, px1 - (iwt * scale / 2), py2)
-            c.line(px1 + (iwt * scale / 2), py1, px1 + (iwt * scale / 2), py2)
+            wall_len_px = py2 - py1
+            # Convert door gaps from metres to px offsets along wall
+            raw_gaps = vertical_door_gaps.get(round(x, 3), [])
+            gaps_px = [
+                ((g_s - min_y) * scale, (g_e - min_y) * scale)
+                for g_s, g_e in raw_gaps
+            ]
+            _pdf_draw_double_line_wall(
+                c, px1, py1, px1, py2,
+                iwt_px, gaps_px, INT_LW,
+            )
 
-        # Horizontal interior dividers
         for y in ys[1:-1]:
             py1 = oy + y * scale
             px1 = ox + min_x * scale
             px2 = ox + max_x * scale
-            c.line(px1, py1 - (iwt * scale / 2), px2, py1 - (iwt * scale / 2))
-            c.line(px1, py1 + (iwt * scale / 2), px2, py1 + (iwt * scale / 2))
+            raw_gaps = horizontal_door_gaps.get(round(y, 3), [])
+            gaps_px = [
+                ((g_s - min_x) * scale, (g_e - min_x) * scale)
+                for g_s, g_e in raw_gaps
+            ]
+            _pdf_draw_double_line_wall(
+                c, px1, py1, px2, py1,
+                iwt_px, gaps_px, INT_LW,
+            )
 
-        # ── External wall boundary (thick) ────────────────────────────────────
-        c.setLineWidth(EXT_LW)
+        # ── External wall boundary (thick double lines with window gaps) ───────
         bx = ox + min_x * scale
         by = oy + min_y * scale
         bw = (max_x - min_x) * scale
         bh = (max_y - min_y) * scale
-        half_ewt = ewt * scale / 2
-        c.rect(bx - half_ewt, by - half_ewt,
-               bw + 2 * half_ewt, bh + 2 * half_ewt, fill=0, stroke=1)
-        c.setLineWidth(INT_LW)
-        c.rect(bx + half_ewt, by + half_ewt,
-               bw - 2 * half_ewt, bh - 2 * half_ewt, fill=0, stroke=1)
+        ewt_px = ewt * scale
+
+        # Front wall (bottom, horizontal, y=min_y)
+        raw_gaps_front = external_h_win_gaps.get(round(min_y, 3), [])
+        gaps_px_front = [
+            ((g_s - min_x) * scale, (g_e - min_x) * scale)
+            for g_s, g_e in raw_gaps_front
+        ]
+        _pdf_draw_double_line_wall(c, bx, by, bx + bw, by, ewt_px, gaps_px_front, EXT_LW)
+
+        # Rear wall (top, horizontal, y=max_y)
+        raw_gaps_rear = external_h_win_gaps.get(round(max_y, 3), [])
+        gaps_px_rear = [
+            ((g_s - min_x) * scale, (g_e - min_x) * scale)
+            for g_s, g_e in raw_gaps_rear
+        ]
+        _pdf_draw_double_line_wall(c, bx, by + bh, bx + bw, by + bh, ewt_px, gaps_px_rear, EXT_LW)
+
+        # Left wall (vertical, x=min_x)
+        raw_gaps_left = external_v_win_gaps.get(round(min_x, 3), [])
+        gaps_px_left = [
+            ((g_s - min_y) * scale, (g_e - min_y) * scale)
+            for g_s, g_e in raw_gaps_left
+        ]
+        _pdf_draw_double_line_wall(c, bx, by, bx, by + bh, ewt_px, gaps_px_left, EXT_LW)
+
+        # Right wall (vertical, x=max_x)
+        raw_gaps_right = external_v_win_gaps.get(round(max_x, 3), [])
+        gaps_px_right = [
+            ((g_s - min_y) * scale, (g_e - min_y) * scale)
+            for g_s, g_e in raw_gaps_right
+        ]
+        _pdf_draw_double_line_wall(c, bx + bw, by, bx + bw, by + bh, ewt_px, gaps_px_right, EXT_LW)
 
         # ── Staircase treads ──────────────────────────────────────────────────
         _draw_staircase_treads(c, rooms, scale, ox, oy)
 
-        # ── Window symbols on exterior walls ──────────────────────────────────
+        # ── Window symbols in exterior wall gaps ──────────────────────────────
         _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y)
 
-        # ── Door symbols ──────────────────────────────────────────────────────
-        _draw_doors(c, rooms, scale, ox, oy)
+        # ── Door leaf + arc in interior wall gaps ─────────────────────────────
+        _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
 
     # ── Column markers (filled dark squares) ─────────────────────────────────
     c.setFillColor(HexColor("#1E293B"))
@@ -327,7 +568,11 @@ def _draw_window_symbol(c, cx, cy, width_px, horizontal: bool):
 
 
 def _draw_doors(c, rooms, scale, ox, oy):
-    """Draw simplified door symbols (line + arc) on room entry walls."""
+    """Draw simplified door symbols (line + arc) on room entry walls.
+
+    Kept for structural page and fallback use; main architectural page uses
+    _draw_doors_in_gaps which places doors at actual shared-wall openings.
+    """
     door_w_m = 0.9
     habitable = {"living", "bedroom", "kitchen", "study", "dining", "utility", "pooja"}
     c.setStrokeColor(HexColor("#64748B"))
@@ -342,9 +587,50 @@ def _draw_doors(c, rooms, scale, ox, oy):
         hy = oy + room.y * scale
         # Door leaf
         c.line(hx, hy, hx + door_px, hy)
-        # Swing arc (quarter circle)
-        r_px = door_px
-        c.arc(hx - r_px, hy - r_px, hx + r_px, hy + r_px, 0, 90)
+        # Swing arc (quarter circle): bounding box centred on hinge at (hx, hy)
+        c.arc(hx, hy, hx + door_px, hy + door_px, 90, 90)
+
+
+def _draw_doors_in_gaps(
+    c: canvas.Canvas,
+    rooms,
+    scale: float,
+    ox: float,
+    oy: float,
+    vertical_door_gaps: dict[float, list[tuple[float, float]]],
+    horizontal_door_gaps: dict[float, list[tuple[float, float]]],
+) -> None:
+    """
+    Draw door leaf (line) + quarter-circle swing arc at each computed door gap.
+
+    vertical_door_gaps  : {x_coord_m: [(y_start_m, y_end_m), ...]}
+    horizontal_door_gaps: {y_coord_m: [(x_start_m, x_end_m), ...]}
+    """
+    c.setStrokeColor(HexColor("#475569"))
+    c.setLineWidth(0.75)
+    c.setDash()
+
+    # Doors on vertical walls (wall runs N-S at fixed x)
+    for x_m, gaps in vertical_door_gaps.items():
+        wx = ox + x_m * scale
+        for y_s, y_e in gaps:
+            door_px = (y_e - y_s) * scale
+            hy = oy + y_s * scale  # hinge at start of gap
+            # Door leaf: horizontal line from hinge into room (rightward)
+            c.line(wx, hy, wx + door_px, hy)
+            # Quarter-circle arc: centred on hinge, sweeping 90° into room
+            c.arc(wx, hy, wx + door_px, hy + door_px, 90, 90)
+
+    # Doors on horizontal walls (wall runs E-W at fixed y)
+    for y_m, gaps in horizontal_door_gaps.items():
+        wy = oy + y_m * scale
+        for x_s, x_e in gaps:
+            door_px = (x_e - x_s) * scale
+            hx = ox + x_s * scale  # hinge at start of gap
+            # Door leaf: vertical line from hinge into room (upward)
+            c.line(hx, wy, hx, wy + door_px)
+            # Quarter-circle arc: centred on hinge, sweeping 90° into room
+            c.arc(hx, wy, hx + door_px, wy + door_px, 90, 90)
 
 
 def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py):
