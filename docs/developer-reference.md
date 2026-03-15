@@ -150,7 +150,7 @@ PlanForge/
 | Tool | Version |
 |------|---------|
 | Docker | 24+ |
-| Node.js | 20+ |
+| Bun | 1.3+ — `curl -fsSL https://bun.sh/install \| bash` |
 | Python | 3.12+ |
 | uv | latest — `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 
@@ -162,7 +162,7 @@ cp frontend/.env.local.example frontend/.env.local
 # Fill in BETTER_AUTH_SECRET, API keys (see Environment Variables section)
 
 # 2. Install dependencies
-npm install --prefix frontend
+cd frontend && bun install
 cd backend && uv sync
 
 # 3. Start (all-in-one)
@@ -171,7 +171,7 @@ cd backend && uv sync
 # 4. First run: push Better Auth schema
 cd frontend
 DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
-  npx drizzle-kit push
+  bunx drizzle-kit push
 ```
 
 Access the app at `http://localhost:3001`. API docs at `http://localhost:8002/docs`.
@@ -181,7 +181,7 @@ Access the app at `http://localhost:3001`. API docs at `http://localhost:8002/do
 ```bash
 docker compose up db -d
 cd backend && uv run uvicorn app.main:app --reload --port 8002
-cd frontend && PORT=3001 npm run dev
+cd frontend && bun dev
 ```
 
 ---
@@ -193,7 +193,7 @@ cd frontend && PORT=3001 npm run dev
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | ✓ | PostgreSQL for Drizzle — `postgresql://planforge:planforge@localhost:5432/planforge` |
-| `BETTER_AUTH_SECRET` | ✓ | ≥32-char random secret — run `npx @better-auth/cli secret` |
+| `BETTER_AUTH_SECRET` | ✓ | ≥32-char random secret — run `bunx @better-auth/cli secret` |
 | `BETTER_AUTH_URL` | ✓ | Canonical frontend URL — `http://localhost:3001` |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | ✓ | Same, exposed to browser |
 | `NEXT_PUBLIC_API_URL` | ✓ | Backend base URL — `http://localhost:8002` |
@@ -650,8 +650,8 @@ Requires full dev stack running.
 
 ```bash
 cd frontend
-npm run test:e2e          # headless
-npm run test:e2e:ui       # interactive
+bun run test:e2e          # headless
+bun run test:e2e:ui       # interactive
 ```
 
 ```
@@ -665,9 +665,9 @@ tests/e2e/
 
 ```bash
 cd frontend
-npx biome check .             # lint + format check
-npx biome format --write .    # auto-format
-npx tsc --noEmit              # type check
+bun run lint                  # lint + format check (Biome)
+bun run format                # auto-format (Biome)
+bunx tsc --noEmit             # type check
 ```
 
 ---
@@ -694,7 +694,7 @@ Requires the database to be running first.
 
 ```bash
 docker compose up db -d
-cd frontend && npm run seed
+cd frontend && bun run seed
 ```
 
 Output:
@@ -804,7 +804,7 @@ The frontend proxies `/api/*` requests to the backend via `NEXT_PUBLIC_API_URL`.
 
 ```bash
 DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
-  npx drizzle-kit push
+  bunx drizzle-kit push
 ```
 
 ### ThemeToggle client component
@@ -901,4 +901,32 @@ The "new project" form stores road width in **feet** in React state (user-facing
 
 - **Dashboard = Drizzle, not API**: Server Components in the app shell should query the DB directly. The backend API is for layout generation/export, not for basic CRUD that the frontend already owns via Drizzle.
 - **CSS token "spread"**: When dark-mode elements are invisible, check if `--border`, `--input`, and `--card` lightness values are too close together. Spread them: card ≈ 0.13, border ≈ 0.36, input ≈ 0.40 gives clear visual layering.
-- **Build must use `NODE_ENV=production`**: The project `.envrc` previously injected `NODE_ENV=development` via direnv, causing React to load in dev mode during SSR and all `useContext` calls to return null. Always invoke `NODE_ENV=production npm run build`.
+- **Bun is the frontend package manager**: `bun install`, `bun dev`, `bun run build`. The lockfile is `bun.lockb` (binary). Do not use `npm install` or `npx` in the frontend — use `bun`/`bunx` equivalents.
+
+---
+
+### 2026-03-15 — Migrate Frontend to Bun
+
+**What was built:**
+
+- **Bun migration** — replaced npm with Bun (v1.3.9) as the frontend package manager, runtime, and test runner. `package-lock.json` removed; `bun.lockb` generated. Added `"packageManager": "bun@1.3.9"` to `package.json`.
+- **Test script** — added `"test": "bun test"` to `package.json` scripts, enabling the Bun built-in test runner (Jest-compatible API, no config file needed).
+- **`dev-start.sh` updated** — replaced `exec npx next dev --port 3001` with `exec bun dev` so the dev stack script uses the Bun runtime for the frontend process.
+- **`frontend/Dockerfile` updated** — base image switched from `node:20-alpine` to `oven/bun:1.3.9-alpine`; `npm ci` → `bun install --frozen-lockfile`; CMD changed from `node server.js` to `bun server.js`.
+- **Documentation sweep** — all `npm run`, `npx`, and `node_modules/.bin/` references in README.md, frontend/README.md, CLAUDE.md, docs/developer-reference.md, and the seed script comment updated to `bun`/`bunx` equivalents.
+
+**Key files changed:**
+
+- `frontend/package.json` — `"packageManager": "bun@1.3.9"`, `"test": "bun test"`, `"seed"` now uses `bun`
+- `frontend/package-lock.json` — deleted
+- `frontend/bun.lockb` — created
+- `frontend/Dockerfile` — `oven/bun:1.3.9-alpine` base image throughout all stages
+- `dev-start.sh` — line 35: `exec npx next dev` → `exec bun dev`
+- `frontend/scripts/seed-test-users.mjs` — usage comment updated
+- `README.md`, `frontend/README.md`, `CLAUDE.md`, `docs/developer-reference.md` — npm/npx → bun/bunx throughout
+
+**Patterns established:**
+
+- **Frontend package manager = Bun**: `bun add <pkg>` to add, `bun install` to restore, `bunx` for one-off executables (replaces `npx`). Lockfile is `bun.lockb`.
+- **`dev-start.sh` uses `exec bun dev`**: `exec` replaces the subshell so `$!` captures the actual process PID that `dev-stop.sh` kills via `_kill_tree`. This works correctly with Bun as the runtime.
+- **`bun test` is zero-config**: Bun's test runner discovers `*.test.ts` / `*.spec.ts` files automatically with no `vitest.config.ts` or `jest.config.js` required.

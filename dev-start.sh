@@ -32,7 +32,7 @@ printf "  PID %-6s  tail -f .dev-logs/backend.log\n\n" "$BACKEND_PID"
 
 # ── 3. Frontend ───────────────────────────────────────────────────────────────
 printf "▶ Starting frontend → http://localhost:3001\n"
-(cd "$ROOT/frontend" && exec npx next dev --port 3001) \
+(cd "$ROOT/frontend" && exec bun dev) \
   >"$LOGS_DIR/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 printf "  PID %-6s  tail -f .dev-logs/frontend.log\n\n" "$FRONTEND_PID"

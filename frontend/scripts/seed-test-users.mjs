@@ -2,10 +2,10 @@
  * Seed script — creates 3 test users with known credentials for feature gating QA.
  *
  * Usage (from project root):
- *   cd frontend && npm run seed
+ *   cd frontend && bun run seed
  *
  * Or directly:
- *   cd frontend && node scripts/seed-test-users.mjs
+ *   cd frontend && bun scripts/seed-test-users.mjs
  *
  * Requires PostgreSQL to be running (docker compose up db -d).
  * The script is idempotent — safe to run multiple times.

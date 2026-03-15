@@ -55,7 +55,7 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 | AI | Vercel AI SDK (Claude Sonnet/Opus), OpenAI Whisper |
 | Database | PostgreSQL 16 |
 | Payments | Razorpay |
-| Tooling | Biome, Drizzle ORM, uv, Docker Compose |
+| Tooling | Bun (package manager + runtime + test runner), Biome, Drizzle ORM, uv, Docker Compose |
 
 ---
 
@@ -66,7 +66,7 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 | Tool | Version |
 |------|---------|
 | Docker | 24+ |
-| Node.js | 20+ |
+| Bun | 1.3+ — `curl -fsSL https://bun.sh/install \| bash` |
 | Python | 3.12+ |
 | uv | latest — `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 
@@ -78,7 +78,7 @@ cp frontend/.env.local.example frontend/.env.local
 # Fill in: BETTER_AUTH_SECRET, DATABASE_URL, NEXT_PUBLIC_API_URL
 
 # 2. Install dependencies
-npm install --prefix frontend
+cd frontend && bun install
 cd backend && uv sync
 
 # 3. Start dev stack (PostgreSQL → backend → frontend)
@@ -93,7 +93,7 @@ API docs → `http://localhost:8002/docs`
 ```bash
 cd frontend
 DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
-  npx drizzle-kit push
+  bunx drizzle-kit push
 ```
 
 ### Manual start (without the script)
@@ -101,7 +101,7 @@ DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
 ```bash
 docker compose up db -d
 cd backend && uv run uvicorn app.main:app --reload --port 8002
-cd frontend && PORT=3001 npm run dev
+cd frontend && bun dev
 ```
 
 ---
@@ -175,19 +175,19 @@ uv run uvicorn app.main:app --reload --port 8002
 
 # Frontend
 cd frontend
-npm run dev                       # dev server on :3001
-npm run build                     # production build
-npx biome check .                 # lint + format check
-npx biome format --write .        # auto-format
-npx tsc --noEmit                  # type check
-npm run test:e2e                  # Playwright e2e (headless)
-npm run test:e2e:ui               # Playwright interactive
-npm run seed                      # seed 3 test users (free/basic/pro)
+bun dev                           # dev server on :3001
+bun run build                     # production build
+bun run lint                      # lint + format check (Biome)
+bun run format                    # auto-format (Biome)
+bun test                          # unit tests (Bun test runner)
+bun run test:e2e                  # Playwright e2e (headless)
+bun run test:e2e:ui               # Playwright interactive
+bun run seed                      # seed 3 test users (free/basic/pro)
 ```
 
 ### Test users (dev/QA only)
 
-After running `npm run seed`, three accounts are available:
+After running `bun run seed`, three accounts are available:
 
 | Email | Password | Plan |
 |-------|----------|------|
@@ -199,11 +199,11 @@ After running `npm run seed`, three accounts are available:
 
 - **Frontend:** App Router server components by default; `"use client"` only for interactivity
 - **Linting:** Biome (no ESLint, no Prettier)
+- **Frontend packages:** `bun add <pkg>` — never `npm install`
 - **Backend packages:** `uv add <pkg>` — never `pip install`
 - **Compliance rules:** edit `backend/app/config/compliance_rules.json`, not Python
 - **Layout IDs:** always dynamic (e.g. `"solver-front-0"`), never assume `"A"/"B"/"C"`
 - **Dashboard data:** queries Drizzle directly — never call the backend API for server-side project lists
-- **Build:** always run `NODE_ENV=production npm run build` — direnv may set `NODE_ENV=development` in the shell
 
 ---
 

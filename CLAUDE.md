@@ -143,22 +143,25 @@ uv add shapely
 ### Next.js dev
 ```bash
 cd frontend
-npm run dev
+bun dev
 ```
 
 ### Frontend tooling
 ```bash
 # Lint + format check
-cd frontend && npx biome check .
+cd frontend && bun run lint
 
 # Format files
-cd frontend && npx biome format --write .
+cd frontend && bun run format
+
+# Run unit tests (Bun test runner)
+cd frontend && bun test
 
 # Add a ShadCN component
-cd frontend && npx shadcn@latest add button
+cd frontend && bunx shadcn@latest add button
 
 # Run Drizzle migrations
-cd frontend && npx drizzle-kit migrate
+cd frontend && bunx drizzle-kit migrate
 ```
 
 ---

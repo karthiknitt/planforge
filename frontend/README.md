@@ -5,25 +5,28 @@ Next.js 16 App Router application. See [root README](../README.md) for full proj
 ## Dev
 
 ```bash
-npm install
-npm run dev     # http://localhost:3001
+bun install
+bun dev     # http://localhost:3001
 ```
 
 ## Key Commands
 
 ```bash
 # Lint + format check
-npx biome check .
+bun run lint
 
 # Format files
-npx biome format --write .
+bun run format
+
+# Unit tests (Bun test runner)
+bun test
 
 # Add a ShadCN component
-npx shadcn@latest add <component>
+bunx shadcn@latest add <component>
 
 # Push DB schema changes
 DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
-  node_modules/.bin/drizzle-kit push
+  bunx drizzle-kit push
 ```
 
 ## Environment
@@ -34,10 +37,8 @@ Copy `.env.local.example` → `.env.local` and fill in:
 DATABASE_URL=postgresql://planforge:planforge@localhost:5432/planforge
 BETTER_AUTH_SECRET=<random-secret>
 NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3001
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
-NEXT_PUBLIC_RAZORPAY_KEY_ID=
-OPENAI_API_KEY=        # for voice transcription (agent feature)
-ANTHROPIC_API_KEY=     # for agentic chat
+NEXT_PUBLIC_API_URL=http://localhost:8002
+NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_...
+OPENAI_API_KEY=sk-...        # voice transcription (agent feature)
+ANTHROPIC_API_KEY=sk-ant-... # agentic chat
 ```
