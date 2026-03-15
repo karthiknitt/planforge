@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { MobileNav } from "./mobile-nav";
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {

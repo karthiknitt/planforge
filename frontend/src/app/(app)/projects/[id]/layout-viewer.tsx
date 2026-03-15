@@ -83,6 +83,79 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
+// ── Vastu badge with popover for details ──────────────────────────────────────
+function VastuBadge({ compliance }: { compliance: ComplianceData }) {
+  const vastuViolations = compliance.violations.filter((v) => v.startsWith("[Vastu]"));
+  const vastuWarnings = compliance.warnings.filter((w) => w.startsWith("[Vastu]"));
+  const allIssues = [...vastuViolations, ...vastuWarnings];
+
+  let badgeClass: string;
+  let label: string;
+  if (vastuViolations.length > 0) {
+    badgeClass =
+      "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-500/15";
+    label = `${vastuViolations.length} Vastu Violation${vastuViolations.length !== 1 ? "s" : ""}`;
+  } else if (vastuWarnings.length > 0) {
+    badgeClass =
+      "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15";
+    label = `${vastuWarnings.length} Vastu Warning${vastuWarnings.length !== 1 ? "s" : ""}`;
+  } else {
+    badgeClass =
+      "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/15";
+    label = "Vastu Compliant";
+  }
+
+  if (allIssues.length === 0) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${badgeClass}`}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer ${badgeClass}`}
+        >
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 text-sm" align="start">
+        <p className="font-semibold mb-2 text-foreground">Vastu Issues</p>
+        {vastuViolations.length > 0 && (
+          <div className="mb-2">
+            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Violations</p>
+            <ul className="space-y-1">
+              {vastuViolations.map((v) => (
+                <li key={v} className="text-xs text-muted-foreground">
+                  {v.replace("[Vastu] ", "")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {vastuWarnings.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Warnings</p>
+            <ul className="space-y-1">
+              {vastuWarnings.map((w) => (
+                <li key={w} className="text-xs text-muted-foreground">
+                  {w.replace("[Vastu] ", "")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 interface LayoutViewerProps {
   generateData: GenerateResponse | null;
   plotWidth: number;
@@ -335,6 +408,24 @@ export function LayoutViewer({
             >
               Layout {l.id} — {l.name}
               {l.score && <ScoreBadge score={l.score.total} />}
+              {vastuEnabled && (
+                <span
+                  className={[
+                    "ml-1 rounded-sm border px-1 py-0.5 text-xs",
+                    l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
+                      ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
+                      : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        : "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
+                  ].join(" ")}
+                >
+                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
+                    ? "Vastu ✗"
+                    : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
+                      ? "Vastu ⚠"
+                      : "Vastu ✓"}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -455,6 +546,21 @@ export function LayoutViewer({
         </div>
       )}
 
+      {/* Vastu compliance summary (shown only when vastu_enabled) */}
+      {vastuEnabled && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Vastu
+          </span>
+          <VastuBadge compliance={layout.compliance} />
+          {layout.score && (
+            <span className="text-xs text-muted-foreground">
+              Score: {layout.score.vastu.toFixed(0)}/100
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Compliance badge */}
       <div
         className={[
@@ -562,6 +668,22 @@ export function LayoutViewer({
             ))}
           </div>
 
+          {/* Vastu zone overlay toggle */}
+          {vastuEnabled && (
+            <button
+              type="button"
+              onClick={() => setShowVastuZones((v) => !v)}
+              className={[
+                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                showVastuZones
+                  ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+              ].join(" ")}
+            >
+              {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
+            </button>
+          )}
+
           <FloorPlanSVG
             floorPlan={floorPlan}
             plotWidth={plotWidth}
@@ -572,6 +694,7 @@ export function LayoutViewer({
             plotFrontWidth={plotFrontWidth}
             plotRearWidth={plotRearWidth}
             plotCorners={plotCorners}
+            showVastuZones={showVastuZones}
           />
 
           {/* Room legend */}

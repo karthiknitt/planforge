@@ -1,3 +1,6 @@
+import { CheckCircle, X } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 import { PricingCheckoutButton } from "@/components/pricing-checkout-button";
@@ -9,9 +12,6 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, X } from "lucide-react";
-import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Pricing — PlanForge",

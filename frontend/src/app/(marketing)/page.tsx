@@ -1,9 +1,3 @@
-import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
-import { FadeIn } from "@/components/motion/fade-in";
-import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { auth } from "@/lib/auth";
 import {
   ArrowRight,
   Building2,
@@ -19,6 +13,12 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
+import { FadeIn } from "@/components/motion/fade-in";
+import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { auth } from "@/lib/auth";
 
 /* ──────────────────────────────────────────────────────────────
    Feature cards

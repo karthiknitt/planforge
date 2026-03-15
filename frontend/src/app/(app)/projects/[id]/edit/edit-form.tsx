@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import { CITIES } from "@/lib/layout-types";
 
@@ -49,6 +50,7 @@ interface ProjectData {
   numFloors?: number;
   hasStilt?: boolean;
   hasBasement?: boolean;
+  vastuEnabled?: boolean;
 }
 
 /* ── Live plot compass ─────────────────────────────────────────────────────── */
@@ -218,6 +220,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
     num_floors: String(project.numFloors ?? 1),
     has_stilt: project.hasStilt ?? false,
     has_basement: project.hasBasement ?? false,
+    vastu_enabled: project.vastuEnabled ?? false,
   });
 
   function set(field: string, value: string | boolean) {
@@ -294,6 +297,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               num_floors: parseInt(form.num_floors, 10),
               has_stilt: form.has_stilt,
               has_basement: form.has_basement,
+              vastu_enabled: form.vastu_enabled,
             };
           })()
         ),
@@ -698,6 +702,32 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* ── 7. Vastu compliance ───────────────────────────────────────── */}
+        <div className="flex flex-col gap-4">
+          <Section num="7" title="Vastu Compliance" />
+          <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+            <div>
+              <Label htmlFor="vastu_enabled" className="font-medium">
+                Vastu Compliance
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Check room placement against Vastu Shastra principles
+              </p>
+            </div>
+            <Switch
+              id="vastu_enabled"
+              checked={form.vastu_enabled}
+              onCheckedChange={(v) => set("vastu_enabled", v)}
+            />
+          </div>
+          {form.vastu_enabled && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-xs text-orange-700 dark:text-orange-400">
+              Vastu analysis checks room zones against Vastu Shastra principles (NE sacred zone, SE
+              kitchen, SW master bedroom, etc.) and flags violations in layout compliance.
+            </div>
+          )}
         </div>
 
         {/* ── Submit ────────────────────────────────────────────────────── */}

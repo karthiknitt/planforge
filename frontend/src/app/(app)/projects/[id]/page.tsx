@@ -61,6 +61,7 @@ interface LayoutSectionProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  vastuEnabled?: boolean;
 }
 
 async function LayoutSection({
@@ -76,6 +77,7 @@ async function LayoutSection({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  vastuEnabled,
 }: LayoutSectionProps) {
   const generateData = await fetchLayouts(projectId, userId);
   return (
@@ -92,6 +94,7 @@ async function LayoutSection({
       plotFrontWidth={plotFrontWidth}
       plotRearWidth={plotRearWidth}
       plotCorners={plotCorners}
+      vastuEnabled={vastuEnabled}
     />
   );
 }
@@ -296,6 +299,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               ? (JSON.parse(project.plotCorners) as [number, number][])
               : undefined
           }
+          vastuEnabled={project.vastuEnabled}
         />
       </Suspense>
     </main>

@@ -45,6 +45,7 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
         numFloors: project.numFloors,
         hasStilt: project.hasStilt,
         hasBasement: project.hasBasement,
+        vastuEnabled: project.vastuEnabled,
       }}
     />
   );

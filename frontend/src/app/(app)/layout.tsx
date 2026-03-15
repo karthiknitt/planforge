@@ -1,8 +1,8 @@
+import { headers } from "next/headers";
+import Link from "next/link";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
-import Link from "next/link";
 import { UserMenu } from "./user-menu";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {

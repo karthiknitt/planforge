@@ -1,6 +1,6 @@
-import { PlanForgeIcon } from "@/components/logo";
 import { FileText, LayoutGrid, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { PlanForgeIcon } from "@/components/logo";
 
 const features = [
   { icon: ShieldCheck, label: "NBC 2016 compliance built in" },

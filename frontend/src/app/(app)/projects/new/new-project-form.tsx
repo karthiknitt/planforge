@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import { CITIES, type CustomRoomSpec, ROOM_TYPES } from "@/lib/layout-types";
 
@@ -892,17 +893,27 @@ export default function NewProjectPage() {
           )}
 
           {/* Vastu toggle */}
-          <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border bg-background px-4 py-3 text-sm hover:bg-muted transition-colors w-fit">
-            <Checkbox
+          <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+            <div>
+              <Label htmlFor="vastu_enabled" className="font-medium">
+                Vastu Compliance
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Check room placement against Vastu Shastra principles
+              </p>
+            </div>
+            <Switch
               id="vastu_enabled"
               checked={form.vastu_enabled}
-              onCheckedChange={(v) => set("vastu_enabled", !!v)}
-              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              onCheckedChange={(v) => set("vastu_enabled", v)}
             />
-            <Label htmlFor="vastu_enabled" className="cursor-pointer font-normal">
-              Apply Vastu Shastra rules
-            </Label>
           </div>
+          {form.vastu_enabled && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-xs text-orange-700 dark:text-orange-400">
+              Vastu analysis checks room zones against Vastu Shastra principles (NE sacred zone, SE
+              kitchen, SW master bedroom, etc.) and flags violations in layout compliance.
+            </div>
+          )}
         </div>
 
         {/* ── Submit ────────────────────────────────────────────────── */}

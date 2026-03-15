@@ -784,7 +784,54 @@ interface FloorPlanSVGProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  showVastuZones?: boolean;
 }
+
+// ── Vastu zone colors (3×3 grid) ─────────────────────────────────────────────
+// Ordered: row 0=rear (N-ish), row 1=middle, row 2=front (S-ish)
+// col 0=left, col 1=center, col 2=right
+// Colors follow classical Vastu auspiciousness:
+//   NE(green/sacred), N(cyan/wealth), NW(slate), W(slate), C(amber/Brahma), E(blue), SE(orange/fire), S(slate), SW(red/bad)
+const VASTU_ZONE_COLORS: Record<string, { fill: string; label: string[] }> = {
+  NE: { fill: "rgba(34,197,94,0.22)", label: ["NE", "Ishanya"] },
+  N: { fill: "rgba(6,182,212,0.18)", label: ["N", "Kubera"] },
+  NW: { fill: "rgba(148,163,184,0.18)", label: ["NW", "Vayu"] },
+  W: { fill: "rgba(148,163,184,0.18)", label: ["W", "Varuna"] },
+  C: { fill: "rgba(251,191,36,0.20)", label: ["C", "Brahma"] },
+  E: { fill: "rgba(59,130,246,0.18)", label: ["E", "Purva"] },
+  SE: { fill: "rgba(249,115,22,0.20)", label: ["SE", "Agni"] },
+  S: { fill: "rgba(148,163,184,0.18)", label: ["S", "Yama"] },
+  SW: { fill: "rgba(239,68,68,0.22)", label: ["SW", "Nairutya"] },
+};
+
+// Zone grid for road facing South (default):
+// row 0=rear/north, row 2=front/south  |  col 0=west, col 2=east
+const VASTU_GRID_ROAD_S = [
+  ["NW", "N", "NE"],
+  ["W", "C", "E"],
+  ["SW", "S", "SE"],
+];
+const VASTU_GRID_ROAD_N = [
+  ["SE", "S", "SW"],
+  ["E", "C", "W"],
+  ["NE", "N", "NW"],
+];
+const VASTU_GRID_ROAD_E = [
+  ["NE", "E", "SE"],
+  ["N", "C", "S"],
+  ["NW", "W", "SW"],
+];
+const VASTU_GRID_ROAD_W = [
+  ["SW", "W", "NW"],
+  ["S", "C", "N"],
+  ["SE", "E", "NE"],
+];
+const VASTU_GRIDS: Record<string, string[][]> = {
+  S: VASTU_GRID_ROAD_S,
+  N: VASTU_GRID_ROAD_N,
+  E: VASTU_GRID_ROAD_E,
+  W: VASTU_GRID_ROAD_W,
+};
 
 export function FloorPlanSVG({
   floorPlan,
@@ -796,6 +843,7 @@ export function FloorPlanSVG({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  showVastuZones = false,
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -926,6 +974,57 @@ export function FloorPlanSVG({
           className="svg-plot"
         />
       )}
+
+      {/* ── Vastu zone overlay (3×3 grid) ─────────────────────────────── */}
+      {showVastuZones &&
+        (() => {
+          const grid = VASTU_GRIDS[roadSide?.toUpperCase() ?? "S"] ?? VASTU_GRID_ROAD_S;
+          const zW = drawW / 3;
+          const zH = drawH / 3;
+          const cells: React.ReactNode[] = [];
+          for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < 3; col++) {
+              const zoneName = grid[row][col];
+              const zoneInfo = VASTU_ZONE_COLORS[zoneName] ?? {
+                fill: "rgba(148,163,184,0.15)",
+                label: zoneName,
+              };
+              const zx = originX + col * zW;
+              // row 0 = rear (top of SVG), row 2 = front (bottom) — SVG y increases downward
+              const zy = originY + row * zH;
+              const lines = zoneInfo.label;
+              cells.push(
+                <g key={`vz-${row}-${col}`}>
+                  <rect
+                    x={zx}
+                    y={zy}
+                    width={zW}
+                    height={zH}
+                    fill={zoneInfo.fill}
+                    stroke="rgba(148,163,184,0.3)"
+                    strokeWidth={0.5}
+                  />
+                  {lines.map((line, li) => (
+                    <text
+                      key={`${zoneName}-${line}`}
+                      x={zx + zW / 2}
+                      y={zy + zH / 2 + (li - (lines.length - 1) / 2) * 10}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={li === 0 ? 9 : 7}
+                      fontFamily="sans-serif"
+                      fontWeight={li === 0 ? "700" : "400"}
+                      fill="rgba(30,41,59,0.55)"
+                    >
+                      {line}
+                    </text>
+                  ))}
+                </g>
+              );
+            }
+          }
+          return <g opacity={1}>{cells}</g>;
+        })()}
 
       {/* ── Room fills ─────────────────────────────────────────────────── */}
       {rooms.map((room) => {
