@@ -204,10 +204,9 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         "Fetch the current layout state so the floor plan re-renders. Call this after every successful room modification (move, resize, add, remove, swap, undo).",
       inputSchema: z.object({}),
       execute: async () => {
-        const res = await fetch(
-          `${BACKEND}/api/projects/${projectId}/rooms/layout-state`,
-          { headers: backendHeaders }
-        );
+        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/layout-state`, {
+          headers: backendHeaders,
+        });
         return res.json(); // { layout: LayoutData }
       },
     }),
@@ -261,7 +260,6 @@ export async function POST(req: Request, { params }: { params: Params }) {
     ? createOpenAI({
         apiKey: process.env.OPENROUTER_API_KEY ?? "",
         baseURL: "https://openrouter.ai/api/v1",
-        compatibility: "compatible", // prevents @ai-sdk/openai from using /v1/responses
       })
     : null;
 
@@ -274,19 +272,26 @@ export async function POST(req: Request, { params }: { params: Params }) {
   if (provider === "openrouter" && openrouterClient) {
     models.push({ model: openrouterClient(requestedId), label: requestedId });
     // Fallback chain for OpenRouter failures
-    if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: "claude-sonnet-fallback" });
+    if (hasAnthropic)
+      models.push({ model: anthropic(DEFAULT_MODEL_ID), label: "claude-sonnet-fallback" });
     else if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
   } else if (provider === "anthropic" && hasAnthropic) {
     models.push({ model: anthropic(requestedId), label: requestedId });
     if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
     else if (hasOpenRouter && openrouterClient)
-      models.push({ model: openrouterClient("deepseek/deepseek-chat-v3-0324"), label: "deepseek-fallback" });
+      models.push({
+        model: openrouterClient("deepseek/deepseek-chat-v3-0324"),
+        label: "deepseek-fallback",
+      });
   } else if (provider === "openai" && hasOpenAI) {
     models.push({ model: openai(requestedId), label: requestedId });
     if (hasAnthropic)
       models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
     else if (hasOpenRouter && openrouterClient)
-      models.push({ model: openrouterClient("deepseek/deepseek-chat-v3-0324"), label: "deepseek-fallback" });
+      models.push({
+        model: openrouterClient("deepseek/deepseek-chat-v3-0324"),
+        label: "deepseek-fallback",
+      });
   } else {
     // No matching provider available — try all in priority order
     if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
