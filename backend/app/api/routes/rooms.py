@@ -501,4 +501,46 @@ async def undo_last(
     if prev is None:
         return {"success": False, "error": "Nothing to undo"}
     _layout_state[key] = prev
-    return {"success": True, "layout": prev}
+    return {"success": True, "layout": _state_to_layout_dict(prev)}
+
+
+def _state_to_layout_dict(state: dict) -> dict:
+    """Convert in-memory floor-plan state to a LayoutData-compatible dict."""
+    def _ensure_floor(fp: dict | None) -> dict | None:
+        if fp is None:
+            return None
+        return {
+            **fp,
+            "needs_mech_ventilation": fp.get("needs_mech_ventilation", False),
+        }
+
+    return {
+        "id": "current",
+        "name": "Current Layout",
+        "compliance": {"passed": True, "violations": [], "warnings": []},
+        "ground_floor": _ensure_floor(state.get("ground_floor")),
+        "first_floor": _ensure_floor(state.get("first_floor")),
+        "second_floor": _ensure_floor(state.get("second_floor")),
+        "basement_floor": _ensure_floor(state.get("basement_floor")),
+        "score": None,
+        "space_notes": [],
+    }
+
+
+@router.get("/projects/{project_id}/rooms/layout-state")
+async def get_layout_state(
+    project_id: str,
+    user_id: str = Depends(_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current in-memory layout state as a LayoutData-compatible dict.
+
+    Called by the refresh_layout agent tool so the frontend SVG can re-render
+    after room modifications.
+    """
+    tier = await _get_plan_tier(user_id, db)
+    if tier != "pro":
+        raise HTTPException(403, "Pro plan required for agentic chat")
+
+    state = await _get_or_init_state(project_id, user_id, db)
+    return {"layout": _state_to_layout_dict(state)}

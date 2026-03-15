@@ -45,8 +45,10 @@ ${JSON.stringify(layoutState, null, 2)}
 
 BEHAVIOUR
 - Be concise and professional. Use metric units.
+- After EVERY successful room modification (move, resize, add, remove, swap, undo),
+  ALWAYS call refresh_layout immediately — this re-renders the floor plan for the user.
 - Always check compliance after making changes using get_compliance_status.
-- If a change creates a violation, undo it and explain why.
+- If a change creates a violation, undo it and explain why, then call refresh_layout.
 - Acknowledge what you did after each successful tool call.
 - Keep undo available — remind users they can say "undo" after changes.`;
 }
@@ -196,6 +198,19 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         return res.json();
       },
     }),
+
+    refresh_layout: tool({
+      description:
+        "Fetch the current layout state so the floor plan re-renders. Call this after every successful room modification (move, resize, add, remove, swap, undo).",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const res = await fetch(
+          `${BACKEND}/api/projects/${projectId}/rooms/layout-state`,
+          { headers: backendHeaders }
+        );
+        return res.json(); // { layout: LayoutData }
+      },
+    }),
   };
 }
 
@@ -241,11 +256,12 @@ export async function POST(req: Request, { params }: { params: Params }) {
     );
   }
 
-  // OpenRouter client — OpenAI-compatible API, different baseURL
+  // OpenRouter client — uses Chat Completions API (not OpenAI Responses API)
   const openrouterClient = hasOpenRouter
     ? createOpenAI({
         apiKey: process.env.OPENROUTER_API_KEY ?? "",
         baseURL: "https://openrouter.ai/api/v1",
+        compatibility: "compatible", // prevents @ai-sdk/openai from using /v1/responses
       })
     : null;
 
