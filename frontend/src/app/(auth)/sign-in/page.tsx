@@ -34,7 +34,6 @@ export default function SignInPage() {
 
   return (
     <div className="flex flex-col">
-
       {/* Heading */}
       <div className="animate-fade-up mb-8">
         <h1

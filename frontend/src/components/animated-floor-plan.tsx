@@ -11,41 +11,87 @@ interface AnimatedFloorPlanProps {
 const ROOMS = [
   {
     id: "living",
-    x: 32, y: 32, w: 176, h: 166, fill: "#1e40af", opacity: 0.28,
-    label: "Living Room", lx: 120, ly: 118, text: "#93c5fd",
+    x: 32,
+    y: 32,
+    w: 176,
+    h: 166,
+    fill: "#1e40af",
+    opacity: 0.28,
+    label: "Living Room",
+    lx: 120,
+    ly: 118,
+    text: "#93c5fd",
   },
   {
     id: "bed1",
-    x: 212, y: 32, w: 176, h: 86, fill: "#166534", opacity: 0.28,
-    label: "Bedroom 1", lx: 300, ly: 72, text: "#86efac",
+    x: 212,
+    y: 32,
+    w: 176,
+    h: 86,
+    fill: "#166534",
+    opacity: 0.28,
+    label: "Bedroom 1",
+    lx: 300,
+    ly: 72,
+    text: "#86efac",
   },
   {
     id: "stair",
-    x: 212, y: 122, w: 176, h: 76, fill: "#78350f", opacity: 0.28,
-    label: "Staircase", lx: 300, ly: 162, text: "#fcd34d",
+    x: 212,
+    y: 122,
+    w: 176,
+    h: 76,
+    fill: "#78350f",
+    opacity: 0.28,
+    label: "Staircase",
+    lx: 300,
+    ly: 162,
+    text: "#fcd34d",
   },
   {
     id: "bed2",
-    x: 32, y: 202, w: 256, h: 86, fill: "#9f1239", opacity: 0.28,
-    label: "Bedroom 2", lx: 140, ly: 248, text: "#fda4af",
+    x: 32,
+    y: 202,
+    w: 256,
+    h: 86,
+    fill: "#9f1239",
+    opacity: 0.28,
+    label: "Bedroom 2",
+    lx: 140,
+    ly: 248,
+    text: "#fda4af",
   },
   {
     id: "bath",
-    x: 292, y: 202, w: 96, h: 86, fill: "#4c1d95", opacity: 0.28,
-    label: "Bathroom", lx: 340, ly: 248, text: "#c4b5fd",
+    x: 292,
+    y: 202,
+    w: 96,
+    h: 86,
+    fill: "#4c1d95",
+    opacity: 0.28,
+    label: "Bathroom",
+    lx: 340,
+    ly: 248,
+    text: "#c4b5fd",
   },
 ];
 
 const COLUMNS: [number, number][] = [
-  [30, 30],   [210, 30],  [390, 30],
-  [30, 200],  [210, 200], [390, 200],
-  [30, 290],  [290, 290], [390, 290],
+  [30, 30],
+  [210, 30],
+  [390, 30],
+  [30, 200],
+  [210, 200],
+  [390, 200],
+  [30, 290],
+  [290, 290],
+  [390, 290],
 ];
 
 const WINDOWS = [
-  { id: "win-n1", x: 80,  y: 28, w: 60, h: 4 },
+  { id: "win-n1", x: 80, y: 28, w: 60, h: 4 },
   { id: "win-n2", x: 240, y: 28, w: 60, h: 4 },
-  { id: "win-w1", x: 26,  y: 90, w: 4,  h: 60 },
+  { id: "win-w1", x: 26, y: 90, w: 4, h: 60 },
 ];
 
 export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
@@ -82,7 +128,10 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       {ROOMS.map((r, i) => (
         <motion.rect
           key={r.id}
-          x={r.x} y={r.y} width={r.w} height={r.h}
+          x={r.x}
+          y={r.y}
+          width={r.w}
+          height={r.h}
           fill={r.fill}
           initial={{ opacity: 0 }}
           animate={{ opacity: r.opacity }}
@@ -125,26 +174,46 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       {/* ── Internal walls — staggered after outer ── */}
       {/* Vertical centre wall */}
       <motion.line
-        x1={210} y1={30} x2={210} y2={200}
-        stroke="#60a5fa" strokeWidth={2} strokeLinecap="round"
+        x1={210}
+        y1={30}
+        x2={210}
+        y2={200}
+        stroke="#60a5fa"
+        strokeWidth={2}
+        strokeLinecap="round"
         {...wall(0.62)}
       />
       {/* Horizontal mid wall */}
       <motion.line
-        x1={30} y1={200} x2={390} y2={200}
-        stroke="#60a5fa" strokeWidth={2} strokeLinecap="round"
+        x1={30}
+        y1={200}
+        x2={390}
+        y2={200}
+        stroke="#60a5fa"
+        strokeWidth={2}
+        strokeLinecap="round"
         {...wall(0.74)}
       />
       {/* Bathroom divider */}
       <motion.line
-        x1={290} y1={200} x2={290} y2={290}
-        stroke="#60a5fa" strokeWidth={2} strokeLinecap="round"
+        x1={290}
+        y1={200}
+        x2={290}
+        y2={290}
+        stroke="#60a5fa"
+        strokeWidth={2}
+        strokeLinecap="round"
         {...wall(0.83)}
       />
       {/* Staircase top */}
       <motion.line
-        x1={210} y1={120} x2={390} y2={120}
-        stroke="#60a5fa" strokeWidth={2} strokeLinecap="round"
+        x1={210}
+        y1={120}
+        x2={390}
+        y2={120}
+        stroke="#60a5fa"
+        strokeWidth={2}
+        strokeLinecap="round"
         {...wall(0.89)}
       />
 
@@ -152,7 +221,10 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       {WINDOWS.map((win, i) => (
         <motion.rect
           key={win.id}
-          x={win.x} y={win.y} width={win.w} height={win.h}
+          x={win.x}
+          y={win.y}
+          width={win.w}
+          height={win.h}
           fill="#93c5fd"
           fillOpacity={0.7}
           initial={{ opacity: 0 }}
@@ -164,12 +236,16 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       {/* ── Door swing arcs ── */}
       <motion.path
         d="M30 192 Q50 182 50 202"
-        fill="none" stroke="#60a5fa" strokeWidth={1.2}
+        fill="none"
+        stroke="#60a5fa"
+        strokeWidth={1.2}
         {...wall(1.02, 0.4)}
       />
       <motion.path
         d="M210 192 Q230 182 230 202"
-        fill="none" stroke="#60a5fa" strokeWidth={1.2}
+        fill="none"
+        stroke="#60a5fa"
+        strokeWidth={1.2}
         {...wall(1.08, 0.4)}
       />
 
@@ -177,8 +253,10 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       {COLUMNS.map(([cx, cy], i) => (
         <motion.rect
           key={`col-${cx}-${cy}`}
-          x={cx - 5} y={cy - 5}
-          width={10} height={10}
+          x={cx - 5}
+          y={cy - 5}
+          width={10}
+          height={10}
           fill="#f97316"
           initial={{ opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -197,7 +275,8 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       {ROOMS.map((r, i) => (
         <motion.text
           key={`lbl-${r.id}`}
-          x={r.lx} y={r.ly}
+          x={r.lx}
+          y={r.ly}
           textAnchor="middle"
           fontSize={10}
           fill={r.text}
@@ -241,14 +320,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       >
         <circle cx="380" cy="18" r="11" fill="#080e1c" stroke="#f97316" strokeWidth="1" />
         <polygon points="380,6 383,18 380,15 377,18" fill="#f97316" />
-        <text
-          x="380"
-          y="32"
-          textAnchor="middle"
-          fontSize={8}
-          fill="#f97316"
-          fontWeight={700}
-        >
+        <text x="380" y="32" textAnchor="middle" fontSize={8} fill="#f97316" fontWeight={700}>
           N
         </text>
       </motion.g>

@@ -33,7 +33,7 @@ export function SectionHeader({
         <p
           className={cn(
             "text-muted-foreground text-lg leading-relaxed",
-            align === "center" && "max-w-2xl mx-auto",
+            align === "center" && "max-w-2xl mx-auto"
           )}
         >
           {subtitle}

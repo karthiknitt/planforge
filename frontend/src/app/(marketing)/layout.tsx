@@ -11,7 +11,6 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-4">
-
             {/* Logo */}
             <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:shadow-orange-500/50 group-hover:scale-105">
@@ -90,18 +89,27 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 </span>
               </Link>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-                G+1 floor plan generator for Indian builders. NBC 2016 compliant. 5 layouts, PDF & DXF export.
+                G+1 floor plan generator for Indian builders. NBC 2016 compliant. 5 layouts, PDF &
+                DXF export.
               </p>
             </div>
 
             {/* Product links */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Product</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                Product
+              </p>
               <nav className="flex flex-col gap-2">
-                <Link href="/how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link
+                  href="/how-it-works"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
                   How It Works
                 </Link>
-                <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link
+                  href="/pricing"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
                   Pricing
                 </Link>
               </nav>
@@ -109,12 +117,20 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
 
             {/* Account links */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Account</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                Account
+              </p>
               <nav className="flex flex-col gap-2">
-                <Link href="/sign-in" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link
+                  href="/sign-in"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
                   Sign In
                 </Link>
-                <Link href="/sign-up" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link
+                  href="/sign-up"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
                   Sign Up Free
                 </Link>
               </nav>

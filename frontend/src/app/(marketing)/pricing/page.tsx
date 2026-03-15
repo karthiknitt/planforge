@@ -2,10 +2,10 @@ import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 import { PricingCheckoutButton } from "@/components/pricing-checkout-button";
 import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -147,7 +147,9 @@ export default function PricingPage() {
                   </div>
                 )}
                 {/* Card header */}
-                <div className={`px-7 pt-8 pb-6 rounded-t-2xl ${plan.highlight ? "bg-primary/5" : ""}`}>
+                <div
+                  className={`px-7 pt-8 pb-6 rounded-t-2xl ${plan.highlight ? "bg-primary/5" : ""}`}
+                >
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">
                     {plan.name}
                   </p>

@@ -16,11 +16,11 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   bedroom: { fill: "#EDE9FE", stroke: "#7C3AED", text: "#3B0764" },
   master_bedroom: { fill: "#F3E8FF", stroke: "#9333EA", text: "#3B0764" },
   kitchen: { fill: "#DCFCE7", stroke: "#16A34A", text: "#14532D" },
-  toilet:          { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
-  wc_only:         { fill: "#BAE6FD", stroke: "#0284C7", text: "#0C4A6E" },
+  toilet: { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
+  wc_only: { fill: "#BAE6FD", stroke: "#0284C7", text: "#0C4A6E" },
   bathroom_master: { fill: "#BFDBFE", stroke: "#1D4ED8", text: "#1E3A8A" },
   staircase: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
-  parking:    { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  parking: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
   parking_4w: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
   parking_2w: { fill: "#E7E5E4", stroke: "#78716C", text: "#44403C" },
   utility: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
@@ -220,7 +220,7 @@ function StaircaseSymbol({
   const x0 = px(room.x);
   const x1 = px(room.x + room.width);
   const y0 = py(room.y + room.depth); // top in SVG (y flipped)
-  const y1 = py(room.y);              // bottom in SVG
+  const y1 = py(room.y); // bottom in SVG
   const h = Math.abs(y1 - y0);
   const treadH = Math.max(4, Math.min(10, scale * 0.3));
   const numTreads = Math.max(3, Math.floor(h / treadH));
@@ -229,9 +229,7 @@ function StaircaseSymbol({
   const lines: React.ReactNode[] = [];
   for (let i = 1; i < numTreads; i++) {
     const ly = y0 + i * step;
-    lines.push(
-      <line key={i} x1={x0} y1={ly} x2={x1} y2={ly} stroke="#94A3B8" strokeWidth={0.6} />,
-    );
+    lines.push(<line key={i} x1={x0} y1={ly} x2={x1} y2={ly} stroke="#94A3B8" strokeWidth={0.6} />);
   }
   // Cut line (diagonal cross-hatching line with UP arrow)
   const midY = (y0 + y1) / 2;
@@ -239,7 +237,15 @@ function StaircaseSymbol({
     <g>
       {lines}
       {/* Cut line */}
-      <line x1={x0} y1={midY} x2={x1} y2={midY} stroke="#64748B" strokeWidth={1.2} strokeDasharray="4 2" />
+      <line
+        x1={x0}
+        y1={midY}
+        x2={x1}
+        y2={midY}
+        stroke="#64748B"
+        strokeWidth={1.2}
+        strokeDasharray="4 2"
+      />
       {/* UP label */}
       <text
         x={(x0 + x1) / 2}
@@ -325,10 +331,31 @@ function FurnitureLiving({
       {/* Sofa body */}
       <rect x={px(sx)} y={py(sy + sofaD)} width={sofaW * scale} height={sofaD * scale} />
       {/* Armrests */}
-      <rect x={px(sx)} y={py(sy + sofaD)} width={0.3 * scale} height={sofaD * scale} fill="#CA8A04" fillOpacity={0.15} />
-      <rect x={px(sx + sofaW - 0.3)} y={py(sy + sofaD)} width={0.3 * scale} height={sofaD * scale} fill="#CA8A04" fillOpacity={0.15} />
+      <rect
+        x={px(sx)}
+        y={py(sy + sofaD)}
+        width={0.3 * scale}
+        height={sofaD * scale}
+        fill="#CA8A04"
+        fillOpacity={0.15}
+      />
+      <rect
+        x={px(sx + sofaW - 0.3)}
+        y={py(sy + sofaD)}
+        width={0.3 * scale}
+        height={sofaD * scale}
+        fill="#CA8A04"
+        fillOpacity={0.15}
+      />
       {/* TV unit */}
-      <rect x={px(tvX)} y={py(room.y + margin + 0.4)} width={tvW * scale} height={0.4 * scale} fill="#CA8A04" fillOpacity={0.1} />
+      <rect
+        x={px(tvX)}
+        y={py(room.y + margin + 0.4)}
+        width={tvW * scale}
+        height={0.4 * scale}
+        fill="#CA8A04"
+        fillOpacity={0.1}
+      />
     </g>
   );
 }
@@ -360,7 +387,7 @@ function FurnitureDining({
     const cxVal = px(tx + (tW / (numChairs + 1)) * (i + 1));
     chairs.push(
       <circle key={`b${i}`} cx={cxVal} cy={py(ty) + gap + chairR} r={chairR} />,
-      <circle key={`t${i}`} cx={cxVal} cy={py(ty + tD) - gap - chairR} r={chairR} />,
+      <circle key={`t${i}`} cx={cxVal} cy={py(ty + tD) - gap - chairR} r={chairR} />
     );
   }
 
@@ -426,8 +453,8 @@ function FurnitureKitchen({
       />
       {/* Stove burners */}
       {[
-        [rx + margin + 0.1 + (Math.min(0.6, (rw - 2 * margin) * 0.4)) * 0.3, rearY + cw * 0.3],
-        [rx + margin + 0.1 + (Math.min(0.6, (rw - 2 * margin) * 0.4)) * 0.7, rearY + cw * 0.3],
+        [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.3, rearY + cw * 0.3],
+        [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.7, rearY + cw * 0.3],
       ].map(([bx, by], i) => (
         <circle key={i} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
       ))}
@@ -460,7 +487,14 @@ function FurnitureToilet({
   return (
     <g stroke="#0284C7" strokeWidth={0.7} fill="none" opacity={0.7}>
       {/* WC tank */}
-      <rect x={px(wcCx - 0.175)} y={py(wcCy + 0.15)} width={0.35 * scale} height={0.15 * scale} fill="#0284C7" fillOpacity={0.15} />
+      <rect
+        x={px(wcCx - 0.175)}
+        y={py(wcCy + 0.15)}
+        width={0.35 * scale}
+        height={0.15 * scale}
+        fill="#0284C7"
+        fillOpacity={0.15}
+      />
       {/* WC bowl arc */}
       <path
         d={`M ${px(wcCx) - r} ${py(wcCy)} A ${r} ${r} 0 0 0 ${px(wcCx) + r} ${py(wcCy)}`}
@@ -529,12 +563,20 @@ function FurnitureParking({
     return (
       <g stroke="#78716C" strokeWidth={0.7} fill="none" opacity={0.6}>
         <ellipse
-          cx={px(bx + bW / 2)} cy={py(by + bD / 2)}
-          rx={(bW / 2) * scale} ry={(bD / 2) * scale}
+          cx={px(bx + bW / 2)}
+          cy={py(by + bD / 2)}
+          rx={(bW / 2) * scale}
+          ry={(bD / 2) * scale}
           strokeDasharray="3 2"
         />
         {/* wheel marks */}
-        <line x1={px(bx + bW / 2)} y1={py(by + bD * 0.15)} x2={px(bx + bW / 2)} y2={py(by + bD * 0.85)} strokeWidth={1.2} />
+        <line
+          x1={px(bx + bW / 2)}
+          y1={py(by + bD * 0.15)}
+          x2={px(bx + bW / 2)}
+          y2={py(by + bD * 0.85)}
+          strokeWidth={1.2}
+        />
       </g>
     );
   }
@@ -547,7 +589,13 @@ function FurnitureParking({
 
   return (
     <g stroke="#94A3B8" strokeWidth={0.7} fill="none" opacity={0.6}>
-      <rect x={px(cx)} y={py(cy + carD)} width={carW * scale} height={carD * scale} strokeDasharray="3 2" />
+      <rect
+        x={px(cx)}
+        y={py(cy + carD)}
+        width={carW * scale}
+        height={carD * scale}
+        strokeDasharray="3 2"
+      />
     </g>
   );
 }
@@ -835,9 +883,7 @@ export function FloorPlanSVG({
       {/* Plot boundary (dashed) */}
       {plotShape === "quadrilateral" && plotCorners && plotCorners.length === 4 ? (
         <polygon
-          points={plotCorners
-            .map(([cx, cy]) => `${px(cx)},${py(cy)}`)
-            .join(" ")}
+          points={plotCorners.map(([cx, cy]) => `${px(cx)},${py(cy)}`).join(" ")}
           fill="white"
           stroke="#CBD5E1"
           strokeWidth={1}

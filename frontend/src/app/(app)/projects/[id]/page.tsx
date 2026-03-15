@@ -287,7 +287,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           plotShape={project.plotShape}
           plotFrontWidth={project.plotFrontWidth ? parseFloat(project.plotFrontWidth) : undefined}
           plotRearWidth={project.plotRearWidth ? parseFloat(project.plotRearWidth) : undefined}
-          plotCorners={project.plotCorners ? (JSON.parse(project.plotCorners) as [number, number][]) : undefined}
+          plotCorners={
+            project.plotCorners
+              ? (JSON.parse(project.plotCorners) as [number, number][])
+              : undefined
+          }
         />
       </Suspense>
     </main>

@@ -21,9 +21,7 @@ export function ScaleIn({
 
   return (
     <motion.div
-      initial={
-        shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.94 }
-      }
+      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.94 }}
       whileInView={{ opacity: 1, scale: 1 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{

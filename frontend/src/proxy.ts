@@ -17,14 +17,11 @@ export async function proxy(request: NextRequest) {
   // This handles expired/stale cookies correctly — unlike a bare cookie presence check.
   let hasValidSession = false;
   try {
-    const res = await fetch(
-      new URL("/api/auth/get-session", request.nextUrl.origin).toString(),
-      {
-        headers: { cookie: request.headers.get("cookie") ?? "" },
-        // Don't cache — always get fresh session state
-        cache: "no-store",
-      }
-    );
+    const res = await fetch(new URL("/api/auth/get-session", request.nextUrl.origin).toString(), {
+      headers: { cookie: request.headers.get("cookie") ?? "" },
+      // Don't cache — always get fresh session state
+      cache: "no-store",
+    });
     if (res.ok) {
       const data = await res.json();
       hasValidSession = data != null && data?.user != null;

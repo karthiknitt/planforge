@@ -9,7 +9,11 @@ interface StaggerChildrenProps {
   className?: string;
 }
 
-export function StaggerChildren({ children, staggerDelay = 0.08, className }: StaggerChildrenProps) {
+export function StaggerChildren({
+  children,
+  staggerDelay = 0.08,
+  className,
+}: StaggerChildrenProps) {
   const shouldReduceMotion = useReducedMotion();
 
   return (

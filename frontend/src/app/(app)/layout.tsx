@@ -50,9 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {/* Right */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <ThemeToggle />
-            {session && (
-              <UserMenu name={session.user.name} email={session.user.email} />
-            )}
+            {session && <UserMenu name={session.user.name} email={session.user.email} />}
           </div>
         </div>
       </header>

@@ -226,13 +226,7 @@ const OpenRouterLogo = () => (
   </svg>
 );
 
-function ModelSelectorLogo({
-  logoId,
-  className,
-}: {
-  logoId: LogoId;
-  className?: string;
-}) {
+function ModelSelectorLogo({ logoId, className }: { logoId: LogoId; className?: string }) {
   const logo = {
     anthropic: <AnthropicLogo />,
     openai: <OpenAILogo />,

@@ -5,15 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
 import {
-    ArrowRight,
-    Building2,
-    CheckCircle,
-    FileText,
-    LayoutGrid,
-    MapPin,
-    Package,
-    ShieldCheck,
-    Sparkles,
+  ArrowRight,
+  Building2,
+  CheckCircle,
+  FileText,
+  LayoutGrid,
+  MapPin,
+  Package,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -322,7 +322,11 @@ export default async function LandingPage() {
           </StaggerChildren>
           <div className="mt-12 text-center">
             <Link href="/how-it-works">
-              <Button variant="outline" size="lg" className="border-border/80 text-foreground hover:bg-muted font-semibold px-8">
+              <Button
+                variant="outline"
+                size="lg"
+                className="border-border/80 text-foreground hover:bg-muted font-semibold px-8"
+              >
                 Full walkthrough
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -423,7 +427,8 @@ export default async function LandingPage() {
             Ready to plan your first project?
           </h2>
           <p className="text-muted-foreground text-lg mb-10">
-            Sign up free — no credit card required. Start generating NBC-compliant floor plans in seconds.
+            Sign up free — no credit card required. Start generating NBC-compliant floor plans in
+            seconds.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/sign-up">

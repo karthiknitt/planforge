@@ -102,7 +102,7 @@
   --success-foreground: oklch(0.98 0 0);
   --warning: oklch(0.65 0.18 85);
   --warning-foreground: oklch(0.15 0.02 85);
-  --info: oklch(0.50 0.15 220);
+  --info: oklch(0.5 0.15 220);
   --info-foreground: oklch(0.98 0 0);
 
   /* ─── Radius tokens ───────────────────────────────────────────────────────── */
@@ -131,13 +131,13 @@
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.18 0.025 252);
   --secondary-foreground: oklch(0.92 0.012 252);
-  --muted: oklch(0.17 0.02 252);
-  --muted-foreground: oklch(0.65 0.028 252);
-  --accent: oklch(0.20 0.025 252); /* Neutral dark surface */
+  --muted: oklch(0.19 0.025 252);
+  --muted-foreground: oklch(0.78 0.03 252);
+  --accent: oklch(0.22 0.028 252); /* Neutral dark surface */
   --accent-foreground: oklch(0.92 0.012 252);
   --destructive: oklch(0.65 0.22 27);
-  --border: oklch(0.27 0.035 252);
-  --input: oklch(0.2 0.025 252);
+  --border: oklch(0.36 0.05 252);
+  --input: oklch(0.4 0.055 252);
   --ring: oklch(0.68 0.22 45);
   --chart-1: oklch(0.58 0.19 230);
   --chart-2: oklch(0.68 0.22 45);
@@ -150,11 +150,11 @@
   --sidebar-primary-foreground: oklch(0.97 0 0);
   --sidebar-accent: oklch(0.18 0.025 252);
   --sidebar-accent-foreground: oklch(0.92 0.012 252);
-  --sidebar-border: oklch(0.22 0.035 252);
+  --sidebar-border: oklch(0.36 0.05 252);
   --sidebar-ring: oklch(0.68 0.22 45);
 
   /* ─── Surface layers ─────────────────────────────────────────────────────── */
-  --surface-1: oklch(0.10 0.018 255);
+  --surface-1: oklch(0.1 0.018 255);
   --surface-2: oklch(0.13 0.022 252);
   --surface-3: oklch(0.17 0.025 252);
   --surface-4: oklch(0.22 0.03 252);
@@ -164,7 +164,7 @@
   --success-foreground: oklch(0.98 0 0);
   --warning: oklch(0.75 0.18 85);
   --warning-foreground: oklch(0.15 0.02 85);
-  --info: oklch(0.60 0.15 220);
+  --info: oklch(0.6 0.15 220);
   --info-foreground: oklch(0.98 0 0);
 
   /* SVG dark mode tokens */
@@ -454,19 +454,27 @@
 
 /* ─── Shadow utilities ──────────────────────────────────────────────────── */
 .shadow-card {
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .shadow-card-hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(249, 115, 22, 0.15);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(249, 115, 22, 0.15);
 }
 
 .shadow-modal {
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .shadow-glow-orange {
-  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.4), 0 20px 60px rgba(249, 115, 22, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(249, 115, 22, 0.4),
+    0 20px 60px rgba(249, 115, 22, 0.2);
 }
 
 .shadow-glow-orange-sm {
@@ -496,18 +504,26 @@
 
 /* ─── Interactive glow card hover ───────────────────────────────────────── */
 .glow-card-hover {
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  transition:
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
 }
 
 .glow-card-hover:hover {
-  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.3), 0 16px 50px rgba(249, 115, 22, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(249, 115, 22, 0.3),
+    0 16px 50px rgba(249, 115, 22, 0.12);
   border-color: rgba(249, 115, 22, 0.25);
 }
 
 /* ─── Animated gradient border ──────────────────────────────────────────── */
 @keyframes gradient-border {
-  0% { --gradient-angle: 0deg; }
-  100% { --gradient-angle: 360deg; }
+  0% {
+    --gradient-angle: 0deg;
+  }
+  100% {
+    --gradient-angle: 360deg;
+  }
 }
 
 @property --gradient-angle {
@@ -533,10 +549,66 @@
   opacity: 0.5;
 }
 
+/* ─── Form element glow on focus (dark mode) ────────────────────────────── */
+.dark [data-slot="input"]:focus-visible,
+.dark [data-slot="select"]:focus-visible {
+  box-shadow:
+    0 0 0 3px oklch(0.68 0.22 45 / 0.18),
+    0 0 0 1px oklch(0.68 0.22 45 / 0.6);
+  border-color: oklch(0.68 0.22 45 / 0.7);
+}
+
+.dark [data-slot="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 3px oklch(0.68 0.22 45 / 0.25);
+}
+
+/* ─── Subtle hover lift for interactive cards ────────────────────────────── */
+.hover-lift {
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Form control base — ensures consistent border weight ──────────────── */
+.dark [data-slot="input"],
+.dark [data-slot="select"],
+.dark [data-slot="checkbox"] {
+  border-width: 1.5px;
+}
+
+/* ─── Reduced motion: honour system preference ──────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-float,
+  .bg-blueprint-grid,
+  .bg-blueprint-grid-light,
+  .btn-shine::after {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
 /* ─── Progress bar indeterminate animation ──────────────────────────────── */
 @keyframes progress-indeterminate {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(400%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
 }
 
 .animate-progress-indeterminate {

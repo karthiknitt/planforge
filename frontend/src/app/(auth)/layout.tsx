@@ -110,9 +110,33 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                   strokeOpacity="0.45"
                 />
                 {/* Internal walls */}
-                <line x1="120" y1="10" x2="120" y2="105" stroke="#f97316" strokeWidth="0.75" strokeOpacity="0.3" />
-                <line x1="15" y1="105" x2="225" y2="105" stroke="#f97316" strokeWidth="0.75" strokeOpacity="0.3" />
-                <line x1="168" y1="105" x2="168" y2="155" stroke="#f97316" strokeWidth="0.75" strokeOpacity="0.3" />
+                <line
+                  x1="120"
+                  y1="10"
+                  x2="120"
+                  y2="105"
+                  stroke="#f97316"
+                  strokeWidth="0.75"
+                  strokeOpacity="0.3"
+                />
+                <line
+                  x1="15"
+                  y1="105"
+                  x2="225"
+                  y2="105"
+                  stroke="#f97316"
+                  strokeWidth="0.75"
+                  strokeOpacity="0.3"
+                />
+                <line
+                  x1="168"
+                  y1="105"
+                  x2="168"
+                  y2="155"
+                  stroke="#f97316"
+                  strokeWidth="0.75"
+                  strokeOpacity="0.3"
+                />
                 {/* Room tints */}
                 <rect x="16" y="11" width="103" height="93" fill="#f97316" fillOpacity="0.04" />
                 <rect x="121" y="11" width="103" height="93" fill="#f97316" fillOpacity="0.04" />
@@ -146,8 +170,23 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                   />
                 ))}
                 {/* Dimension line */}
-                <line x1="15" y1="162" x2="225" y2="162" stroke="#f97316" strokeWidth="0.4" strokeOpacity="0.3" />
-                <text x="120" y="165" textAnchor="middle" fontSize="5.5" fill="#f97316" fillOpacity="0.4">
+                <line
+                  x1="15"
+                  y1="162"
+                  x2="225"
+                  y2="162"
+                  stroke="#f97316"
+                  strokeWidth="0.4"
+                  strokeOpacity="0.3"
+                />
+                <text
+                  x="120"
+                  y="165"
+                  textAnchor="middle"
+                  fontSize="5.5"
+                  fill="#f97316"
+                  fillOpacity="0.4"
+                >
                   9.0 m
                 </text>
               </svg>
