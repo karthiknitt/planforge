@@ -109,8 +109,8 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     min_p4w     = rules.get("min_parking_4w_sqm", 12.5)
     min_p4w_w   = rules.get("min_parking_4w_width_m", 2.5)
     max_p4w     = rules.get("max_parking_4w_sqm", 30.0)
-    min_p2w     = rules.get("min_parking_2w_sqm", 2.5)
-    min_p2w_w   = rules.get("min_parking_2w_width_m", 1.0)
+    min_p2w     = rules.get("min_parking_2w_sqm", 3.0)
+    min_p2w_w   = rules.get("min_parking_2w_width_m", 1.2)
     max_p2w     = rules.get("max_parking_2w_sqm", 9.0)
     min_stair_w = rules["min_stair_width_mm"] / 1000
 
