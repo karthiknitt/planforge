@@ -7,9 +7,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelectorSeparator,
+  ModelSelectorTrigger,
+} from "@/components/ui/model-selector";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useSession } from "@/lib/auth-client";
 import type { LayoutData } from "@/lib/layout-types";
+import { DEFAULT_MODEL_ID, MODEL_OPTIONS } from "@/lib/models";
 
 interface ChatPanelProps {
   projectId: string;
@@ -27,6 +41,11 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
   sessionRef.current = session;
   layoutRef.current = currentLayout;
 
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL_ID);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const selectedModelRef = useRef(selectedModel);
+  selectedModelRef.current = selectedModel;
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -36,6 +55,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
             messages,
             layoutState: layoutRef.current,
             userId: sessionRef.current?.user.id,
+            selectedModel: selectedModelRef.current,
           },
         }),
       }),
@@ -93,6 +113,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
   const isTranscribing = voiceStatus === "transcribing";
 
   const displayError = agentError ?? chatError?.message ?? voiceError;
+  const selectedModelOption = MODEL_OPTIONS.find((m) => m.id === selectedModel);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +151,66 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
           <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
           Undo
         </Button>
+      </div>
+
+      {/* Model selector bar */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20">
+        <ModelSelector open={modelSelectorOpen} onOpenChange={setModelSelectorOpen}>
+          <ModelSelectorTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isLoading}
+              className="h-7 gap-1.5 px-2 text-xs font-normal"
+            >
+              {selectedModelOption && <ModelSelectorLogo provider={selectedModelOption.provider} />}
+              <span>{selectedModelOption?.label ?? "Select model"}</span>
+              <span className="text-muted-foreground">▾</span>
+            </Button>
+          </ModelSelectorTrigger>
+          <ModelSelectorContent>
+            <ModelSelectorInput placeholder="Search models..." />
+            <ModelSelectorList>
+              <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+
+              <ModelSelectorGroup heading="Anthropic">
+                {MODEL_OPTIONS.filter((m) => m.provider === "anthropic").map((m) => (
+                  <ModelSelectorItem
+                    key={m.id}
+                    value={m.id}
+                    onSelect={() => {
+                      setSelectedModel(m.id);
+                      setModelSelectorOpen(false);
+                    }}
+                  >
+                    <ModelSelectorLogo provider="anthropic" />
+                    <ModelSelectorName>{m.label}</ModelSelectorName>
+                    <span className="text-xs text-muted-foreground">{m.description}</span>
+                  </ModelSelectorItem>
+                ))}
+              </ModelSelectorGroup>
+
+              <ModelSelectorSeparator />
+
+              <ModelSelectorGroup heading="OpenAI">
+                {MODEL_OPTIONS.filter((m) => m.provider === "openai").map((m) => (
+                  <ModelSelectorItem
+                    key={m.id}
+                    value={m.id}
+                    onSelect={() => {
+                      setSelectedModel(m.id);
+                      setModelSelectorOpen(false);
+                    }}
+                  >
+                    <ModelSelectorLogo provider="openai" />
+                    <ModelSelectorName>{m.label}</ModelSelectorName>
+                    <span className="text-xs text-muted-foreground">{m.description}</span>
+                  </ModelSelectorItem>
+                ))}
+              </ModelSelectorGroup>
+            </ModelSelectorList>
+          </ModelSelectorContent>
+        </ModelSelector>
       </div>
 
       {/* Messages */}

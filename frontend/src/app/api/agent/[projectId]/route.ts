@@ -10,6 +10,7 @@ import {
   tool,
 } from "ai";
 import { z } from "zod";
+import { DEFAULT_MODEL_ID, getModelProvider } from "@/lib/models";
 
 export const maxDuration = 60;
 
@@ -216,7 +217,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { messages, layoutState, userId, forceOpenAI } = body;
+  const { messages, layoutState, userId, selectedModel } = body;
 
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -236,33 +237,22 @@ export async function POST(req: Request, { params }: { params: Params }) {
     );
   }
 
-  const lastMsg = messages.at(-1);
-  const lastContent =
-    typeof lastMsg?.content === "string"
-      ? lastMsg.content
-      : (lastMsg?.parts
-          ?.filter((p: { type: string }) => p.type === "text")
-          .map((p: { text: string }) => p.text)
-          .join("") ?? "");
+  const requestedId =
+    typeof selectedModel === "string" && selectedModel ? selectedModel : DEFAULT_MODEL_ID;
 
-  const isComplex =
-    lastContent.length > 200 ||
-    /redesign|optimize|rearrange all|vastu layout|redo|completely/i.test(lastContent);
-
-  // Build model priority: try Anthropic first (unless forced to OpenAI), fall back to OpenAI
+  const provider = getModelProvider(requestedId);
   const models: { model: LanguageModel; label: string }[] = [];
-  if (!forceOpenAI && hasAnthropic) {
-    models.push({
-      model: anthropic(isComplex ? "claude-opus-4-6" : "claude-sonnet-4-6"),
-      label: isComplex ? "claude-opus" : "claude-sonnet",
-    });
-  }
-  if (hasOpenAI) {
-    models.push({ model: openai("gpt-5.2"), label: "gpt-5.2" });
-  }
-  // If only Anthropic key and forced OpenAI, still try Anthropic as last resort
-  if (models.length === 0 && hasAnthropic) {
-    models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
+
+  if (provider === "anthropic" && hasAnthropic) {
+    models.push({ model: anthropic(requestedId), label: requestedId });
+    if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
+  } else if (provider === "openai" && hasOpenAI) {
+    models.push({ model: openai(requestedId), label: requestedId });
+    if (hasAnthropic)
+      models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
+  } else {
+    if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
+    if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2" });
   }
 
   const backendHeaders: Record<string, string> = {
