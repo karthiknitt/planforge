@@ -39,6 +39,7 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 - **Authentication** — Better Auth (TypeScript-native, session-based)
 - **Payments** — Razorpay with plan tiers: Free / Basic / Pro
 - **Blueprint Dark theme** — Outfit + Plus Jakarta Sans + JetBrains Mono fonts
+- **Accessible dark-mode UI** — WCAG-compliant contrast, visible form borders, hover/focus animations, `prefers-reduced-motion` support
 
 ---
 
@@ -201,6 +202,8 @@ After running `npm run seed`, three accounts are available:
 - **Backend packages:** `uv add <pkg>` — never `pip install`
 - **Compliance rules:** edit `backend/app/config/compliance_rules.json`, not Python
 - **Layout IDs:** always dynamic (e.g. `"solver-front-0"`), never assume `"A"/"B"/"C"`
+- **Dashboard data:** queries Drizzle directly — never call the backend API for server-side project lists
+- **Build:** always run `NODE_ENV=production npm run build` — direnv may set `NODE_ENV=development` in the shell
 
 ---
 

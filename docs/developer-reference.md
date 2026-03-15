@@ -865,3 +865,40 @@ The "new project" form stores road width in **feet** in React state (user-facing
 - Never pass `x + w` (two-IntVar sum) directly as OR-Tools interval end — always create explicit end IntVar
 - DXF HATCH: always use polyline path (not edge path) for simple polygons
 - Quad plot compliance and geometry must use the same inset calculation path or compliance results are meaningless
+
+---
+
+### 2026-03-15 — Dashboard Fix, Dark-Mode UI Accessibility, Build Hardening
+
+**What was built:**
+
+- **Dashboard project list fix** — `/dashboard` was calling the FastAPI backend (`GET /api/projects`) to list projects, which silently returned `[]` if the backend was not running. Replaced with a direct Drizzle query (same pattern as `/projects/[id]` and `/projects/[id]/edit`). Both queries (`projects` + `user.planTier`) are now run in parallel via `Promise.all`. Field references updated from snake_case (`p.plot_length`) to Drizzle camelCase (`p.plotLength`).
+- **Dark-mode CSS token overhaul** — raised three low-contrast tokens in `.dark {}`: `--muted-foreground` oklch(0.65→0.78) for readable secondary text; `--border` oklch(0.27→0.36) for visible card/tab/divider edges; `--input` oklch(0.20→0.40) for clearly visible form control borders. Also updated `--sidebar-border` to match.
+- **Form control accessibility** — `Input`, `Select`, `Checkbox`, `Tabs`: all now have explicit `dark:border-input` at 1.5px border weight; orange focus glow (`box-shadow: 0 0 0 3px oklch(0.68 0.22 45 / 0.18)`) on focus in dark mode; hover colour brightening on all controls; `hover:scale-105` micro-interaction on checkboxes.
+- **Button micro-interactions** — base button now scales `1.02` on hover and `0.98` on press via `transition` + `scale` utilities. Outline variant gets `dark:hover:border-ring/60`.
+- **Tabs visibility** — `TabsList` default variant gains `border border-border shadow-sm` so the tab strip is visible as a raised surface. `TabsTrigger` inactive state shows a ghost border on hover; active state has solid `border-input` + `bg-input/40`. Line-variant active indicator colour changed to `--primary` (orange).
+- **Card & dropdown elevation** — `Card` gains `dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)]`. `DropdownMenuContent` gains a stronger dark shadow + thin border glow.
+- **`prefers-reduced-motion`** — media query added to `globals.css` cancelling all custom animations and trimming all CSS transitions to 0.01ms for users who prefer reduced motion (WCAG 2.3 AAA).
+- **`global-error.tsx`** — created minimal `"use client"` error boundary at `src/app/global-error.tsx` with inline styles (no context dependencies) to fix Next.js 16 prerender failure on `/_global-error`.
+- **TS fix: `compatibility` prop removed** — `@ai-sdk/openai` v3 removed the `compatibility` option from `OpenAIProviderSettings`. Removed from `route.ts` OpenRouter client initialisation. Build now passes TypeScript strict mode with zero errors.
+- **Biome format pass** — `npx biome format --write src/` applied across all 77 frontend source files; 28 files auto-corrected.
+
+**Key files changed:**
+
+- `frontend/src/app/(app)/dashboard/page.tsx` — replaced backend API fetch with direct Drizzle query; `Promise.all` for parallel DB calls; field names updated to camelCase
+- `frontend/src/app/globals.css` — `--muted-foreground`, `--border`, `--input`, `--sidebar-border` tokens raised; dark focus-glow rules added; `prefers-reduced-motion` block added; `.dark [data-slot]` border-width 1.5px
+- `frontend/src/components/ui/input.tsx` — hover/focus transitions, dark border, dark bg
+- `frontend/src/components/ui/checkbox.tsx` — visible border, hover scale, focus ring
+- `frontend/src/components/ui/select.tsx` — visible border, dark bg, hover/focus
+- `frontend/src/components/ui/tabs.tsx` — `TabsList` border+shadow; `TabsTrigger` hover/active border states; line-variant orange underline
+- `frontend/src/components/ui/button.tsx` — `scale-[1.02]` hover, `scale-[0.98]` press, outline dark border improved
+- `frontend/src/components/ui/card.tsx` — dark elevation shadow
+- `frontend/src/components/ui/dropdown-menu.tsx` — dark shadow + border glow on content
+- `frontend/src/app/global-error.tsx` — new; minimal inline-styled error boundary
+- `frontend/src/app/api/agent/[projectId]/route.ts` — removed `compatibility` from `createOpenAI()`
+
+**Patterns established:**
+
+- **Dashboard = Drizzle, not API**: Server Components in the app shell should query the DB directly. The backend API is for layout generation/export, not for basic CRUD that the frontend already owns via Drizzle.
+- **CSS token "spread"**: When dark-mode elements are invisible, check if `--border`, `--input`, and `--card` lightness values are too close together. Spread them: card ≈ 0.13, border ≈ 0.36, input ≈ 0.40 gives clear visual layering.
+- **Build must use `NODE_ENV=production`**: The project `.envrc` previously injected `NODE_ENV=development` via direnv, causing React to load in dev mode during SSR and all `useContext` calls to return null. Always invoke `NODE_ENV=production npm run build`.
