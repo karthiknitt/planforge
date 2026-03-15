@@ -772,6 +772,64 @@ function DimLine({
   );
 }
 
+// ── L-shape polygon point helper ─────────────────────────────────────────────
+function computeLShapePoints(
+  plotWidth: number,
+  plotLength: number,
+  cutoutCorner: string,
+  cutoutWidth: number,
+  cutoutHeight: number,
+  px: (x: number) => number,
+  py: (y: number) => number
+): string {
+  const W = plotWidth;
+  const H = plotLength;
+  const cw = cutoutWidth;
+  const ch = cutoutHeight;
+
+  let vertices: [number, number][];
+  if (cutoutCorner === "NE") {
+    vertices = [
+      [0, 0],
+      [W, 0],
+      [W, H - ch],
+      [W - cw, H - ch],
+      [W - cw, H],
+      [0, H],
+    ];
+  } else if (cutoutCorner === "NW") {
+    vertices = [
+      [0, 0],
+      [W, 0],
+      [W, H],
+      [cw, H],
+      [cw, H - ch],
+      [0, H - ch],
+    ];
+  } else if (cutoutCorner === "SE") {
+    vertices = [
+      [0, 0],
+      [W - cw, 0],
+      [W - cw, ch],
+      [W, ch],
+      [W, H],
+      [0, H],
+    ];
+  } else {
+    // SW
+    vertices = [
+      [cw, 0],
+      [W, 0],
+      [W, H],
+      [0, H],
+      [0, ch],
+      [cw, ch],
+    ];
+  }
+
+  return vertices.map(([x, y]) => `${px(x)},${py(y)}`).join(" ");
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 interface FloorPlanSVGProps {
   floorPlan: FloorPlanData;
@@ -784,6 +842,9 @@ interface FloorPlanSVGProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  cutoutCorner?: string;
+  cutoutWidth?: number;
+  cutoutHeight?: number;
 }
 
 export function FloorPlanSVG({
@@ -796,6 +857,9 @@ export function FloorPlanSVG({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  cutoutCorner = "NE",
+  cutoutWidth = 0,
+  cutoutHeight = 0,
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -884,6 +948,23 @@ export function FloorPlanSVG({
       {plotShape === "quadrilateral" && plotCorners && plotCorners.length === 4 ? (
         <polygon
           points={plotCorners.map(([cx, cy]) => `${px(cx)},${py(cy)}`).join(" ")}
+          fill="white"
+          stroke="#CBD5E1"
+          strokeWidth={1}
+          strokeDasharray="5 3"
+          className="svg-plot"
+        />
+      ) : plotShape === "l_shaped" && cutoutWidth > 0 && cutoutHeight > 0 ? (
+        <polygon
+          points={computeLShapePoints(
+            plotWidth,
+            plotLength,
+            cutoutCorner,
+            cutoutWidth,
+            cutoutHeight,
+            px,
+            py
+          )}
           fill="white"
           stroke="#CBD5E1"
           strokeWidth={1}

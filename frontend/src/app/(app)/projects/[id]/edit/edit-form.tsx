@@ -46,6 +46,9 @@ interface ProjectData {
   plotRearWidth?: string | null;
   plotSideOffset?: string | null;
   plotCorners?: string | null;
+  cutoutCorner?: string | null;
+  cutoutWidth?: string | null;
+  cutoutHeight?: string | null;
   numFloors?: number;
   hasStilt?: boolean;
   hasBasement?: boolean;
@@ -218,6 +221,9 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
     num_floors: String(project.numFloors ?? 1),
     has_stilt: project.hasStilt ?? false,
     has_basement: project.hasBasement ?? false,
+    cutout_corner: project.cutoutCorner ?? "NE",
+    cutout_width: project.cutoutWidth ? metresToFeet(project.cutoutWidth) : "",
+    cutout_height: project.cutoutHeight ? metresToFeet(project.cutoutHeight) : "",
   });
 
   function set(field: string, value: string | boolean) {
@@ -257,6 +263,28 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               base.plot_width = Math.max(...xs);
               base.plot_front_width = null;
               base.plot_rear_width = null;
+              base.cutout_width = 0;
+              base.cutout_height = 0;
+            } else if (form.plot_shape === "l_shaped") {
+              const cw = feetToMetres(form.cutout_width);
+              const ch = feetToMetres(form.cutout_height);
+              const pl = feetToMetres(form.plot_length);
+              const pw = feetToMetres(form.plot_width);
+              if (cw <= 0 || ch <= 0)
+                throw new Error(
+                  "Cutout width and height must be greater than 0 for L-shaped plots."
+                );
+              if (cw >= pw || ch >= pl)
+                throw new Error(
+                  "Cutout dimensions must be smaller than the overall plot dimensions."
+                );
+              base.plot_length = pl;
+              base.plot_width = pw;
+              base.plot_front_width = null;
+              base.plot_rear_width = null;
+              base.cutout_corner = form.cutout_corner;
+              base.cutout_width = cw;
+              base.cutout_height = ch;
             } else {
               base.plot_length = feetToMetres(form.plot_length);
               base.plot_width =
@@ -274,6 +302,8 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                 form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null;
               base.plot_rear_width =
                 form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null;
+              base.cutout_width = 0;
+              base.cutout_height = 0;
             }
             return {
               ...base,
@@ -347,11 +377,12 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
           {/* Plot shape selector */}
           <div className="flex flex-col gap-1.5">
             <Label>Plot shape</Label>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {(
                 [
                   { value: "rectangular", label: "Rectangular", desc: "Standard 4-sided plot" },
                   { value: "trapezoid", label: "Trapezoid", desc: "Different front & rear widths" },
+                  { value: "l_shaped", label: "L-Shaped", desc: "Rectangle with corner cutout" },
                   {
                     value: "quadrilateral",
                     label: "Quadrilateral",
@@ -391,7 +422,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                   onChange={(e) => set("plot_length", e.target.value)}
                 />
               </div>
-              {form.plot_shape === "rectangular" ? (
+              {form.plot_shape === "rectangular" || form.plot_shape === "l_shaped" ? (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="plot_width">Width (feet)</Label>
                   <Input
@@ -447,6 +478,58 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               </div>
             </div>
           )}
+          {form.plot_shape === "l_shaped" && (
+            <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/30 p-4">
+              <p className="text-xs text-muted-foreground">
+                An L-shaped plot is a rectangle with one corner cut out. Enter the overall
+                dimensions above, then specify the cutout corner and its size.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cutout_corner">Cutout corner</Label>
+                <Select
+                  id="cutout_corner"
+                  value={form.cutout_corner}
+                  onChange={(e) => set("cutout_corner", e.target.value)}
+                >
+                  <option value="NE">NE — Rear-Right corner</option>
+                  <option value="NW">NW — Rear-Left corner</option>
+                  <option value="SE">SE — Front-Right corner</option>
+                  <option value="SW">SW — Front-Left corner</option>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cutout_width">Cutout Width (feet)</Label>
+                  <Input
+                    id="cutout_width"
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    placeholder="10"
+                    required
+                    value={form.cutout_width}
+                    onChange={(e) => set("cutout_width", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Must be less than plot width</p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cutout_height">Cutout Height (feet)</Label>
+                  <Input
+                    id="cutout_height"
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    placeholder="10"
+                    required
+                    value={form.cutout_height}
+                    onChange={(e) => set("cutout_height", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Must be less than plot length</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {form.plot_shape === "quadrilateral" && (
             <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

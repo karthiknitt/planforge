@@ -56,6 +56,14 @@ class Project(Base):
     plot_rear_width:  Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
     plot_side_offset: Mapped[float | None]   = mapped_column(Numeric(8, 3), nullable=True)
 
+    # L-shaped plot cutout
+    cutout_corner:    Mapped[str]            = mapped_column(String(2), default="NE", nullable=False,
+                                                              server_default="NE")
+    cutout_width:     Mapped[float]          = mapped_column(Float, default=0.0, nullable=False,
+                                                              server_default=text("0.0"))
+    cutout_height:    Mapped[float]          = mapped_column(Float, default=0.0, nullable=False,
+                                                              server_default=text("0.0"))
+
     # Multi-floor support (Phase E)
     num_floors:   Mapped[int]  = mapped_column(Integer, default=1, nullable=False,
                                                 server_default=text("1"))

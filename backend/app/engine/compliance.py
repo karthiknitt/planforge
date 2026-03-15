@@ -304,6 +304,9 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         from shapely.geometry import Polygon as _Polygon
         plot_area = _Polygon(cfg.plot_corners).area
+    elif cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        from app.engine.generator import compute_l_shaped_polygon
+        plot_area = compute_l_shaped_polygon(cfg).area
     else:
         plot_area = cfg.plot_width * cfg.plot_length
     coverage_pct = (footprint / plot_area) * 100
@@ -334,6 +337,7 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
 
     # --- Room boundary vs. setback lines (above-ground floors only) ---
     ewt = rules["external_wall_thickness_mm"] / 1000
+    _l_inset_poly = None
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         # Derive boundary from the same Shapely inset used by _quad_floor_plate
         from shapely.geometry import Polygon as _Polygon
@@ -344,6 +348,13 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
             violations.append("Plot too small after setbacks — no buildable area")
             return ComplianceResult(passed=False, violations=violations, warnings=warnings)
         min_x, min_y, max_x, max_y = _inset.bounds
+    elif cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        # L-shaped uses the same rectangular setback boundary as the floor plate.
+        # The cutout zone is handled by _remove_cutout_overlap in generator.py.
+        min_x = cfg.setback_left  + ewt
+        max_x = cfg.plot_width    - cfg.setback_right - ewt
+        min_y = cfg.setback_front + ewt
+        max_y = cfg.plot_length   - cfg.setback_rear  - ewt
     else:
         min_x = cfg.setback_left  + ewt
         max_x = cfg.plot_width    - cfg.setback_right - ewt

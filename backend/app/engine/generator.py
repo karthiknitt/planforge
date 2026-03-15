@@ -1,11 +1,95 @@
 from __future__ import annotations
 
+from shapely.geometry import Polygon
+
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
 from .compliance import check, load_rules
 from .models import FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
 from .solver import solve_layouts
 from .vastu import check_vastu
+
+
+def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
+    """Return a Shapely Polygon for the L-shaped plot boundary.
+
+    The L-shape is the full bounding rectangle with one rectangular corner cut out.
+    Supports NE, NW, SE, SW cutout corners.
+    """
+    W = cfg.plot_width
+    H = cfg.plot_length
+    cw = cfg.cutout_width
+    ch = cfg.cutout_height
+
+    if cfg.cutout_corner == "NE":
+        vertices = [
+            (0, 0),
+            (W, 0),
+            (W, H - ch),
+            (W - cw, H - ch),
+            (W - cw, H),
+            (0, H),
+        ]
+    elif cfg.cutout_corner == "NW":
+        vertices = [
+            (0, 0),
+            (W, 0),
+            (W, H),
+            (cw, H),
+            (cw, H - ch),
+            (0, H - ch),
+        ]
+    elif cfg.cutout_corner == "SE":
+        vertices = [
+            (0, 0),
+            (W - cw, 0),
+            (W - cw, ch),
+            (W, ch),
+            (W, H),
+            (0, H),
+        ]
+    else:  # SW
+        vertices = [
+            (cw, 0),
+            (W, 0),
+            (W, H),
+            (0, H),
+            (0, ch),
+            (cw, ch),
+        ]
+
+    return Polygon(vertices)
+
+
+def _remove_cutout_overlap(
+    rooms: list[Room],
+    cutout_polygon: Polygon,
+    space_notes: list[str],
+    floor: int,
+) -> list[Room]:
+    """Remove rooms whose centre lies within the cutout zone.
+
+    Rooms that are mostly outside the cutout are kept as-is (minor overlaps are
+    accepted — the plot boundary is dashed in SVG and real-world construction will
+    handle the edge).  Rooms that are completely inside the cutout are removed.
+    Rooms where more than 60 % of their area overlaps the cutout are also removed.
+    """
+    from shapely.geometry import box as _box
+
+    kept: list[Room] = []
+    for room in rooms:
+        room_box = _box(room.x, room.y, room.x + room.width, room.y + room.depth)
+        intersection = room_box.intersection(cutout_polygon)
+        overlap_ratio = intersection.area / room_box.area if room_box.area > 0 else 0
+
+        if overlap_ratio > 0.6:
+            space_notes.append(
+                f"{room.name} removed from floor {floor}: "
+                f"{overlap_ratio * 100:.0f}% falls in the L-shaped cutout zone."
+            )
+        else:
+            kept.append(room)
+    return kept
 
 
 # ── Blank area detection & filling ────────────────────────────────────────────
@@ -19,12 +103,21 @@ def _next_id(prefix: str) -> str:
 
 
 def _plate_box(cfg: PlotConfig, ewt: float):
-    """Return a Shapely box for the usable floor plate."""
+    """Return a Shapely geometry for the usable floor plate.
+
+    For L-shaped plots, returns the L-polygon inset by setbacks + wall thickness.
+    For all other shapes, returns a simple rectangle.
+    """
     from shapely.geometry import box
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
     w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
     d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        l_poly = compute_l_shaped_polygon(cfg)
+        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        inset = l_poly.buffer(-(avg_sb + ewt), join_style="mitre")
+        return inset if not inset.is_empty else box(ox, oy, ox + w, oy + d)
     return box(ox, oy, ox + w, oy + d)
 
 
@@ -249,6 +342,36 @@ def generate(cfg: PlotConfig) -> list[Layout]:
 
     all_layouts = solver_layouts + archetype_layouts
 
+    # ── L-shaped plot: remove rooms in the cutout zone ────────────────────────
+    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        cutout_polygon = compute_l_shaped_polygon(cfg).difference(
+            compute_l_shaped_polygon(cfg).buffer(-0.001)
+        )
+        # Build the actual cutout rectangle (the removed corner)
+        W = cfg.plot_width
+        H = cfg.plot_length
+        cw = cfg.cutout_width
+        ch = cfg.cutout_height
+        from shapely.geometry import box as _sbox
+        if cfg.cutout_corner == "NE":
+            cutout_zone = _sbox(W - cw, H - ch, W, H)
+        elif cfg.cutout_corner == "NW":
+            cutout_zone = _sbox(0, H - ch, cw, H)
+        elif cfg.cutout_corner == "SE":
+            cutout_zone = _sbox(W - cw, 0, W, ch)
+        else:  # SW
+            cutout_zone = _sbox(0, 0, cw, ch)
+
+        for layout in all_layouts:
+            cutout_notes: list[str] = []
+            for fp in [layout.ground_floor, layout.first_floor,
+                       layout.second_floor, layout.basement_floor]:
+                if fp is None or not fp.rooms:
+                    continue
+                fp.rooms = _remove_cutout_overlap(fp.rooms, cutout_zone, cutout_notes, fp.floor)
+            # prepend cutout notes so they appear first in space_notes
+            layout.space_notes = cutout_notes + layout.space_notes
+
     # ── Fill blank areas in every passing layout ──────────────────────────────
     ewt = rules["external_wall_thickness_mm"] / 1000
     for layout in all_layouts:
@@ -269,7 +392,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             notes = _fill_blank_areas(fp, cfg, ewt, is_topmost=is_top)
             space_notes.extend(notes)
 
-        layout.space_notes = space_notes
+        layout.space_notes = list(layout.space_notes) + space_notes
 
     # ── Score and select top 3 ────────────────────────────────────────────────
     top = rank_and_select(all_layouts, cfg, top_n=3)
