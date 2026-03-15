@@ -12,6 +12,7 @@ from app.schemas.layout import (
     ColumnOut, ComplianceOut, FloorPlanOut,
     GenerateResponse, LayoutOut, LayoutScoreOut, RoomOut,
 )
+from app.api.routes.revisions import save_auto_revision
 
 router = APIRouter()
 
@@ -95,10 +96,18 @@ async def generate_layouts(
         num_floors=getattr(project, "num_floors", 1) or 1,
         has_stilt=getattr(project, "has_stilt", False) or False,
         has_basement=getattr(project, "has_basement", False) or False,
+        municipality=getattr(project, "municipality", None),
         custom_room_config=custom_room_config,
     )
 
     layouts = generate(cfg)
+
+    # Auto-snapshot the current state before delivering new results.
+    # Fire-and-forget: failure must not block the response.
+    try:
+        await save_auto_revision(db, project, label_prefix="Auto-save before generation")
+    except Exception:
+        pass
 
     return GenerateResponse(
         project_id=project_id,

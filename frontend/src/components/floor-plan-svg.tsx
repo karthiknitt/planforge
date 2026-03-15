@@ -105,16 +105,16 @@ function RoomLabel({
 
   return (
     <g>
-      {lines.map((line, i) => (
+      {lines.map((line, lineIdx) => (
         <text
-          key={i}
+          key={line}
           x={cx}
-          y={cy + (i - (lines.length - 1) / 2) * (fs + 2)}
+          y={cy + (lineIdx - (lines.length - 1) / 2) * (fs + 2)}
           textAnchor="middle"
           dominantBaseline="middle"
           fontSize={fs}
           fontFamily="sans-serif"
-          fontWeight={i === 0 ? "600" : "400"}
+          fontWeight={lineIdx === 0 ? "600" : "400"}
           fill={c.text}
         >
           {line}
@@ -455,8 +455,8 @@ function FurnitureKitchen({
       {[
         [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.3, rearY + cw * 0.3],
         [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.7, rearY + cw * 0.3],
-      ].map(([bx, by], i) => (
-        <circle key={i} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
+      ].map(([bx, by]) => (
+        <circle key={`burner-${bx}-${by}`} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
       ))}
     </g>
   );
@@ -1187,11 +1187,11 @@ export function FloorPlanSVG({
         ))}
 
       {/* ── Column markers ────────────────────────────────────────────── */}
-      {uniqueCols.map((col, idx) => {
+      {uniqueCols.map((col) => {
         const colPx = Math.max(4, 0.3 * scale);
         return (
           <rect
-            key={`col-${idx}`}
+            key={`col-${col.x}-${col.y}`}
             x={px(col.x) - colPx / 2}
             y={py(col.y) - colPx / 2}
             width={colPx}

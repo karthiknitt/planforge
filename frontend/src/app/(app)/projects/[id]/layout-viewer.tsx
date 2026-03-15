@@ -1,6 +1,16 @@
 "use client";
 
-import { Check, Copy, Link2, Lock } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  History,
+  Link2,
+  Lock,
+  RotateCcw,
+  Save,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -26,6 +36,14 @@ import type {
   GenerateResponse,
   LayoutData,
 } from "@/lib/layout-types";
+
+interface RevisionListItem {
+  id: number;
+  project_id: string;
+  version: number;
+  label: string | null;
+  created_at: string;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   living: "Living / Hall",
@@ -171,6 +189,7 @@ interface LayoutViewerProps {
   plotCorners?: [number, number][];
   numFloors?: number;
   vastuEnabled?: boolean;
+  municipality?: string | null;
 }
 
 // ── Vastu badge helper ────────────────────────────────────────────────────────
@@ -260,6 +279,7 @@ export function LayoutViewer({
   plotCorners,
   numFloors: _numFloors = 1,
   vastuEnabled = false,
+  municipality = null,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
@@ -269,7 +289,7 @@ export function LayoutViewer({
   const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat" | "compare">(
     "plan"
   );
-  const [_showVastuZones, _setShowVastuZones] = useState(false);
+  const [showVastuZones, setShowVastuZones] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -278,6 +298,111 @@ export function LayoutViewer({
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // ── Version History state ──────────────────────────────────────────────────
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [revisions, setRevisions] = useState<RevisionListItem[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [revisionsError, setRevisionsError] = useState("");
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+  const [snapshotLabel, setSnapshotLabel] = useState("");
+  const [showSnapshotInput, setShowSnapshotInput] = useState(false);
+  const [restoredData, setRestoredData] = useState<GenerateResponse | null>(null);
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
+
+  async function fetchRevisions() {
+    if (!session) return;
+    setRevisionsLoading(true);
+    setRevisionsError("");
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions`,
+        { headers: { "X-User-Id": session.user.id } }
+      );
+      if (!res.ok) throw new Error(`Failed to load revisions (${res.status})`);
+      const data = (await res.json()) as RevisionListItem[];
+      setRevisions(data);
+    } catch (err) {
+      setRevisionsError(err instanceof Error ? err.message : "Could not load revision history");
+    } finally {
+      setRevisionsLoading(false);
+    }
+  }
+
+  function handleHistoryToggle() {
+    setHistoryOpen((prev) => {
+      if (!prev) fetchRevisions();
+      return !prev;
+    });
+  }
+
+  async function handleSaveSnapshot() {
+    if (!session) return;
+    setSavingSnapshot(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions`,
+        {
+          method: "POST",
+          headers: {
+            "X-User-Id": session.user.id,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ label: snapshotLabel.trim() || null }),
+        }
+      );
+      if (!res.ok) throw new Error(`Failed to save snapshot (${res.status})`);
+      setSnapshotLabel("");
+      setShowSnapshotInput(false);
+      await fetchRevisions();
+    } catch (err) {
+      setRevisionsError(err instanceof Error ? err.message : "Could not save snapshot");
+    } finally {
+      setSavingSnapshot(false);
+    }
+  }
+
+  async function handleRestore(version: number) {
+    if (!session) return;
+    setRestoringVersion(version);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions/${version}`,
+        { headers: { "X-User-Id": session.user.id } }
+      );
+      if (!res.ok) throw new Error(`Failed to load revision v${version} (${res.status})`);
+      const detail = (await res.json()) as { snapshot: GenerateResponse };
+      setRestoredData(detail.snapshot);
+      setSelectedId(detail.snapshot.layouts[0]?.id ?? selectedId);
+      setLiveLayout(null);
+      setFloor(0);
+    } catch (err) {
+      setRevisionsError(err instanceof Error ? err.message : "Could not restore revision");
+    } finally {
+      setRestoringVersion(null);
+    }
+  }
+
+  function handleClearRestore() {
+    setRestoredData(null);
+    setSelectedId(generateData?.layouts[0]?.id ?? "A");
+    setLiveLayout(null);
+    setFloor(0);
+  }
+
+  async function handleDeleteRevision(version: number) {
+    if (!session) return;
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions/${version}`,
+        { method: "DELETE", headers: { "X-User-Id": session.user.id } }
+      );
+      if (!res.ok) throw new Error(`Failed to delete revision (${res.status})`);
+      await fetchRevisions();
+    } catch (err) {
+      setRevisionsError(err instanceof Error ? err.message : "Could not delete revision");
+    }
+  }
 
   async function handleShare() {
     if (!session) return;
@@ -364,8 +489,10 @@ export function LayoutViewer({
     );
   }
 
-  const baseLayout =
-    generateData.layouts.find((l) => l.id === selectedId) ?? generateData.layouts[0];
+  // Use restoredData for display when a revision is active, else live data
+  const activeData = restoredData ?? generateData;
+
+  const baseLayout = activeData.layouts.find((l) => l.id === selectedId) ?? activeData.layouts[0];
   const layout = liveLayout ?? baseLayout;
 
   // Build the ordered list of available floors for this layout
@@ -390,7 +517,7 @@ export function LayoutViewer({
       {/* Layout selector + export buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          {generateData.layouts.map((l) => (
+          {activeData.layouts.map((l) => (
             <button
               key={l.id}
               type="button"
@@ -570,9 +697,16 @@ export function LayoutViewer({
             : "border-red-500/40 bg-red-500/8 text-red-700 dark:text-red-400",
         ].join(" ")}
       >
-        <span className="font-semibold">
-          {layout.compliance.passed ? "✓ Compliance passed" : "✗ Compliance failed"}
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold">
+            {layout.compliance.passed ? "✓ Compliance passed" : "✗ Compliance failed"}
+          </span>
+          {municipality && (
+            <span className="text-xs font-normal text-muted-foreground opacity-80">
+              Validated against: {municipality}
+            </span>
+          )}
+        </div>
 
         {layout.compliance.violations.length > 0 && (
           <ul className="list-inside list-disc space-y-0.5 text-red-600 dark:text-red-400">
@@ -735,7 +869,7 @@ export function LayoutViewer({
 
       {activeTab === "compare" && (
         <LayoutCompareView
-          layouts={generateData.layouts}
+          layouts={activeData.layouts}
           plotWidth={plotWidth}
           plotLength={plotLength}
           roadSide={roadSide}
@@ -793,6 +927,145 @@ export function LayoutViewer({
             </Button>
           </div>
         ))}
+
+      {/* ── Restored revision banner ─────────────────────────────────────── */}
+      {restoredData && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-500/8 px-4 py-2.5 text-sm">
+          <span className="text-amber-700 dark:text-amber-400 font-medium">
+            Viewing a restored revision — this is a preview only, not the current saved state.
+          </span>
+          <button
+            type="button"
+            onClick={handleClearRestore}
+            className="ml-4 shrink-0 rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-500/15 transition-colors"
+          >
+            Back to current
+          </button>
+        </div>
+      )}
+
+      {/* ── Version History panel ────────────────────────────────────────── */}
+      <div className="rounded-xl border border-border">
+        <button
+          type="button"
+          onClick={handleHistoryToggle}
+          className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors rounded-xl"
+        >
+          <span className="flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            Version History
+          </span>
+          {historyOpen ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+
+        {historyOpen && (
+          <div className="border-t border-border px-4 pb-4 pt-3 flex flex-col gap-3">
+            {/* Save snapshot row */}
+            <div className="flex items-center gap-2">
+              {showSnapshotInput ? (
+                <>
+                  <input
+                    type="text"
+                    value={snapshotLabel}
+                    onChange={(e) => setSnapshotLabel(e.target.value)}
+                    placeholder="Label (optional, e.g. Before plot resize)"
+                    className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveSnapshot();
+                      if (e.key === "Escape") setShowSnapshotInput(false);
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSaveSnapshot}
+                    disabled={savingSnapshot}
+                  >
+                    {savingSnapshot ? "Saving…" : "Save"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowSnapshotInput(false)}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setShowSnapshotInput(true)}
+                  disabled={!session}
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  Save Snapshot
+                </Button>
+              )}
+            </div>
+
+            {/* Error message */}
+            {revisionsError && (
+              <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
+                {revisionsError}
+              </p>
+            )}
+
+            {/* Revisions list */}
+            {revisionsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : revisions.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2">
+                No saved revisions yet. Click "Save Snapshot" to create one, or revisions are
+                auto-created when you regenerate layouts.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {revisions.map((rev) => (
+                  <li key={rev.id} className="flex items-center justify-between py-2.5 gap-3">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        v{rev.version}
+                        {rev.label ? ` — ${rev.label}` : ""}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(rev.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 h-7 px-2 text-xs"
+                        onClick={() => handleRestore(rev.version)}
+                        disabled={restoringVersion === rev.version}
+                        title="Preview this revision without overwriting current state"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        {restoringVersion === rev.version ? "Loading…" : "Restore"}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRevision(rev.version)}
+                        className="h-7 w-7 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors text-xs"
+                        title="Delete this revision"
+                        aria-label={`Delete revision v${rev.version}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
