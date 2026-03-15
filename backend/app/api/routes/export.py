@@ -112,7 +112,7 @@ async def export_dxf(
         raise HTTPException(status_code=402, detail="DXF export requires Basic or Pro plan.")
 
     try:
-        import ezdxf
+        import ezdxf  # noqa: F401
     except ImportError:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,
                             detail="ezdxf not installed. Run: uv add ezdxf")
@@ -141,27 +141,61 @@ async def export_dxf(
 def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     import ezdxf
     from ezdxf import colors
-    from ezdxf.enums import TextEntityAlignment
+
+    from app.engine.cad_advanced import (
+        draw_building_footprint,
+        draw_compound_wall,
+        draw_furniture,
+        draw_open_terrace,
+        draw_setback_zones,
+        draw_structural_grid,
+    )
+    from app.engine.cad_elements import build_walls_from_rooms
+    from app.engine.cad_primitives import (
+        collect_openings,
+        draw_dimension_chain,
+        draw_door,
+        draw_north_arrow,
+        draw_staircase,
+        draw_title_block,
+        draw_ventilator,
+        draw_wall_with_breaks,
+        draw_window,
+        metres_to_ftin,
+    )
 
     doc = ezdxf.new("R2010")
     doc.header["$INSUNITS"] = 6  # metres
 
     layer_defs = [
-        ("PLOT-BOUNDARY", colors.GREEN,  0.25),
-        ("A-WALL-BRICK",  colors.RED,    0.50),
-        ("A-WALL-INT",    colors.YELLOW, 0.35),
-        ("A-DOOR",        colors.CYAN,   0.25),
-        ("A-WINDOW",      colors.BLUE,   0.25),
-        ("S-COLUMN",      colors.WHITE,  0.35),
-        ("S-BEAM",        colors.WHITE,  0.35),
-        ("S-GRID",        colors.GRAY,   0.18),
-        ("DIM-LINE",      colors.GRAY,   0.18),
-        ("TEXT",          colors.WHITE,  0.18),
+        ("PLOT-BOUNDARY",   colors.GREEN,   0.25),
+        ("A-WALL-BRICK",    colors.RED,     0.50),
+        ("A-WALL-INT",      colors.YELLOW,  0.35),
+        ("A-DOOR",          colors.CYAN,    0.25),
+        ("A-WINDOW",        colors.BLUE,    0.25),
+        ("A-STAIR",         colors.WHITE,   0.25),
+        ("A-VENTILATOR",    colors.MAGENTA, 0.18),
+        ("A-TITLE",         colors.WHITE,   0.50),
+        ("S-COLUMN",        colors.WHITE,   0.35),
+        ("S-BEAM",          colors.WHITE,   0.35),
+        ("S-GRID",          colors.GRAY,    0.18),
+        ("DIM-LINE",        colors.GRAY,    0.18),
+        ("TEXT",            colors.WHITE,   0.18),
+        # Advanced CAD layers
+        ("A-FOOTPRINT",     colors.WHITE,   0.70),
+        ("A-COMPOUND-WALL", colors.GREEN,   0.35),
+        ("A-TERRACE",       colors.CYAN,    0.18),
+        ("A-FURNITURE",     colors.BLUE,    0.18),
+        ("DIM-SETBACK",     colors.GRAY,    0.18),
     ]
     for lname, color, lw in layer_defs:
-        layer = doc.layers.new(lname)
-        layer.color = color
-        layer.lineweight = int(lw * 100)
+        lyr = doc.layers.new(lname)
+        lyr.color = color
+        lyr.lineweight = int(lw * 100)
+
+    # Register DASHED linetype (used by plot boundary and structural grid)
+    if "DASHED" not in doc.linetypes:
+        doc.linetypes.new("DASHED", dxfattribs={"description": "Dashed _ _ _"})
 
     msp = doc.modelspace()
 
@@ -188,11 +222,14 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if layout.basement_floor:
         floor_plans.append(layout.basement_floor)
 
-    import math
-    from app.engine.cad_elements import build_walls_from_rooms, build_windows
+    ewt_m = 0.23    # external wall thickness (m)
+    iwt_m = 0.115   # internal (half-brick) wall thickness
 
-    ewt_m = 0.23   # external wall thickness (m)
-    iwt_m = 0.115  # internal (half-brick) wall thickness
+    global_min_x = global_min_y = float("inf")
+    global_max_x = global_max_y = float("-inf")
+
+    # Ground-floor building extents needed for post-loop setback callouts
+    gf_bld_x = gf_bld_y = gf_bld_w = gf_bld_d = 0.0
 
     for floor_plan in floor_plans:
         z_offset = float(floor_plan.floor) * 3.0
@@ -200,150 +237,77 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         if not rooms:
             continue
 
-        # Buildable bounds derived from actual room extents
         bld_x = min(r.x for r in rooms)
         bld_y = min(r.y for r in rooms)
-        bld_w = max(r.x + r.width  for r in rooms) - bld_x
-        bld_d = max(r.y + r.depth  for r in rooms) - bld_y
+        bld_w = max(r.x + r.width for r in rooms) - bld_x
+        bld_d = max(r.y + r.depth for r in rooms) - bld_y
 
-        # ── 2A: Double-line walls + ANSI hatch fill ──────────────────────────
+        if floor_plan.floor == 0:
+            gf_bld_x, gf_bld_y, gf_bld_w, gf_bld_d = bld_x, bld_y, bld_w, bld_d
+
+        global_min_x = min(global_min_x, bld_x)
+        global_min_y = min(global_min_y, bld_y)
+        global_max_x = max(global_max_x, bld_x + bld_w)
+        global_max_y = max(global_max_y, bld_y + bld_d)
+
+        # 1. Collect all openings (doors, windows, ventilators)
+        openings_map = collect_openings(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
+
+        # 2. Draw walls with clean gaps at openings
         walls = build_walls_from_rooms(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
         for wall in walls:
-            dx = wall.x2 - wall.x1
-            dy = wall.y2 - wall.y1
-            seg_len = math.hypot(dx, dy)
-            if seg_len < 0.001:
-                continue
-            px, py = -dy / seg_len, dx / seg_len  # perpendicular unit vector
-            h = wall.thickness / 2
-            layer = "A-WALL-BRICK" if wall.thickness >= ewt_m else "A-WALL-INT"
-            msp.add_line(
-                (wall.x1 + h * px, wall.y1 + h * py, z_offset),
-                (wall.x2 + h * px, wall.y2 + h * py, z_offset),
-                dxfattribs={"layer": layer},
+            wall_key = (round(wall.x1, 2), round(wall.y1, 2),
+                        round(wall.x2, 2), round(wall.y2, 2))
+            lyr_name = "A-WALL-BRICK" if wall.thickness >= ewt_m else "A-WALL-INT"
+            draw_wall_with_breaks(
+                msp, wall, openings_map.get(wall_key, []), lyr_name, z_offset
             )
-            msp.add_line(
-                (wall.x1 - h * px, wall.y1 - h * py, z_offset),
-                (wall.x2 - h * px, wall.y2 - h * py, z_offset),
-                dxfattribs={"layer": layer},
-            )
-            # HATCH fill: ANSI31 (45° diagonal) for brick, ANSI37 (crosshatch) for partition
-            hatch_corners = [
-                (wall.x1 + h * px, wall.y1 + h * py),
-                (wall.x2 + h * px, wall.y2 + h * py),
-                (wall.x2 - h * px, wall.y2 - h * py),
-                (wall.x1 - h * px, wall.y1 - h * py),
-            ]
-            try:
-                hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z_offset})
-                hatch.set_pattern_fill(
-                    "ANSI31" if wall.thickness >= ewt_m else "ANSI37",
-                    scale=0.05,
-                )
-                hatch.paths.add_polyline_path(hatch_corners, is_closed=True)
-            except Exception:
-                pass  # hatch is cosmetic — skip on older ezdxf versions
 
-        # ── 2B: Door symbols (line + arc at room adjacencies) ───────────────
-        door_w = 0.9
-        placed_doors: set = set()
-        for i, ra in enumerate(rooms):
-            for j, rb in enumerate(rooms):
-                if j <= i:
-                    continue
-                # Vertical shared wall: ra right-edge ≈ rb left-edge
-                if abs(ra.x + ra.width - rb.x) < 0.05:
-                    y_lo = max(ra.y, rb.y)
-                    y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
-                    if y_hi - y_lo > door_w + 0.1:
-                        wx = ra.x + ra.width
-                        my = (y_lo + y_hi) / 2
-                        key = (round(wx, 2), round(my, 2), "v")
-                        if key not in placed_doors:
-                            placed_doors.add(key)
-                            hy = my - door_w / 2
-                            msp.add_line((wx, hy, z_offset), (wx, hy + door_w, z_offset), dxfattribs={"layer": "A-DOOR"})
-                            msp.add_arc(center=(wx, hy), radius=door_w, start_angle=90, end_angle=180, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
-                elif abs(rb.x + rb.width - ra.x) < 0.05:
-                    y_lo = max(ra.y, rb.y)
-                    y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
-                    if y_hi - y_lo > door_w + 0.1:
-                        wx = rb.x + rb.width
-                        my = (y_lo + y_hi) / 2
-                        key = (round(wx, 2), round(my, 2), "v")
-                        if key not in placed_doors:
-                            placed_doors.add(key)
-                            hy = my - door_w / 2
-                            msp.add_line((wx, hy, z_offset), (wx, hy + door_w, z_offset), dxfattribs={"layer": "A-DOOR"})
-                            msp.add_arc(center=(wx, hy + door_w), radius=door_w, start_angle=270, end_angle=360, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
-                # Horizontal shared wall: ra top ≈ rb bottom
-                if abs(ra.y + ra.depth - rb.y) < 0.05:
-                    x_lo = max(ra.x, rb.x)
-                    x_hi = min(ra.x + ra.width, rb.x + rb.width)
-                    if x_hi - x_lo > door_w + 0.1:
-                        wy = ra.y + ra.depth
-                        mx = (x_lo + x_hi) / 2
-                        key = (round(mx, 2), round(wy, 2), "h")
-                        if key not in placed_doors:
-                            placed_doors.add(key)
-                            hx = mx - door_w / 2
-                            msp.add_line((hx, wy, z_offset), (hx + door_w, wy, z_offset), dxfattribs={"layer": "A-DOOR"})
-                            msp.add_arc(center=(hx, wy), radius=door_w, start_angle=0, end_angle=90, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
-                elif abs(rb.y + rb.depth - ra.y) < 0.05:
-                    x_lo = max(ra.x, rb.x)
-                    x_hi = min(ra.x + ra.width, rb.x + rb.width)
-                    if x_hi - x_lo > door_w + 0.1:
-                        wy = rb.y + rb.depth
-                        mx = (x_lo + x_hi) / 2
-                        key = (round(mx, 2), round(wy, 2), "h")
-                        if key not in placed_doors:
-                            placed_doors.add(key)
-                            hx = mx - door_w / 2
-                            msp.add_line((hx, wy, z_offset), (hx + door_w, wy, z_offset), dxfattribs={"layer": "A-DOOR"})
-                            msp.add_arc(center=(hx + door_w, wy), radius=door_w, start_angle=90, end_angle=180, dxfattribs={"layer": "A-DOOR", "elevation": z_offset})
+        # 3. Draw opening symbols in the gaps
+        for wall_openings in openings_map.values():
+            for op in wall_openings:
+                if op.kind == "door":
+                    draw_door(msp, op.cx, op.cy, op.width,
+                              op.is_vertical_wall, swing_left=True,
+                              layer="A-DOOR", z=z_offset)
+                elif op.kind == "window":
+                    draw_window(msp, op.cx, op.cy, op.width,
+                                not op.is_vertical_wall, ewt_m,
+                                layer="A-WINDOW", z=z_offset)
+                elif op.kind == "ventilator":
+                    draw_ventilator(msp, op.cx, op.cy,
+                                    not op.is_vertical_wall,
+                                    layer="A-VENTILATOR", z=z_offset)
 
-        # ── 2C: Window symbols (3 parallel lines on exterior walls) ─────────
-        windows = build_windows(rooms, bld_x, bld_y, bld_w, bld_d)
-        win_gap = 0.04  # 40 mm between the 3 window lines
-        for win in windows:
-            hw = win.width / 2
-            if win.is_horizontal:
-                for off in (-win_gap, 0.0, win_gap):
-                    msp.add_line(
-                        (win.cx - hw, win.cy + off, z_offset),
-                        (win.cx + hw, win.cy + off, z_offset),
-                        dxfattribs={"layer": "A-WINDOW"},
-                    )
-            else:
-                for off in (-win_gap, 0.0, win_gap):
-                    msp.add_line(
-                        (win.cx + off, win.cy - hw, z_offset),
-                        (win.cx + off, win.cy + hw, z_offset),
-                        dxfattribs={"layer": "A-WINDOW"},
-                    )
+        # 4. Staircase treads + cut line + UP arrow
+        for room in rooms:
+            if room.type == "staircase":
+                draw_staircase(msp, room, layer="A-STAIR", z=z_offset)
 
-        # ── Room labels ──────────────────────────────────────────────────────
+        # 5. Room labels in feet-inches
         for room in rooms:
             cx = room.x + room.width / 2
             cy = room.y + room.depth / 2
+            label = (f"{room.name}\\P"
+                     f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}")
             msp.add_mtext(
-                f"{room.name}\\P{room.area}m²",
+                label,
                 dxfattribs={
                     "layer": "TEXT",
-                    "char_height": 0.25,
+                    "char_height": 0.2,
                     "insert": (cx, cy, z_offset),
-                    "attachment_point": 5,  # MIDDLE_CENTER
+                    "attachment_point": 5,
                 },
             )
 
-        # ── Columns ──────────────────────────────────────────────────────────
+        # 6. Columns
         half = 0.15
         seen: set = set()
         for col in floor_plan.columns:
-            key = (round(col.x, 2), round(col.y, 2))
-            if key in seen:
+            col_key = (round(col.x, 2), round(col.y, 2))
+            if col_key in seen:
                 continue
-            seen.add(key)
+            seen.add(col_key)
             pts_col = [
                 (col.x - half, col.y - half),
                 (col.x + half, col.y - half),
@@ -351,37 +315,68 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 (col.x - half, col.y + half),
             ]
             msp.add_lwpolyline(
-                pts_col,
-                close=True,
+                pts_col, close=True,
                 dxfattribs={"layer": "S-COLUMN", "elevation": z_offset},
             )
 
-        # ── Overall dimension lines ──────────────────────────────────────────
-        min_x = min(r.x for r in rooms)
-        max_x = max(r.x + r.width  for r in rooms)
-        min_y = min(r.y for r in rooms)
-        max_y = max(r.y + r.depth  for r in rooms)
-        dim_offset = 1.5
-        msp.add_linear_dim(
-            base=(min_x, min_y - dim_offset),
-            p1=(min_x, min_y),
-            p2=(max_x, min_y),
-            angle=0,
-            dxfattribs={"layer": "DIM-LINE"},
-        ).render()
-        msp.add_linear_dim(
-            base=(min_x - dim_offset, min_y),
-            p1=(min_x, min_y),
-            p2=(min_x, max_y),
-            angle=90,
-            dxfattribs={"layer": "DIM-LINE"},
-        ).render()
+        # 6a. Bold building outline (unary_union of room boxes)
+        footprint = draw_building_footprint(msp, rooms, layer="A-FOOTPRINT", z=z_offset)
 
-    # Title annotation
-    msp.add_mtext(
-        f"PlanForge | {project_name} | Layout {layout.id} — {layout.name}",
-        dxfattribs={"layer": "TEXT", "char_height": 0.5, "insert": (0, -3, 0)},
-    )
+        # 6b. Structural grid (ground floor only)
+        if floor_plan.floor == 0:
+            draw_structural_grid(msp, rooms, bld_x, bld_y, bld_w, bld_d,
+                                 layer="S-GRID", z=z_offset)
+
+        # 6c. Furniture per room
+        for room in rooms:
+            draw_furniture(msp, room, layer="A-FURNITURE", z=z_offset)
+
+        # 6d. Open terrace hatching (ground floor only)
+        if floor_plan.floor == 0 and footprint is not None:
+            from shapely.geometry import Polygon as _SPoly
+            from shapely.geometry import box as _sbox
+            plot_poly = (
+                _SPoly([(float(x), float(y)) for x, y in cfg.plot_corners])
+                if cfg.plot_shape == "quadrilateral" and cfg.plot_corners
+                else _sbox(0, 0, cfg.plot_width, cfg.plot_length)
+            )
+            draw_open_terrace(msp, plot_poly, footprint, layer="A-TERRACE", z=z_offset)
+
+        # 7. Feet-inches dimension chains
+        xs = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
+        ys = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
+        draw_dimension_chain(msp, xs, fixed_coord=bld_y, offset=-1.5,
+                             is_horizontal=True, layer="DIM-LINE", z=z_offset)
+        draw_dimension_chain(msp, ys, fixed_coord=bld_x + bld_w, offset=1.5,
+                             is_horizontal=False, layer="DIM-LINE", z=z_offset)
+
+    # ── North arrow (top-right, drawn once outside floor loop) ───────────────
+    if global_max_x < float("inf"):
+        north_dir = getattr(cfg, "road_side", "S") or "S"
+        draw_north_arrow(msp, cx=global_max_x + 2.5, cy=global_max_y - 1.5,
+                         north_dir=north_dir, size=0.8, layer="TEXT")
+
+        # ── Setback dimension callouts (ground floor extents) ─────────────────
+        draw_setback_zones(msp, cfg, gf_bld_x, gf_bld_y, gf_bld_w, gf_bld_d,
+                           layer="DIM-SETBACK", z=0.0)
+
+        # ── Compound boundary wall with gate ─────────────────────────────────
+        draw_compound_wall(msp, cfg, layer="A-COMPOUND-WALL", z=0.0)
+
+        # ── Title block (below the drawing) ───────────────────────────────────
+        gf_sqft = sum(r.area for r in layout.ground_floor.rooms) * 10.764
+        ff_sqft = sum(r.area for r in layout.first_floor.rooms) * 10.764
+        draw_title_block(
+            msp,
+            project_name=project_name,
+            layout_id=layout.id,
+            gf_area_sqft=gf_sqft,
+            ff_area_sqft=ff_sqft,
+            plot_w=cfg.plot_width,
+            plot_l=cfg.plot_length,
+            insert_x=global_min_x,
+            insert_y=global_min_y - 5.5,
+        )
 
     # ezdxf writes DXF as text (not binary) — use StringIO then encode
     text_buf = StringIO()
@@ -426,7 +421,7 @@ async def export_boq(
 
 def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     try:
-        import openpyxl
+        import openpyxl  # noqa: F401
     except ImportError:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,
                             detail="openpyxl not installed. Run: uv add openpyxl")
