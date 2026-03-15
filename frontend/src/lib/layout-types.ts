@@ -59,11 +59,18 @@ export interface BOQItem {
   description: string;
   quantity: number;
   unit: string;
+  rate: number;
+  amount: number;
 }
 
 export interface BOQResponse {
   project_name: string;
   layout_id: string;
+  city: string;
+  rates_note: string;
+  total_cost: number;
+  generic_total_cost: number | null;
+  cost_difference: number | null;
   items: BOQItem[];
 }
 
@@ -81,10 +88,24 @@ export const CITIES = [
   { value: "chennai", label: "Chennai (CMDA)" },
   { value: "delhi", label: "Delhi (DDA/MCD)" },
   { value: "hyderabad", label: "Hyderabad (GHMC)" },
+  { value: "mumbai", label: "Mumbai (MCGM)" },
   { value: "pune", label: "Pune (PMC)" },
 ] as const;
 
 export type CityValue = (typeof CITIES)[number]["value"];
+
+// Municipality options that map to per-city JSON rule files in the backend
+export const MUNICIPALITIES = [
+  { value: "", label: "Generic (NBC)" },
+  { value: "Chennai (CMDA)", label: "Chennai (CMDA)" },
+  { value: "Bangalore (BBMP)", label: "Bangalore (BBMP)" },
+  { value: "Hyderabad (GHMC)", label: "Hyderabad (GHMC)" },
+  { value: "Pune (PMC)", label: "Pune (PMC)" },
+  { value: "Mumbai (MCGM)", label: "Mumbai (MCGM)" },
+  { value: "Other", label: "Other (specify below)" },
+] as const;
+
+export type MunicipalityValue = (typeof MUNICIPALITIES)[number]["value"];
 
 // All known room types
 export const ROOM_TYPES = [

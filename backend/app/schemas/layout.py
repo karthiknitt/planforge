@@ -56,3 +56,23 @@ class LayoutOut(BaseModel):
 class GenerateResponse(BaseModel):
     project_id: str
     layouts: list[LayoutOut]
+
+
+class BOQItemOut(BaseModel):
+    item: str
+    description: str
+    quantity: float
+    unit: str
+    rate: float = 0.0
+    amount: float = 0.0
+
+
+class BOQOut(BaseModel):
+    project_name: str
+    layout_id: str
+    city: str = "Generic"
+    rates_note: str = "Generic rates (2026)"
+    total_cost: float = 0.0
+    generic_total_cost: float | None = None
+    cost_difference: float | None = None
+    items: list[BOQItemOut] = []

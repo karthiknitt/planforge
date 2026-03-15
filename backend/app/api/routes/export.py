@@ -396,6 +396,7 @@ async def export_boq(
     project_id: str,
     layout_id: str = "A",
     fmt: str = "json",
+    city: str = "Generic",
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -409,7 +410,7 @@ async def export_boq(
                             detail=f"Layout {layout_id!r} not found")
 
     engine = QuantityEngine()
-    boq = engine.calculate(layout, cfg, project_name=project.name)
+    boq = engine.calculate(layout, cfg, project_name=project.name, city=city)
 
     if fmt == "excel":
         plan = await _get_plan_tier(user_id, db)
@@ -438,28 +439,52 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     ws = wb.active
     ws.title = "BOQ"
 
-    # Header
-    ws.merge_cells("A1:E1")
+    # Title row 1: project + layout
+    ws.merge_cells("A1:F1")
     ws["A1"] = f"Bill of Quantities — {boq.project_name} / Layout {boq.layout_id}"
     ws["A1"].font = Font(bold=True, size=13)
     ws["A1"].alignment = Alignment(horizontal="center")
 
+    # Title row 2: city / rates note
+    ws.merge_cells("A2:F2")
+    ws["A2"] = boq.rates_note
+    ws["A2"].font = Font(italic=True, size=10, color="555555")
+    ws["A2"].alignment = Alignment(horizontal="center")
+
     # Column headers
     headers = ["S.No", "Item Description", "Quantity", "Unit", "Rate (₹)", "Amount (₹)"]
     for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=3, column=col, value=h)
+        cell = ws.cell(row=4, column=col, value=h)
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="1E3A5F")
         cell.alignment = Alignment(horizontal="center")
 
     # Data rows
-    for row_idx, item in enumerate(boq.line_items, start=4):
+    for row_idx, item in enumerate(boq.line_items, start=5):
         ws.cell(row=row_idx, column=1, value=item.item)
         ws.cell(row=row_idx, column=2, value=item.description)
         ws.cell(row=row_idx, column=3, value=item.quantity)
         ws.cell(row=row_idx, column=4, value=item.unit)
-        ws.cell(row=row_idx, column=5, value="")   # rate — user fills
-        ws.cell(row=row_idx, column=6, value="")   # amount — user fills
+        ws.cell(row=row_idx, column=5, value=round(item.rate, 2) if item.rate else "")
+        ws.cell(row=row_idx, column=6, value=round(item.amount) if item.amount else "")
+
+    # Total row
+    total_row = len(boq.line_items) + 6
+    ws.cell(row=total_row, column=2, value="TOTAL ESTIMATED COST")
+    ws.cell(row=total_row, column=2).font = Font(bold=True)
+    ws.cell(row=total_row, column=6, value=round(boq.total_cost))
+    ws.cell(row=total_row, column=6).font = Font(bold=True)
+
+    # City comparison row
+    if boq.city != "Generic" and boq.cost_difference is not None:
+        diff = boq.cost_difference
+        diff_label = (f"vs Generic: +₹{diff:,.0f} more" if diff > 0
+                      else f"vs Generic: ₹{abs(diff):,.0f} less")
+        compare_row = total_row + 1
+        ws.cell(row=compare_row, column=2, value=diff_label)
+        ws.cell(row=compare_row, column=2).font = Font(
+            italic=True, color="CC0000" if diff > 0 else "007700"
+        )
 
     # Auto-width columns
     for col in ws.columns:
@@ -467,7 +492,7 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
         ws.column_dimensions[col[0].column_letter].width = max(max_len + 2, 12)
 
     # Footer note
-    note_row = len(boq.line_items) + 5
+    note_row = len(boq.line_items) + 9
     ws.cell(row=note_row, column=1, value="Note: Quantities are approximate. "
             "Verify with site measurements before procurement.")
     ws.cell(row=note_row, column=1).font = Font(italic=True, color="888888")
