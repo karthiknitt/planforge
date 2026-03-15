@@ -1,15 +1,23 @@
 "use client";
 
-import { Lock } from "lucide-react";
+import { Check, Copy, Link2, Lock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
 import { ChatPanel } from "@/components/chat-panel";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
+import { LayoutCompareView } from "@/components/layout-compare-view";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useSession } from "@/lib/auth-client";
 import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
 
@@ -104,10 +112,51 @@ export function LayoutViewer({
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
   const [floor, setFloor] = useState(0);
-  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat">("plan");
+  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat" | "compare">(
+    "plan"
+  );
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  async function handleShare() {
+    if (!session) return;
+    setShareLoading(true);
+    setShareError("");
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/share`,
+        { method: "POST", headers: { "X-User-Id": session.user.id } }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.detail ?? `Failed to generate share link (${res.status})`);
+      }
+      const json = await res.json();
+      const fullUrl = `${window.location.origin}${json.share_url}`;
+      setShareUrl(fullUrl);
+      setShareOpen(true);
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : "Could not generate share link");
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: select the input text
+    }
+  }
 
   async function handleDownload(format: "pdf" | "dxf") {
     if (!session) return;
@@ -322,9 +371,9 @@ export function LayoutViewer({
         </details>
       )}
 
-      {/* Tabs: Floor Plan | Section | BOQ | Chat */}
+      {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat */}
       <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 w-fit">
-        {(["plan", "section", "boq", "chat"] as const).map((tab) => (
+        {(["plan", "section", "boq", "compare", "chat"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -342,7 +391,9 @@ export function LayoutViewer({
                 ? "Section View"
                 : tab === "boq"
                   ? "BOQ"
-                  : "Chat"}
+                  : tab === "compare"
+                    ? "Compare"
+                    : "Chat"}
           </button>
         ))}
       </div>
@@ -422,6 +473,19 @@ export function LayoutViewer({
 
       {activeTab === "boq" && (
         <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
+      )}
+
+      {activeTab === "compare" && (
+        <LayoutCompareView
+          layouts={generateData.layouts}
+          plotWidth={plotWidth}
+          plotLength={plotLength}
+          roadSide={roadSide}
+          plotShape={plotShape}
+          plotFrontWidth={plotFrontWidth}
+          plotRearWidth={plotRearWidth}
+          plotCorners={plotCorners}
+        />
       )}
 
       {activeTab === "chat" &&
