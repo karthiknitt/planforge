@@ -1,0 +1,21 @@
+{
+  "city": "Mumbai",
+  "authority": "MCGM",
+  "state": "Maharashtra",
+  "min_bedroom_sqm": 9.5,
+  "min_kitchen_sqm": 4.5,
+  "min_toilet_sqm": 2.8,
+  "min_stair_width_m": 0.9,
+  "external_wall_mm": 230,
+  "internal_wall_mm": 115,
+  "max_far": 1.33,
+  "max_ground_coverage_pct": 50,
+  "max_building_height_m": 15.0,
+  "setbacks": {
+    "front_min_m": 4.5,
+    "rear_min_m": 3.0,
+    "side_min_m": 1.5,
+    "note": "MCGM Development Control and Promotion Regulations (DCPR) 2034 — suburban residential; island city FAR is different"
+  },
+  "notes": "Municipal Corporation of Greater Mumbai (MCGM) DCPR 2034 for suburban residential plots"
+}

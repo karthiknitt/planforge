@@ -62,6 +62,7 @@ interface LayoutSectionProps {
   plotRearWidth?: number;
   plotCorners?: [number, number][];
   vastuEnabled?: boolean;
+  municipality?: string | null;
 }
 
 async function LayoutSection({
@@ -78,6 +79,7 @@ async function LayoutSection({
   plotRearWidth,
   plotCorners,
   vastuEnabled,
+  municipality,
 }: LayoutSectionProps) {
   const generateData = await fetchLayouts(projectId, userId);
   return (
@@ -95,6 +97,7 @@ async function LayoutSection({
       plotRearWidth={plotRearWidth}
       plotCorners={plotCorners}
       vastuEnabled={vastuEnabled}
+      municipality={municipality}
     />
   );
 }
@@ -245,7 +248,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             City / Rules
           </p>
-          <p className="mt-0.5 font-medium capitalize">{project.city ?? "NBC Defaults"}</p>
+          <p className="mt-0.5 font-medium capitalize">
+            {project.municipality ?? project.city ?? "NBC Defaults"}
+          </p>
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -300,6 +305,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               : undefined
           }
           vastuEnabled={project.vastuEnabled}
+          municipality={project.municipality}
         />
       </Suspense>
     </main>

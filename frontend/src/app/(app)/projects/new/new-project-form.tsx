@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
-import { CITIES, type CustomRoomSpec, ROOM_TYPES } from "@/lib/layout-types";
+import { CITIES, type CustomRoomSpec, MUNICIPALITIES, ROOM_TYPES } from "@/lib/layout-types";
 
 const DIRECTIONS = ["N", "S", "E", "W"] as const;
 const DIRECTION_LABELS: Record<string, string> = { N: "North", S: "South", E: "East", W: "West" };
@@ -257,6 +257,8 @@ export default function NewProjectPage() {
     toilets: "2",
     parking: false,
     city: "other",
+    municipality: "",
+    municipality_other: "",
     road_width_m: "30",
     has_pooja: false,
     has_study: false,
@@ -365,6 +367,11 @@ export default function NewProjectPage() {
           form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null;
       }
 
+      const resolvedMunicipality =
+        form.municipality === "Other"
+          ? form.municipality_other.trim() || null
+          : form.municipality || null;
+
       Object.assign(payload, {
         setback_front: feetToMetres(form.setback_front),
         setback_rear: feetToMetres(form.setback_rear),
@@ -373,6 +380,7 @@ export default function NewProjectPage() {
         road_side: form.road_side,
         north_direction: OPPOSITE[form.road_side],
         city: form.city,
+        municipality: resolvedMunicipality,
         road_width_m: Math.round(parseFloat(form.road_width_m) * 0.3048),
         vastu_enabled: form.vastu_enabled,
         // Multi-floor
@@ -602,7 +610,7 @@ export default function NewProjectPage() {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="city">City / Compliance rules</Label>
+            <Label htmlFor="city">City / FAR & Setback tables</Label>
             <Select id="city" value={form.city} onChange={(e) => set("city", e.target.value)}>
               {CITIES.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -614,6 +622,38 @@ export default function NewProjectPage() {
               Applies city-specific setback tables and FAR limits.
             </p>
           </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="municipality">Municipality / Building Authority</Label>
+            <Select
+              id="municipality"
+              value={form.municipality}
+              onChange={(e) => set("municipality", e.target.value)}
+            >
+              {MUNICIPALITIES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Applies bye-law specific ground coverage, FAR, and height limits.
+            </p>
+          </div>
+
+          {form.municipality === "Other" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="municipality_other">Specify authority name</Label>
+              <input
+                id="municipality_other"
+                type="text"
+                placeholder="e.g. Trichy Corporation (TCC)"
+                value={form.municipality_other}
+                onChange={(e) => set("municipality_other", e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          )}
         </div>
 
         {/* ── 3. Orientation & setbacks ──────────────────────────────── */}

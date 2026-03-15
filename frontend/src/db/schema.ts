@@ -125,6 +125,8 @@ export const project = pgTable(
     numFloors: integer("num_floors").default(1).notNull(),
     hasStilt: boolean("has_stilt").default(false).notNull(),
     hasBasement: boolean("has_basement").default(false).notNull(),
+    // Municipality / building authority selector (e.g. "Chennai (CMDA)")
+    municipality: text("municipality"),
     // Arbitrary room config JSON (Phase C)
     customRoomConfig: text("custom_room_config"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -7,6 +7,16 @@ from .models import ComplianceResult, Layout, PlotConfig, RoomType
 
 _RULES_PATH = Path(__file__).parent.parent / "config" / "compliance_rules.json"
 _CITY_PATH  = Path(__file__).parent.parent / "config" / "city_rules.json"
+_CITIES_DIR = Path(__file__).parent.parent / "config" / "cities"
+
+_MUNICIPALITY_MAP: dict[str, str] = {
+    "Chennai (CMDA)":     "chennai_cmda.json",
+    "Bangalore (BBMP)":   "bangalore_bbmp.json",
+    "Hyderabad (GHMC)":   "hyderabad_ghmc.json",
+    "Pune (PMC)":         "pune_pmc.json",
+    "Mumbai (MCGM)":      "mumbai_mcgm.json",
+    "Generic (NBC)":      "nbc_generic.json",
+}
 
 
 def load_rules() -> dict:
@@ -15,6 +25,20 @@ def load_rules() -> dict:
 
 def load_city_rules() -> dict:
     return json.loads(_CITY_PATH.read_text())
+
+
+def load_municipality_rules(municipality: str | None) -> dict:
+    """Load per-municipality compliance thresholds (FAR, coverage, setbacks).
+
+    Falls back to nbc_generic.json when municipality is None or unknown.
+    """
+    if municipality:
+        filename = _MUNICIPALITY_MAP.get(municipality)
+        if filename:
+            path = _CITIES_DIR / filename
+            if path.exists():
+                return json.loads(path.read_text())
+    return json.loads((_CITIES_DIR / "nbc_generic.json").read_text())
 
 
 def get_city_setbacks(city: str, plot_area: float, city_data: dict) -> dict | None:
@@ -46,6 +70,7 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
         rules = load_rules()
 
     city_data = load_city_rules()
+    muni_rules = load_municipality_rules(getattr(cfg, "municipality", None))
     violations: list[str] = []
     warnings: list[str] = []
 
@@ -308,13 +333,14 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
         plot_area = cfg.plot_width * cfg.plot_length
     coverage_pct = (footprint / plot_area) * 100
 
-    max_cov = rules["max_floor_coverage_pct"]
+    max_cov = muni_rules.get("max_ground_coverage_pct", rules["max_floor_coverage_pct"])
+    muni_label = muni_rules.get("authority", "NBC")
     if coverage_pct > max_cov:
         violations.append(
-            f"Floor coverage {coverage_pct:.1f}% > {max_cov}% maximum — increase setbacks"
+            f"Floor coverage {coverage_pct:.1f}% > {max_cov}% maximum ({muni_label}) — increase setbacks"
         )
 
-    # --- FAR check (city-aware) ---
+    # --- FAR check (municipality-aware, falls back to city_rules table) ---
     # Count habitable floors (basement excluded per most Indian bylaws)
     habitable_floors = sum([
         1,  # GF or stilt
@@ -322,14 +348,21 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
         1 if layout.second_floor is not None else 0,
     ])
     total_built = footprint * habitable_floors
-    far_limit = get_city_far(cfg.city, cfg.road_width_m, city_data)
-    if far_limit is None:
+    # Municipality-specific FAR takes priority; city_rules road-width table is secondary
+    muni_far = muni_rules.get("max_far")
+    city_far = get_city_far(cfg.city, cfg.road_width_m, city_data)
+    far_limit: float
+    if muni_far is not None:
+        far_limit = float(muni_far)
+    elif city_far is not None:
+        far_limit = city_far
+    else:
         far_limit = rules.get("default_far", 1.5)
     actual_far = total_built / plot_area
+    far_source = muni_rules.get("authority", cfg.city.title())
     if actual_far > far_limit + 0.01:
         warnings.append(
-            f"FAR {actual_far:.2f} exceeds city limit {far_limit:.2f} for {cfg.city.title()} "
-            f"(road width {cfg.road_width_m} m)"
+            f"FAR {actual_far:.2f} exceeds limit {far_limit:.2f} ({far_source})"
         )
 
     # --- Room boundary vs. setback lines (above-ground floors only) ---

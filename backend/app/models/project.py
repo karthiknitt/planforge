@@ -64,6 +64,9 @@ class Project(Base):
     has_basement: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
                                                 server_default=text("false"))
 
+    # Municipality / building authority (e.g. "Chennai (CMDA)", "Bangalore (BBMP)")
+    municipality: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     # Quadrilateral plot corners — JSON-encoded list of 4 (x,y) tuples (metres)
     plot_corners: Mapped[str | None] = mapped_column(Text, nullable=True)
 

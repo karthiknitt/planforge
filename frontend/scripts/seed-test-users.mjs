@@ -14,15 +14,14 @@
  *   <hex(16-byte-salt)>:<hex(scrypt(password, salt, 64, N=16384 r=16 p=1))>
  */
 
-import { scrypt, randomBytes } from "node:crypto";
+import { randomBytes, scrypt } from "node:crypto";
 import { promisify } from "node:util";
 import postgres from "postgres";
 
 const scryptAsync = promisify(scrypt);
 
 function generateId(length = 21) {
-  const ALPHABET =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   const result = [];
   while (result.length < length) {
     const bytes = randomBytes(length * 3);
@@ -80,8 +79,7 @@ const TEST_USERS = [
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  "postgresql://planforge:planforge@localhost:5432/planforge";
+  process.env.DATABASE_URL ?? "postgresql://planforge:planforge@localhost:5432/planforge";
 
 async function seed() {
   console.log("PlanForge — Seeding test users");
@@ -91,8 +89,7 @@ async function seed() {
   const now = new Date();
 
   for (const u of TEST_USERS) {
-    const existing =
-      await sql`SELECT id FROM "user" WHERE email = ${u.email}`;
+    const existing = await sql`SELECT id FROM "user" WHERE email = ${u.email}`;
 
     if (existing.length > 0) {
       // User already exists — update plan_tier and re-hash password

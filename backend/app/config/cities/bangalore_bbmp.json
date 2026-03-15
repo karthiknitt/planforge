@@ -1,0 +1,21 @@
+{
+  "city": "Bangalore",
+  "authority": "BBMP",
+  "state": "Karnataka",
+  "min_bedroom_sqm": 9.5,
+  "min_kitchen_sqm": 4.5,
+  "min_toilet_sqm": 2.8,
+  "min_stair_width_m": 0.9,
+  "external_wall_mm": 230,
+  "internal_wall_mm": 115,
+  "max_far": 2.25,
+  "max_ground_coverage_pct": 60,
+  "max_building_height_m": 14.5,
+  "setbacks": {
+    "front_min_m": 3.0,
+    "rear_min_m": 2.0,
+    "side_min_m": 1.5,
+    "note": "BBMP Building Bye-laws 2003 (amended) — FAR 2.25 applies to plots <200 sqm; larger plots may differ"
+  },
+  "notes": "Bruhat Bengaluru Mahanagara Palike (BBMP) building regulations for residential plots up to 200 sqm"
+}

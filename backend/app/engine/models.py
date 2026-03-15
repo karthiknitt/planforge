@@ -94,6 +94,8 @@ class PlotConfig:
     num_floors: int = 1                   # 1=G, 2=G+1, 3=G+2
     has_stilt: bool = False               # floor 0 is stilt (parking only)
     has_basement: bool = False            # add basement floor (-1)
+    # Municipality / building authority (e.g. "Chennai (CMDA)") — for per-city rule loading
+    municipality: str | None = None
     # Custom room config (arbitrary rooms, Phase C)
     custom_room_config: list | None = None  # list of dicts from CustomRoomSpec
 

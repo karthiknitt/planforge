@@ -48,6 +48,8 @@ class ProjectCreate(BaseModel):
     num_floors: int = Field(default=1, ge=1, le=3, description="Number of floors: 1=G, 2=G+1, 3=G+2")
     has_stilt: bool = False
     has_basement: bool = False
+    # Municipality / building authority selector
+    municipality: str | None = None
     # Arbitrary rooms (Phase C)
     custom_room_config: list[CustomRoomSpec] | None = None
 
@@ -79,6 +81,7 @@ class ProjectUpdate(BaseModel):
     num_floors: int | None = Field(default=None, ge=1, le=3)
     has_stilt: bool | None = None
     has_basement: bool | None = None
+    municipality: str | None = None
     custom_room_config: list[CustomRoomSpec] | None = None
 
 
@@ -111,6 +114,7 @@ class ProjectRead(BaseModel):
     num_floors: int = 1
     has_stilt: bool = False
     has_basement: bool = False
+    municipality: str | None = None
     custom_room_config: str | None = None   # raw JSON string from DB
     created_at: datetime
     updated_at: datetime

@@ -1,0 +1,21 @@
+{
+  "city": "Hyderabad",
+  "authority": "GHMC",
+  "state": "Telangana",
+  "min_bedroom_sqm": 9.5,
+  "min_kitchen_sqm": 4.5,
+  "min_toilet_sqm": 2.8,
+  "min_stair_width_m": 0.9,
+  "external_wall_mm": 230,
+  "internal_wall_mm": 115,
+  "max_far": 1.5,
+  "max_ground_coverage_pct": 55,
+  "max_building_height_m": 12.0,
+  "setbacks": {
+    "front_min_m": 3.0,
+    "rear_min_m": 2.0,
+    "side_min_m": 1.5,
+    "note": "GHMC Building Permission Rules 2012 — FAR 1.5 for residential; higher FAR for commercial"
+  },
+  "notes": "Greater Hyderabad Municipal Corporation (GHMC) building regulations for residential use"
+}
