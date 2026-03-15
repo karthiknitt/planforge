@@ -26,7 +26,7 @@ const plans: Array<{
   tagline: string;
   highlight: boolean;
   cta: string;
-  checkoutPlan: "basic" | "pro" | null;
+  checkoutPlan: "basic" | "pro" | "firm" | null;
   features: Array<{ text: string; included: boolean }>;
 }> = [
   {
@@ -81,6 +81,26 @@ const plans: Array<{
       { text: "DXF export for AutoCAD", included: true },
       { text: "BOQ Excel export", included: true },
       { text: "Priority support", included: true },
+      { text: "Team / multi-seat access", included: false },
+    ],
+  },
+  {
+    name: "Firm",
+    price: "₹2,999",
+    period: "/month",
+    tagline: "For civil engineering firms with multiple engineers.",
+    highlight: false,
+    cta: "Subscribe — ₹2,999/mo",
+    checkoutPlan: "firm",
+    features: [
+      { text: "Everything in Pro", included: true },
+      { text: "Up to 5 engineers", included: true },
+      { text: "Shared project pool", included: true },
+      { text: "Team admin dashboard", included: true },
+      { text: "DXF export for AutoCAD", included: true },
+      { text: "BOQ Excel export", included: true },
+      { text: "Priority support", included: true },
+      { text: "Team / multi-seat access", included: true },
     ],
   },
 ];
@@ -143,7 +163,7 @@ export default function PricingPage() {
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Pricing cards */}
-        <StaggerChildren className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto py-16 lg:py-20">
+        <StaggerChildren className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto py-16 lg:py-20">
           {plans.map((plan) => (
             <StaggerItem key={plan.name}>
               <div

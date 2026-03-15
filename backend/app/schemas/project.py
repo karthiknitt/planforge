@@ -52,6 +52,8 @@ class ProjectCreate(BaseModel):
     municipality: str | None = None
     # Arbitrary rooms (Phase C)
     custom_room_config: list[CustomRoomSpec] | None = None
+    # Team assignment (optional — assign project to team)
+    team_id: int | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -83,6 +85,7 @@ class ProjectUpdate(BaseModel):
     has_basement: bool | None = None
     municipality: str | None = None
     custom_room_config: list[CustomRoomSpec] | None = None
+    team_id: int | None = None
 
 
 class ProjectRead(BaseModel):
@@ -116,6 +119,7 @@ class ProjectRead(BaseModel):
     has_basement: bool = False
     municipality: str | None = None
     custom_room_config: str | None = None   # raw JSON string from DB
+    team_id: int | None = None
     created_at: datetime
     updated_at: datetime
 

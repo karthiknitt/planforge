@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import { LanguageToggle } from "@/components/language-toggle";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
@@ -40,6 +41,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               New Project
             </Link>
             <Link
+              href="/team"
+              className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+            >
+              Team
+            </Link>
+            <Link
               href="/pricing"
               className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
             >
@@ -49,6 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
           {/* Right */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            <LanguageToggle />
             <ThemeToggle />
             {session && <UserMenu name={session.user.name} email={session.user.email} />}
           </div>

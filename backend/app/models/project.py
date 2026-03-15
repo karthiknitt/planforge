@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, Float, Integer, Numeric, String, Text, text
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
@@ -75,6 +75,11 @@ class Project(Base):
     # Arbitrary room config JSON (Phase C)
     custom_room_config: Mapped[str | None]   = mapped_column(
         String, nullable=True)   # JSON array of CustomRoomSpec
+
+    # Team membership — nullable for solo (non-team) projects
+    team_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teams.id"), nullable=True, index=True
+    )
 
     # Share link token (public read-only access)
     share_token: Mapped[str | None] = mapped_column(

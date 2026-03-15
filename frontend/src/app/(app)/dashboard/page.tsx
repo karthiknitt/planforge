@@ -1,18 +1,30 @@
-import { desc, eq } from "drizzle-orm";
-import { Building2, Plus } from "lucide-react";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { Building2, Users } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
-import { Button } from "@/components/ui/button";
 import { db } from "@/db";
-import { project as projectTable, user as userTable } from "@/db/schema";
+import {
+  project as projectTable,
+  teamMember as teamMemberTable,
+  user as userTable,
+} from "@/db/schema";
 import { auth } from "@/lib/auth";
+import {
+  DashboardEmptyState,
+  DashboardNewProjectButton,
+  DashboardProjectCount,
+  DashboardTitle,
+  ProjectCardApprovalBadge,
+  ProjectCardBuilding2Icon,
+  ProjectCardViewLink,
+} from "./dashboard-strings";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-const TIER_BADGE = {
+const TIER_BADGE: Record<string, { label: string; className: string }> = {
   free: {
     label: "Free",
     className: "bg-muted/80 text-muted-foreground border border-border/60",
@@ -25,6 +37,10 @@ const TIER_BADGE = {
     label: "Pro",
     className: "bg-primary/10 text-primary border border-primary/25",
   },
+  firm: {
+    label: "Firm",
+    className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
+  },
 };
 
 export default async function DashboardPage() {
@@ -34,7 +50,7 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  const [projects, userRows] = await Promise.all([
+  const [myProjects, userRows, teamMemberships] = await Promise.all([
     db
       .select()
       .from(projectTable)
@@ -45,9 +61,27 @@ export default async function DashboardPage() {
       .from(userTable)
       .where(eq(userTable.id, session.user.id))
       .limit(1),
+    db
+      .select({ teamId: teamMemberTable.teamId })
+      .from(teamMemberTable)
+      .where(eq(teamMemberTable.userId, session.user.id)),
   ]);
+
+  const teamIds = teamMemberships.map((m) => m.teamId);
+  const teamProjects =
+    teamIds.length > 0
+      ? await db
+          .select()
+          .from(projectTable)
+          .where(
+            and(inArray(projectTable.teamId, teamIds), ne(projectTable.userId, session.user.id))
+          )
+          .orderBy(desc(projectTable.createdAt))
+      : [];
+
+  const projects = myProjects;
   const planTier = userRows[0]?.planTier ?? "free";
-  const badge = TIER_BADGE[planTier as keyof typeof TIER_BADGE] ?? TIER_BADGE.free;
+  const badge = TIER_BADGE[planTier] ?? TIER_BADGE.free;
 
   const firstName = session.user.name.split(" ")[0];
 
@@ -58,43 +92,16 @@ export default async function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1
-                className="text-2xl sm:text-3xl font-black text-foreground"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                Welcome back, <span className="text-gradient-orange">{firstName}</span>
-              </h1>
+              <DashboardTitle firstName={firstName} />
               <span
                 className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}
               >
                 {badge.label}
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {projects.length} project{projects.length !== 1 ? "s" : ""}
-              {planTier === "free" && (
-                <>
-                  {" \u00B7 "}
-                  <Link
-                    href="/pricing"
-                    className="text-primary hover:underline underline-offset-4 font-medium"
-                  >
-                    Upgrade
-                  </Link>{" "}
-                  for DXF + BOQ
-                </>
-              )}
-            </p>
+            <DashboardProjectCount count={projects.length} planTier={planTier} />
           </div>
-          <Button
-            asChild
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/15 flex-shrink-0 h-10"
-          >
-            <Link href="/projects/new">
-              <Plus className="h-4 w-4 mr-1.5" />
-              New project
-            </Link>
-          </Button>
+          <DashboardNewProjectButton />
         </div>
       </div>
 
@@ -104,25 +111,7 @@ export default async function DashboardPage() {
           <div className="mx-auto mb-8 w-[160px] opacity-40 pointer-events-none">
             <AnimatedFloorPlan />
           </div>
-          <h3
-            className="text-lg font-bold text-foreground mb-2"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            No projects yet
-          </h3>
-          <p className="text-sm text-muted-foreground mb-8 max-w-xs">
-            Create your first floor plan project and get 5 NBC-compliant layout variations in
-            seconds.
-          </p>
-          <Button
-            asChild
-            className="bg-primary hover:bg-primary/90 text-primary-foreground btn-shine shadow-md shadow-primary/15"
-          >
-            <Link href="/projects/new">
-              <Plus className="h-4 w-4 mr-1.5" />
-              Create first project
-            </Link>
-          </Button>
+          <DashboardEmptyState />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -136,14 +125,7 @@ export default async function DashboardPage() {
               <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
                 {/* Project header */}
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/8 ring-1 ring-primary/15">
-                      <Building2 className="h-4 w-4 text-primary/70" />
-                    </div>
-                    <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                      {p.name}
-                    </span>
-                  </div>
+                  <ProjectCardBuilding2Icon name={p.name} />
                 </div>
 
                 {/* Tags */}
@@ -164,22 +146,7 @@ export default async function DashboardPage() {
                 {/* Approval badge */}
                 {p.approvalStatus && (
                   <div className="flex items-center gap-1.5">
-                    {p.approvalStatus === "approved" ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-400">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                        Approved
-                      </span>
-                    ) : p.approvalStatus === "changes_requested" ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[11px] font-medium text-orange-700 dark:text-orange-400">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-500" />
-                        Changes requested
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                        Awaiting client
-                      </span>
-                    )}
+                    <ProjectCardApprovalBadge status={p.approvalStatus} />
                   </div>
                 )}
 
@@ -192,13 +159,74 @@ export default async function DashboardPage() {
                       year: "numeric",
                     })}
                   </span>
-                  <span className="text-xs font-medium text-primary/70 group-hover:text-primary transition-colors">
-                    View &rarr;
-                  </span>
+                  <ProjectCardViewLink />
                 </div>
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Team Projects section */}
+      {teamProjects.length > 0 && (
+        <div className="animate-fade-up delay-300 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <h2
+              className="text-base font-bold text-foreground"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Team Projects
+            </h2>
+            <span className="text-xs text-muted-foreground">({teamProjects.length})</span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {teamProjects.map((p, i) => (
+              <Link
+                key={p.id}
+                href={`/projects/${p.id}`}
+                className="animate-fade-up block h-full group"
+                style={{ animationDelay: `${100 + i * 60}ms` }}
+              >
+                <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/8 ring-1 ring-primary/15">
+                        <Building2 className="h-4 w-4 text-primary/70" />
+                      </div>
+                      <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                        {p.name}
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 flex-shrink-0">
+                      <Users className="h-2.5 w-2.5" />
+                      Shared
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {p.plotLength} &times; {p.plotWidth} m
+                    </span>
+                    <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {p.numBedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
+                    </span>
+                  </div>
+                  <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
+                    <span className="text-[11px] text-muted-foreground/70">
+                      {new Date(p.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span className="text-xs font-medium text-primary/70 group-hover:text-primary transition-colors">
+                      View &rarr;
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </main>

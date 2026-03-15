@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 
 interface PricingCheckoutButtonProps {
-  plan: "basic" | "pro";
+  plan: "basic" | "pro" | "firm";
   label: string;
   highlight?: boolean;
 }
@@ -52,7 +52,7 @@ export function PricingCheckoutButton({ plan, label, highlight }: PricingCheckou
         amount,
         currency: "INR",
         name: "PlanForge",
-        description: `${plan === "basic" ? "Basic" : "Pro"} Plan — 30 days`,
+        description: `${plan === "basic" ? "Basic" : plan === "pro" ? "Pro" : "Firm"} Plan — 30 days`,
         prefill: {
           name: session.user.name,
           email: session.user.email,

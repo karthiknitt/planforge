@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import { CITIES, type CustomRoomSpec, MUNICIPALITIES, ROOM_TYPES } from "@/lib/layout-types";
+import { useLocale } from "@/lib/locale-context";
 
 const DIRECTIONS = ["N", "S", "E", "W"] as const;
 const DIRECTION_LABELS: Record<string, string> = { N: "North", S: "South", E: "East", W: "West" };
@@ -197,6 +198,7 @@ function CustomRoomRow({
 export default function NewProjectPage() {
   const router = useRouter();
   const { data: session } = useSession();
+  const { t } = useLocale();
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -436,11 +438,9 @@ export default function NewProjectPage() {
           className="text-2xl sm:text-3xl font-black text-foreground mb-2"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          New Project
+          {t("project.newProject")}
         </h1>
-        <p className="text-sm text-muted-foreground/60">
-          Enter your plot details to generate NBC-compliant floor plan options.
-        </p>
+        <p className="text-sm text-muted-foreground/60">{t("project.newProjectHint")}</p>
       </div>
 
       <form
@@ -449,12 +449,12 @@ export default function NewProjectPage() {
       >
         {/* ── 1. Project name ───────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          <Section num="1" title="Project" />
+          <Section num="1" title={t("project.newProject")} />
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="name">Project name</Label>
+            <Label htmlFor="name">{t("project.projectName")}</Label>
             <Input
               id="name"
-              placeholder="e.g. My House — Trichy 2026"
+              placeholder={t("project.projectNamePlaceholder")}
               required
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
@@ -464,21 +464,33 @@ export default function NewProjectPage() {
 
         {/* ── 2. Plot & city ────────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          <Section num="2" title="Plot Dimensions" />
+          <Section num="2" title={t("project.plotDimensions")} />
 
           <div className="flex flex-col gap-1.5">
-            <Label>Plot shape</Label>
+            <Label>{t("project.plotShape")}</Label>
             <div className="flex gap-3">
               {(
                 [
-                  { value: "rectangular", label: "Rectangular", desc: "Standard 4-sided plot" },
-                  { value: "trapezoid", label: "Trapezoid", desc: "Different front & rear widths" },
+                  {
+                    value: "rectangular",
+                    label: t("project.rectangular"),
+                    desc: t("project.rectangularDesc"),
+                  },
+                  {
+                    value: "trapezoid",
+                    label: t("project.trapezoid"),
+                    desc: t("project.trapezoidDesc"),
+                  },
                   {
                     value: "quadrilateral",
-                    label: "Quadrilateral",
-                    desc: "Any convex 4-corner shape",
+                    label: t("project.quadrilateral"),
+                    desc: t("project.quadrilateralDesc"),
                   },
-                ] as const
+                ] as Array<{
+                  value: "rectangular" | "trapezoid" | "quadrilateral";
+                  label: string;
+                  desc: string;
+                }>
               ).map((opt) => (
                 <button
                   key={opt.value}
@@ -500,7 +512,7 @@ export default function NewProjectPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="plot_length">Length / Depth (feet)</Label>
+              <Label htmlFor="plot_length">{t("project.plotLength")}</Label>
               <Input
                 id="plot_length"
                 type="number"
@@ -514,7 +526,7 @@ export default function NewProjectPage() {
             </div>
             {form.plot_shape === "rectangular" ? (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="plot_width">Width (feet)</Label>
+                <Label htmlFor="plot_width">{t("project.plotWidth")}</Label>
                 <Input
                   id="plot_width"
                   type="number"
@@ -539,7 +551,7 @@ export default function NewProjectPage() {
           {form.plot_shape === "trapezoid" && (
             <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="plot_front_width">Front Width (feet)</Label>
+                <Label htmlFor="plot_front_width">{t("project.plotFrontWidth")}</Label>
                 <Input
                   id="plot_front_width"
                   type="number"
@@ -550,10 +562,10 @@ export default function NewProjectPage() {
                   value={form.plot_front_width}
                   onChange={(e) => set("plot_front_width", e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">Road-facing side</p>
+                <p className="text-xs text-muted-foreground">{t("project.roadFacingSide")}</p>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="plot_rear_width">Rear Width (feet)</Label>
+                <Label htmlFor="plot_rear_width">{t("project.plotRearWidth")}</Label>
                 <Input
                   id="plot_rear_width"
                   type="number"
@@ -564,7 +576,7 @@ export default function NewProjectPage() {
                   value={form.plot_rear_width}
                   onChange={(e) => set("plot_rear_width", e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">Opposite side</p>
+                <p className="text-xs text-muted-foreground">{t("project.oppositeSide")}</p>
               </div>
             </div>
           )}
@@ -610,7 +622,7 @@ export default function NewProjectPage() {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="city">City / FAR & Setback tables</Label>
+            <Label htmlFor="city">{t("project.city")}</Label>
             <Select id="city" value={form.city} onChange={(e) => set("city", e.target.value)}>
               {CITIES.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -618,13 +630,11 @@ export default function NewProjectPage() {
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Applies city-specific setback tables and FAR limits.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("project.cityHint")}</p>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="municipality">Municipality / Building Authority</Label>
+            <Label htmlFor="municipality">{t("project.municipality")}</Label>
             <Select
               id="municipality"
               value={form.municipality}

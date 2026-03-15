@@ -6,6 +6,7 @@ import {
   numeric,
   pgTable,
   real,
+  serial,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
@@ -130,6 +131,8 @@ export const project = pgTable(
     municipality: text("municipality"),
     // Arbitrary room config JSON (Phase C)
     customRoomConfig: text("custom_room_config"),
+    // Team assignment — null for solo projects
+    teamId: integer("team_id").references(() => team.id, { onDelete: "set null" }),
     // Share link token (public read-only access)
     shareToken: text("share_token").unique(),
     // Client approval workflow — None | "pending" | "approved" | "changes_requested"
@@ -145,16 +148,62 @@ export const project = pgTable(
   (table) => [index("project_userId_idx").on(table.userId)]
 );
 
+// ── Teams ─────────────────────────────────────────────────────────────────────
+
+export const team = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  ownerId: text("owner_id").notNull(),
+  planTier: text("plan_tier").default("firm").notNull(),
+  planExpiresAt: timestamp("plan_expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const teamMember = pgTable(
+  "team_members",
+  {
+    id: serial("id").primaryKey(),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    role: text("role").default("member").notNull(),
+    invitedEmail: text("invited_email"),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("team_member_teamId_idx").on(table.teamId),
+    index("team_member_userId_idx").on(table.userId),
+  ]
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   projects: many(project),
+  teamMemberships: many(teamMember),
 }));
 
 export const projectRelations = relations(project, ({ one }) => ({
   user: one(user, {
     fields: [project.userId],
     references: [user.id],
+  }),
+  team: one(team, {
+    fields: [project.teamId],
+    references: [team.id],
+  }),
+}));
+
+export const teamRelations = relations(team, ({ many }) => ({
+  members: many(teamMember),
+  projects: many(project),
+}));
+
+export const teamMemberRelations = relations(teamMember, ({ one }) => ({
+  team: one(team, {
+    fields: [teamMember.teamId],
+    references: [team.id],
   }),
 }));
 

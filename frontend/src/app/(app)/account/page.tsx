@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { Users } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -6,12 +7,12 @@ import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/motion/fade-in";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
-import { user as userTable } from "@/db/schema";
+import { teamMember as teamMemberTable, team as teamTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Account — PlanForge" };
 
-const TIER_BADGE = {
+const TIER_BADGE: Record<string, { label: string; className: string }> = {
   free: {
     label: "Free",
     className: "bg-muted text-muted-foreground border border-border",
@@ -23,6 +24,10 @@ const TIER_BADGE = {
   pro: {
     label: "Pro",
     className: "bg-primary/15 text-primary border border-primary/25",
+  },
+  firm: {
+    label: "Firm",
+    className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
   },
 };
 
@@ -43,7 +48,25 @@ export default async function AccountPage() {
   const planTier = userRows[0]?.planTier ?? "free";
   const planExpiresAt = userRows[0]?.planExpiresAt ?? null;
   const projectCredits = userRows[0]?.projectCredits ?? 0;
-  const badge = TIER_BADGE[planTier as keyof typeof TIER_BADGE] ?? TIER_BADGE.free;
+  const badge = TIER_BADGE[planTier] ?? TIER_BADGE.free;
+
+  // Fetch team membership
+  const memberships = await db
+    .select({ teamId: teamMemberTable.teamId })
+    .from(teamMemberTable)
+    .where(eq(teamMemberTable.userId, session.user.id))
+    .limit(1);
+
+  const userTeam =
+    memberships.length > 0
+      ? ((
+          await db
+            .select({ id: teamTable.id, name: teamTable.name })
+            .from(teamTable)
+            .where(eq(teamTable.id, memberships[0].teamId))
+            .limit(1)
+        )[0] ?? null)
+      : null;
 
   /* User initials for avatar */
   const initials = session.user.name
@@ -163,8 +186,54 @@ export default async function AccountPage() {
         </section>
       </FadeIn>
 
-      {/* Actions */}
+      {/* Team */}
       <FadeIn delay={0.3}>
+        <section className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+              Your Team
+            </h2>
+          </div>
+          {userTeam ? (
+            <div className="grid gap-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Firm name</span>
+                <span className="font-semibold text-foreground">{userTeam.name}</span>
+              </div>
+              <Button asChild className="w-full font-bold mt-1">
+                <Link href="/team">Manage Team</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 text-sm">
+              <p className="text-muted-foreground">
+                You are not part of a team.{" "}
+                {planTier === "firm" ? (
+                  <Link href="/team" className="text-primary underline underline-offset-4">
+                    Create your firm
+                  </Link>
+                ) : (
+                  <>
+                    <Link href="/pricing" className="text-primary underline underline-offset-4">
+                      Upgrade to Firm
+                    </Link>{" "}
+                    to collaborate with up to 5 engineers.
+                  </>
+                )}
+              </p>
+              {planTier === "firm" && (
+                <Button asChild variant="outline" className="w-full font-semibold mt-1">
+                  <Link href="/team">Create Team</Link>
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
+      </FadeIn>
+
+      {/* Actions */}
+      <FadeIn delay={0.4}>
         <div className="flex gap-3">
           <Button variant="outline" asChild>
             <Link href="/dashboard">← Dashboard</Link>

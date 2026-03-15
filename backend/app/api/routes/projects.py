@@ -4,11 +4,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.project import Project
+from app.models.team import TeamMember
 from app.models.user import User
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 
@@ -23,6 +24,24 @@ async def _get_user(user_id: str, db: AsyncSession) -> User | None:
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
     u = await _get_user(user_id, db)
     return u.plan_tier if u else "free"
+
+
+async def _get_user_team_ids(user_id: str, db: AsyncSession) -> list[int]:
+    """Return all team IDs the user belongs to (any role)."""
+    result = await db.execute(
+        select(TeamMember.team_id).where(TeamMember.user_id == user_id)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def _can_access_project(project: Project, user_id: str, db: AsyncSession) -> bool:
+    """Return True if user owns the project or is a member of the project's team."""
+    if project.user_id == user_id:
+        return True
+    if project.team_id is not None:
+        team_ids = await _get_user_team_ids(user_id, db)
+        return project.team_id in team_ids
+    return False
 
 
 def get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
@@ -107,7 +126,7 @@ async def update_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if project.user_id != user_id:
+    if not await _can_access_project(project, user_id, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     data = _serialize_project_data(body.model_dump(exclude_none=True))
@@ -136,11 +155,25 @@ async def list_projects(
     user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[Project]:
-    result = await db.execute(
-        select(Project)
-        .where(Project.user_id == user_id)
-        .order_by(Project.created_at.desc())
-    )
+    team_ids = await _get_user_team_ids(user_id, db)
+
+    if team_ids:
+        result = await db.execute(
+            select(Project)
+            .where(
+                or_(
+                    Project.user_id == user_id,
+                    Project.team_id.in_(team_ids),
+                )
+            )
+            .order_by(Project.created_at.desc())
+        )
+    else:
+        result = await db.execute(
+            select(Project)
+            .where(Project.user_id == user_id)
+            .order_by(Project.created_at.desc())
+        )
     return list(result.scalars().all())
 
 
@@ -164,7 +197,7 @@ async def get_annotations(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if project.user_id != user_id:
+    if not await _can_access_project(project, user_id, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return project.annotations or {}
 
@@ -180,7 +213,7 @@ async def put_annotations(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if project.user_id != user_id:
+    if not await _can_access_project(project, user_id, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     project.annotations = body
     await db.commit()

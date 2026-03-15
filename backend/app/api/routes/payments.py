@@ -13,7 +13,7 @@ from app.models.user import User
 
 router = APIRouter()
 
-PLAN_AMOUNTS = {"basic": 49900, "pro": 99900}  # paise
+PLAN_AMOUNTS = {"basic": 49900, "pro": 99900, "firm": 299900}  # paise
 
 CREDIT_PACKS: dict[str, dict[str, int]] = {
     "pack_1": {"credits": 1, "price_paise": 9900},
@@ -54,7 +54,7 @@ async def create_order(
     user_id: str = Depends(_get_user_id),
 ) -> dict:
     if body.plan not in PLAN_AMOUNTS:
-        raise HTTPException(400, "Invalid plan. Choose 'basic' or 'pro'.")
+        raise HTTPException(400, "Invalid plan. Choose 'basic', 'pro', or 'firm'.")
 
     if not settings.razorpay_key_id or settings.razorpay_key_id == "rzp_test_PLACEHOLDER":
         raise HTTPException(503, "Payment gateway not configured. Add Razorpay keys to backend/.env.")
@@ -84,7 +84,7 @@ async def verify_payment(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     if body.plan not in PLAN_AMOUNTS:
-        raise HTTPException(400, "Invalid plan.")
+        raise HTTPException(400, "Invalid plan. Choose 'basic', 'pro', or 'firm'.")
 
     # Verify Razorpay signature
     msg = f"{body.order_id}|{body.payment_id}".encode()
