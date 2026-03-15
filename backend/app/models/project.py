@@ -71,6 +71,10 @@ class Project(Base):
     custom_room_config: Mapped[str | None]   = mapped_column(
         String, nullable=True)   # JSON array of CustomRoomSpec
 
+    # Share link token (public read-only access)
+    share_token: Mapped[str | None] = mapped_column(
+        String, unique=True, nullable=True, index=True)
+
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[DateTime] = mapped_column(

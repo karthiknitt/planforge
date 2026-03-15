@@ -18,8 +18,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSession } from "@/lib/auth-client";
-import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
+import type {
+  ComplianceData,
+  FloorPlanData,
+  GenerateResponse,
+  LayoutData,
+} from "@/lib/layout-types";
 
 const TYPE_LABELS: Record<string, string> = {
   living: "Living / Hall",
@@ -91,6 +97,80 @@ interface LayoutViewerProps {
   plotRearWidth?: number;
   plotCorners?: [number, number][];
   numFloors?: number;
+  vastuEnabled?: boolean;
+}
+
+// ── Vastu badge helper ────────────────────────────────────────────────────────
+function _VastuBadge({ compliance }: { compliance: ComplianceData }) {
+  const vastuViolations = compliance.violations.filter((v) => v.startsWith("[Vastu]"));
+  const vastuWarnings = compliance.warnings.filter((w) => w.startsWith("[Vastu]"));
+  const allIssues = [...vastuViolations, ...vastuWarnings];
+
+  let badgeClass: string;
+  let label: string;
+  if (vastuViolations.length > 0) {
+    badgeClass =
+      "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-500/15";
+    label = `${vastuViolations.length} Vastu Violation${vastuViolations.length !== 1 ? "s" : ""}`;
+  } else if (vastuWarnings.length > 0) {
+    badgeClass =
+      "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15";
+    label = `${vastuWarnings.length} Vastu Warning${vastuWarnings.length !== 1 ? "s" : ""}`;
+  } else {
+    badgeClass =
+      "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/15";
+    label = "Vastu Compliant";
+  }
+
+  if (allIssues.length === 0) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${badgeClass}`}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer ${badgeClass}`}
+        >
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 text-sm" align="start">
+        <p className="font-semibold mb-2 text-foreground">Vastu Issues</p>
+        {vastuViolations.length > 0 && (
+          <div className="mb-2">
+            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Violations</p>
+            <ul className="space-y-1">
+              {vastuViolations.map((v) => (
+                <li key={v} className="text-xs text-muted-foreground">
+                  {v.replace("[Vastu] ", "")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {vastuWarnings.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Warnings</p>
+            <ul className="space-y-1">
+              {vastuWarnings.map((w) => (
+                <li key={w} className="text-xs text-muted-foreground">
+                  {w.replace("[Vastu] ", "")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function LayoutViewer({
@@ -106,6 +186,7 @@ export function LayoutViewer({
   plotRearWidth,
   plotCorners,
   numFloors: _numFloors = 1,
+  vastuEnabled = false,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
@@ -115,6 +196,7 @@ export function LayoutViewer({
   const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat" | "compare">(
     "plan"
   );
+  const [_showVastuZones, _setShowVastuZones] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -294,8 +376,61 @@ export function LayoutViewer({
             </Button>
           )}
           <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-border text-foreground hover:bg-muted"
+            onClick={handleShare}
+            disabled={shareLoading || !session}
+            title="Get a read-only share link for your client"
+          >
+            <Link2 className="h-3 w-3 mr-1.5" />
+            {shareLoading ? "…" : "Share"}
+          </Button>
         </div>
       </div>
+
+      {/* Share error */}
+      {shareError && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {shareError}
+        </p>
+      )}
+
+      {/* Share link dialog */}
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share floor plan with client</DialogTitle>
+            <DialogDescription>
+              Anyone with this link can view the floor plans in read-only mode — no login required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              readOnly
+              value={shareUrl}
+              className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
+              onFocus={(e) => e.target.select()}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCopy}
+              className="shrink-0"
+              title="Copy link"
+            >
+              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          {copied && (
+            <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            The link shows all layout options with floor plans, section view, and compliance status.
+          </p>
+        </DialogContent>
+      </Dialog>
 
       {/* Download error */}
       {downloadError && (
