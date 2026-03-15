@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -12,8 +13,11 @@ import {
   Link2,
   Lock,
   MessageSquare,
+  Pencil,
+  RefreshCw,
   RotateCcw,
   Save,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -36,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSession } from "@/lib/auth-client";
 import type {
@@ -43,6 +48,7 @@ import type {
   FloorPlanData,
   GenerateResponse,
   LayoutData,
+  RoomData,
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
 
@@ -316,6 +322,14 @@ export function LayoutViewer({
   const [showElectrical, setShowElectrical] = useState(false);
   const [showPlumbing, setShowPlumbing] = useState(false);
 
+  // ── Edit mode state ────────────────────────────────────────────────────────
+  const [editMode, setEditMode] = useState(false);
+  const [editedRooms, setEditedRooms] = useState<RoomData[] | null>(null);
+  const [complianceIssues, setComplianceIssues] = useState<Record<string, string[]>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editSaveError, setEditSaveError] = useState("");
+  const complianceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Annotation state ───────────────────────────────────────────────────────
   const [annotationMode, setAnnotationMode] = useState(false);
   // annotations keyed by room_id
@@ -451,6 +465,117 @@ export function LayoutViewer({
 
   const annotationCount = Object.keys(annotations).filter((k) => annotations[k]?.note).length;
   const annotationList = Object.values(annotations);
+
+  // ── Edit mode handlers ─────────────────────────────────────────────────────
+
+  function handleToggleEditMode() {
+    if (editMode) {
+      // Exit edit mode — discard unsaved changes
+      setEditMode(false);
+      setEditedRooms(null);
+      setComplianceIssues({});
+      setEditSaveError("");
+    } else {
+      setEditMode(true);
+      setEditedRooms(null);
+      setComplianceIssues({});
+    }
+  }
+
+  function handleResetRooms() {
+    setEditedRooms(null);
+    setComplianceIssues({});
+  }
+
+  async function runComplianceCheck(rooms: RoomData[], floorLabel: string): Promise<void> {
+    if (!session) return;
+    const floorCode =
+      floorLabel === "ff"
+        ? "ff"
+        : floorLabel === "sf"
+          ? "sf"
+          : floorLabel === "basement"
+            ? "basement"
+            : "gf";
+    try {
+      const body = {
+        rooms: rooms.map((r) => ({
+          id: r.id,
+          type: r.type,
+          name: r.name,
+          x: r.x,
+          y: r.y,
+          width: r.width,
+          height: r.depth,
+          floor: floorCode,
+        })),
+      };
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/layouts/${selectedId}/compliance-check`,
+        {
+          method: "POST",
+          headers: {
+            "X-User-Id": session.user.id,
+            "X-Project-Id": projectId,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        passed: boolean;
+        violations: string[];
+        warnings: string[];
+        room_issues: Record<string, string[]>;
+      };
+      setComplianceIssues(data.room_issues);
+    } catch {
+      // silent — compliance check is non-critical
+    }
+  }
+
+  function handleRoomsChange(rooms: RoomData[], floorCode: string) {
+    setEditedRooms(rooms);
+    // Debounced compliance check: runs 800ms after last drag
+    if (complianceDebounceRef.current) clearTimeout(complianceDebounceRef.current);
+    complianceDebounceRef.current = setTimeout(() => {
+      void runComplianceCheck(rooms, floorCode);
+    }, 800);
+  }
+
+  async function handleSaveEditedRooms(rooms: RoomData[]) {
+    if (!session) return;
+    setEditSaving(true);
+    setEditSaveError("");
+    try {
+      // Persist each modified room via the existing resize endpoint
+      for (const room of rooms) {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/rooms/${room.id}/resize`,
+          {
+            method: "POST",
+            headers: {
+              "X-User-Id": session.user.id,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ new_width: room.width, new_depth: room.depth }),
+          }
+        );
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { detail?: string };
+          throw new Error(data?.detail ?? `Save failed (${res.status})`);
+        }
+      }
+      setEditMode(false);
+      setEditedRooms(null);
+      setComplianceIssues({});
+    } catch (err) {
+      setEditSaveError(err instanceof Error ? err.message : "Could not save changes");
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   async function handleSendForApproval() {
     if (!session) return;
@@ -1409,6 +1534,35 @@ export function LayoutViewer({
                 </span>
               )}
             </button>
+            {planTier === "pro" ? (
+              <button
+                type="button"
+                onClick={handleToggleEditMode}
+                className={[
+                  "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  editMode
+                    ? "border-blue-600/70 bg-blue-600/15 text-blue-700 dark:text-blue-400"
+                    : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+                ].join(" ")}
+                title={
+                  editMode
+                    ? "Exit edit mode and discard changes"
+                    : "Enter edit mode — drag shared walls to resize rooms"
+                }
+              >
+                {editMode ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                {editMode ? "Exit Edit" : "Edit Rooms"}
+              </button>
+            ) : (
+              <Link
+                href="/pricing"
+                className="flex w-fit items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                title="Upgrade to Pro to enable manual room editing"
+              >
+                <Lock className="h-3 w-3" />
+                Edit Rooms
+              </Link>
+            )}
           </div>
 
           {annotationMode && (
@@ -1416,6 +1570,69 @@ export function LayoutViewer({
               Click any room to add or edit a note. Notes persist across sessions and appear in PDF
               exports.
             </p>
+          )}
+
+          {editMode && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                Drag shared walls (blue lines) to resize rooms. Changes are not saved automatically.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  onClick={() => {
+                    const roomsToCheck = editedRooms ?? floorPlan.rooms;
+                    const currentFloorCode =
+                      floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
+                    void runComplianceCheck(roomsToCheck, currentFloorCode);
+                  }}
+                  disabled={!session}
+                  title="Check compliance for current room layout"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Check Compliance
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  onClick={handleResetRooms}
+                  title="Restore rooms to the original generated layout"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Reset
+                </Button>
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs h-7 px-2.5 bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => {
+                    const roomsToSave = editedRooms ?? floorPlan.rooms;
+                    void handleSaveEditedRooms(roomsToSave);
+                  }}
+                  disabled={editSaving || !session || !editedRooms}
+                  title="Save the edited room layout to the project"
+                >
+                  <Save className="h-3 w-3" />
+                  {editSaving ? "Saving…" : "Save Changes"}
+                </Button>
+              </div>
+              {editSaveError && (
+                <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
+                  {editSaveError}
+                </p>
+              )}
+              {Object.keys(complianceIssues).length > 0 && (
+                <p className="text-xs text-red-700 dark:text-red-400 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-1.5 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  {Object.keys(complianceIssues).length} room
+                  {Object.keys(complianceIssues).length !== 1 ? "s have" : " has"} compliance issues
+                  — highlighted in red.
+                </p>
+              )}
+            </div>
           )}
 
           <FloorPlanSVG
@@ -1436,6 +1653,13 @@ export function LayoutViewer({
             annotations={annotationList}
             onAnnotationClick={handleAnnotationClick}
             locale={locale}
+            editMode={editMode}
+            onRoomsChange={(rooms) => {
+              const currentFloorCode =
+                floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
+              handleRoomsChange(rooms, currentFloorCode);
+            }}
+            complianceIssues={complianceIssues}
           />
 
           {/* Room legend */}

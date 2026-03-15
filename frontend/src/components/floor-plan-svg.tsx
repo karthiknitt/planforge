@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
 import { PlumbingOverlay } from "@/components/plumbing-overlay";
@@ -791,6 +792,114 @@ function DimLine({
   );
 }
 
+// ── Minimum room side dimensions for edit-mode constraint enforcement ─────────
+const MIN_ROOM_SIDE: Record<string, number> = {
+  bedroom: 3.0,
+  master_bedroom: 3.0,
+  kitchen: 2.6,
+  toilet: 1.5,
+  wc_only: 1.5,
+  bathroom_master: 1.8,
+};
+const MIN_ROOM_SIDE_DEFAULT = 2.0;
+
+function getMinSide(type: string): number {
+  return MIN_ROOM_SIDE[type] ?? MIN_ROOM_SIDE_DEFAULT;
+}
+
+// ── Shared wall detection ─────────────────────────────────────────────────────
+interface SharedWall {
+  /** "vertical" = wall runs top-to-bottom (rooms share an x edge) */
+  orientation: "vertical" | "horizontal";
+  /** Wall position in metres */
+  wallPos: number;
+  /** The two rooms sharing the wall */
+  roomA: RoomData;
+  roomB: RoomData;
+  /** Overlap segment along the perpendicular axis */
+  segStart: number;
+  segEnd: number;
+}
+
+const WALL_TOL = 0.01; // 1 cm tolerance for shared-wall detection
+
+function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
+  const walls: SharedWall[] = [];
+  for (let i = 0; i < rooms.length; i++) {
+    for (let j = i + 1; j < rooms.length; j++) {
+      const a = rooms[i];
+      const b = rooms[j];
+
+      // Vertical shared wall: a's right edge == b's left edge (or vice versa)
+      const aRight = a.x + a.width;
+      const bRight = b.x + b.width;
+      if (Math.abs(aRight - b.x) < WALL_TOL) {
+        // a is left, b is right — check y overlap
+        const segStart = Math.max(a.y, b.y);
+        const segEnd = Math.min(a.y + a.depth, b.y + b.depth);
+        if (segEnd > segStart + WALL_TOL) {
+          walls.push({
+            orientation: "vertical",
+            wallPos: aRight,
+            roomA: a,
+            roomB: b,
+            segStart,
+            segEnd,
+          });
+        }
+      } else if (Math.abs(bRight - a.x) < WALL_TOL) {
+        // b is left, a is right
+        const segStart = Math.max(a.y, b.y);
+        const segEnd = Math.min(a.y + a.depth, b.y + b.depth);
+        if (segEnd > segStart + WALL_TOL) {
+          walls.push({
+            orientation: "vertical",
+            wallPos: bRight,
+            roomA: b,
+            roomB: a,
+            segStart,
+            segEnd,
+          });
+        }
+      }
+
+      // Horizontal shared wall: a's top edge == b's bottom edge (or vice versa)
+      const aTop = a.y + a.depth;
+      const bTop = b.y + b.depth;
+      if (Math.abs(aTop - b.y) < WALL_TOL) {
+        // a is below, b is above
+        const segStart = Math.max(a.x, b.x);
+        const segEnd = Math.min(a.x + a.width, b.x + b.width);
+        if (segEnd > segStart + WALL_TOL) {
+          walls.push({
+            orientation: "horizontal",
+            wallPos: aTop,
+            roomA: a,
+            roomB: b,
+            segStart,
+            segEnd,
+          });
+        }
+      } else if (Math.abs(bTop - a.y) < WALL_TOL) {
+        // b is below, a is above
+        const segStart = Math.max(a.x, b.x);
+        const segEnd = Math.min(a.x + a.width, b.x + b.width);
+        if (segEnd > segStart + WALL_TOL) {
+          walls.push({
+            orientation: "horizontal",
+            wallPos: bTop,
+            roomA: b,
+            roomB: a,
+            segStart,
+            segEnd,
+          });
+        }
+      }
+    }
+  }
+  return walls;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 interface FloorPlanSVGProps {
   floorPlan: FloorPlanData;
@@ -811,6 +920,10 @@ interface FloorPlanSVGProps {
   annotations?: Annotation[];
   onAnnotationClick?: (roomId: string, roomName: string, x: number, y: number) => void;
   locale?: Locale;
+  // ── Edit mode props (all optional — backward compatible) ──────────────────
+  editMode?: boolean;
+  onRoomsChange?: (rooms: RoomData[]) => void;
+  complianceIssues?: Record<string, string[]>;
 }
 
 // ── Vastu zone colors (3×3 grid) ─────────────────────────────────────────────
@@ -877,8 +990,32 @@ export function FloorPlanSVG({
   annotations = [],
   onAnnotationClick,
   locale = "en",
+  editMode = false,
+  onRoomsChange,
+  complianceIssues = {},
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
+
+  // ── Edit mode drag state ────────────────────────────────────────────────────
+  interface DragState {
+    wall: SharedWall;
+    startSvgPos: number; // SVG px coordinate where drag started
+    startWallPos: number; // metres position of wall when drag started
+  }
+  const dragRef = useRef<DragState | null>(null);
+  const [editRooms, setEditRooms] = useState<RoomData[] | null>(null);
+  const [hoveredWallKey, setHoveredWallKey] = useState<string | null>(null);
+  const [dragTooltip, setDragTooltip] = useState<{
+    svgX: number;
+    svgY: number;
+    widthA: number;
+    depthA: number;
+    widthB: number;
+    depthB: number;
+  } | null>(null);
+
+  // The rooms to render — use editRooms if in edit mode and user has dragged, else floorPlan.rooms
+  const displayRooms: RoomData[] = editMode && editRooms !== null ? editRooms : floorPlan.rooms;
 
   const availW = VP_W - 2 * PAD;
   const availH = VP_H - 2 * PAD - ROAD_H;
@@ -897,7 +1034,7 @@ export function FloorPlanSVG({
   const px = (x: number) => originX + x * scale;
   const py = (y: number) => originY + drawH - y * scale;
 
-  const rooms = floorPlan.rooms;
+  const rooms = displayRooms;
 
   // Compute building extents for wall rendering
   const minX = rooms.length ? Math.min(...rooms.map((r) => r.x)) : 0;
@@ -932,6 +1069,135 @@ export function FloorPlanSVG({
   // Build annotation lookup by room_id for quick access
   const annotationMap = new Map(annotations.map((a) => [a.room_id, a]));
 
+  // ── Edit mode: shared wall list ─────────────────────────────────────────────
+  const sharedWalls = editMode ? detectSharedWalls(rooms) : [];
+
+  function wallKey(w: SharedWall): string {
+    return `${w.orientation}-${w.wallPos.toFixed(3)}-${w.roomA.id}-${w.roomB.id}`;
+  }
+
+  function handleWallMouseDown(e: React.MouseEvent<SVGLineElement>, wall: SharedWall): void {
+    if (!editMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startPos = wall.orientation === "vertical" ? e.clientX : e.clientY;
+    dragRef.current = {
+      wall,
+      startSvgPos: startPos,
+      startWallPos: wall.wallPos,
+    };
+  }
+
+  function handleSVGMouseMove(e: React.MouseEvent<SVGSVGElement>): void {
+    if (!editMode || !dragRef.current) return;
+    const drag = dragRef.current;
+
+    const currentPos = drag.wall.orientation === "vertical" ? e.clientX : e.clientY;
+    const svgEl = e.currentTarget;
+    const rect = svgEl.getBoundingClientRect();
+    const svgScale = VP_W / rect.width; // screen px → SVG px
+
+    const deltaSvgPx = (currentPos - drag.startSvgPos) * svgScale;
+    // vertical wall: positive delta = wall moves right (x increases)
+    // horizontal wall: positive delta = wall moves down in screen (y increases in SVG) = y decreases in metres
+    const deltaM = drag.wall.orientation === "vertical" ? deltaSvgPx / scale : -deltaSvgPx / scale;
+
+    const newWallPos = drag.startWallPos + deltaM;
+
+    // Compute current rooms (copy of latest editRooms or original)
+    const baseRooms: RoomData[] = editRooms !== null ? editRooms : floorPlan.rooms;
+
+    // Apply constraint: neither adjacent room shrinks below its minimum side
+    const { roomA, roomB, orientation } = drag.wall;
+    const rA = baseRooms.find((r) => r.id === roomA.id);
+    const rB = baseRooms.find((r) => r.id === roomB.id);
+    if (!rA || !rB) return;
+
+    let clampedPos = newWallPos;
+    if (orientation === "vertical") {
+      // roomA is left (x + width = wall), roomB is right (x = wall)
+      const minWallForA = rA.x + getMinSide(rA.type);
+      const maxWallForB = rB.x + rB.width - getMinSide(rB.type);
+      clampedPos = Math.max(minWallForA, Math.min(maxWallForB, clampedPos));
+    } else {
+      // roomA is below (y + depth = wall), roomB is above (y = wall)
+      const minWallForA = rA.y + getMinSide(rA.type);
+      const maxWallForB = rB.y + rB.depth - getMinSide(rB.type);
+      clampedPos = Math.max(minWallForA, Math.min(maxWallForB, clampedPos));
+    }
+
+    const updatedRooms: RoomData[] = baseRooms.map((r) => {
+      if (orientation === "vertical") {
+        if (r.id === rA.id) {
+          const newWidth = clampedPos - r.x;
+          return { ...r, width: newWidth, area: parseFloat((newWidth * r.depth).toFixed(2)) };
+        }
+        if (r.id === rB.id) {
+          const newX = clampedPos;
+          const newWidth = rB.x + rB.width - clampedPos;
+          return {
+            ...r,
+            x: newX,
+            width: newWidth,
+            area: parseFloat((newWidth * r.depth).toFixed(2)),
+          };
+        }
+      } else {
+        if (r.id === rA.id) {
+          const newDepth = clampedPos - r.y;
+          return { ...r, depth: newDepth, area: parseFloat((r.width * newDepth).toFixed(2)) };
+        }
+        if (r.id === rB.id) {
+          const newY = clampedPos;
+          const newDepth = rB.y + rB.depth - clampedPos;
+          return {
+            ...r,
+            y: newY,
+            depth: newDepth,
+            area: parseFloat((r.width * newDepth).toFixed(2)),
+          };
+        }
+      }
+      return r;
+    });
+
+    setEditRooms(updatedRooms);
+
+    // Show drag tooltip
+    const updatedA = updatedRooms.find((r) => r.id === rA.id);
+    const updatedB = updatedRooms.find((r) => r.id === rB.id);
+    if (updatedA && updatedB) {
+      const tooltipSvgX = orientation === "vertical" ? px(clampedPos) : px(rA.x + rA.width / 2);
+      const tooltipSvgY =
+        orientation === "vertical"
+          ? py(drag.wall.segStart + (drag.wall.segEnd - drag.wall.segStart) / 2)
+          : py(clampedPos);
+      setDragTooltip({
+        svgX: tooltipSvgX,
+        svgY: tooltipSvgY,
+        widthA: updatedA.width,
+        depthA: updatedA.depth,
+        widthB: updatedB.width,
+        depthB: updatedB.depth,
+      });
+    }
+  }
+
+  function handleSVGMouseUp(): void {
+    if (!editMode || !dragRef.current) return;
+    dragRef.current = null;
+    setDragTooltip(null);
+    if (editRooms !== null && onRoomsChange) {
+      onRoomsChange(editRooms);
+    }
+  }
+
+  function handleSVGMouseLeave(): void {
+    if (dragRef.current) {
+      handleSVGMouseUp();
+    }
+  }
+
   return (
     <TooltipProvider>
       <svg
@@ -939,6 +1205,9 @@ export function FloorPlanSVG({
         className={["floor-plan-svg", className].filter(Boolean).join(" ")}
         style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
         aria-label="Floor plan diagram"
+        onMouseMove={editMode ? handleSVGMouseMove : undefined}
+        onMouseUp={editMode ? handleSVGMouseUp : undefined}
+        onMouseLeave={editMode ? handleSVGMouseLeave : undefined}
       >
         {/* Background */}
         <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
@@ -1071,6 +1340,9 @@ export function FloorPlanSVG({
           const rh = room.depth * scale;
           const roomCx = px(room.x + room.width / 2);
           const roomCy = py(room.y + room.depth / 2);
+          const hasIssue =
+            editMode && complianceIssues[room.id] && complianceIssues[room.id].length > 0;
+
           if (annotationMode && onAnnotationClick) {
             const handleAnnotClick = () => onAnnotationClick(room.id, room.name, roomCx, roomCy);
             return (
@@ -1093,6 +1365,23 @@ export function FloorPlanSVG({
                   stroke={color(room.type).stroke}
                   strokeWidth={1.5}
                   strokeDasharray="3 2"
+                />
+              </g>
+            );
+          }
+          if (hasIssue) {
+            return (
+              <g key={room.id}>
+                <rect x={rx} y={ry} width={rw} height={rh} fill="rgba(239,68,68,0.1)" />
+                <rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 2"
                 />
               </g>
             );
@@ -1278,6 +1567,43 @@ export function FloorPlanSVG({
           />
         ))}
 
+        {/* ── Edit mode: compliance violation badges ─────────────────────── */}
+        {editMode &&
+          rooms.map((room) => {
+            const issues = complianceIssues[room.id];
+            if (!issues || issues.length === 0) return null;
+            const cx = px(room.x + room.width / 2);
+            // Place badge below room label — shift down by ~24px from centre
+            const cy = py(room.y + room.depth / 2) + 24;
+            const label = issues[0].length > 22 ? `${issues[0].slice(0, 20)}…` : issues[0];
+            const badgeW = label.length * 4.8 + 12;
+            return (
+              <g key={`ci-${room.id}`}>
+                <rect
+                  x={cx - badgeW / 2}
+                  y={cy - 7}
+                  width={badgeW}
+                  height={13}
+                  rx={3}
+                  fill="#ef4444"
+                  fillOpacity={0.92}
+                />
+                <text
+                  x={cx}
+                  y={cy + 2}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={7}
+                  fontFamily="sans-serif"
+                  fill="white"
+                  fontWeight="600"
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+
         {/* ── Internal room dimensions ──────────────────────────────────── */}
         {rooms.map((room) => {
           const roomPxW = room.width * scale;
@@ -1415,6 +1741,89 @@ export function FloorPlanSVG({
               </Tooltip>
             );
           })}
+
+        {/* ── Edit mode: draggable shared wall handles ───────────────────── */}
+        {editMode &&
+          sharedWalls.map((wall) => {
+            const key = wallKey(wall);
+            const isHovered = hoveredWallKey === key;
+            const isDragging = dragRef.current !== null && wallKey(dragRef.current.wall) === key;
+            const active = isHovered || isDragging;
+
+            if (wall.orientation === "vertical") {
+              const svgX = px(wall.wallPos);
+              const svgY1 = py(wall.segEnd);
+              const svgY2 = py(wall.segStart);
+              return (
+                <line
+                  key={key}
+                  x1={svgX}
+                  y1={svgY1}
+                  x2={svgX}
+                  y2={svgY2}
+                  stroke={active ? "#1d4ed8" : "#3b82f6"}
+                  strokeWidth={active ? 3 : 2}
+                  strokeOpacity={active ? 1 : 0.7}
+                  style={{ cursor: "ew-resize" }}
+                  onMouseEnter={() => setHoveredWallKey(key)}
+                  onMouseLeave={() => setHoveredWallKey(null)}
+                  onMouseDown={(e) => handleWallMouseDown(e, wall)}
+                />
+              );
+            } else {
+              const svgY = py(wall.wallPos);
+              const svgX1 = px(wall.segStart);
+              const svgX2 = px(wall.segEnd);
+              return (
+                <line
+                  key={key}
+                  x1={svgX1}
+                  y1={svgY}
+                  x2={svgX2}
+                  y2={svgY}
+                  stroke={active ? "#1d4ed8" : "#3b82f6"}
+                  strokeWidth={active ? 3 : 2}
+                  strokeOpacity={active ? 1 : 0.7}
+                  style={{ cursor: "ns-resize" }}
+                  onMouseEnter={() => setHoveredWallKey(key)}
+                  onMouseLeave={() => setHoveredWallKey(null)}
+                  onMouseDown={(e) => handleWallMouseDown(e, wall)}
+                />
+              );
+            }
+          })}
+
+        {/* ── Edit mode: drag tooltip ────────────────────────────────────── */}
+        {editMode &&
+          dragTooltip &&
+          (() => {
+            const tx = dragTooltip.svgX + 6;
+            const ty = dragTooltip.svgY - 36;
+            const areaA = (dragTooltip.widthA * dragTooltip.depthA).toFixed(1);
+            const areaB = (dragTooltip.widthB * dragTooltip.depthB).toFixed(1);
+            const line1 = `${dragTooltip.widthA.toFixed(1)}×${dragTooltip.depthA.toFixed(1)}=${areaA}㎡`;
+            const line2 = `${dragTooltip.widthB.toFixed(1)}×${dragTooltip.depthB.toFixed(1)}=${areaB}㎡`;
+            const boxW = Math.max(line1.length, line2.length) * 5.2 + 10;
+            return (
+              <g>
+                <rect
+                  x={tx - 4}
+                  y={ty - 10}
+                  width={boxW}
+                  height={32}
+                  rx={3}
+                  fill="#1e293b"
+                  fillOpacity={0.88}
+                />
+                <text x={tx} y={ty + 4} fontSize={9} fill="white" fontFamily="monospace">
+                  {line1}
+                </text>
+                <text x={tx} y={ty + 16} fontSize={9} fill="#93c5fd" fontFamily="monospace">
+                  {line2}
+                </text>
+              </g>
+            );
+          })()}
       </svg>
     </TooltipProvider>
   );
