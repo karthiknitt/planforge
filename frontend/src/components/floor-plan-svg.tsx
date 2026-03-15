@@ -1,5 +1,15 @@
 import { FurnitureOverlay } from "@/components/furniture-overlay";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FloorPlanData, RoomData } from "@/lib/layout-types";
+
+// ── Annotation data structure ─────────────────────────────────────────────────
+export interface Annotation {
+  room_id: string;
+  room_name: string;
+  note: string;
+  x: number;
+  y: number;
+}
 
 // ── Viewport constants ────────────────────────────────────────────────────────
 const VP_W = 600;
@@ -787,6 +797,9 @@ interface FloorPlanSVGProps {
   plotCorners?: [number, number][];
   showVastuZones?: boolean;
   showFurniture?: boolean;
+  annotationMode?: boolean;
+  annotations?: Annotation[];
+  onAnnotationClick?: (roomId: string, roomName: string, x: number, y: number) => void;
 }
 
 // ── Vastu zone colors (3×3 grid) ─────────────────────────────────────────────
@@ -847,6 +860,9 @@ export function FloorPlanSVG({
   plotCorners,
   showVastuZones = false,
   showFurniture = false,
+  annotationMode = false,
+  annotations = [],
+  onAnnotationClick,
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
@@ -899,381 +915,463 @@ export function FloorPlanSVG({
   const bBottom = py(minY);
   const bTop = py(maxY);
 
+  // Build annotation lookup by room_id for quick access
+  const annotationMap = new Map(annotations.map((a) => [a.room_id, a]));
+
   return (
-    <svg
-      viewBox={`0 0 ${VP_W} ${VP_H}`}
-      className={["floor-plan-svg", className].filter(Boolean).join(" ")}
-      style={{ width: "100%", height: "auto" }}
-      aria-label="Floor plan diagram"
-    >
-      {/* Background */}
-      <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
-
-      {/* Road strip */}
-      <rect
-        x={originX}
-        y={originY + drawH + 2}
-        width={drawW}
-        height={ROAD_H}
-        fill="#CBD5E1"
-        rx={2}
-        className="svg-road"
-      />
-      <text
-        x={originX + drawW / 2}
-        y={originY + drawH + ROAD_H / 2 + 5}
-        textAnchor="middle"
-        fontSize={9}
-        fontFamily="sans-serif"
-        fill="#475569"
-        letterSpacing={2}
+    <TooltipProvider>
+      <svg
+        viewBox={`0 0 ${VP_W} ${VP_H}`}
+        className={["floor-plan-svg", className].filter(Boolean).join(" ")}
+        style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
+        aria-label="Floor plan diagram"
       >
-        ROAD ({roadSide})
-      </text>
+        {/* Background */}
+        <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
 
-      {/* Plot boundary (dashed) */}
-      {plotShape === "quadrilateral" && plotCorners && plotCorners.length === 4 ? (
-        <polygon
-          points={plotCorners.map(([cx, cy]) => `${px(cx)},${py(cy)}`).join(" ")}
-          fill="white"
-          stroke="#CBD5E1"
-          strokeWidth={1}
-          strokeDasharray="5 3"
-          className="svg-plot"
-        />
-      ) : plotShape === "trapezoid" && plotFrontWidth && plotRearWidth ? (
-        (() => {
-          const fw = plotFrontWidth * scale;
-          const rw = plotRearWidth * scale;
-          const fOffset = originX + (drawW - fw) / 2;
-          const rOffset = originX + (drawW - rw) / 2;
-          const points = [
-            `${fOffset},${originY + drawH}`,
-            `${fOffset + fw},${originY + drawH}`,
-            `${rOffset + rw},${originY}`,
-            `${rOffset},${originY}`,
-          ].join(" ");
-          return (
-            <polygon
-              points={points}
-              fill="white"
-              stroke="#CBD5E1"
-              strokeWidth={1}
-              strokeDasharray="5 3"
-              className="svg-plot"
-            />
-          );
-        })()
-      ) : (
+        {/* Road strip */}
         <rect
           x={originX}
-          y={originY}
+          y={originY + drawH + 2}
           width={drawW}
-          height={drawH}
-          fill="white"
-          stroke="#CBD5E1"
-          strokeWidth={1}
-          strokeDasharray="5 3"
-          className="svg-plot"
+          height={ROAD_H}
+          fill="#CBD5E1"
+          rx={2}
+          className="svg-road"
         />
-      )}
+        <text
+          x={originX + drawW / 2}
+          y={originY + drawH + ROAD_H / 2 + 5}
+          textAnchor="middle"
+          fontSize={9}
+          fontFamily="sans-serif"
+          fill="#475569"
+          letterSpacing={2}
+        >
+          ROAD ({roadSide})
+        </text>
 
-      {/* ── Vastu zone overlay (3×3 grid) ─────────────────────────────── */}
-      {showVastuZones &&
-        (() => {
-          const grid = VASTU_GRIDS[roadSide?.toUpperCase() ?? "S"] ?? VASTU_GRID_ROAD_S;
-          const zW = drawW / 3;
-          const zH = drawH / 3;
-          const cells: React.ReactNode[] = [];
-          for (let row = 0; row < 3; row++) {
-            for (let col = 0; col < 3; col++) {
-              const zoneName = grid[row][col];
-              const zoneInfo = VASTU_ZONE_COLORS[zoneName] ?? {
-                fill: "rgba(148,163,184,0.15)",
-                label: zoneName,
-              };
-              const zx = originX + col * zW;
-              // row 0 = rear (top of SVG), row 2 = front (bottom) — SVG y increases downward
-              const zy = originY + row * zH;
-              const lines = zoneInfo.label;
-              cells.push(
-                <g key={`vz-${row}-${col}`}>
-                  <rect
-                    x={zx}
-                    y={zy}
-                    width={zW}
-                    height={zH}
-                    fill={zoneInfo.fill}
-                    stroke="rgba(148,163,184,0.3)"
-                    strokeWidth={0.5}
-                  />
-                  {lines.map((line, li) => (
-                    <text
-                      key={`${zoneName}-${line}`}
-                      x={zx + zW / 2}
-                      y={zy + zH / 2 + (li - (lines.length - 1) / 2) * 10}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={li === 0 ? 9 : 7}
-                      fontFamily="sans-serif"
-                      fontWeight={li === 0 ? "700" : "400"}
-                      fill="rgba(30,41,59,0.55)"
-                    >
-                      {line}
-                    </text>
-                  ))}
+        {/* Plot boundary (dashed) */}
+        {plotShape === "quadrilateral" && plotCorners && plotCorners.length === 4 ? (
+          <polygon
+            points={plotCorners.map(([cx, cy]) => `${px(cx)},${py(cy)}`).join(" ")}
+            fill="white"
+            stroke="#CBD5E1"
+            strokeWidth={1}
+            strokeDasharray="5 3"
+            className="svg-plot"
+          />
+        ) : plotShape === "trapezoid" && plotFrontWidth && plotRearWidth ? (
+          (() => {
+            const fw = plotFrontWidth * scale;
+            const rw = plotRearWidth * scale;
+            const fOffset = originX + (drawW - fw) / 2;
+            const rOffset = originX + (drawW - rw) / 2;
+            const points = [
+              `${fOffset},${originY + drawH}`,
+              `${fOffset + fw},${originY + drawH}`,
+              `${rOffset + rw},${originY}`,
+              `${rOffset},${originY}`,
+            ].join(" ");
+            return (
+              <polygon
+                points={points}
+                fill="white"
+                stroke="#CBD5E1"
+                strokeWidth={1}
+                strokeDasharray="5 3"
+                className="svg-plot"
+              />
+            );
+          })()
+        ) : (
+          <rect
+            x={originX}
+            y={originY}
+            width={drawW}
+            height={drawH}
+            fill="white"
+            stroke="#CBD5E1"
+            strokeWidth={1}
+            strokeDasharray="5 3"
+            className="svg-plot"
+          />
+        )}
+
+        {/* ── Vastu zone overlay (3×3 grid) ─────────────────────────────── */}
+        {showVastuZones &&
+          (() => {
+            const grid = VASTU_GRIDS[roadSide?.toUpperCase() ?? "S"] ?? VASTU_GRID_ROAD_S;
+            const zW = drawW / 3;
+            const zH = drawH / 3;
+            const cells: React.ReactNode[] = [];
+            for (let row = 0; row < 3; row++) {
+              for (let col = 0; col < 3; col++) {
+                const zoneName = grid[row][col];
+                const zoneInfo = VASTU_ZONE_COLORS[zoneName] ?? {
+                  fill: "rgba(148,163,184,0.15)",
+                  label: zoneName,
+                };
+                const zx = originX + col * zW;
+                // row 0 = rear (top of SVG), row 2 = front (bottom) — SVG y increases downward
+                const zy = originY + row * zH;
+                const lines = zoneInfo.label;
+                cells.push(
+                  <g key={`vz-${row}-${col}`}>
+                    <rect
+                      x={zx}
+                      y={zy}
+                      width={zW}
+                      height={zH}
+                      fill={zoneInfo.fill}
+                      stroke="rgba(148,163,184,0.3)"
+                      strokeWidth={0.5}
+                    />
+                    {lines.map((line, li) => (
+                      <text
+                        key={`${zoneName}-${line}`}
+                        x={zx + zW / 2}
+                        y={zy + zH / 2 + (li - (lines.length - 1) / 2) * 10}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={li === 0 ? 9 : 7}
+                        fontFamily="sans-serif"
+                        fontWeight={li === 0 ? "700" : "400"}
+                        fill="rgba(30,41,59,0.55)"
+                      >
+                        {line}
+                      </text>
+                    ))}
+                  </g>
+                );
+              }
+            }
+            return <g opacity={1}>{cells}</g>;
+          })()}
+
+        {/* ── Room fills ─────────────────────────────────────────────────── */}
+        {rooms.map((room) => {
+          const rx = px(room.x);
+          const ry = py(room.y + room.depth);
+          const rw = room.width * scale;
+          const rh = room.depth * scale;
+          const roomCx = px(room.x + room.width / 2);
+          const roomCy = py(room.y + room.depth / 2);
+          if (annotationMode && onAnnotationClick) {
+            const handleAnnotClick = () => onAnnotationClick(room.id, room.name, roomCx, roomCy);
+            return (
+              <g
+                key={room.id}
+                role="button"
+                tabIndex={0}
+                style={{ cursor: "pointer", outline: "none" }}
+                onClick={handleAnnotClick}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleAnnotClick(); }}
+                aria-label={String(room.name)}
+              >
+                <rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  fill={color(room.type).fill}
+                  stroke={color(room.type).stroke}
+                  strokeWidth={1.5}
+                  strokeDasharray="3 2"
+                />
+              </g>
+            );
+          }
+          return (
+            <rect key={room.id} x={rx} y={ry} width={rw} height={rh} fill={color(room.type).fill} />
+          );
+        })}
+
+        {/* ── Internal wall double-lines ─────────────────────────────────── */}
+        {rooms.length > 0 && (
+          <g stroke="#334155" strokeWidth={0.8}>
+            {intWallXs.map((x) => {
+              const svgX = px(x);
+              return (
+                <g key={`vw-${x}`}>
+                  <line x1={svgX - halfIwt} y1={bBottom} x2={svgX - halfIwt} y2={bTop} />
+                  <line x1={svgX + halfIwt} y1={bBottom} x2={svgX + halfIwt} y2={bTop} />
                 </g>
               );
+            })}
+            {intWallYs.map((y) => {
+              const svgY = py(y);
+              return (
+                <g key={`hw-${y}`}>
+                  <line x1={bLeft} y1={svgY - halfIwt} x2={bRight} y2={svgY - halfIwt} />
+                  <line x1={bLeft} y1={svgY + halfIwt} x2={bRight} y2={svgY + halfIwt} />
+                </g>
+              );
+            })}
+          </g>
+        )}
+
+        {/* ── External walls (outer + inner line) ───────────────────────── */}
+        {rooms.length > 0 && (
+          <g stroke="#1E293B" fill="none">
+            <rect
+              x={bLeft - halfEwt}
+              y={bTop - halfEwt}
+              width={bRight - bLeft + 2 * halfEwt}
+              height={bBottom - bTop + 2 * halfEwt}
+              strokeWidth={2}
+            />
+            <rect
+              x={bLeft + halfEwt}
+              y={bTop + halfEwt}
+              width={bRight - bLeft - 2 * halfEwt}
+              height={bBottom - bTop - 2 * halfEwt}
+              strokeWidth={0.8}
+            />
+          </g>
+        )}
+
+        {/* ── Window symbols on exterior walls ──────────────────────────── */}
+        {rooms
+          .filter((r) => habitable.has(r.type))
+          .flatMap((room) => {
+            const symbols = [];
+            const cx_m = room.x + room.width / 2;
+            const cy_m = room.y + room.depth / 2;
+
+            if (Math.abs(room.y - minY) < tol) {
+              symbols.push(
+                <WindowSymbol
+                  key={`w-front-${room.id}`}
+                  cx={px(cx_m)}
+                  cy={py(room.y)}
+                  width={winPx}
+                  horizontal
+                />
+              );
             }
-          }
-          return <g opacity={1}>{cells}</g>;
-        })()}
-
-      {/* ── Room fills ─────────────────────────────────────────────────── */}
-      {rooms.map((room) => {
-        const rx = px(room.x);
-        const ry = py(room.y + room.depth);
-        const rw = room.width * scale;
-        const rh = room.depth * scale;
-        return (
-          <rect key={room.id} x={rx} y={ry} width={rw} height={rh} fill={color(room.type).fill} />
-        );
-      })}
-
-      {/* ── Internal wall double-lines ─────────────────────────────────── */}
-      {rooms.length > 0 && (
-        <g stroke="#334155" strokeWidth={0.8}>
-          {intWallXs.map((x) => {
-            const svgX = px(x);
-            return (
-              <g key={`vw-${x}`}>
-                <line x1={svgX - halfIwt} y1={bBottom} x2={svgX - halfIwt} y2={bTop} />
-                <line x1={svgX + halfIwt} y1={bBottom} x2={svgX + halfIwt} y2={bTop} />
-              </g>
-            );
+            if (Math.abs(room.y + room.depth - maxY) < tol) {
+              symbols.push(
+                <WindowSymbol
+                  key={`w-rear-${room.id}`}
+                  cx={px(cx_m)}
+                  cy={py(room.y + room.depth)}
+                  width={winPx}
+                  horizontal
+                />
+              );
+            }
+            if (Math.abs(room.x - minX) < tol) {
+              symbols.push(
+                <WindowSymbol
+                  key={`w-left-${room.id}`}
+                  cx={px(room.x)}
+                  cy={py(cy_m)}
+                  width={winPx}
+                  horizontal={false}
+                />
+              );
+            }
+            if (Math.abs(room.x + room.width - maxX) < tol) {
+              symbols.push(
+                <WindowSymbol
+                  key={`w-right-${room.id}`}
+                  cx={px(room.x + room.width)}
+                  cy={py(cy_m)}
+                  width={winPx}
+                  horizontal={false}
+                />
+              );
+            }
+            return symbols;
           })}
-          {intWallYs.map((y) => {
-            const svgY = py(y);
-            return (
-              <g key={`hw-${y}`}>
-                <line x1={bLeft} y1={svgY - halfIwt} x2={bRight} y2={svgY - halfIwt} />
-                <line x1={bLeft} y1={svgY + halfIwt} x2={bRight} y2={svgY + halfIwt} />
-              </g>
-            );
+
+        {/* ── Door symbols ──────────────────────────────────────────────── */}
+        {rooms
+          .filter((r) => habitable.has(r.type) || r.type === "utility")
+          .map((room) => {
+            const doorPx = Math.min(0.9 * scale, room.width * scale * 0.4);
+            // Place door on the wall that faces an adjacent room or exterior
+            // Prefer bottom wall (road-facing / front), else top
+            const onBottom = Math.abs(room.y - minY) < tol;
+            const onTop = Math.abs(room.y + room.depth - maxY) < tol;
+            const onLeft = Math.abs(room.x - minX) < tol;
+
+            let wall: "bottom" | "top" | "left" | "right" = "bottom";
+            let hx: number;
+            let hy: number;
+
+            if (onBottom) {
+              wall = "bottom";
+              hx = px(room.x + 0.1);
+              hy = py(room.y);
+            } else if (onTop) {
+              wall = "top";
+              hx = px(room.x + 0.1);
+              hy = py(room.y + room.depth);
+            } else if (onLeft) {
+              wall = "left";
+              hx = px(room.x);
+              hy = py(room.y + room.depth - 0.1);
+            } else {
+              wall = "right";
+              hx = px(room.x + room.width);
+              hy = py(room.y + room.depth - 0.1);
+            }
+
+            return <DoorSymbol key={`d-${room.id}`} hx={hx} hy={hy} doorPx={doorPx} wall={wall} />;
           })}
-        </g>
-      )}
 
-      {/* ── External walls (outer + inner line) ───────────────────────── */}
-      {rooms.length > 0 && (
-        <g stroke="#1E293B" fill="none">
-          <rect
-            x={bLeft - halfEwt}
-            y={bTop - halfEwt}
-            width={bRight - bLeft + 2 * halfEwt}
-            height={bBottom - bTop + 2 * halfEwt}
-            strokeWidth={2}
-          />
-          <rect
-            x={bLeft + halfEwt}
-            y={bTop + halfEwt}
-            width={bRight - bLeft - 2 * halfEwt}
-            height={bBottom - bTop - 2 * halfEwt}
-            strokeWidth={0.8}
-          />
-        </g>
-      )}
+        {/* ── Staircase treads ──────────────────────────────────────────── */}
+        {rooms
+          .filter((r) => r.type === "staircase")
+          .map((room) => (
+            <StaircaseSymbol key={`stair-${room.id}`} room={room} px={px} py={py} scale={scale} />
+          ))}
 
-      {/* ── Window symbols on exterior walls ──────────────────────────── */}
-      {rooms
-        .filter((r) => habitable.has(r.type))
-        .flatMap((room) => {
-          const symbols = [];
-          const cx_m = room.x + room.width / 2;
-          const cy_m = room.y + room.depth / 2;
+        {/* ── Room furniture ────────────────────────────────────────────── */}
+        {rooms
+          .filter((r) => r.width * scale >= 30 && r.depth * scale >= 30)
+          .map((room) => (
+            <RoomFurniture key={`furn-${room.id}`} room={room} px={px} py={py} scale={scale} />
+          ))}
 
-          if (Math.abs(room.y - minY) < tol) {
-            symbols.push(
-              <WindowSymbol
-                key={`w-front-${room.id}`}
-                cx={px(cx_m)}
-                cy={py(room.y)}
-                width={winPx}
-                horizontal
-              />
-            );
-          }
-          if (Math.abs(room.y + room.depth - maxY) < tol) {
-            symbols.push(
-              <WindowSymbol
-                key={`w-rear-${room.id}`}
-                cx={px(cx_m)}
-                cy={py(room.y + room.depth)}
-                width={winPx}
-                horizontal
-              />
-            );
-          }
-          if (Math.abs(room.x - minX) < tol) {
-            symbols.push(
-              <WindowSymbol
-                key={`w-left-${room.id}`}
-                cx={px(room.x)}
-                cy={py(cy_m)}
-                width={winPx}
-                horizontal={false}
-              />
-            );
-          }
-          if (Math.abs(room.x + room.width - maxX) < tol) {
-            symbols.push(
-              <WindowSymbol
-                key={`w-right-${room.id}`}
-                cx={px(room.x + room.width)}
-                cy={py(cy_m)}
-                width={winPx}
-                horizontal={false}
-              />
-            );
-          }
-          return symbols;
+        {/* ── Column markers ────────────────────────────────────────────── */}
+        {uniqueCols.map((col) => {
+          const colPx = Math.max(4, 0.3 * scale);
+          return (
+            <rect
+              key={`col-${col.x}-${col.y}`}
+              x={px(col.x) - colPx / 2}
+              y={py(col.y) - colPx / 2}
+              width={colPx}
+              height={colPx}
+              fill="#1E293B"
+            />
+          );
         })}
 
-      {/* ── Door symbols ──────────────────────────────────────────────── */}
-      {rooms
-        .filter((r) => habitable.has(r.type) || r.type === "utility")
-        .map((room) => {
-          const doorPx = Math.min(0.9 * scale, room.width * scale * 0.4);
-          // Place door on the wall that faces an adjacent room or exterior
-          // Prefer bottom wall (road-facing / front), else top
-          const onBottom = Math.abs(room.y - minY) < tol;
-          const onTop = Math.abs(room.y + room.depth - maxY) < tol;
-          const onLeft = Math.abs(room.x - minX) < tol;
+        {/* ── Room labels ───────────────────────────────────────────────── */}
+        {rooms.map((room) => (
+          <RoomLabel key={`lbl-${room.id}`} room={room} px={px} py={py} scale={scale} />
+        ))}
 
-          let wall: "bottom" | "top" | "left" | "right" = "bottom";
-          let hx: number;
-          let hy: number;
+        {/* ── Internal room dimensions ──────────────────────────────────── */}
+        {rooms.map((room) => {
+          const roomPxW = room.width * scale;
+          const roomPxH = room.depth * scale;
+          if (roomPxW < 40 || roomPxH < 40) return null;
 
-          if (onBottom) {
-            wall = "bottom";
-            hx = px(room.x + 0.1);
-            hy = py(room.y);
-          } else if (onTop) {
-            wall = "top";
-            hx = px(room.x + 0.1);
-            hy = py(room.y + room.depth);
-          } else if (onLeft) {
-            wall = "left";
-            hx = px(room.x);
-            hy = py(room.y + room.depth - 0.1);
-          } else {
-            wall = "right";
-            hx = px(room.x + room.width);
-            hy = py(room.y + room.depth - 0.1);
-          }
+          const cx = px(room.x + room.width / 2);
+          const cy = py(room.y + room.depth / 2);
+          const fs = Math.max(6, Math.min(8, roomPxW / 10));
+          // Place dimension text slightly below the room name
+          const offsetY = roomPxH >= 44 ? fs * 3.5 : fs * 2.2;
 
-          return <DoorSymbol key={`d-${room.id}`} hx={hx} hy={hy} doorPx={doorPx} wall={wall} />;
+          return (
+            <text
+              key={`dim-${room.id}`}
+              x={cx}
+              y={cy + offsetY}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={fs}
+              fontFamily="sans-serif"
+              fill={color(room.type).text}
+              opacity={0.7}
+            >
+              {room.width.toFixed(1)} × {room.depth.toFixed(1)} m
+            </text>
+          );
         })}
 
-      {/* ── Staircase treads ──────────────────────────────────────────── */}
-      {rooms
-        .filter((r) => r.type === "staircase")
-        .map((room) => (
-          <StaircaseSymbol key={`stair-${room.id}`} room={room} px={px} py={py} scale={scale} />
-        ))}
-
-      {/* ── Room furniture ────────────────────────────────────────────── */}
-      {rooms
-        .filter((r) => r.width * scale >= 30 && r.depth * scale >= 30)
-        .map((room) => (
-          <RoomFurniture key={`furn-${room.id}`} room={room} px={px} py={py} scale={scale} />
-        ))}
-
-      {/* ── Column markers ────────────────────────────────────────────── */}
-      {uniqueCols.map((col) => {
-        const colPx = Math.max(4, 0.3 * scale);
-        return (
-          <rect
-            key={`col-${col.x}-${col.y}`}
-            x={px(col.x) - colPx / 2}
-            y={py(col.y) - colPx / 2}
-            width={colPx}
-            height={colPx}
-            fill="#1E293B"
-          />
-        );
-      })}
-
-      {/* ── Room labels ───────────────────────────────────────────────── */}
-      {rooms.map((room) => (
-        <RoomLabel key={`lbl-${room.id}`} room={room} px={px} py={py} scale={scale} />
-      ))}
-
-      {/* ── Internal room dimensions ──────────────────────────────────── */}
-      {rooms.map((room) => {
-        const roomPxW = room.width * scale;
-        const roomPxH = room.depth * scale;
-        if (roomPxW < 40 || roomPxH < 40) return null;
-
-        const cx = px(room.x + room.width / 2);
-        const cy = py(room.y + room.depth / 2);
-        const fs = Math.max(6, Math.min(8, roomPxW / 10));
-        // Place dimension text slightly below the room name
-        const offsetY = roomPxH >= 44 ? fs * 3.5 : fs * 2.2;
-
-        return (
-          <text
-            key={`dim-${room.id}`}
-            x={cx}
-            y={cy + offsetY}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={fs}
-            fontFamily="sans-serif"
-            fill={color(room.type).text}
-            opacity={0.7}
-          >
-            {room.width.toFixed(1)} × {room.depth.toFixed(1)} m
-          </text>
-        );
-      })}
-
-      {/* ── Dimension lines ───────────────────────────────────────────── */}
-      <DimLine
-        x1={originX}
-        y1={originY + drawH}
-        x2={originX + drawW}
-        y2={originY + drawH}
-        label={`${plotWidth} m`}
-        offset={-28}
-        horizontal
-      />
-      <DimLine
-        x1={originX}
-        y1={originY}
-        x2={originX}
-        y2={originY + drawH}
-        label={`${plotLength} m`}
-        offset={-28}
-        horizontal={false}
-      />
-
-      {/* ── North arrow ───────────────────────────────────────────────── */}
-      <NorthArrow x={originX + drawW - 2} y={originY + 18} rotation={northRotation} />
-
-      {/* ── Scale bar ─────────────────────────────────────────────────── */}
-      <ScaleBar x={originX + 4} y={originY + drawH - 10} scale={scale} />
-
-      {/* ── Furniture overlay (presentation mode) ─────────────────────── */}
-      {showFurniture && (
-        <FurnitureOverlay
-          rooms={rooms}
-          scale={scale}
-          offsetX={originX}
-          offsetY={originY}
-          plotHeightPx={drawH}
+        {/* ── Dimension lines ───────────────────────────────────────────── */}
+        <DimLine
+          x1={originX}
+          y1={originY + drawH}
+          x2={originX + drawW}
+          y2={originY + drawH}
+          label={`${plotWidth} m`}
+          offset={-28}
+          horizontal
         />
-      )}
-    </svg>
+        <DimLine
+          x1={originX}
+          y1={originY}
+          x2={originX}
+          y2={originY + drawH}
+          label={`${plotLength} m`}
+          offset={-28}
+          horizontal={false}
+        />
+
+        {/* ── North arrow ───────────────────────────────────────────────── */}
+        <NorthArrow x={originX + drawW - 2} y={originY + 18} rotation={northRotation} />
+
+        {/* ── Scale bar ─────────────────────────────────────────────────── */}
+        <ScaleBar x={originX + 4} y={originY + drawH - 10} scale={scale} />
+
+        {/* ── Furniture overlay (presentation mode) ─────────────────────── */}
+        {showFurniture && (
+          <FurnitureOverlay
+            rooms={rooms}
+            scale={scale}
+            offsetX={originX}
+            offsetY={originY}
+            plotHeightPx={drawH}
+          />
+        )}
+
+        {/* ── Annotation sticky-note icons ───────────────────────────────── */}
+        {annotations.length > 0 &&
+          rooms.map((room) => {
+            const ann = annotationMap.get(room.id);
+            if (!ann || !ann.note) return null;
+            const noteX = px(room.x + room.width / 2) - 10;
+            const noteY = py(room.y + room.depth / 2) - 10;
+            return (
+              <Tooltip key={`ann-${room.id}`}>
+                <TooltipTrigger asChild>
+                  <g style={{ cursor: "pointer" }}>
+                    {/* Sticky note yellow rect */}
+                    <rect
+                      x={noteX}
+                      y={noteY}
+                      width={20}
+                      height={20}
+                      rx={2}
+                      fill="#FEF08A"
+                      stroke="#CA8A04"
+                      strokeWidth={0.8}
+                    />
+                    {/* Fold corner */}
+                    <path
+                      d={`M ${noteX + 14} ${noteY} L ${noteX + 20} ${noteY + 6} L ${noteX + 14} ${noteY + 6} Z`}
+                      fill="#FDE047"
+                      stroke="#CA8A04"
+                      strokeWidth={0.5}
+                    />
+                    {/* N text */}
+                    <text
+                      x={noteX + 7}
+                      y={noteY + 14}
+                      fontSize={8}
+                      fontWeight="700"
+                      fill="#713F12"
+                      fontFamily="sans-serif"
+                    >
+                      N
+                    </text>
+                  </g>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-semibold text-xs mb-0.5">{ann.room_name}</p>
+                  <p className="text-xs">{ann.note}</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+      </svg>
+    </TooltipProvider>
   );
 }

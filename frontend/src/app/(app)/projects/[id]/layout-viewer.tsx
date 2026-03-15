@@ -2,20 +2,25 @@
 
 import {
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  CircleDot,
+  Clock,
   Copy,
   History,
   Link2,
   Lock,
+  MessageSquare,
   RotateCcw,
   Save,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
 import { ChatPanel } from "@/components/chat-panel";
+import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { LayoutCompareView } from "@/components/layout-compare-view";
 import { SectionViewSVG } from "@/components/section-view-svg";
@@ -177,6 +182,14 @@ function VastuBadge({ compliance }: { compliance: ComplianceData }) {
   );
 }
 
+type ApprovalStatus = "approved" | "changes_requested" | "pending" | null;
+
+interface ApprovalInfo {
+  status: ApprovalStatus;
+  note: string | null;
+  updatedAt: string | null;
+}
+
 interface LayoutViewerProps {
   generateData: GenerateResponse | null;
   plotWidth: number;
@@ -193,6 +206,8 @@ interface LayoutViewerProps {
   numFloors?: number;
   vastuEnabled?: boolean;
   municipality?: string | null;
+  shareToken?: string | null;
+  initialApproval?: ApprovalInfo;
 }
 
 // ── Vastu badge helper ────────────────────────────────────────────────────────
@@ -283,6 +298,8 @@ export function LayoutViewer({
   numFloors: _numFloors = 1,
   vastuEnabled = false,
   municipality = null,
+  shareToken = null,
+  initialApproval,
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
@@ -294,6 +311,20 @@ export function LayoutViewer({
   );
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
+
+  // ── Annotation state ───────────────────────────────────────────────────────
+  const [annotationMode, setAnnotationMode] = useState(false);
+  // annotations keyed by room_id
+  const [annotations, setAnnotations] = useState<Record<string, Annotation>>({});
+  const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+  // Annotation dialog state
+  const [annDialogOpen, setAnnDialogOpen] = useState(false);
+  const [annEditRoomId, setAnnEditRoomId] = useState("");
+  const [annEditRoomName, setAnnEditRoomName] = useState("");
+  const [annEditNote, setAnnEditNote] = useState("");
+  const [annSaving, setAnnSaving] = useState(false);
+  // Debounce timer ref for PUT
+  const annDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -302,6 +333,162 @@ export function LayoutViewer({
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // ── Client Approval state ─────────────────────────────────────────────────
+  const [approval, setApproval] = useState<ApprovalInfo>({
+    status: initialApproval?.status ?? null,
+    note: initialApproval?.note ?? null,
+    updatedAt: initialApproval?.updatedAt ?? null,
+  });
+  const [approvalFetching, setApprovalFetching] = useState(false);
+  const [sendForApprovalOpen, setSendForApprovalOpen] = useState(false);
+  const [approvalShareUrl, setApprovalShareUrl] = useState(
+    shareToken
+      ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/${shareToken}`
+      : ""
+  );
+  const [approvalShareCopied, setApprovalShareCopied] = useState(false);
+  const [approvalShareLoading, setApprovalShareLoading] = useState(false);
+  const [approvalShareError, setApprovalShareError] = useState("");
+
+  async function fetchApprovalStatus() {
+    if (!session) return;
+    setApprovalFetching(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/approval-status`,
+        { headers: { "X-User-Id": session.user.id } }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      setApproval({
+        status: data.approval_status as ApprovalStatus,
+        note: data.approval_note ?? null,
+        updatedAt: data.approval_updated_at ?? null,
+      });
+    } catch {
+      // silent — approval status is non-critical
+    } finally {
+      setApprovalFetching(false);
+    }
+  }
+
+  // ── Annotation helpers ─────────────────────────────────────────────────────
+
+  const saveAnnotationsToBackend = useCallback(
+    (updated: Record<string, Annotation>) => {
+      if (!session) return;
+      if (annDebounceRef.current) clearTimeout(annDebounceRef.current);
+      annDebounceRef.current = setTimeout(async () => {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/annotations`, {
+            method: "PUT",
+            headers: { "X-User-Id": session.user.id, "Content-Type": "application/json" },
+            body: JSON.stringify(updated),
+          });
+        } catch {
+          // silent — annotations are non-critical, will retry on next save
+        }
+      }, 500);
+    },
+    [session, projectId]
+  );
+
+  useEffect(() => {
+    if (!session || annotationsLoaded) return;
+    setAnnotationsLoaded(true);
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/annotations`, {
+      headers: { "X-User-Id": session.user.id },
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data: Record<string, Annotation>) => setAnnotations(data))
+      .catch(() => {});
+  }, [session, projectId, annotationsLoaded]);
+
+  function handleAnnotationClick(roomId: string, roomName: string, _x: number, _y: number) {
+    const existing = annotations[roomId];
+    setAnnEditRoomId(roomId);
+    setAnnEditRoomName(roomName);
+    setAnnEditNote(existing?.note ?? "");
+    setAnnDialogOpen(true);
+  }
+
+  function handleAnnotationSave() {
+    if (!annEditRoomId) return;
+    setAnnSaving(true);
+    const updated = { ...annotations };
+    if (annEditNote.trim()) {
+      updated[annEditRoomId] = {
+        room_id: annEditRoomId,
+        room_name: annEditRoomName,
+        note: annEditNote.trim(),
+        x: 0,
+        y: 0,
+      };
+    } else {
+      delete updated[annEditRoomId];
+    }
+    setAnnotations(updated);
+    saveAnnotationsToBackend(updated);
+    setAnnDialogOpen(false);
+    setAnnEditNote("");
+    setAnnSaving(false);
+  }
+
+  function handleAnnotationDelete() {
+    if (!annEditRoomId) return;
+    const updated = { ...annotations };
+    delete updated[annEditRoomId];
+    setAnnotations(updated);
+    saveAnnotationsToBackend(updated);
+    setAnnDialogOpen(false);
+    setAnnEditNote("");
+  }
+
+  const annotationCount = Object.keys(annotations).filter((k) => annotations[k]?.note).length;
+  const annotationList = Object.values(annotations);
+
+  async function handleSendForApproval() {
+    if (!session) return;
+    setApprovalShareLoading(true);
+    setApprovalShareError("");
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/share`,
+        { method: "POST", headers: { "X-User-Id": session.user.id } }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { detail?: string })?.detail ?? `Failed (${res.status})`);
+      }
+      const json = await res.json();
+      const fullUrl = `${window.location.origin}${json.share_url}`;
+      setApprovalShareUrl(fullUrl);
+      setSendForApprovalOpen(true);
+    } catch (err) {
+      setApprovalShareError(err instanceof Error ? err.message : "Could not generate share link");
+    } finally {
+      setApprovalShareLoading(false);
+    }
+  }
+
+  async function handleCopyApprovalLink() {
+    try {
+      await navigator.clipboard.writeText(approvalShareUrl);
+      setApprovalShareCopied(true);
+      setTimeout(() => setApprovalShareCopied(false), 2000);
+    } catch {
+      // fallback
+    }
+  }
+
+  function formatApprovalDate(iso: string): string {
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
 
   // ── Approval PDF state ────────────────────────────────────────────────────
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
@@ -669,6 +856,28 @@ export function LayoutViewer({
             <Link2 className="h-3 w-3 mr-1.5" />
             {shareLoading ? "…" : "Share"}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-border text-foreground hover:bg-muted"
+            onClick={handleSendForApproval}
+            disabled={approvalShareLoading || !session}
+            title="Send this plan to client for approval"
+          >
+            <MessageSquare className="h-3 w-3 mr-1.5" />
+            {approvalShareLoading ? "…" : "Send for Approval"}
+          </Button>
+          {/* Refresh approval status button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-border text-muted-foreground hover:bg-muted"
+            onClick={fetchApprovalStatus}
+            disabled={approvalFetching || !session}
+            title="Refresh client approval status"
+          >
+            {approvalFetching ? "…" : "↻"}
+          </Button>
         </div>
       </div>
 
@@ -678,6 +887,64 @@ export function LayoutViewer({
           {shareError}
         </p>
       )}
+
+      {/* Annotation dialog */}
+      <Dialog
+        open={annDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAnnDialogOpen(false);
+            setAnnEditNote("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-yellow-600" />
+              {annEditRoomName}
+            </DialogTitle>
+            <DialogDescription>
+              Add an engineer note for this room. Notes appear as sticky icons on the floor plan and
+              in PDF exports.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <Textarea
+              value={annEditNote}
+              onChange={(e) => setAnnEditNote(e.target.value)}
+              placeholder="e.g. Client wants wardrobe here, Confirm column clearance with structural engineer…"
+              className="min-h-[90px] resize-none text-sm"
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="flex items-center gap-2">
+            {annotations[annEditRoomId] && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive mr-auto"
+                onClick={handleAnnotationDelete}
+              >
+                Delete note
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAnnDialogOpen(false);
+                setAnnEditNote("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleAnnotationSave} disabled={annSaving}>
+              Save note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Share link dialog */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
@@ -713,6 +980,108 @@ export function LayoutViewer({
           </p>
         </DialogContent>
       </Dialog>
+
+      {/* Approval share error */}
+      {approvalShareError && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {approvalShareError}
+        </p>
+      )}
+
+      {/* Send for Approval dialog */}
+      <Dialog open={sendForApprovalOpen} onOpenChange={setSendForApprovalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send for client approval</DialogTitle>
+            <DialogDescription>
+              Share this link with your client. They can approve the plan or request changes — no
+              login needed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              readOnly
+              value={approvalShareUrl}
+              className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
+              onFocus={(e) => e.target.select()}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCopyApprovalLink}
+              className="shrink-0"
+              title="Copy link"
+            >
+              {approvalShareCopied ? (
+                <Check className="h-4 w-4 text-green-600" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          {approvalShareCopied && (
+            <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            After sending the link, use the ↻ button in the toolbar to check if the client has
+            responded.
+          </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval status indicator */}
+      {(approval.status || shareToken) && (
+        <div
+          className={[
+            "flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm",
+            approval.status === "approved"
+              ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
+              : approval.status === "changes_requested"
+                ? "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-400"
+                : "border-border bg-muted/30 text-muted-foreground",
+          ].join(" ")}
+        >
+          {approval.status === "approved" ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : approval.status === "changes_requested" ? (
+            <MessageSquare className="h-4 w-4 shrink-0" />
+          ) : shareToken ? (
+            <Clock className="h-4 w-4 shrink-0" />
+          ) : (
+            <CircleDot className="h-4 w-4 shrink-0" />
+          )}
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span className="font-medium">
+              {approval.status === "approved"
+                ? "Client Approved"
+                : approval.status === "changes_requested"
+                  ? "Changes Requested"
+                  : shareToken
+                    ? "Pending client review"
+                    : "Not sent for review"}
+            </span>
+            {approval.updatedAt && (
+              <span className="text-xs opacity-80">{formatApprovalDate(approval.updatedAt)}</span>
+            )}
+            {approval.status === "changes_requested" && approval.note && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-left text-xs underline underline-offset-2 opacity-80 hover:opacity-100 w-fit"
+                  >
+                    View note
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 text-sm" align="start">
+                  <p className="font-semibold mb-2 text-foreground">Client note</p>
+                  <p className="text-muted-foreground">{approval.note}</p>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Approval PDF dialog */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
@@ -961,7 +1330,7 @@ export function LayoutViewer({
             ))}
           </div>
 
-          {/* Floor plan toolbar: Vastu zones + Furnish toggles */}
+          {/* Floor plan toolbar: Vastu zones + Furnish + Annotate toggles */}
           <div className="flex flex-wrap gap-2">
             {vastuEnabled && (
               <button
@@ -989,7 +1358,37 @@ export function LayoutViewer({
             >
               {showFurniture ? "Hide Furniture" : "Furnish"}
             </button>
+            <button
+              type="button"
+              onClick={() => setAnnotationMode((v) => !v)}
+              className={[
+                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                annotationMode
+                  ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+              ].join(" ")}
+              title={
+                annotationMode
+                  ? "Click a room to add/edit a note. Click again to exit."
+                  : "Enter annotation mode to attach notes to rooms"
+              }
+            >
+              <MessageSquare className="h-3 w-3" />
+              {annotationMode ? "Exit Annotate" : "Annotate"}
+              {annotationCount > 0 && (
+                <span className="ml-1 rounded-full bg-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                  {annotationCount}
+                </span>
+              )}
+            </button>
           </div>
+
+          {annotationMode && (
+            <p className="text-xs text-yellow-700 dark:text-yellow-400 rounded-lg border border-yellow-500/30 bg-yellow-500/8 px-3 py-1.5">
+              Click any room to add or edit a note. Notes persist across sessions and appear in PDF
+              exports.
+            </p>
+          )}
 
           <FloorPlanSVG
             floorPlan={floorPlan}
@@ -1003,6 +1402,9 @@ export function LayoutViewer({
             plotCorners={plotCorners}
             showVastuZones={showVastuZones}
             showFurniture={showFurniture}
+            annotationMode={annotationMode}
+            annotations={annotationList}
+            onAnnotationClick={handleAnnotationClick}
           />
 
           {/* Room legend */}

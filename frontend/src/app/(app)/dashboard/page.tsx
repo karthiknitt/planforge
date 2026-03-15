@@ -161,6 +161,28 @@ export default async function DashboardPage() {
                   )}
                 </div>
 
+                {/* Approval badge */}
+                {p.approvalStatus && (
+                  <div className="flex items-center gap-1.5">
+                    {p.approvalStatus === "approved" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-400">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                        Approved
+                      </span>
+                    ) : p.approvalStatus === "changes_requested" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[11px] font-medium text-orange-700 dark:text-orange-400">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-500" />
+                        Changes requested
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                        Awaiting client
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Footer */}
                 <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
                   <span className="text-[11px] text-muted-foreground/70">

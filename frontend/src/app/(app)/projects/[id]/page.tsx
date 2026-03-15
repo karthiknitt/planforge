@@ -63,6 +63,10 @@ interface LayoutSectionProps {
   plotCorners?: [number, number][];
   vastuEnabled?: boolean;
   municipality?: string | null;
+  shareToken?: string | null;
+  approvalStatus?: string | null;
+  approvalNote?: string | null;
+  approvalUpdatedAt?: Date | null;
 }
 
 async function LayoutSection({
@@ -80,6 +84,10 @@ async function LayoutSection({
   plotCorners,
   vastuEnabled,
   municipality,
+  shareToken,
+  approvalStatus,
+  approvalNote,
+  approvalUpdatedAt,
 }: LayoutSectionProps) {
   const generateData = await fetchLayouts(projectId, userId);
   return (
@@ -98,6 +106,12 @@ async function LayoutSection({
       plotCorners={plotCorners}
       vastuEnabled={vastuEnabled}
       municipality={municipality}
+      shareToken={shareToken}
+      initialApproval={{
+        status: approvalStatus as "approved" | "changes_requested" | "pending" | null,
+        note: approvalNote ?? null,
+        updatedAt: approvalUpdatedAt ? approvalUpdatedAt.toISOString() : null,
+      }}
     />
   );
 }
@@ -306,6 +320,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           }
           vastuEnabled={project.vastuEnabled}
           municipality={project.municipality}
+          shareToken={project.shareToken}
+          approvalStatus={project.approvalStatus}
+          approvalNote={project.approvalNote}
+          approvalUpdatedAt={project.approvalUpdatedAt}
         />
       </Suspense>
     </main>

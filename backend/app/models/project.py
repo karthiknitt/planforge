@@ -1,6 +1,8 @@
 import uuid
+from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import Boolean, Float, Integer, Numeric, String, Text, text
+from sqlalchemy import JSON, Boolean, Float, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
@@ -77,6 +79,17 @@ class Project(Base):
     # Share link token (public read-only access)
     share_token: Mapped[str | None] = mapped_column(
         String, unique=True, nullable=True, index=True)
+
+    # Room annotations — per-room engineer notes (per-project, applies to all layouts)
+    # Shape: {"<room_id>": {"room_id": str, "room_name": str, "note": str, "x": float, "y": float}}
+    annotations: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Client approval workflow
+    # Values: None | "pending" | "approved" | "changes_requested"
+    approval_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    approval_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    approval_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)

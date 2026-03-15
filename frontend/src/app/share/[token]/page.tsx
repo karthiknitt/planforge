@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ApprovalActions } from "@/components/approval-actions";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
@@ -24,6 +25,9 @@ interface ShareProjectInfo {
 interface ShareApiResponse {
   project: ShareProjectInfo;
   generate: GenerateResponse;
+  approval_status: string | null;
+  approval_note: string | null;
+  approval_updated_at: string | null;
 }
 
 // ── Fetch helper ──────────────────────────────────────────────────────────────
@@ -294,6 +298,16 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
             />
           ))}
         </div>
+
+        {/* Client approval actions */}
+        <ApprovalActions
+          token={token}
+          initialStatus={
+            data.approval_status as "approved" | "changes_requested" | "pending" | null
+          }
+          initialNote={data.approval_note}
+          initialUpdatedAt={data.approval_updated_at}
+        />
 
         {/* Standard details */}
         <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-2 gap-1 sm:grid-cols-3">
