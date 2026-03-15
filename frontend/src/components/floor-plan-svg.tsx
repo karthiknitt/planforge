@@ -107,7 +107,7 @@ function RoomLabel({
     <g>
       {lines.map((line, i) => (
         <text
-          key={line}
+          key={i}
           x={cx}
           y={cy + (i - (lines.length - 1) / 2) * (fs + 2)}
           textAnchor="middle"
