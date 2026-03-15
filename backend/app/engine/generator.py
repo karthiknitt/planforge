@@ -37,12 +37,15 @@ def _fill_blank_areas(
     """
     Detect unoccupied space in ``floor_plan`` and fill it intelligently.
 
-    For the topmost occupied floor, leftover area becomes an open terrace.
-    For other floors, the fill room type is chosen by area:
-      < 0.5 m²  → ignore
-      0.5–3 m²  → store_room (small utility pocket)
-      3–7 m²    → utility / laundry
-      > 7 m²    → expand the adjacent largest room (stretch its depth/width)
+    For the topmost occupied floor:
+      ≥ 15 m²  → Open Terrace
+      4–15 m²  → Utility
+      < 4 m²   → merge into adjacent room
+
+    For other floors:
+      ≥ 8 m²   → Store Room
+      4–8 m²   → Utility
+      < 4 m²   → merge into adjacent room
 
     Returns a list of human-readable notes about what was added/changed.
     """
@@ -84,69 +87,86 @@ def _fill_blank_areas(
             continue
 
         if is_topmost:
-            # Top floor leftover → open terrace (minimum 1.5 m in each dimension)
-            if rw >= 1.5 and rd >= 1.5:
-                room_id = _next_id("open_terrace")
-                floor_plan.rooms.append(Room(
-                    id=room_id,
-                    name="Open Terrace",
-                    type="balcony",  # closest existing type for compliance purposes
-                    x=round(minx, 3),
-                    y=round(miny, 3),
-                    width=rw,
-                    depth=rd,
-                ))
-                notes.append(
-                    f"Open Terrace ({rw:.1f}×{rd:.1f} m, {area:.1f} m²) added to "
-                    f"utilise remaining space on top floor."
-                )
+            if area >= 15.0:
+                # Large top-floor leftover → Open Terrace (min 1.5 m each dimension)
+                if rw >= 1.5 and rd >= 1.5:
+                    room_id = _next_id("open_terrace")
+                    floor_plan.rooms.append(Room(
+                        id=room_id,
+                        name="Open Terrace",
+                        type="balcony",  # closest existing type for compliance purposes
+                        x=round(minx, 3),
+                        y=round(miny, 3),
+                        width=rw,
+                        depth=rd,
+                    ))
+                    notes.append(
+                        f"Open Terrace ({area:.1f} sqm) added to top floor."
+                    )
+                else:
+                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+            elif area >= 4.0:
+                # Medium top-floor leftover → Utility
+                if rw >= 1.5 and rd >= 1.5:
+                    room_id = _next_id("utility_auto")
+                    floor_plan.rooms.append(Room(
+                        id=room_id,
+                        name="Utility",
+                        type="utility",
+                        x=round(minx, 3),
+                        y=round(miny, 3),
+                        width=rw,
+                        depth=rd,
+                    ))
+                    notes.append(
+                        f"Utility ({area:.1f} sqm) added to top floor."
+                    )
+                else:
+                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
             else:
-                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
-
-        elif area < 3.0:
-            # Small gap → store room
-            if rw >= 0.8 and rd >= 0.8:
-                room_id = _next_id("store_auto")
-                floor_plan.rooms.append(Room(
-                    id=room_id,
-                    name="Store Room",
-                    type="store_room",
-                    x=round(minx, 3),
-                    y=round(miny, 3),
-                    width=rw,
-                    depth=rd,
-                ))
-                notes.append(
-                    f"Store Room ({rw:.1f}×{rd:.1f} m, {area:.1f} m²) added to fill "
-                    f"unused gap on floor {floor_plan.floor}."
-                )
-            else:
-                # Too narrow to be a named room — absorb into the closest adjacent room
-                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
-
-        elif area < 7.0:
-            # Medium gap → utility / laundry
-            if rw >= 1.5 and rd >= 1.5:
-                room_id = _next_id("utility_auto")
-                floor_plan.rooms.append(Room(
-                    id=room_id,
-                    name="Utility / Laundry",
-                    type="utility",
-                    x=round(minx, 3),
-                    y=round(miny, 3),
-                    width=rw,
-                    depth=rd,
-                ))
-                notes.append(
-                    f"Utility/Laundry room ({rw:.1f}×{rd:.1f} m, {area:.1f} m²) added to "
-                    f"fill unused space on floor {floor_plan.floor}."
-                )
-            else:
+                # < 4 m² → merge into adjacent room
                 _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
 
         else:
-            # Large gap → expand adjacent room (prefer the largest neighbouring room)
-            _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+            if area >= 8.0:
+                # Large gap → Store Room
+                if rw >= 1.5 and rd >= 1.5:
+                    room_id = _next_id("store_auto")
+                    floor_plan.rooms.append(Room(
+                        id=room_id,
+                        name="Store Room",
+                        type="store_room",
+                        x=round(minx, 3),
+                        y=round(miny, 3),
+                        width=rw,
+                        depth=rd,
+                    ))
+                    notes.append(
+                        f"Store Room ({area:.1f} sqm) added to Ground Floor."
+                    )
+                else:
+                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+            elif area >= 4.0:
+                # Medium gap → Utility
+                if rw >= 1.5 and rd >= 1.5:
+                    room_id = _next_id("utility_auto")
+                    floor_plan.rooms.append(Room(
+                        id=room_id,
+                        name="Utility",
+                        type="utility",
+                        x=round(minx, 3),
+                        y=round(miny, 3),
+                        width=rw,
+                        depth=rd,
+                    ))
+                    notes.append(
+                        f"Utility ({area:.1f} sqm) added to Ground Floor."
+                    )
+                else:
+                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+            else:
+                # < 4 m² → merge into adjacent room
+                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
 
     return notes
 

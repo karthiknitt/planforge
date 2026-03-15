@@ -50,6 +50,7 @@ class LayoutOut(BaseModel):
     basement_floor: FloorPlanOut | None = None
     score: LayoutScoreOut | None = None
     space_notes: list[str] = []
+    auto_added_rooms: list[str] = []
 
 
 class GenerateResponse(BaseModel):

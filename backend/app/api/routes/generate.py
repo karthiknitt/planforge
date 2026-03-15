@@ -124,6 +124,7 @@ async def generate_layouts(
                     vastu=lay.score.vastu,
                 ) if lay.score else None,
                 space_notes=getattr(lay, "space_notes", []),
+                auto_added_rooms=getattr(lay, "space_notes", []),
             )
             for lay in layouts
         ],
