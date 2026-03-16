@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import export, gallery, generate, health, payments, projects, revisions, rooms, share, teams
 from app.db import Base, engine
+from app.auto_migrate import auto_migrate_missing_columns
 # Import all models so SQLAlchemy knows about them before create_all
 import app.models.project   # noqa: F401
 import app.models.revision  # noqa: F401
@@ -16,6 +17,7 @@ import app.models.user      # noqa: F401
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await auto_migrate_missing_columns(engine)
     yield
 
 

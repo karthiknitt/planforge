@@ -5,13 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select } from "@/components/ui/select";
 
 interface InviteMemberFormProps {
   teamId: number;
@@ -78,14 +72,9 @@ export function InviteMemberForm({ teamId }: InviteMemberFormProps) {
         <Label htmlFor="invite-role" className="text-sm font-medium">
           Role
         </Label>
-        <Select value={role} onValueChange={setRole}>
-          <SelectTrigger id="invite-role">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="member">Member</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-          </SelectContent>
+        <Select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
         </Select>
       </div>
 

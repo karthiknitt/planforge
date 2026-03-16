@@ -4,13 +4,7 @@ import { useState } from "react";
 
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -139,18 +133,13 @@ function LayoutPanel({
   return (
     <div className="flex flex-col gap-3 min-w-0">
       {/* Layout picker */}
-      <Select value={selectedId} onValueChange={onSelect}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="Pick a layout" />
-        </SelectTrigger>
-        <SelectContent>
-          {layouts.map((l) => (
-            <SelectItem key={l.id} value={l.id}>
-              Layout {l.id} — {l.name}
-              {l.score ? ` · ${l.score.total.toFixed(0)}/100` : ""}
-            </SelectItem>
-          ))}
-        </SelectContent>
+      <Select value={selectedId} onChange={(e) => onSelect(e.target.value)} className="w-full">
+        {layouts.map((l) => (
+          <option key={l.id} value={l.id}>
+            Layout {l.id} — {l.name}
+            {l.score ? ` · ${l.score.total.toFixed(0)}/100` : ""}
+          </option>
+        ))}
       </Select>
 
       {/* Score + compliance badges */}

@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   real,
@@ -139,9 +140,12 @@ export const project = pgTable(
     teamId: integer("team_id").references(() => team.id, { onDelete: "set null" }),
     // Share link token (public read-only access)
     shareToken: text("share_token").unique(),
+    // Per-room engineer notes: { "<room_id>": { note, x, y } }
+    annotations: jsonb("annotations"),
     // Client approval workflow — None | "pending" | "approved" | "changes_requested"
     approvalStatus: text("approval_status"),
     approvalNote: text("approval_note"),
+    approvalSelectedLayouts: text("approval_selected_layouts"),
     approvalUpdatedAt: timestamp("approval_updated_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

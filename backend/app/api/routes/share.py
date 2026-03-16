@@ -159,12 +159,17 @@ class ShareResponse(BaseModel):
     generate: GenerateResponse
     approval_status: str | None = None
     approval_note: str | None = None
+    approval_selected_layouts: list[str] | None = None
     approval_updated_at: datetime | None = None
 
 
 class ShareTokenResponse(BaseModel):
     share_url: str
     token: str
+
+
+class ApproveBody(BaseModel):
+    selected_layout_ids: list[str] = []
 
 
 class RequestChangesBody(BaseModel):
@@ -175,6 +180,7 @@ class ApprovalStatusResponse(BaseModel):
     project_id: str
     approval_status: str | None
     approval_note: str | None
+    approval_selected_layouts: list[str] | None
     approval_updated_at: datetime | None
 
 
@@ -235,11 +241,15 @@ async def get_shared_project(
 
     generate_resp = _build_generate_response(project.id, project)
 
+    raw_sel = getattr(project, "approval_selected_layouts", None)
+    selected = json.loads(raw_sel) if raw_sel else None
+
     return ShareResponse(
         project=project_info,
         generate=generate_resp,
         approval_status=getattr(project, "approval_status", None),
         approval_note=getattr(project, "approval_note", None),
+        approval_selected_layouts=selected,
         approval_updated_at=getattr(project, "approval_updated_at", None),
     )
 
@@ -247,6 +257,7 @@ async def get_shared_project(
 @router.post("/share/{token}/approve", status_code=status.HTTP_200_OK)
 async def approve_shared_project(
     token: str,
+    body: ApproveBody,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     result = await db.execute(select(Project).where(Project.share_token == token))
@@ -257,6 +268,7 @@ async def approve_shared_project(
 
     project.approval_status = "approved"
     project.approval_note = None
+    project.approval_selected_layouts = json.dumps(body.selected_layout_ids) if body.selected_layout_ids else None
     project.approval_updated_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -300,9 +312,11 @@ async def get_approval_status(
     if project.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
+    raw_sel = getattr(project, "approval_selected_layouts", None)
     return ApprovalStatusResponse(
         project_id=project_id,
         approval_status=getattr(project, "approval_status", None),
         approval_note=getattr(project, "approval_note", None),
+        approval_selected_layouts=json.loads(raw_sel) if raw_sel else None,
         approval_updated_at=getattr(project, "approval_updated_at", None),
     )

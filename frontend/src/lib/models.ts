@@ -44,8 +44,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
 
   // ── OpenAI ───────────────────────────────────────────────────────────────
   {
-    id: "gpt-5.2",
-    label: "GPT-5.2",
+    id: "gpt-4.1",
+    label: "GPT-4.1",
     provider: "openai",
     group: "OpenAI",
     logoId: "openai",

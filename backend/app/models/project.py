@@ -101,6 +101,7 @@ class Project(Base):
     # Values: None | "pending" | "approved" | "changes_requested"
     approval_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     approval_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    approval_selected_layouts: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list of layout IDs
     approval_updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
 

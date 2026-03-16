@@ -3,13 +3,7 @@
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select } from "@/components/ui/select";
 import { useSession } from "@/lib/auth-client";
 import type { BOQResponse } from "@/lib/layout-types";
 
@@ -113,17 +107,17 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
           <label className="text-xs font-medium text-muted-foreground" htmlFor="city-select-pre">
             City / Region
           </label>
-          <Select value={city} onValueChange={handleCityChange}>
-            <SelectTrigger id="city-select-pre" className="w-48">
-              <SelectValue placeholder="Select city" />
-            </SelectTrigger>
-            <SelectContent>
-              {SUPPORTED_CITIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
+          <Select
+            id="city-select-pre"
+            value={city}
+            onChange={(e) => handleCityChange(e.target.value)}
+            className="w-48"
+          >
+            {SUPPORTED_CITIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </Select>
           <p className="text-xs text-muted-foreground">
             Material rates vary 20–30% across Indian cities. Select your city for accurate
@@ -175,17 +169,16 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
 
         <div className="flex flex-wrap items-center gap-2">
           {/* City selector */}
-          <Select value={city} onValueChange={handleCityChange}>
-            <SelectTrigger className="h-9 w-full sm:h-8 sm:w-40 text-sm sm:text-xs">
-              <SelectValue placeholder="Select city" />
-            </SelectTrigger>
-            <SelectContent>
-              {SUPPORTED_CITIES.map((c) => (
-                <SelectItem key={c} value={c} className="text-xs">
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
+          <Select
+            value={city}
+            onChange={(e) => handleCityChange(e.target.value)}
+            className="h-9 w-full sm:h-8 sm:w-40 text-sm sm:text-xs"
+          >
+            {SUPPORTED_CITIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </Select>
 
           {planTier === "pro" ? (

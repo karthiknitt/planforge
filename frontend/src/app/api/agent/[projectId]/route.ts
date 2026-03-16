@@ -255,7 +255,9 @@ export async function POST(req: Request, { params }: { params: Params }) {
     );
   }
 
-  // OpenRouter client — uses Chat Completions API (not OpenAI Responses API)
+  // OpenRouter only supports Chat Completions — use .chat() not the default call.
+  // In @ai-sdk/openai v3+, calling provider(modelId) directly routes to the
+  // Responses API (/v1/responses) which OpenRouter doesn't implement.
   const openrouterClient = hasOpenRouter
     ? createOpenAI({
         apiKey: process.env.OPENROUTER_API_KEY ?? "",
@@ -273,35 +275,35 @@ export async function POST(req: Request, { params }: { params: Params }) {
   const models: { model: LanguageModel; label: string }[] = [];
 
   if (provider === "openrouter" && openrouterClient) {
-    models.push({ model: openrouterClient(requestedId), label: requestedId });
+    models.push({ model: openrouterClient.chat(requestedId), label: requestedId });
     // Fallback chain for OpenRouter failures
     if (hasAnthropic)
       models.push({ model: anthropic(DEFAULT_MODEL_ID), label: "claude-sonnet-fallback" });
-    else if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
+    else if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o-fallback" });
   } else if (provider === "anthropic" && hasAnthropic) {
     models.push({ model: anthropic(requestedId), label: requestedId });
-    if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2-fallback" });
+    if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o-fallback" });
     else if (hasOpenRouter && openrouterClient)
       models.push({
-        model: openrouterClient(openrouterFallbackModel),
+        model: openrouterClient.chat(openrouterFallbackModel),
         label: `openrouter-fallback(${openrouterFallbackModel})`,
       });
   } else if (provider === "openai" && hasOpenAI) {
-    models.push({ model: openai(requestedId), label: requestedId });
+    models.push({ model: openai.chat(requestedId), label: requestedId });
     if (hasAnthropic)
       models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
     else if (hasOpenRouter && openrouterClient)
       models.push({
-        model: openrouterClient(openrouterFallbackModel),
+        model: openrouterClient.chat(openrouterFallbackModel),
         label: `openrouter-fallback(${openrouterFallbackModel})`,
       });
   } else {
     // No matching provider available — try all in priority order
     if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
-    if (hasOpenAI) models.push({ model: openai("gpt-5.2"), label: "gpt-5.2" });
+    if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o" });
     if (hasOpenRouter && openrouterClient)
       models.push({
-        model: openrouterClient(openrouterFallbackModel),
+        model: openrouterClient.chat(openrouterFallbackModel),
         label: `openrouter(${openrouterFallbackModel})`,
       });
   }

@@ -27,6 +27,7 @@ interface ShareApiResponse {
   generate: GenerateResponse;
   approval_status: string | null;
   approval_note: string | null;
+  approval_selected_layouts: string[] | null;
   approval_updated_at: string | null;
 }
 
@@ -302,10 +303,16 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
         {/* Client approval actions */}
         <ApprovalActions
           token={token}
+          layouts={generate.layouts.map((l) => ({
+            id: l.id,
+            name: l.name,
+            score: l.score?.total,
+          }))}
           initialStatus={
             data.approval_status as "approved" | "changes_requested" | "pending" | null
           }
           initialNote={data.approval_note}
+          initialSelectedLayouts={data.approval_selected_layouts}
           initialUpdatedAt={data.approval_updated_at}
         />
 

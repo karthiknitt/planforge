@@ -1,3 +1,5 @@
+"use client";
+
 import { useRef, useState } from "react";
 import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";

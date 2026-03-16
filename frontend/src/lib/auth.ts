@@ -9,6 +9,14 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
+  logger: {
+    disabled: false,
+    level: "error",
+    log(level, message, ...args) {
+      if (level === "error" && message.includes("fallback join")) return;
+      console[level]?.("[Better Auth]", message, ...args);
+    },
+  },
   emailAndPassword: {
     enabled: true,
   },
