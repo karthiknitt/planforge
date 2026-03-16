@@ -152,7 +152,7 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
   return (
     <div className="flex flex-col gap-4">
       {/* Header row: title + city selector + export */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-muted-foreground">
             Approximate quantities &amp; cost — Layout {boq.layout_id}
@@ -176,7 +176,7 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
         <div className="flex flex-wrap items-center gap-2">
           {/* City selector */}
           <Select value={city} onValueChange={handleCityChange}>
-            <SelectTrigger className="h-8 w-40 text-xs">
+            <SelectTrigger className="h-9 w-full sm:h-8 sm:w-40 text-sm sm:text-xs">
               <SelectValue placeholder="Select city" />
             </SelectTrigger>
             <SelectContent>
@@ -193,14 +193,14 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
               type="button"
               onClick={downloadExcel}
               disabled={downloading}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 transition-colors"
+              className="w-full sm:w-auto rounded-lg border border-border px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-medium hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px] sm:min-h-0"
             >
               {downloading ? "Downloading…" : "Export Excel"}
             </button>
           ) : (
             <Link
               href="/pricing"
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-medium hover:bg-muted transition-colors min-h-[44px] sm:min-h-0"
               title="Upgrade to Pro for Excel export"
             >
               <Lock className="h-3 w-3" />

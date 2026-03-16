@@ -10,13 +10,25 @@ export function DashboardNewProjectButton() {
   return (
     <Button
       asChild
-      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/15 flex-shrink-0 h-10"
+      className="hidden sm:flex bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/15 flex-shrink-0 h-10"
     >
       <Link href="/projects/new">
         <Plus className="h-4 w-4 mr-1.5" />
         {t("dashboard.newProject")}
       </Link>
     </Button>
+  );
+}
+
+export function DashboardMobileFAB() {
+  return (
+    <Link
+      href="/projects/new"
+      aria-label="New Project"
+      className="sm:hidden fixed bottom-6 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 hover:bg-primary/90 active:scale-95 transition-all"
+    >
+      <Plus className="h-6 w-6" />
+    </Link>
   );
 }
 

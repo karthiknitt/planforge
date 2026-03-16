@@ -14,6 +14,7 @@ import {
 import { auth } from "@/lib/auth";
 import {
   DashboardEmptyState,
+  DashboardMobileFAB,
   DashboardNewProjectButton,
   DashboardProjectCount,
   DashboardTitle,
@@ -86,7 +87,7 @@ export default async function DashboardPage() {
   const firstName = session.user.name.split(" ")[0];
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 sm:px-6 py-10 sm:py-14">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
       {/* Header */}
       <div className="animate-fade-up">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -229,6 +230,8 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
+      {/* Mobile FAB — fixed bottom-right, replaces top-right button on small screens */}
+      <DashboardMobileFAB />
     </main>
   );
 }
