@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import { CITIES, MUNICIPALITIES } from "@/lib/layout-types";
+import { invalidateProjectLayouts } from "./actions";
 
 const DIRECTIONS = ["N", "S", "E", "W"] as const;
 const DIRECTION_LABELS: Record<string, string> = { N: "North", S: "South", E: "East", W: "West" };
@@ -347,6 +348,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
         throw new Error(data?.detail ?? "Failed to update project.");
       }
 
+      await invalidateProjectLayouts(project.id);
       router.push(`/projects/${project.id}`);
       router.refresh();
     } catch (err) {
