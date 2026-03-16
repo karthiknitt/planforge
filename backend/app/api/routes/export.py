@@ -57,6 +57,9 @@ def _cfg_from_project(project: Project) -> PlotConfig:
         plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
         plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
         plot_corners=_json.loads(project.plot_corners) if getattr(project, "plot_corners", None) else None,
+        cutout_corner=getattr(project, "cutout_corner", None),
+        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
+        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
     )
 
 

@@ -67,9 +67,88 @@ def _quad_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     )
 
 
+def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    """Return a FloorPlate for the PRIMARY rectangle of an L-shaped plot.
+
+    The L-shape is decomposed into two overlapping rectangles.  The PRIMARY
+    rectangle is the one that covers the full plot dimension in at least one
+    axis (the larger "arm").  All archetype rooms are placed within this safe
+    rectangle — the secondary arm's area is later filled by _fill_blank_areas.
+
+    Corner → primary rectangle mapping (plot_width W, plot_length L,
+    cutout_width cw, cutout_height ch):
+      NE: full-width × (L − ch) strip from front  [ox, oy, W−sb, L−ch−sb]
+      NW: full-width × (L − ch) strip from front  (same)
+      SE: full-width × (L − ch) strip from rear   [ox, oy+ch, W−sb, L−ch−sb]
+      SW: same as SE
+
+    The secondary arm (partial-width strip near the cutout) is intentionally
+    excluded so archetype room placement stays inside the valid polygon.
+    """
+    sb_l = cfg.setback_left + ewt
+    sb_r = cfg.setback_right + ewt
+    sb_f = cfg.setback_front + ewt
+    sb_b = cfg.setback_rear + ewt
+
+    W  = cfg.plot_width
+    L  = cfg.plot_length
+    cw = cfg.cutout_width
+    ch = cfg.cutout_height
+    corner = (cfg.cutout_corner or "NE").upper()
+
+    # Two candidate decomposition rects (before setback):
+    # Rect1: full-width strip, height = L − ch  (strips near front or rear)
+    # Rect2: (W − cw) strip,  height = full L   (strips near left or right)
+    r1_area = W * (L - ch)
+    r2_area = (W - cw) * L
+
+    if corner in ("NE", "NW"):
+        # Cutout at rear — primary is the front full-width strip (front to cutout line).
+        # The "top" of this strip faces the cutout interior, NOT the plot boundary,
+        # so no rear setback is applied there — only ewt (internal wall face).
+        # R2 is the side column (left for NW, right for NE) spanning the full depth.
+        if r1_area >= r2_area:
+            ox = sb_l
+            oy = sb_f
+            w  = W - cfg.setback_left - cfg.setback_right - 2 * ewt
+            # depth up to cutout line (inner face): L - ch - ewt, minus front setback/ewt
+            d  = (L - ch - ewt) - sb_f
+        else:
+            if corner == "NE":
+                ox = sb_l  # left column avoids cutout on right
+            else:  # NW
+                ox = cw + sb_l  # right column avoids cutout on left
+            oy = sb_f
+            w  = (W - cw) - cfg.setback_left - cfg.setback_right - 2 * ewt
+            d  = L - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    else:  # SE, SW
+        # Cutout at front — primary is the rear full-width strip (cutout line to rear).
+        if r1_area >= r2_area:
+            ox = sb_l
+            oy = ch + ewt + sb_f  # start at cutout line inner face
+            w  = W - cfg.setback_left - cfg.setback_right - 2 * ewt
+            d  = (L - ch) - cfg.setback_front - cfg.setback_rear - 2 * ewt
+        else:
+            if corner == "SE":
+                ox = sb_l
+            else:  # SW
+                ox = cw + sb_l
+            oy = sb_f
+            w  = (W - cw) - cfg.setback_left - cfg.setback_right - 2 * ewt
+            d  = L - cfg.setback_front - cfg.setback_rear - 2 * ewt
+
+    if w <= 0 or d <= 0:
+        raise ValueError("L-shaped plot too small for given setbacks and wall thickness")
+
+    return FloorPlate(ox=round(ox, 3), oy=round(oy, 3),
+                      width=round(w, 3), depth=round(d, 3))
+
+
 def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         return _quad_floor_plate(cfg, ewt)
+    if cfg.plot_shape == "l_shaped":
+        return _l_shaped_floor_plate(cfg, ewt)
     if cfg.plot_shape == "trapezoid" and cfg.plot_front_width > 0 and cfg.plot_rear_width > 0:
         return _trapezoid_floor_plate(cfg, ewt)
     if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:

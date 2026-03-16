@@ -189,6 +189,45 @@ def _solve_one(
     quad_planes: list[tuple[int, int, int]] = []
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         bw, bd, ox, oy, quad_planes = _quad_plate_and_planes(cfg, ewt)
+    elif cfg.plot_shape == "l_shaped":
+        # For L-shaped plots use the bounding box of the inset polygon as solver bounds,
+        # plus half-plane constraints derived from the inset polygon's edges (same approach
+        # as quadrilateral). This keeps rooms inside the actual L-shape.
+        from app.engine.generator import compute_l_shaped_polygon
+        from shapely.geometry import Polygon as _Poly
+
+        l_poly = compute_l_shaped_polygon(cfg)
+        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        inset = l_poly.buffer(-(avg_sb + ewt), join_style=2)
+        if inset.is_empty:
+            return None
+        minx, miny, maxx, maxy = inset.bounds
+        bw = _mm(maxx - minx)
+        bd = _mm(maxy - miny)
+        ox = _mm(minx)
+        oy = _mm(miny)
+
+        # Build half-plane constraints from L-shape inset edges (same as quad)
+        coords = list(inset.exterior.coords)[:-1]
+        n_c = len(coords)
+        area2 = sum(
+            coords[i][0] * coords[(i + 1) % n_c][1] - coords[(i + 1) % n_c][0] * coords[i][1]
+            for i in range(n_c)
+        )
+        if area2 < 0:
+            coords = coords[::-1]
+        planes: list[tuple[int, int, int]] = []
+        n = len(coords)
+        for i in range(n):
+            p1 = coords[i]
+            p2 = coords[(i + 1) % n]
+            dx = round((p2[0] - p1[0]) * SCALE)
+            dy = round((p2[1] - p1[1]) * SCALE)
+            cx = round(p1[0] * SCALE)
+            cy = round(p1[1] * SCALE)
+            rhs = dx * cy - dy * cx - dx * oy + dy * ox
+            planes.append((dx, dy, rhs))
+        quad_planes = planes
     else:
         bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
         bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
