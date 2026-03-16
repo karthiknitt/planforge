@@ -1255,6 +1255,17 @@ export function FloorPlanSVG({
         onMouseUp={editMode ? handleSVGMouseUp : undefined}
         onMouseLeave={editMode ? handleSVGMouseLeave : undefined}
       >
+        <defs>
+          {/* Masonry wall hatch — 45° diagonal, for external walls */}
+          <pattern id="wall-hatch-floor" width="4" height="4" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="4" x2="4" y2="0" stroke="#94a3b8" strokeWidth="0.5" />
+          </pattern>
+          {/* Internal wall hatch — lighter diagonal */}
+          <pattern id="int-wall-hatch" width="3" height="3" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="3" x2="3" y2="0" stroke="#cbd5e1" strokeWidth="0.4" />
+          </pattern>
+        </defs>
+
         {/* Background */}
         <rect width={VP_W} height={VP_H} fill="#F8FAFC" rx={6} className="svg-bg" />
 
@@ -1456,13 +1467,34 @@ export function FloorPlanSVG({
 
         {/* ── Internal wall double-lines ─────────────────────────────────── */}
         {rooms.length > 0 && (
-          <g stroke="#334155" strokeWidth={0.8}>
+          <g stroke="#334155">
             {intWallXs.map((x) => {
               const svgX = px(x);
               return (
                 <g key={`vw-${x}`}>
-                  <line x1={svgX - halfIwt} y1={bBottom} x2={svgX - halfIwt} y2={bTop} />
-                  <line x1={svgX + halfIwt} y1={bBottom} x2={svgX + halfIwt} y2={bTop} />
+                  {/* Hatch fill band between the two wall lines */}
+                  <rect
+                    x={svgX - halfIwt}
+                    y={bTop}
+                    width={2 * halfIwt}
+                    height={bBottom - bTop}
+                    fill="url(#int-wall-hatch)"
+                    stroke="none"
+                  />
+                  <line
+                    x1={svgX - halfIwt}
+                    y1={bBottom}
+                    x2={svgX - halfIwt}
+                    y2={bTop}
+                    strokeWidth={0.4}
+                  />
+                  <line
+                    x1={svgX + halfIwt}
+                    y1={bBottom}
+                    x2={svgX + halfIwt}
+                    y2={bTop}
+                    strokeWidth={0.4}
+                  />
                 </g>
               );
             })}
@@ -1470,12 +1502,48 @@ export function FloorPlanSVG({
               const svgY = py(y);
               return (
                 <g key={`hw-${y}`}>
-                  <line x1={bLeft} y1={svgY - halfIwt} x2={bRight} y2={svgY - halfIwt} />
-                  <line x1={bLeft} y1={svgY + halfIwt} x2={bRight} y2={svgY + halfIwt} />
+                  {/* Hatch fill band between the two wall lines */}
+                  <rect
+                    x={bLeft}
+                    y={svgY - halfIwt}
+                    width={bRight - bLeft}
+                    height={2 * halfIwt}
+                    fill="url(#int-wall-hatch)"
+                    stroke="none"
+                  />
+                  <line
+                    x1={bLeft}
+                    y1={svgY - halfIwt}
+                    x2={bRight}
+                    y2={svgY - halfIwt}
+                    strokeWidth={0.4}
+                  />
+                  <line
+                    x1={bLeft}
+                    y1={svgY + halfIwt}
+                    x2={bRight}
+                    y2={svgY + halfIwt}
+                    strokeWidth={0.4}
+                  />
                 </g>
               );
             })}
           </g>
+        )}
+
+        {/* ── External wall hatch band (evenodd fills only the wall ring) ── */}
+        {rooms.length > 0 && (
+          <path
+            d={[
+              `M ${bLeft - halfEwt} ${bTop - halfEwt}`,
+              `H ${bRight + halfEwt} V ${bBottom + halfEwt} H ${bLeft - halfEwt} Z`,
+              `M ${bLeft + halfEwt} ${bTop + halfEwt}`,
+              `H ${bRight - halfEwt} V ${bBottom - halfEwt} H ${bLeft + halfEwt} Z`,
+            ].join(" ")}
+            fill="url(#wall-hatch-floor)"
+            fillRule="evenodd"
+            stroke="none"
+          />
         )}
 
         {/* ── External walls (outer + inner line) ───────────────────────── */}

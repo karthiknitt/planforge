@@ -45,7 +45,7 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 ### Export
 - **PDF export** — ReportLab A4 at 1:100, title block, room labels, dimensions (free)
 - **Approval drawing PDF** — municipality-format 4-page package with title block, owner info, engineer seal (per-submission add-on)
-- **DXF export** — ezdxf with CAD layers, ANSI hatch fills, door/window symbols (Basic+)
+- **DXF export** — ezdxf with CAD layers, ANSI hatch fills, door/window symbols, per-layer lineweights (0.09–0.50mm), ARCH_MM dimstyle (text above line), graphical scale bar (Basic+)
 - **Bill of Quantities** — city-linked material rates for 8 cities; JSON (free) + formatted Excel (Pro)
 
 ### Workflow & Collaboration
@@ -182,7 +182,7 @@ PlanForge/
 │   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, PDF, BOQ
 │   │   ├── models/            # SQLAlchemy ORM models
 │   │   └── schemas/           # Pydantic I/O schemas
-│   └── tests/                 # 108 pytest tests (API e2e, engine, solver, scorer, L-shaped)
+│   └── tests/                 # 159 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD)
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -211,7 +211,7 @@ PlanForge/
 ```bash
 # Backend
 cd backend
-uv run pytest tests/ -v          # run 108 tests
+uv run pytest tests/ -v          # run 159 tests
 uv run uvicorn app.main:app --reload --port 8002
 
 # Frontend

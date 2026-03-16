@@ -303,12 +303,12 @@ def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: flo
         # Inner face
         p1 = (wall.x1 + t0 * dx + h * px, wall.y1 + t0 * dy + h * py, z)
         p2 = (wall.x1 + t1 * dx + h * px, wall.y1 + t1 * dy + h * py, z)
-        msp.add_line(p1, p2, dxfattribs={"layer": layer})
+        msp.add_line(p1, p2, dxfattribs={"layer": layer, "lineweight": 50})
 
         # Outer face
         p3 = (wall.x1 + t0 * dx - h * px, wall.y1 + t0 * dy - h * py, z)
         p4 = (wall.x1 + t1 * dx - h * px, wall.y1 + t1 * dy - h * py, z)
-        msp.add_line(p3, p4, dxfattribs={"layer": layer})
+        msp.add_line(p3, p4, dxfattribs={"layer": layer, "lineweight": 50})
 
         # Hatch fill
         hatch_corners = [
@@ -318,7 +318,7 @@ def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: flo
             (p3[0], p3[1]),
         ]
         try:
-            hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z})
+            hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z, "lineweight": 9})
             hatch.set_pattern_fill(
                 "ANSI31" if wall.thickness >= 0.23 else "ANSI37",
                 scale=0.05,
@@ -347,28 +347,28 @@ def draw_door(
         # Door leaf runs perpendicular (horizontal) into room
         hinge_y = cy - width / 2 if swing_left else cy + width / 2
         leaf_end_x = cx + width if swing_left else cx - width
-        msp.add_line((cx, hinge_y, z), (leaf_end_x, hinge_y, z), dxfattribs={"layer": layer})
+        msp.add_line((cx, hinge_y, z), (leaf_end_x, hinge_y, z), dxfattribs={"layer": layer, "lineweight": 25})
         if swing_left:
             msp.add_arc(center=(cx, hinge_y), radius=width,
                         start_angle=0, end_angle=90,
-                        dxfattribs={"layer": layer, "elevation": z})
+                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
         else:
             msp.add_arc(center=(cx, hinge_y), radius=width,
                         start_angle=90, end_angle=180,
-                        dxfattribs={"layer": layer, "elevation": z})
+                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
     else:
         # Door leaf runs perpendicular (vertical) into room
         hinge_x = cx - width / 2 if swing_left else cx + width / 2
         leaf_end_y = cy + width if swing_left else cy - width
-        msp.add_line((hinge_x, cy, z), (hinge_x, leaf_end_y, z), dxfattribs={"layer": layer})
+        msp.add_line((hinge_x, cy, z), (hinge_x, leaf_end_y, z), dxfattribs={"layer": layer, "lineweight": 25})
         if swing_left:
             msp.add_arc(center=(hinge_x, cy), radius=width,
                         start_angle=0, end_angle=90,
-                        dxfattribs={"layer": layer, "elevation": z})
+                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
         else:
             msp.add_arc(center=(hinge_x, cy), radius=width,
                         start_angle=270, end_angle=360,
-                        dxfattribs={"layer": layer, "elevation": z})
+                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +398,7 @@ def draw_window(
         else:
             p1 = (cx + off, cy - hw, z)
             p2 = (cx + off, cy + hw, z)
-        msp.add_line(p1, p2, dxfattribs={"layer": layer})
+        msp.add_line(p1, p2, dxfattribs={"layer": layer, "lineweight": 25})
         if i == 0:
             outer_pts = [p1, p2]
         elif i == 2:
@@ -407,7 +407,7 @@ def draw_window(
     # Glazing hatch between the two outer lines
     try:
         hatch_corners_2d = [(p[0], p[1]) for p in outer_pts]
-        hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z})
+        hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z, "lineweight": 9})
         hatch.set_pattern_fill("ANSI31", scale=0.02)
         hatch.paths.add_polyline_path(hatch_corners_2d, is_closed=True)
     except Exception:
@@ -434,10 +434,10 @@ def draw_ventilator(
     for off in offsets:
         if is_horizontal:
             msp.add_line((cx - hw, cy + off, z), (cx + hw, cy + off, z),
-                         dxfattribs={"layer": layer})
+                         dxfattribs={"layer": layer, "lineweight": 25})
         else:
             msp.add_line((cx + off, cy - hw, z), (cx + off, cy + hw, z),
-                         dxfattribs={"layer": layer})
+                         dxfattribs={"layer": layer, "lineweight": 25})
 
 
 # ---------------------------------------------------------------------------
@@ -453,20 +453,20 @@ def draw_staircase(msp, room, layer: str, z: float) -> None:
         tread_count = max(2, int(rd / 0.25))
         for i in range(1, tread_count):
             y = ry + i * (rd / tread_count)
-            msp.add_line((rx, y, z), (rx + rw, y, z), dxfattribs={"layer": layer})
+            msp.add_line((rx, y, z), (rx + rw, y, z), dxfattribs={"layer": layer, "lineweight": 25})
     else:
         # Stairs run E-W; treads are vertical lines
         tread_count = max(2, int(rw / 0.25))
         for i in range(1, tread_count):
             x = rx + i * (rw / tread_count)
-            msp.add_line((x, ry, z), (x, ry + rd, z), dxfattribs={"layer": layer})
+            msp.add_line((x, ry, z), (x, ry + rd, z), dxfattribs={"layer": layer, "lineweight": 25})
 
     # Diagonal cut line (zig-zag at ~60% height)
     mid_y = ry + rd * 0.6
     msp.add_lwpolyline(
         [(rx, mid_y), (rx + rw * 0.4, mid_y + 0.15),
          (rx + rw * 0.6, mid_y - 0.15), (rx + rw, mid_y)],
-        dxfattribs={"layer": layer, "elevation": z},
+        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25},
     )
 
     # Direction arrow
@@ -474,7 +474,7 @@ def draw_staircase(msp, room, layer: str, z: float) -> None:
     arrow_y_start = ry + 0.15
     arrow_y_end = ry + rd * 0.55
     msp.add_line((arrow_x, arrow_y_start, z), (arrow_x, arrow_y_end, z),
-                 dxfattribs={"layer": layer})
+                 dxfattribs={"layer": layer, "lineweight": 25})
     msp.add_mtext(
         "UP",
         dxfattribs={
@@ -506,6 +506,15 @@ def draw_dimension_chain(
     if len(positions) < 2:
         return
 
+    # Create ARCH_MM dimstyle on first call if not already present
+    if "ARCH_MM" not in msp.doc.dimstyles:
+        ds = msp.doc.dimstyles.new("ARCH_MM")
+        ds.dxf.dimtxt = 0.25
+        ds.dxf.dimasz = 0.15
+        ds.dxf.dimtad = 1
+        ds.dxf.dimexo = 0.1
+        ds.dxf.dimexe = 0.15
+
     for i in range(len(positions) - 1):
         p_start = positions[i]
         p_end = positions[i + 1]
@@ -531,7 +540,8 @@ def draw_dimension_chain(
                 p1=p1,
                 p2=p2,
                 angle=angle,
-                dxfattribs={"layer": layer},
+                dimstyle="ARCH_MM",
+                dxfattribs={"layer": layer, "lineweight": 18},
             )
             dim.set_text(dim_text)
             dim.render()
@@ -558,7 +568,8 @@ def draw_dimension_chain(
             p1=p1_outer,
             p2=p2_outer,
             angle=angle_outer,
-            dxfattribs={"layer": layer},
+            dimstyle="ARCH_MM",
+            dxfattribs={"layer": layer, "lineweight": 18},
         )
         dim.set_text(metres_to_ftin(total))
         dim.render()
@@ -598,7 +609,7 @@ def draw_north_arrow(
         ry = cy + size * 0.3 * math.sin(right_rad)
 
         spike_pts = [(lx, ly), (tip_x, tip_y), (rx, ry), (cx, cy)]
-        msp.add_lwpolyline(spike_pts, close=True, dxfattribs={"layer": layer})
+        msp.add_lwpolyline(spike_pts, close=True, dxfattribs={"layer": layer, "lineweight": 25})
 
         # Fill north spike
         if direction == north_dir:
@@ -622,6 +633,7 @@ def draw_north_arrow(
                 "char_height": 0.2,
                 "insert": (label_x, label_y),
                 "attachment_point": 5,
+                "lineweight": 25,
             },
         )
 
@@ -630,7 +642,48 @@ def draw_north_arrow(
         angle_rad = math.radians(angle_deg)
         tip_x = cx + size * 0.6 * math.cos(angle_rad)
         tip_y = cy + size * 0.6 * math.sin(angle_rad)
-        msp.add_line((cx, cy), (tip_x, tip_y), dxfattribs={"layer": layer})
+        msp.add_line((cx, cy), (tip_x, tip_y), dxfattribs={"layer": layer, "lineweight": 25})
+
+
+# ---------------------------------------------------------------------------
+# Scale bar (graphical 1:100 bar)
+# ---------------------------------------------------------------------------
+
+def draw_scale_bar(msp, x: float, y: float, layer: str, z: float = 0) -> None:
+    """Draw a 3m graphical scale bar subdivided at 0, 1m, 2m, 3m."""
+    tick_h = 0.1  # tick half-height above and below bar
+    labels = ["0", "1m", "2m", "3m"]
+
+    # Horizontal bar (0 to 3m)
+    msp.add_line((x, y, z), (x + 3.0, y, z), dxfattribs={"layer": layer, "lineweight": 25})
+
+    # Tick marks and labels at each metre
+    for i, label in enumerate(labels):
+        tx = x + float(i)
+        msp.add_line((tx, y, z), (tx, y + tick_h, z), dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_line((tx, y, z), (tx, y - tick_h, z), dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_mtext(
+            label,
+            dxfattribs={
+                "layer": layer,
+                "char_height": 0.18,
+                "insert": (tx, y + tick_h + 0.05, z),
+                "attachment_point": 8,  # BOTTOM_CENTER
+                "lineweight": 18,
+            },
+        )
+
+    # "SCALE 1:100" title above bar
+    msp.add_mtext(
+        "SCALE 1:100",
+        dxfattribs={
+            "layer": layer,
+            "char_height": 0.2,
+            "insert": (x + 1.5, y + tick_h + 0.35, z),
+            "attachment_point": 5,  # MIDDLE_CENTER
+            "lineweight": 18,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

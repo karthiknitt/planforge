@@ -215,6 +215,7 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         draw_dimension_chain,
         draw_door,
         draw_north_arrow,
+        draw_scale_bar,
         draw_staircase,
         draw_title_block,
         draw_ventilator,
@@ -419,6 +420,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         north_dir = getattr(cfg, "road_side", "S") or "S"
         draw_north_arrow(msp, cx=global_max_x + 2.5, cy=global_max_y - 1.5,
                          north_dir=north_dir, size=0.8, layer="TEXT")
+        draw_scale_bar(msp, x=global_max_x + 2.0, y=global_max_y - 3.5,
+                       layer="TEXT", z=0.0)
 
         # ── Setback dimension callouts (ground floor extents) ─────────────────
         draw_setback_zones(msp, cfg, gf_bld_x, gf_bld_y, gf_bld_w, gf_bld_d,
