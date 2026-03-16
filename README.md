@@ -22,24 +22,51 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 
 ## Features
 
+### Planning Engine
 - **3-layout generation** — OR-Tools CP-SAT solver with forced staircase diversity; archetypes as fallback
-- **2BHK / 3BHK** with 1–6 bedrooms; optional pooja, study, balcony, servant quarter, home office, gym, store
+- **2BHK – 4BHK** with 1–6 bedrooms; optional pooja, study, balcony, servant quarter, home office, gym, store
 - **Multi-floor support** — G / G+1 / G+2, optional stilt floor, optional basement
-- **Rectangular and trapezoid plots** — convex quadrilateral (arbitrary 4-corner) support
+- **Plot shapes** — Rectangular, trapezoid, convex quadrilateral (arbitrary 4-corner), and **L-shaped** (rectangle with cutout corner)
 - **Indian compliance engine** — bedroom ≥ 9.5 m², kitchen ≥ 7 m², FAR, setbacks, stair width, beam span
-- **City presets** — Bangalore, Chennai, Mumbai, Hyderabad (local setback / FAR overrides)
-- **Vastu Shastra engine** — 8-zone directional analysis (toggleable)
+- **Municipality bye-laws** — CMDA (Chennai), BBMP (Bangalore), GHMC (Hyderabad), PMC (Pune), MCGM (Mumbai) city-specific FAR + setback rules
+- **Vastu Shastra engine** — 8-zone directional analysis with SVG zone overlay (toggleable per layout)
 - **5-component layout scorer** — natural light, adjacency, aspect ratio, circulation, Vastu (0–100)
+
+### Output & Visualisation
 - **SVG preview** — double-line walls, door arcs, window markers, columns, north arrow, dimension lines
 - **Section view** — parametric 2D cross-section with floor slabs and parapet
+- **Interior furniture overlay** — 11 furniture symbols (bed, sofa, dining, kitchen slab, etc.)
+- **Electrical overlay** — switch, socket, light point, fan positions per NBC residential standard
+- **Plumbing overlay** — supply spine + drain routing for bathrooms and kitchen
+- **Side-by-side comparison** — 2 layouts at same scale with diff highlights
+- **Manual room edit mode** — drag shared walls to resize adjacent rooms; live compliance badges (Pro)
+- **Room annotations** — sticky notes on rooms, exported to PDF
+
+### Export
 - **PDF export** — ReportLab A4 at 1:100, title block, room labels, dimensions (free)
+- **Approval drawing PDF** — municipality-format 4-page package with title block, owner info, engineer seal (per-submission add-on)
 - **DXF export** — ezdxf with CAD layers, ANSI hatch fills, door/window symbols (Basic+)
-- **Bill of Quantities** — JSON (free) + formatted Excel (Pro)
-- **Agentic chat** — Claude-powered room editor with voice input via OpenAI Whisper (Pro)
+- **Bill of Quantities** — city-linked material rates for 8 cities; JSON (free) + formatted Excel (Pro)
+
+### Workflow & Collaboration
+- **Share link** — read-only client view at `/view/:token` (mobile-friendly, no login required)
+- **WhatsApp share** — one-click plan share via WhatsApp Web API
+- **Client approval workflow** — client clicks Approve/Request Changes; engineer notified in-product
+- **Revision history** — v1/v2/v3 auto-snapshots with one-click restore
+- **Team / firm plan** — shared project pool for 2–5 engineers (₹2,999/month)
+
+### AI & Chat
+- **Agentic chat** — Claude-powered room editor with 10 tools, voice input via OpenAI Whisper (Pro)
+- **OpenRouter support** — any model (Claude, GPT-4, Llama, Gemini) via OpenRouter API key
+
+### Platform
+- **Template gallery** — public SEO-optimised gallery filterable by plot size, BHK, city
+- **Per-project credits** — ₹99/project one-time purchase for occasional users
+- **Regional languages** — Tamil and Hindi UI translations with locale context and cookie persistence
+- **Mobile-first UI** — fully responsive; floor plan controls move to bottom sheet on phones; FAB for new project
 - **Authentication** — Better Auth (TypeScript-native, session-based)
 - **Payments** — Razorpay with plan tiers: Free / Basic / Pro
-- **Blueprint Dark theme** — Outfit + Plus Jakarta Sans + JetBrains Mono fonts
-- **Accessible dark-mode UI** — WCAG-compliant contrast, visible form borders, hover/focus animations, `prefers-reduced-motion` support
+- **Blueprint Dark theme** — Outfit + Plus Jakarta Sans + JetBrains Mono fonts; `prefers-reduced-motion` support
 
 ---
 
@@ -120,6 +147,8 @@ cd frontend && bun dev
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | optional | Razorpay test key |
 | `OPENAI_API_KEY` | optional | Voice transcription (Whisper) |
 | `ANTHROPIC_API_KEY` | optional | Agentic chat (Claude) |
+| `OPENROUTER_API_KEY` | optional | Agentic chat via OpenRouter (any model) |
+| `OPENROUTER_MODEL` | optional | e.g. `deepseek/deepseek-chat-v3-0324` |
 
 ### `backend/.env`
 
@@ -142,7 +171,7 @@ PlanForge/
 │   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, PDF, BOQ
 │   │   ├── models/            # SQLAlchemy ORM models
 │   │   └── schemas/           # Pydantic I/O schemas
-│   └── tests/                 # 55 pytest tests (API e2e, engine, solver, scorer)
+│   └── tests/                 # 108 pytest tests (API e2e, engine, solver, scorer, L-shaped)
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -150,7 +179,7 @@ PlanForge/
 │       │   ├── (auth)/        # Sign-in, sign-up
 │       │   ├── (marketing)/   # Landing, pricing, how-it-works
 │       │   └── api/           # Better Auth handler, agent chat, transcription
-│       ├── components/        # SVG renderer, section view, BOQ viewer, chat panel
+│       ├── components/        # SVG renderer, section view, BOQ viewer, chat panel, overlays
 │       ├── db/                # Drizzle client + schema (Better Auth tables)
 │       ├── hooks/             # useVoiceInput
 │       └── lib/               # auth config, layout types, utils
@@ -170,7 +199,7 @@ PlanForge/
 ```bash
 # Backend
 cd backend
-uv run pytest tests/ -v          # run 55 tests
+uv run pytest tests/ -v          # run 108 tests
 uv run uvicorn app.main:app --reload --port 8002
 
 # Frontend

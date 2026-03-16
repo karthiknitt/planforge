@@ -930,3 +930,81 @@ The "new project" form stores road width in **feet** in React state (user-facing
 - **Frontend package manager = Bun**: `bun add <pkg>` to add, `bun install` to restore, `bunx` for one-off executables (replaces `npx`). Lockfile is `bun.lockb`.
 - **`dev-start.sh` uses `exec bun dev`**: `exec` replaces the subshell so `$!` captures the actual process PID that `dev-stop.sh` kills via `_kill_tree`. This works correctly with Bun as the runtime.
 - **`bun test` is zero-config**: Bun's test runner discovers `*.test.ts` / `*.spec.ts` files automatically with no `vitest.config.ts` or `jest.config.js` required.
+
+---
+
+### 2026-03-16 — Full Product Roadmap Sprint (P0 → P3-8)
+
+**What was built:**
+
+All remaining roadmap items implemented via parallel sub-agents with git worktree isolation.
+
+**P0 fixes:**
+- `aca53a9` — CAD primitives rendering: ReportLab-native `_pdf_draw_double_line_wall` + `_draw_doors_in_gaps` (replaced broken ezdxf cross-API calls)
+- `4516c03` — Blank area auto-fill: `_fill_blank_areas()` fills GF residual → Utility/Store, top floor residual → Open Terrace
+- `40af73c` — Structural grid as separate PDF pages 3–4 (architectural plan pages 1–2 unchanged)
+- `943b83a` — Duplicate column keys fix (index-based React keys)
+- `5085bd2` — OpenRouter support: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` env vars
+
+**P1 India workflow:**
+- `a30a789` — Vastu toggle: enable/disable, 9-zone SVG overlay, per-layout score badge, violation list
+- `24b2270` — Share link: `/view/:token` public read-only page, mobile-friendly
+- `d09c45f` — WhatsApp share button: one-click thumbnail + link
+- `ec5f145` — Municipality bye-law selector: CMDA/BBMP/GHMC/PMC/MCGM city compliance JSONs
+- `8c8f44c` — Side-by-side layout comparison with diff highlights
+
+**P2 professional tools:**
+- `201ff1d` — BOQ city-wise material rates: 8-city rate table in `material_rates.json`
+- `e51c17a` + `4cb6862` — Manual room edit mode: `detectSharedWalls()`, drag handles, co-resize adjacent rooms, live compliance badges (Pro gate); `POST /api/layouts/{id}/compliance-check` endpoint
+- `af310ad` — Approval drawing PDF: 4-page municipality package (title block, owner, engineer seal)
+- `94a0ba7` — Revision history: auto-snapshots on generate, one-click restore, v1/v2/v3 sidebar
+- `ceb23bc` — Interior furniture overlay: 11 SVG symbols (presentation layer, no structural change)
+- `02a5f67` — 4BHK support: extended room config form + solver constraints
+
+**P3 growth & distribution:**
+- `ff1edc9` — Template gallery: public SEO page filterable by plot size, BHK, city
+- `2ee61f3` — Team/firm plan: admin seat + multiple engineer logins, shared project pool
+- `d48a201` — Per-project credit pricing: ₹99/project credit packs
+- `824aefb` — Tamil + Hindi language support: locale context, cookie persistence, SVG/PDF labels
+- `93583ee` — Client approval workflow: Approve/Request Changes via read-only share link
+- `339a2ea` — Room annotations: sticky notes on rooms, exported to PDF
+- `0e0d968` + `6ba155e` — L-shaped plot support: 6-vertex Shapely polygon, `compute_l_shaped_polygon()`, primary/secondary rectangle decomposition in archetypes, cutout corner (NE/NW/SE/SW), solver half-plane constraints, 13 new tests (108/108 total), frontend polygon rendering + form inputs
+- `4e8dc3a` — Electrical overlay: switch/socket/light/fan positions per NBC residential
+- `4e8dc3a` — Plumbing overlay: supply spine + drain routing for bathrooms and kitchen
+- `41b175c` — Mobile-first responsive redesign: hamburger nav, FAB for new project, bottom Sheet drawer for floor plan controls, responsive tab bar, 44px touch targets, `min-h-11` interactive elements
+
+**Key files changed:**
+
+- `backend/app/engine/generator.py` — blank-area fill, L-shaped polygon, archetype dispatch
+- `backend/app/engine/archetypes.py` — `_l_shaped_floor_plate()` primary/secondary decomposition
+- `backend/app/engine/pdf.py` — double-line walls, door arcs, annotation rendering, structural pages
+- `backend/app/engine/compliance.py` — L-shaped FAR uses inset polygon area (not bounding box)
+- `backend/app/engine/boq.py` — city-linked material rates
+- `backend/app/engine/approval_pdf.py` — NEW: municipality approval PDF
+- `backend/app/models/project.py` — added: share_token, approval_status, approval_note, team_id, annotations, cutout_corner/width/height, revision columns
+- `backend/app/models/revision.py` — NEW: ProjectRevision model
+- `backend/app/models/team.py` — NEW: Team + TeamMember models
+- `backend/app/api/routes/share.py` — NEW: share token + public GET + approve/request-changes
+- `backend/app/api/routes/revisions.py` — NEW: revision CRUD + auto-snapshot
+- `backend/app/api/routes/teams.py` — NEW: team CRUD + member management
+- `backend/app/api/routes/rooms.py` — NEW: `POST /compliance-check` for edit mode validation
+- `backend/config/material_rates.json` — NEW: 8-city material rate table
+- `backend/config/cities/` — NEW: 6 city compliance JSONs
+- `backend/tests/test_l_shaped.py` + `test_l_shaped_plots.py` — NEW: 13 L-shaped tests
+- `frontend/src/components/floor-plan-svg.tsx` — Vastu overlay, furniture/electrical/plumbing/annotation props, edit mode drag handles + `detectSharedWalls()`, L-shaped polygon, locale i18n
+- `frontend/src/app/(app)/projects/[id]/layout-viewer.tsx` — compare tab, Vastu badges, share dialog, WhatsApp, edit mode toolbar, annotation mode, mobile bottom Sheet, responsive tabs
+- `frontend/src/app/(app)/mobile-nav.tsx` — NEW: hamburger menu + slide-in drawer
+- `frontend/src/lib/i18n.ts` — NEW: en/ta/hi translation objects
+- `frontend/src/lib/locale-context.tsx` — NEW: locale React Context + cookie persistence
+- `frontend/src/components/furniture-overlay.tsx` — NEW: 11 furniture symbols
+- `frontend/src/components/electrical-overlay.tsx` — NEW: 8 electrical symbols
+- `frontend/src/components/plumbing-overlay.tsx` — NEW: supply spine + drain routing
+
+**Patterns established:**
+
+- **Shared wall detection tolerance**: `WALL_TOL = 0.01` (1 cm) — rooms sharing an edge are identified by `|a.x + a.width - b.x| < WALL_TOL`. Float rounding in the solver can produce gaps just below this.
+- **L-shaped solver approach**: bounding rectangle as solver input + post-process `_remove_cutout_overlap()` removes rooms where >60% area falls in cutout zone. More robust than polygon constraints.
+- **Mobile bottom Sheet pattern**: `import { Sheet, SheetContent, SheetTrigger }` from ShadCN. Trigger = gear icon (`Settings2`), `side="bottom"`, `h-[60vh]`. Desktop toolbar hidden with `hidden md:flex`; Sheet trigger hidden with `md:hidden`.
+- **FAB pattern**: `fixed bottom-6 right-6 z-40 rounded-full w-14 h-14 shadow-lg` — only shown at `< sm` breakpoint.
+- **Edit mode compliance check**: `POST /api/layouts/{id}/compliance-check` accepts `{ rooms: Room[] }` directly (stateless). Frontend calls it speculatively during drag (debounced 800ms) without committing room state.
+- **Testing gap**: frontend has 0 test files. Backend has 108/108. Priority gaps: compliance-check endpoint, share token security, BOQ city rates, revision lifecycle.
