@@ -809,19 +809,15 @@ function getMinSide(type: string): number {
 
 // ── Shared wall detection ─────────────────────────────────────────────────────
 interface SharedWall {
-  /** "vertical" = wall runs top-to-bottom (rooms share an x edge) */
   orientation: "vertical" | "horizontal";
-  /** Wall position in metres */
   wallPos: number;
-  /** The two rooms sharing the wall */
   roomA: RoomData;
   roomB: RoomData;
-  /** Overlap segment along the perpendicular axis */
   segStart: number;
   segEnd: number;
 }
 
-const WALL_TOL = 0.01; // 1 cm tolerance for shared-wall detection
+const WALL_TOL = 0.01;
 
 function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
   const walls: SharedWall[] = [];
@@ -829,77 +825,59 @@ function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i];
       const b = rooms[j];
-
-      // Vertical shared wall: a's right edge == b's left edge (or vice versa)
       const aRight = a.x + a.width;
       const bRight = b.x + b.width;
       if (Math.abs(aRight - b.x) < WALL_TOL) {
-        // a is left, b is right — check y overlap
         const segStart = Math.max(a.y, b.y);
         const segEnd = Math.min(a.y + a.depth, b.y + b.depth);
-        if (segEnd > segStart + WALL_TOL) {
-          walls.push({
-            orientation: "vertical",
-            wallPos: aRight,
-            roomA: a,
-            roomB: b,
-            segStart,
-            segEnd,
-          });
-        }
+        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "vertical", wallPos: aRight, roomA: a, roomB: b, segStart, segEnd });
       } else if (Math.abs(bRight - a.x) < WALL_TOL) {
-        // b is left, a is right
         const segStart = Math.max(a.y, b.y);
         const segEnd = Math.min(a.y + a.depth, b.y + b.depth);
-        if (segEnd > segStart + WALL_TOL) {
-          walls.push({
-            orientation: "vertical",
-            wallPos: bRight,
-            roomA: b,
-            roomB: a,
-            segStart,
-            segEnd,
-          });
-        }
+        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "vertical", wallPos: bRight, roomA: b, roomB: a, segStart, segEnd });
       }
-
-      // Horizontal shared wall: a's top edge == b's bottom edge (or vice versa)
       const aTop = a.y + a.depth;
       const bTop = b.y + b.depth;
       if (Math.abs(aTop - b.y) < WALL_TOL) {
-        // a is below, b is above
         const segStart = Math.max(a.x, b.x);
         const segEnd = Math.min(a.x + a.width, b.x + b.width);
-        if (segEnd > segStart + WALL_TOL) {
-          walls.push({
-            orientation: "horizontal",
-            wallPos: aTop,
-            roomA: a,
-            roomB: b,
-            segStart,
-            segEnd,
-          });
-        }
+        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "horizontal", wallPos: aTop, roomA: a, roomB: b, segStart, segEnd });
       } else if (Math.abs(bTop - a.y) < WALL_TOL) {
-        // b is below, a is above
         const segStart = Math.max(a.x, b.x);
         const segEnd = Math.min(a.x + a.width, b.x + b.width);
-        if (segEnd > segStart + WALL_TOL) {
-          walls.push({
-            orientation: "horizontal",
-            wallPos: bTop,
-            roomA: b,
-            roomB: a,
-            segStart,
-            segEnd,
-          });
-        }
+        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "horizontal", wallPos: bTop, roomA: b, roomB: a, segStart, segEnd });
       }
     }
   }
   return walls;
 }
 
+// ── L-shape polygon point helper ─────────────────────────────────────────────
+function computeLShapePoints(
+  plotWidth: number,
+  plotLength: number,
+  cutoutCorner: string,
+  cutoutWidth: number,
+  cutoutHeight: number,
+  px: (x: number) => number,
+  py: (y: number) => number
+): string {
+  const W = plotWidth;
+  const H = plotLength;
+  const cw = cutoutWidth;
+  const ch = cutoutHeight;
+  let vertices: [number, number][];
+  if (cutoutCorner === "NE") {
+    vertices = [[0, 0], [W, 0], [W, H - ch], [W - cw, H - ch], [W - cw, H], [0, H]];
+  } else if (cutoutCorner === "NW") {
+    vertices = [[0, 0], [W, 0], [W, H], [cw, H], [cw, H - ch], [0, H - ch]];
+  } else if (cutoutCorner === "SE") {
+    vertices = [[0, 0], [W - cw, 0], [W - cw, ch], [W, ch], [W, H], [0, H]];
+  } else {
+    vertices = [[cw, 0], [W, 0], [W, H], [0, H], [0, ch], [cw, ch]];
+  }
+  return vertices.map(([x, y]) => `${px(x)},${py(y)}`).join(" ");
+}
 // ── Main component ────────────────────────────────────────────────────────────
 interface FloorPlanSVGProps {
   floorPlan: FloorPlanData;
@@ -920,6 +898,9 @@ interface FloorPlanSVGProps {
   annotations?: Annotation[];
   onAnnotationClick?: (roomId: string, roomName: string, x: number, y: number) => void;
   locale?: Locale;
+  cutoutCorner?: string;
+  cutoutWidth?: number;
+  cutoutHeight?: number;
   // ── Edit mode props (all optional — backward compatible) ──────────────────
   editMode?: boolean;
   onRoomsChange?: (rooms: RoomData[]) => void;
@@ -990,6 +971,9 @@ export function FloorPlanSVG({
   annotations = [],
   onAnnotationClick,
   locale = "en",
+  cutoutCorner = "NE",
+  cutoutWidth = 0,
+  cutoutHeight = 0,
   editMode = false,
   onRoomsChange,
   complianceIssues = {},
@@ -1238,6 +1222,15 @@ export function FloorPlanSVG({
         {plotShape === "quadrilateral" && plotCorners && plotCorners.length === 4 ? (
           <polygon
             points={plotCorners.map(([cx, cy]) => `${px(cx)},${py(cy)}`).join(" ")}
+            fill="white"
+            stroke="#CBD5E1"
+            strokeWidth={1}
+            strokeDasharray="5 3"
+            className="svg-plot"
+          />
+        ) : plotShape === "l_shaped" && cutoutWidth > 0 && cutoutHeight > 0 ? (
+          <polygon
+            points={computeLShapePoints(plotWidth, plotLength, cutoutCorner, cutoutWidth, cutoutHeight, px, py)}
             fill="white"
             stroke="#CBD5E1"
             strokeWidth={1}

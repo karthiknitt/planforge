@@ -35,6 +35,20 @@ def _trapezoid_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     return FloorPlate(ox=ox, oy=oy, width=usable_width, depth=depth)
 
 
+def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    """Return a rectangular FloorPlate for the main (larger) body of an L-shaped plot.
+
+    The floor plate is derived from the bounding rectangle of the L-shape, then inset
+    by setbacks + wall thickness.  Rooms that extend into the cutout zone will be
+    clipped by a post-processing step in generator.py.
+    """
+    ox    = cfg.setback_left  + ewt
+    oy    = cfg.setback_front + ewt
+    width = cfg.plot_width  - cfg.setback_left  - cfg.setback_right  - 2 * ewt
+    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear   - 2 * ewt
+    return FloorPlate(ox=ox, oy=oy, width=width, depth=depth)
+
+
 def _quad_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     from shapely.geometry import Polygon
     poly = Polygon(cfg.plot_corners)
@@ -58,6 +72,8 @@ def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
         return _quad_floor_plate(cfg, ewt)
     if cfg.plot_shape == "trapezoid" and cfg.plot_front_width > 0 and cfg.plot_rear_width > 0:
         return _trapezoid_floor_plate(cfg, ewt)
+    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        return _l_shaped_floor_plate(cfg, ewt)
     ox    = cfg.setback_left  + ewt
     oy    = cfg.setback_front + ewt
     width = cfg.plot_width  - cfg.setback_left  - cfg.setback_right  - 2 * ewt

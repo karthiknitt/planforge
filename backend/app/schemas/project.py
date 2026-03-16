@@ -44,6 +44,10 @@ class ProjectCreate(BaseModel):
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
     plot_corners: list[tuple[float, float]] | None = None  # quadrilateral 4-corner list
+    # L-shaped plot cutout
+    cutout_corner: str = "NE"
+    cutout_width: float = 0.0
+    cutout_height: float = 0.0
     # Multi-floor (Phase E)
     num_floors: int = Field(default=1, ge=1, le=3, description="Number of floors: 1=G, 2=G+1, 3=G+2")
     has_stilt: bool = False
@@ -80,6 +84,9 @@ class ProjectUpdate(BaseModel):
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
     plot_corners: list[tuple[float, float]] | None = None
+    cutout_corner: str | None = None
+    cutout_width: float | None = None
+    cutout_height: float | None = None
     num_floors: int | None = Field(default=None, ge=1, le=3)
     has_stilt: bool | None = None
     has_basement: bool | None = None
@@ -114,6 +121,9 @@ class ProjectRead(BaseModel):
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
     plot_corners: str | None = None   # raw JSON string from DB: [[x,y], ...]
+    cutout_corner: str = "NE"
+    cutout_width: float = 0.0
+    cutout_height: float = 0.0
     num_floors: int = 1
     has_stilt: bool = False
     has_basement: bool = False

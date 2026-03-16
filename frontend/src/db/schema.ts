@@ -123,6 +123,10 @@ export const project = pgTable(
     plotSideOffset: numeric("plot_side_offset", { precision: 8, scale: 3 }),
     // Quadrilateral plot corners — JSON-encoded [[x,y], ...] string
     plotCorners: text("plot_corners"),
+    // L-shaped plot cutout
+    cutoutCorner: text("cutout_corner").default("NE").notNull(),
+    cutoutWidth: numeric("cutout_width", { precision: 8, scale: 3 }).default("0").notNull(),
+    cutoutHeight: numeric("cutout_height", { precision: 8, scale: 3 }).default("0").notNull(),
     // Multi-floor support (Phase E)
     numFloors: integer("num_floors").default(1).notNull(),
     hasStilt: boolean("has_stilt").default(false).notNull(),

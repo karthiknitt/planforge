@@ -271,6 +271,10 @@ export default function NewProjectPage() {
     has_basement: false,
     // Vastu
     vastu_enabled: false,
+    // L-shaped cutout
+    cutout_corner: "NE",
+    cutout_width: "",
+    cutout_height: "",
   });
 
   function set(field: string, value: string | boolean) {
@@ -350,6 +354,30 @@ export default function NewProjectPage() {
         payload.plot_width = Math.max(...xs);
         payload.plot_front_width = null;
         payload.plot_rear_width = null;
+        payload.cutout_width = 0;
+        payload.cutout_height = 0;
+      } else if (form.plot_shape === "l_shaped") {
+        const cw = feetToMetres(form.cutout_width);
+        const ch = feetToMetres(form.cutout_height);
+        const pl = feetToMetres(form.plot_length);
+        const pw = feetToMetres(form.plot_width);
+        if (cw <= 0 || ch <= 0) {
+          setError("Cutout width and height must be greater than 0 for L-shaped plots.");
+          setLoading(false);
+          return;
+        }
+        if (cw >= pw || ch >= pl) {
+          setError("Cutout dimensions must be smaller than the overall plot dimensions.");
+          setLoading(false);
+          return;
+        }
+        payload.plot_length = pl;
+        payload.plot_width = pw;
+        payload.plot_front_width = null;
+        payload.plot_rear_width = null;
+        payload.cutout_corner = form.cutout_corner;
+        payload.cutout_width = cw;
+        payload.cutout_height = ch;
       } else {
         payload.plot_length = feetToMetres(form.plot_length);
         payload.plot_width =
@@ -367,6 +395,8 @@ export default function NewProjectPage() {
           form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null;
         payload.plot_rear_width =
           form.plot_shape === "trapezoid" ? feetToMetres(form.plot_rear_width) : null;
+        payload.cutout_width = 0;
+        payload.cutout_height = 0;
       }
 
       const resolvedMunicipality =
@@ -468,7 +498,7 @@ export default function NewProjectPage() {
 
           <div className="flex flex-col gap-1.5">
             <Label>{t("project.plotShape")}</Label>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {(
                 [
                   {
@@ -481,13 +511,14 @@ export default function NewProjectPage() {
                     label: t("project.trapezoid"),
                     desc: t("project.trapezoidDesc"),
                   },
+                  { value: "l_shaped", label: "L-Shaped", desc: "Rectangle with corner cutout" },
                   {
                     value: "quadrilateral",
                     label: t("project.quadrilateral"),
                     desc: t("project.quadrilateralDesc"),
                   },
                 ] as Array<{
-                  value: "rectangular" | "trapezoid" | "quadrilateral";
+                  value: "rectangular" | "trapezoid" | "l_shaped" | "quadrilateral";
                   label: string;
                   desc: string;
                 }>
@@ -524,7 +555,7 @@ export default function NewProjectPage() {
                 onChange={(e) => set("plot_length", e.target.value)}
               />
             </div>
-            {form.plot_shape === "rectangular" ? (
+            {form.plot_shape === "rectangular" || form.plot_shape === "l_shaped" ? (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="plot_width">{t("project.plotWidth")}</Label>
                 <Input
@@ -577,6 +608,58 @@ export default function NewProjectPage() {
                   onChange={(e) => set("plot_rear_width", e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">{t("project.oppositeSide")}</p>
+              </div>
+            </div>
+          )}
+
+          {form.plot_shape === "l_shaped" && (
+            <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/30 p-4">
+              <p className="text-xs text-muted-foreground">
+                An L-shaped plot is a rectangle with one corner cut out. Enter overall dimensions
+                above, then specify the corner and size of the cutout below.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cutout_corner">Cutout corner</Label>
+                <Select
+                  id="cutout_corner"
+                  value={form.cutout_corner}
+                  onChange={(e) => set("cutout_corner", e.target.value)}
+                >
+                  <option value="NE">NE — Rear-Right corner</option>
+                  <option value="NW">NW — Rear-Left corner</option>
+                  <option value="SE">SE — Front-Right corner</option>
+                  <option value="SW">SW — Front-Left corner</option>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cutout_width">Cutout Width (feet)</Label>
+                  <Input
+                    id="cutout_width"
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    placeholder="10"
+                    required
+                    value={form.cutout_width}
+                    onChange={(e) => set("cutout_width", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Must be less than plot width</p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cutout_height">Cutout Height (feet)</Label>
+                  <Input
+                    id="cutout_height"
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    placeholder="10"
+                    required
+                    value={form.cutout_height}
+                    onChange={(e) => set("cutout_height", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Must be less than plot length</p>
+                </div>
               </div>
             </div>
           )}
