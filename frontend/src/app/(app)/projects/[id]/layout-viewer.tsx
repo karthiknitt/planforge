@@ -17,6 +17,7 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Settings2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,6 +42,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
 import type {
@@ -210,6 +212,9 @@ interface LayoutViewerProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  cutoutCorner?: string;
+  cutoutWidth?: number;
+  cutoutHeight?: number;
   numFloors?: number;
   vastuEnabled?: boolean;
   municipality?: string | null;
@@ -302,6 +307,9 @@ export function LayoutViewer({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  cutoutCorner,
+  cutoutWidth,
+  cutoutHeight,
   numFloors: _numFloors = 1,
   vastuEnabled = false,
   municipality = null,
@@ -883,10 +891,11 @@ export function LayoutViewer({
   const presentTypes = [...new Set(floorPlan.rooms.map((r) => r.type))];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-6">
       {/* Layout selector + export buttons */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-3">
+        {/* Layout buttons — horizontal scroll on mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap">
           {activeData.layouts.map((l) => (
             <button
               key={l.id}
@@ -897,7 +906,7 @@ export function LayoutViewer({
                 setLiveLayout(null);
               }}
               className={[
-                "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
+                "rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors shrink-0 min-h-[44px]",
                 selectedId === l.id
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-transparent hover:bg-muted",
@@ -927,22 +936,22 @@ export function LayoutViewer({
           ))}
         </div>
 
-        {/* Export + share buttons */}
-        <div className="flex flex-wrap gap-2">
+        {/* Export + share buttons — horizontal scroll on mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:items-center">
+          {/* PDF — primary action, prominent on mobile */}
           <Button
-            variant="outline"
             size="sm"
-            className="border-border text-foreground hover:bg-muted"
+            className="shrink-0 min-h-[40px] md:min-h-0 bg-primary text-primary-foreground hover:bg-primary/90 md:bg-transparent md:text-foreground md:border md:border-border md:hover:bg-muted md:shadow-none shadow-md md:variant-outline"
             onClick={() => handleDownload("pdf")}
             disabled={downloadingPdf || !session}
           >
-            {downloadingPdf ? "…" : "PDF"}
+            {downloadingPdf ? "…" : "⬇ PDF"}
           </Button>
           {planTier === "free" ? (
             <Button
               variant="outline"
               size="sm"
-              className="border-border text-foreground hover:bg-muted"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
               asChild
               title="Upgrade to Basic for DXF export"
             >
@@ -955,7 +964,7 @@ export function LayoutViewer({
             <Button
               variant="outline"
               size="sm"
-              className="border-border text-foreground hover:bg-muted"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
               onClick={() => handleDownload("dxf")}
               disabled={downloadingDxf || !session}
               title="DXF for AutoCAD / DraftSight"
@@ -966,18 +975,18 @@ export function LayoutViewer({
           <Button
             variant="outline"
             size="sm"
-            className="border-border text-foreground hover:bg-muted"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
             onClick={() => setApprovalDialogOpen(true)}
             disabled={!session}
             title="Download municipality approval drawing package (CMDA/BBMP/GHMC format)"
           >
-            Approval PDF
+            Approval
           </Button>
           <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
           <Button
             variant="outline"
             size="sm"
-            className="border-border text-foreground hover:bg-muted"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
             onClick={handleShare}
             disabled={shareLoading || !session}
             title="Get a read-only share link for your client"
@@ -988,19 +997,19 @@ export function LayoutViewer({
           <Button
             variant="outline"
             size="sm"
-            className="border-border text-foreground hover:bg-muted"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
             onClick={handleSendForApproval}
             disabled={approvalShareLoading || !session}
             title="Send this plan to client for approval"
           >
             <MessageSquare className="h-3 w-3 mr-1.5" />
-            {approvalShareLoading ? "…" : "Send for Approval"}
+            {approvalShareLoading ? "…" : "Approve"}
           </Button>
           {/* Refresh approval status button */}
           <Button
             variant="outline"
             size="sm"
-            className="border-border text-muted-foreground hover:bg-muted"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-muted-foreground hover:bg-muted"
             onClick={fetchApprovalStatus}
             disabled={approvalFetching || !session}
             title="Refresh client approval status"
@@ -1223,7 +1232,7 @@ export function LayoutViewer({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="apr-owner">Owner Name</Label>
                 <Input
@@ -1231,6 +1240,7 @@ export function LayoutViewer({
                   value={approvalForm.owner_name}
                   onChange={(e) => setApprovalForm((f) => ({ ...f, owner_name: e.target.value }))}
                   placeholder="e.g. Rajan Kumar"
+                  className="text-base"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -1242,6 +1252,7 @@ export function LayoutViewer({
                     setApprovalForm((f) => ({ ...f, survey_number: e.target.value }))
                   }
                   placeholder="e.g. 42/A"
+                  className="text-base"
                 />
               </div>
             </div>
@@ -1252,9 +1263,10 @@ export function LayoutViewer({
                 value={approvalForm.locality}
                 onChange={(e) => setApprovalForm((f) => ({ ...f, locality: e.target.value }))}
                 placeholder="e.g. Anna Nagar, Chennai"
+                className="text-base"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="apr-engineer">Engineer / Architect Name</Label>
                 <Input
@@ -1264,6 +1276,7 @@ export function LayoutViewer({
                     setApprovalForm((f) => ({ ...f, engineer_name: e.target.value }))
                   }
                   placeholder="e.g. Er. S. Venkatesh"
+                  className="text-base"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -1275,6 +1288,7 @@ export function LayoutViewer({
                     setApprovalForm((f) => ({ ...f, license_number: e.target.value }))
                   }
                   placeholder="e.g. TN/2024/1234"
+                  className="text-base"
                 />
               </div>
             </div>
@@ -1404,14 +1418,15 @@ export function LayoutViewer({
       )}
 
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat */}
-      <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 w-fit">
+      {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
+      <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 overflow-x-auto scrollbar-none w-full md:w-fit">
         {(["plan", "section", "boq", "compare", "chat"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
             className={[
-              "rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
+              "rounded-lg px-4 py-2 text-sm font-medium transition-colors shrink-0 min-h-[40px]",
               activeTab === tab
                 ? "bg-background text-foreground shadow-sm"
                 : "hover:bg-background/50",
@@ -1420,7 +1435,7 @@ export function LayoutViewer({
             {tab === "plan"
               ? "Floor Plan"
               : tab === "section"
-                ? "Section View"
+                ? "Section"
                 : tab === "boq"
                   ? "BOQ"
                   : tab === "compare"
@@ -1432,35 +1447,151 @@ export function LayoutViewer({
 
       {activeTab === "plan" && (
         <div className="flex flex-col gap-3">
-          {/* Dynamic floor toggle */}
-          <div className="flex w-fit items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-            {availableFloors.map((f) => (
-              <button
-                key={f.index}
-                type="button"
-                onClick={() => setFloor(f.index)}
-                className={[
-                  "rounded-lg px-3 py-1 text-sm font-medium transition-colors",
-                  floor === f.index
-                    ? "bg-background text-foreground shadow-sm"
-                    : "hover:bg-background/50",
-                ].join(" ")}
+          {/* Dynamic floor toggle + mobile Options sheet trigger side-by-side */}
+          <div className="flex items-center gap-2">
+            {/* Floor toggle */}
+            <div className="flex flex-1 overflow-x-auto scrollbar-none items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
+              {availableFloors.map((f) => (
+                <button
+                  key={f.index}
+                  type="button"
+                  onClick={() => setFloor(f.index)}
+                  className={[
+                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors shrink-0 min-h-[40px]",
+                    floor === f.index
+                      ? "bg-background text-foreground shadow-sm"
+                      : "hover:bg-background/50",
+                  ].join(" ")}
+                >
+                  {f.label}
+                  {f.plan.needs_mech_ventilation && (
+                    <span
+                      className="ml-1 text-xs text-amber-600"
+                      title="Mechanical ventilation required"
+                    >
+                      ⚠
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Mobile: Options Sheet trigger — visible on < md */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  className="md:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40 text-muted-foreground hover:bg-muted transition-colors"
+                  aria-label="View options"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="bottom"
+                className="h-auto max-h-[70vh] overflow-y-auto rounded-t-2xl px-4 pt-4 pb-8"
               >
-                {f.label}
-                {f.plan.needs_mech_ventilation && (
-                  <span
-                    className="ml-1 text-xs text-amber-600"
-                    title="Mechanical ventilation required"
+                <p className="text-sm font-semibold text-foreground mb-4">View Options</p>
+                {/* Same toggles, listed vertically for mobile */}
+                <div className="flex flex-col gap-2">
+                  {vastuEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setShowVastuZones((v) => !v)}
+                      className={[
+                        "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
+                        showVastuZones
+                          ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                          : "border-border bg-transparent text-muted-foreground",
+                      ].join(" ")}
+                    >
+                      {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowFurniture((v) => !v)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
+                      showFurniture
+                        ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
+                        : "border-border bg-transparent text-muted-foreground",
+                    ].join(" ")}
                   >
-                    ⚠
-                  </span>
-                )}
-              </button>
-            ))}
+                    {showFurniture ? "Hide Furniture" : "Show Furniture"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowElectrical((v) => !v)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
+                      showElectrical
+                        ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                        : "border-border bg-transparent text-muted-foreground",
+                    ].join(" ")}
+                  >
+                    {showElectrical ? "Hide Electrical" : "Show Electrical"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPlumbing((v) => !v)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
+                      showPlumbing
+                        ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
+                        : "border-border bg-transparent text-muted-foreground",
+                    ].join(" ")}
+                  >
+                    {showPlumbing ? "Hide Plumbing" : "Show Plumbing"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnnotationMode((v) => !v)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
+                      annotationMode
+                        ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                        : "border-border bg-transparent text-muted-foreground",
+                    ].join(" ")}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    {annotationMode ? "Exit Annotate" : "Annotate"}
+                    {annotationCount > 0 && (
+                      <span className="ml-1 rounded-full bg-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                        {annotationCount}
+                      </span>
+                    )}
+                  </button>
+                  {planTier === "pro" ? (
+                    <button
+                      type="button"
+                      onClick={handleToggleEditMode}
+                      className={[
+                        "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
+                        editMode
+                          ? "border-blue-600/70 bg-blue-600/15 text-blue-700 dark:text-blue-400"
+                          : "border-border bg-transparent text-muted-foreground",
+                      ].join(" ")}
+                    >
+                      {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                      {editMode ? "Exit Edit Mode" : "Edit Rooms"}
+                    </button>
+                  ) : (
+                    <Link
+                      href="/pricing"
+                      className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground min-h-[44px]"
+                    >
+                      <Lock className="h-4 w-4" />
+                      Edit Rooms (Pro)
+                    </Link>
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
 
-          {/* Floor plan toolbar: Vastu zones + Furnish + Annotate toggles */}
-          <div className="flex flex-wrap gap-2">
+          {/* Floor plan toolbar: visible on desktop, hidden on mobile (moved to sheet above) */}
+          <div className="hidden md:flex flex-wrap gap-2">
             {vastuEnabled && (
               <button
                 type="button"
@@ -1640,11 +1771,14 @@ export function LayoutViewer({
             plotWidth={plotWidth}
             plotLength={plotLength}
             roadSide={roadSide}
-            className="max-w-xl rounded-xl border"
+            className="w-full md:max-w-xl rounded-xl border"
             plotShape={plotShape}
             plotFrontWidth={plotFrontWidth}
             plotRearWidth={plotRearWidth}
             plotCorners={plotCorners}
+            cutoutCorner={cutoutCorner}
+            cutoutWidth={cutoutWidth}
+            cutoutHeight={cutoutHeight}
             showVastuZones={showVastuZones}
             showFurniture={showFurniture}
             showElectrical={showElectrical}
@@ -1682,8 +1816,11 @@ export function LayoutViewer({
             Parametric section through the building. Dimensions are standard for Indian residential
             construction.
           </p>
-          <SectionViewSVG buildingWidth={plotWidth} className="max-w-xl rounded-xl border" />
-          <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-2 gap-1 sm:grid-cols-3">
+          <SectionViewSVG
+            buildingWidth={plotWidth}
+            className="w-full md:max-w-xl rounded-xl border"
+          />
+          <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
             <span>Floor height: 3.0 m (each floor)</span>
             <span>Slab thickness: 150 mm (RCC)</span>
             <span>Parapet: 1.0 m above roof</span>
@@ -1708,14 +1845,17 @@ export function LayoutViewer({
           plotFrontWidth={plotFrontWidth}
           plotRearWidth={plotRearWidth}
           plotCorners={plotCorners}
+          cutoutCorner={cutoutCorner}
+          cutoutWidth={cutoutWidth}
+          cutoutHeight={cutoutHeight}
         />
       )}
 
       {activeTab === "chat" &&
         (planTier === "pro" ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Left: live floor plan preview */}
-            <div className="flex flex-col gap-2">
+            {/* Left: live floor plan preview — hidden on mobile to save screen space */}
+            <div className="hidden md:flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">Live Layout Preview</p>
                 {liveLayout && (
@@ -1734,6 +1874,9 @@ export function LayoutViewer({
                 plotFrontWidth={plotFrontWidth}
                 plotRearWidth={plotRearWidth}
                 plotCorners={plotCorners}
+                cutoutCorner={cutoutCorner}
+                cutoutWidth={cutoutWidth}
+                cutoutHeight={cutoutHeight}
                 locale={locale}
               />
               <p className="text-xs text-muted-foreground">

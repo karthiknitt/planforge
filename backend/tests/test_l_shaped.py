@@ -10,6 +10,7 @@ from app.engine.models import PlotConfig
 # ── Shared test configs ──────────────────────────────────────────────────────
 
 # 12 m × 10 m L-shaped plot with NE cutout of 4 m × 3 m
+# Used for polygon geometry and compliance tests only.
 L_NE_CFG = PlotConfig(
     plot_width=12.0,
     plot_length=10.0,
@@ -24,6 +25,24 @@ L_NE_CFG = PlotConfig(
     cutout_corner="NE",
     cutout_width=4.0,
     cutout_height=3.0,
+)
+
+# 15 m × 12 m L-shaped plot with NE cutout of 4 m × 4 m — provides ≥ 52 sqm
+# buildable plate after setbacks + ewt, enough for a compliant 2BHK layout.
+L_NE_GEN_CFG = PlotConfig(
+    plot_width=15.0,
+    plot_length=12.0,
+    setback_front=1.5,
+    setback_rear=1.5,
+    setback_left=1.0,
+    setback_right=1.0,
+    num_bedrooms=2,
+    toilets=2,
+    parking=False,
+    plot_shape="l_shaped",
+    cutout_corner="NE",
+    cutout_width=4.0,
+    cutout_height=4.0,
 )
 
 L_NW_CFG = PlotConfig(
@@ -142,14 +161,14 @@ def test_l_shaped_compliance_uses_polygon_boundary():
 
 
 def test_l_shaped_generation_no_rooms_in_cutout():
-    """generate() removes rooms whose centre falls within the NE cutout zone."""
-    layouts = generate(L_NE_CFG)
+    """generate() produces rooms that do not extend into the NE cutout zone."""
+    layouts = generate(L_NE_GEN_CFG)
     assert len(layouts) >= 1, "Should produce at least 1 layout for L-shaped plot"
 
-    W = L_NE_CFG.plot_width
-    H = L_NE_CFG.plot_length
-    cw = L_NE_CFG.cutout_width
-    ch = L_NE_CFG.cutout_height
+    W = L_NE_GEN_CFG.plot_width
+    H = L_NE_GEN_CFG.plot_length
+    cw = L_NE_GEN_CFG.cutout_width
+    ch = L_NE_GEN_CFG.cutout_height
 
     for layout in layouts:
         all_floors = [layout.ground_floor, layout.first_floor]
@@ -167,7 +186,7 @@ def test_l_shaped_generation_no_rooms_in_cutout():
 
 def test_l_shaped_generation_returns_scored_layouts():
     """generate() returns scored layouts for an L-shaped plot."""
-    layouts = generate(L_NE_CFG)
+    layouts = generate(L_NE_GEN_CFG)
     assert len(layouts) >= 1
     assert len(layouts) <= 3
     for layout in layouts:

@@ -830,22 +830,54 @@ function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
       if (Math.abs(aRight - b.x) < WALL_TOL) {
         const segStart = Math.max(a.y, b.y);
         const segEnd = Math.min(a.y + a.depth, b.y + b.depth);
-        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "vertical", wallPos: aRight, roomA: a, roomB: b, segStart, segEnd });
+        if (segEnd > segStart + WALL_TOL)
+          walls.push({
+            orientation: "vertical",
+            wallPos: aRight,
+            roomA: a,
+            roomB: b,
+            segStart,
+            segEnd,
+          });
       } else if (Math.abs(bRight - a.x) < WALL_TOL) {
         const segStart = Math.max(a.y, b.y);
         const segEnd = Math.min(a.y + a.depth, b.y + b.depth);
-        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "vertical", wallPos: bRight, roomA: b, roomB: a, segStart, segEnd });
+        if (segEnd > segStart + WALL_TOL)
+          walls.push({
+            orientation: "vertical",
+            wallPos: bRight,
+            roomA: b,
+            roomB: a,
+            segStart,
+            segEnd,
+          });
       }
       const aTop = a.y + a.depth;
       const bTop = b.y + b.depth;
       if (Math.abs(aTop - b.y) < WALL_TOL) {
         const segStart = Math.max(a.x, b.x);
         const segEnd = Math.min(a.x + a.width, b.x + b.width);
-        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "horizontal", wallPos: aTop, roomA: a, roomB: b, segStart, segEnd });
+        if (segEnd > segStart + WALL_TOL)
+          walls.push({
+            orientation: "horizontal",
+            wallPos: aTop,
+            roomA: a,
+            roomB: b,
+            segStart,
+            segEnd,
+          });
       } else if (Math.abs(bTop - a.y) < WALL_TOL) {
         const segStart = Math.max(a.x, b.x);
         const segEnd = Math.min(a.x + a.width, b.x + b.width);
-        if (segEnd > segStart + WALL_TOL) walls.push({ orientation: "horizontal", wallPos: bTop, roomA: b, roomB: a, segStart, segEnd });
+        if (segEnd > segStart + WALL_TOL)
+          walls.push({
+            orientation: "horizontal",
+            wallPos: bTop,
+            roomA: b,
+            roomB: a,
+            segStart,
+            segEnd,
+          });
       }
     }
   }
@@ -868,13 +900,41 @@ function computeLShapePoints(
   const ch = cutoutHeight;
   let vertices: [number, number][];
   if (cutoutCorner === "NE") {
-    vertices = [[0, 0], [W, 0], [W, H - ch], [W - cw, H - ch], [W - cw, H], [0, H]];
+    vertices = [
+      [0, 0],
+      [W, 0],
+      [W, H - ch],
+      [W - cw, H - ch],
+      [W - cw, H],
+      [0, H],
+    ];
   } else if (cutoutCorner === "NW") {
-    vertices = [[0, 0], [W, 0], [W, H], [cw, H], [cw, H - ch], [0, H - ch]];
+    vertices = [
+      [0, 0],
+      [W, 0],
+      [W, H],
+      [cw, H],
+      [cw, H - ch],
+      [0, H - ch],
+    ];
   } else if (cutoutCorner === "SE") {
-    vertices = [[0, 0], [W - cw, 0], [W - cw, ch], [W, ch], [W, H], [0, H]];
+    vertices = [
+      [0, 0],
+      [W - cw, 0],
+      [W - cw, ch],
+      [W, ch],
+      [W, H],
+      [0, H],
+    ];
   } else {
-    vertices = [[cw, 0], [W, 0], [W, H], [0, H], [0, ch], [cw, ch]];
+    vertices = [
+      [cw, 0],
+      [W, 0],
+      [W, H],
+      [0, H],
+      [0, ch],
+      [cw, ch],
+    ];
   }
   return vertices.map(([x, y]) => `${px(x)},${py(y)}`).join(" ");
 }
@@ -1230,7 +1290,15 @@ export function FloorPlanSVG({
           />
         ) : plotShape === "l_shaped" && cutoutWidth > 0 && cutoutHeight > 0 ? (
           <polygon
-            points={computeLShapePoints(plotWidth, plotLength, cutoutCorner, cutoutWidth, cutoutHeight, px, py)}
+            points={computeLShapePoints(
+              plotWidth,
+              plotLength,
+              cutoutCorner,
+              cutoutWidth,
+              cutoutHeight,
+              px,
+              py
+            )}
             fill="white"
             stroke="#CBD5E1"
             strokeWidth={1}

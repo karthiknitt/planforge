@@ -33,6 +33,9 @@ interface LayoutCompareViewProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  cutoutCorner?: string;
+  cutoutWidth?: number;
+  cutoutHeight?: number;
 }
 
 // ── Floor selector helpers ────────────────────────────────────────────────────
@@ -105,6 +108,9 @@ interface PanelProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  cutoutCorner?: string;
+  cutoutWidth?: number;
+  cutoutHeight?: number;
   locale?: Locale;
 }
 
@@ -121,6 +127,9 @@ function LayoutPanel({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  cutoutCorner,
+  cutoutWidth,
+  cutoutHeight,
   locale = "en",
 }: PanelProps) {
   const layout = layouts.find((l) => l.id === selectedId) ?? layouts[0];
@@ -212,6 +221,9 @@ function LayoutPanel({
         plotFrontWidth={plotFrontWidth}
         plotRearWidth={plotRearWidth}
         plotCorners={plotCorners}
+        cutoutCorner={cutoutCorner}
+        cutoutWidth={cutoutWidth}
+        cutoutHeight={cutoutHeight}
         locale={locale}
       />
     </div>
@@ -381,6 +393,9 @@ export function LayoutCompareView({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  cutoutCorner,
+  cutoutWidth,
+  cutoutHeight,
 }: LayoutCompareViewProps) {
   // Default: first two layouts
   const { locale } = useLocale();
@@ -420,6 +435,9 @@ export function LayoutCompareView({
           plotFrontWidth={plotFrontWidth}
           plotRearWidth={plotRearWidth}
           plotCorners={plotCorners}
+          cutoutCorner={cutoutCorner}
+          cutoutWidth={cutoutWidth}
+          cutoutHeight={cutoutHeight}
           locale={locale}
         />
         <LayoutPanel
@@ -438,6 +456,9 @@ export function LayoutCompareView({
           plotFrontWidth={plotFrontWidth}
           plotRearWidth={plotRearWidth}
           plotCorners={plotCorners}
+          cutoutCorner={cutoutCorner}
+          cutoutWidth={cutoutWidth}
+          cutoutHeight={cutoutHeight}
           locale={locale}
         />
       </div>

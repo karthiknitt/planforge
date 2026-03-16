@@ -61,6 +61,9 @@ interface LayoutSectionProps {
   plotFrontWidth?: number;
   plotRearWidth?: number;
   plotCorners?: [number, number][];
+  cutoutCorner?: string;
+  cutoutWidth?: number;
+  cutoutHeight?: number;
   vastuEnabled?: boolean;
   municipality?: string | null;
   shareToken?: string | null;
@@ -82,6 +85,9 @@ async function LayoutSection({
   plotFrontWidth,
   plotRearWidth,
   plotCorners,
+  cutoutCorner,
+  cutoutWidth,
+  cutoutHeight,
   vastuEnabled,
   municipality,
   shareToken,
@@ -104,6 +110,9 @@ async function LayoutSection({
       plotFrontWidth={plotFrontWidth}
       plotRearWidth={plotRearWidth}
       plotCorners={plotCorners}
+      cutoutCorner={cutoutCorner}
+      cutoutWidth={cutoutWidth}
+      cutoutHeight={cutoutHeight}
       vastuEnabled={vastuEnabled}
       municipality={municipality}
       shareToken={shareToken}
@@ -214,21 +223,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const widthFt = metresToFeet(project.plotWidth);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-5 md:py-6">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm">
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+      <div className="flex items-center gap-2 text-sm min-w-0">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 shrink-0">
           <Link href="/dashboard">← Dashboard</Link>
         </Button>
-        <span className="text-muted-foreground">/</span>
-        <span className="font-semibold truncate">{project.name}</span>
-        <Button variant="outline" size="sm" asChild className="ml-auto">
-          <Link href={`/projects/${id}/edit`}>Edit project</Link>
+        <span className="text-muted-foreground shrink-0">/</span>
+        <span className="font-semibold truncate min-w-0">{project.name}</span>
+        <Button variant="outline" size="sm" asChild className="ml-auto shrink-0">
+          <Link href={`/projects/${id}/edit`}>Edit</Link>
         </Button>
       </div>
 
       {/* Project summary strip — renders immediately from DB */}
-      <div className="flex flex-wrap gap-6 rounded-xl border bg-muted/40 px-5 py-4">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 sm:gap-6 rounded-xl border bg-muted/40 px-4 sm:px-5 py-3 sm:py-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Plot size{project.plotShape === "trapezoid" ? " (Trapezoid)" : ""}
@@ -318,6 +327,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               ? (JSON.parse(project.plotCorners) as [number, number][])
               : undefined
           }
+          cutoutCorner={project.cutoutCorner ?? undefined}
+          cutoutWidth={project.cutoutWidth ? parseFloat(String(project.cutoutWidth)) : undefined}
+          cutoutHeight={project.cutoutHeight ? parseFloat(String(project.cutoutHeight)) : undefined}
           vastuEnabled={project.vastuEnabled}
           municipality={project.municipality}
           shareToken={project.shareToken}

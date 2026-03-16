@@ -323,17 +323,25 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
             )
 
     # --- Floor coverage ---
-    buildable_w = cfg.plot_width  - cfg.setback_left  - cfg.setback_right
-    buildable_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
-    footprint   = buildable_w * buildable_d
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         from shapely.geometry import Polygon as _Polygon
-        plot_area = _Polygon(cfg.plot_corners).area
+        plot_poly = _Polygon(cfg.plot_corners)
+        plot_area = plot_poly.area
+        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        inset = plot_poly.buffer(-avg_sb, join_style=2)
+        footprint = inset.area if not inset.is_empty else 0.0
     elif cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
         from app.engine.generator import compute_l_shaped_polygon
-        plot_area = compute_l_shaped_polygon(cfg).area
+        l_poly = compute_l_shaped_polygon(cfg)
+        plot_area = l_poly.area
+        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        inset = l_poly.buffer(-avg_sb, join_style=2)
+        footprint = inset.area if not inset.is_empty else 0.0
     else:
-        plot_area = cfg.plot_width * cfg.plot_length
+        buildable_w = cfg.plot_width  - cfg.setback_left  - cfg.setback_right
+        buildable_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
+        footprint   = buildable_w * buildable_d
+        plot_area   = cfg.plot_width * cfg.plot_length
     coverage_pct = (footprint / plot_area) * 100
 
     max_cov = muni_rules.get("max_ground_coverage_pct", rules["max_floor_coverage_pct"])
