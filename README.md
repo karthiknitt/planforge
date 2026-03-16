@@ -68,6 +68,17 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 - **Payments** — Razorpay with plan tiers: Free / Basic / Pro
 - **Blueprint Dark theme** — Outfit + Plus Jakarta Sans + JetBrains Mono fonts; `prefers-reduced-motion` support
 
+### SEO & Marketing
+- **Metadata API** — Per-page `title` / `description` with `%s | PlanForge` template; `lang="en-IN"` for Google India
+- **Structured data (JSON-LD)** — SoftwareApplication schema (homepage), FAQPage (homepage + pricing), HowTo schema (how-it-works); injected via reusable `JsonLd` component
+- **XML sitemap** — `/sitemap.xml` with priorities; 8 pages covered including gallery, privacy, terms
+- **robots.txt** — disallows `/dashboard`, `/projects/`, `/account`, `/team`, `/api/`
+- **Privacy Policy** — `/privacy` page with full data-collection, retention, and security disclosure
+- **Terms of Service** — `/terms` page; governing law: Trichy, Tamil Nadu
+- **OpenGraph / Twitter card** — static 1424×752 OG image (`opengraph-image.png`), Twitter large-image card
+- **Favicon set** — `favicon.ico` (16/32/48 px), `icon.png` (512×512), `apple-touch-icon.png` (180×180)
+- **Hero illustration** — colour-coded floor-plan schematic in hero section replacing animated SVG
+
 ---
 
 ## Tech Stack
@@ -177,7 +188,8 @@ PlanForge/
 │       ├── app/
 │       │   ├── (app)/         # Dashboard, projects, account (auth-gated)
 │       │   ├── (auth)/        # Sign-in, sign-up
-│       │   ├── (marketing)/   # Landing, pricing, how-it-works
+│       │   ├── (marketing)/   # Landing, pricing, how-it-works, gallery, privacy, terms
+│       │   ├── share/         # Public read-only share view
 │       │   └── api/           # Better Auth handler, agent chat, transcription
 │       ├── components/        # SVG renderer, section view, BOQ viewer, chat panel, overlays
 │       ├── db/                # Drizzle client + schema (Better Auth tables)

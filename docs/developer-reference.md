@@ -1008,3 +1008,57 @@ All remaining roadmap items implemented via parallel sub-agents with git worktre
 - **FAB pattern**: `fixed bottom-6 right-6 z-40 rounded-full w-14 h-14 shadow-lg` — only shown at `< sm` breakpoint.
 - **Edit mode compliance check**: `POST /api/layouts/{id}/compliance-check` accepts `{ rooms: Room[] }` directly (stateless). Frontend calls it speculatively during drag (debounced 800ms) without committing room state.
 - **Testing gap**: frontend has 0 test files. Backend has 108/108. Priority gaps: compliance-check endpoint, share token security, BOQ city rates, revision lifecycle.
+
+---
+
+### 2026-03-16 — SEO, CRO & Brand Asset Integration
+
+**What was built:**
+
+Full SEO hardening and conversion-rate optimisation pass on the marketing site.
+
+**SEO infrastructure:**
+- `frontend/src/app/sitemap.ts` — expanded to 8 URLs (added `/gallery`, `/privacy`, `/terms`); correct priority weights (`/pricing` = 0.9, gallery = 0.8)
+- `frontend/src/app/robots.ts` — disallow list expanded to include `/account`, `/team`, `/api/`
+- `frontend/src/app/layout.tsx` — enriched metadata: 12-keyword array, `lang="en-IN"`, `metadataBase`, canonical, OG/Twitter card, `icons` block (favicon.ico + icon.png + apple-touch-icon)
+- `frontend/src/components/json-ld.tsx` — NEW: reusable JSON-LD injector via script tag; content is `JSON.stringify` of own static data objects only (no user input, no XSS risk)
+- **Structured data injected per page:**
+  - Homepage: `SoftwareApplication` schema + `FAQPage` schema (7 FAQs in details/summary accordion)
+  - Pricing: `FAQPage` schema derived from existing `faqs` array
+  - How It Works: `HowTo` schema with `totalTime: "PT1M"` and 4 named steps
+
+**CRO improvements:**
+- Homepage: FAQ section added using `<details>/<summary>` (zero JS, Google can crawl open content); hero `AnimatedFloorPlan` replaced with `<Image priority />` for LCP improvement
+- Marketing layout footer: Privacy Policy + Terms of Service links added to bottom bar
+- `frontend/src/app/(marketing)/privacy/page.tsx` — NEW: full privacy policy (data collection, cookies, retention, security, contact)
+- `frontend/src/app/(marketing)/terms/page.tsx` — NEW: full ToS (7 sections, governing law: Trichy, Tamil Nadu)
+- Pricing page: title updated to include prices (`"Pricing — Free, ₹499 & ₹999/month | PlanForge"`); FAQPage JSON-LD injected
+
+**Brand assets (AI-generated via OpenRouter `google/gemini-3-pro-image-preview`):**
+- `frontend/public/favicon.ico` — PF monogram logo (Option A), multi-size bundle: 16/32/48 px (ImageMagick)
+- `frontend/src/app/icon.png` — Option A at 512×512 (Next.js App Router static icon)
+- `frontend/public/apple-touch-icon.png` — Option A at 180×180
+- `frontend/src/app/opengraph-image.png` — isometric G+1 two-storey house (Option C) with PlanForge branding, 1424×752; replaced `opengraph-image.tsx` edge function (static = faster, CDN-cacheable)
+- `frontend/public/hero-illustration.png` — colour-coded floor-plan schematic (1200×630) in hero section
+
+**Key files changed:**
+
+- `frontend/src/app/layout.tsx` — enriched metadata object; `icons` block; `lang="en-IN"`
+- `frontend/src/app/(marketing)/page.tsx` — FAQ data + accordion; JSON-LD (SoftwareApplication + FAQPage); `<Image>` hero
+- `frontend/src/app/(marketing)/pricing/page.tsx` — enriched title/description; FAQPage JSON-LD
+- `frontend/src/app/(marketing)/how-it-works/page.tsx` — enriched title; HowTo JSON-LD
+- `frontend/src/app/(marketing)/layout.tsx` — Privacy + Terms links in footer
+- `frontend/src/app/(marketing)/privacy/page.tsx` — NEW
+- `frontend/src/app/(marketing)/terms/page.tsx` — NEW
+- `frontend/src/components/json-ld.tsx` — NEW
+- `frontend/src/app/sitemap.ts` — 8 URLs
+- `frontend/src/app/robots.ts` — expanded disallow list
+- `frontend/src/app/opengraph-image.tsx` — DELETED (replaced by static PNG)
+
+**Patterns established:**
+
+- **Static OG image over dynamic `.tsx`**: placing `opengraph-image.png` in `app/` overrides the edge-rendered `.tsx` route. Benefits: no cold-start latency, CDN-cacheable, avoids `@vercel/og` dependency.
+- **Biome security linting suppression**: the `biome-ignore` comment must appear on the exact line containing the flagged attribute, not the line above. Placing it one line before produces "unused suppression" warning.
+- **FAQ SEO pattern**: `<details>/<summary>` renders open content in HTML — Googlebot indexes it without JavaScript. Combined with `FAQPage` JSON-LD this targets FAQ rich results in SERPs.
+- **`lang="en-IN"`**: tells Google India the content is Indian English; affects language-specific ranking signals and local SERP placement.
+- **Image generation via OpenRouter**: endpoint `/api/v1/chat/completions`, model `google/gemini-3-pro-image-preview`, response at `choices[0].message.images[0].image_url.url` as `data:image/png;base64,...`. Free-tier Gemini keys hit quota — OpenRouter is the reliable fallback at $0.000002/image.

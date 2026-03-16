@@ -24,16 +24,57 @@ const monoFont = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://planforge.in"),
-  title: { default: "PlanForge", template: "%s — PlanForge" },
+  title: {
+    default: "PlanForge — G+1 Floor Plan Generator for Indian Builders",
+    template: "%s | PlanForge",
+  },
   description:
-    "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 5 layout variations, PDF & DXF export.",
+    "Generate NBC 2016-compliant G+1 residential floor plans instantly. Enter plot dimensions, get 5 layout variations, export PDF & DXF. Built for Indian civil engineers and small builders.",
+  keywords: [
+    "floor plan generator India",
+    "G+1 floor plan",
+    "NBC 2016 compliant floor plan",
+    "house plan generator",
+    "residential floor plan India",
+    "2BHK floor plan",
+    "3BHK floor plan",
+    "Indian house design",
+    "plot plan Bangalore",
+    "civil engineer software India",
+    "DXF floor plan",
+    "BOQ calculator India",
+  ],
+  authors: [{ name: "PlanForge" }],
+  creator: "PlanForge",
+  publisher: "PlanForge",
+  category: "Architecture & Design Software",
   openGraph: {
     type: "website",
     siteName: "PlanForge",
-    images: ["/opengraph-image"],
+    locale: "en_IN",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1424,
+        height: 752,
+        alt: "PlanForge — G+1 Floor Plan Generator for Indian Builders",
+      },
+    ],
   },
-  twitter: { card: "summary_large_image" },
-  robots: { index: true, follow: true },
+  twitter: {
+    card: "summary_large_image",
+    creator: "@planforge_in",
+    images: ["/opengraph-image.png"],
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+  alternates: { canonical: "/" },
 };
 
 export default function RootLayout({
@@ -42,7 +83,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en-IN" suppressHydrationWarning>
       <body
         className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} antialiased`}
       >

@@ -2,6 +2,7 @@ import {
   ArrowRight,
   Building2,
   CheckCircle,
+  ChevronDown,
   FileText,
   LayoutGrid,
   MapPin,
@@ -11,9 +12,10 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
+import { JsonLd } from "@/components/json-ld";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 import { Badge } from "@/components/ui/badge";
@@ -114,32 +116,111 @@ const plans = [
    Social proof stats
 ────────────────────────────────────────────────────────────── */
 const stats = [
-  { value: "5", label: "Layout variations" },
-  { value: "6", label: "Indian cities supported" },
+  { value: "5", label: "Layout archetypes" },
+  { value: "6+", label: "Indian cities" },
   { value: "NBC", label: "2016 compliant" },
   { value: "<1s", label: "Generation time" },
+];
+
+/* ──────────────────────────────────────────────────────────────
+   FAQ
+────────────────────────────────────────────────────────────── */
+const faqs = [
+  {
+    q: "Do I need AutoCAD or any software to use PlanForge?",
+    a: "No. PlanForge runs entirely in your browser — nothing to install. You can view, edit, and export floor plans from any laptop or phone on the construction site.",
+  },
+  {
+    q: "Which Indian cities are supported?",
+    a: "Bangalore, Chennai, Delhi, Hyderabad, Pune, and a generic Indian option that applies NBC 2016 national defaults. City-specific setbacks and FAR tables are baked in.",
+  },
+  {
+    q: "Is the free plan really free?",
+    a: "Yes — no credit card required. The free plan lets you create up to 3 projects with all 5 layout variations and PDF export. Upgrade to Basic (₹499/mo) for DXF export or Pro (₹999/mo) for BOQ Excel.",
+  },
+  {
+    q: "What compliance standard does PlanForge use?",
+    a: "PlanForge enforces NBC 2016 (National Building Code) for room areas, stair dimensions, and ventilation ratios. City-specific setbacks and FAR limits are applied on top.",
+  },
+  {
+    q: "Can I use PlanForge for L-shaped or irregular plots?",
+    a: "Currently PlanForge supports rectangular and L-shaped plots. Quadrilateral and fully irregular plot support is on the roadmap.",
+  },
+  {
+    q: "What file formats can I export?",
+    a: "PDF (1:100 scale, A3/A4 with title block) on all plans. DXF for AutoCAD with 9 named layers on Basic+. BOQ Excel with 11 quantity line items on Pro.",
+  },
 ];
 
 /* ──────────────────────────────────────────────────────────────
    Page
 ────────────────────────────────────────────────────────────── */
 export const metadata: Metadata = {
-  title: "G+1 Floor Plan Generator for Indian Builders",
+  title: "G+1 Floor Plan Generator for Indian Builders — NBC 2016 Compliant | PlanForge",
   description:
-    "Input plot dimensions, get 5 NBC-compliant layout variations instantly — PDF, DXF, BOQ export.",
+    "Generate 5 NBC 2016-compliant G+1 floor plan variations in under 1 second. Enter plot dimensions, get PDF, DXF & BOQ export. Free plan available. No AutoCAD needed.",
+  keywords: [
+    "G+1 floor plan generator",
+    "floor plan generator India",
+    "NBC 2016 compliant floor plan",
+    "residential floor plan India",
+    "2BHK 3BHK floor plan",
+    "house plan Bangalore Chennai Delhi",
+    "free floor plan generator",
+    "DXF floor plan AutoCAD",
+  ],
   openGraph: {
-    title: "PlanForge — G+1 Floor Plan Generator",
+    title: "PlanForge — Generate G+1 Floor Plans in Seconds",
     description:
-      "Input plot dimensions, get 5 NBC-compliant layout variations instantly — PDF, DXF, BOQ export.",
+      "5 NBC-compliant layout variations from your plot dimensions. PDF, DXF & BOQ export. Free to start. Built for Indian civil engineers.",
   },
+  alternates: { canonical: "/" },
 };
 
 export default async function LandingPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (session) redirect("/dashboard");
 
+  const softwareJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "PlanForge",
+    applicationCategory: "DesignApplication",
+    operatingSystem: "Web",
+    url: "https://planforge.in",
+    description:
+      "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 5 layout variations, PDF & DXF export.",
+    screenshot: "https://planforge.in/opengraph-image",
+    featureList: [
+      "NBC 2016 compliance checks",
+      "5 layout archetypes (front, centre, rear, corner, open-plan)",
+      "PDF export at 1:100 scale",
+      "DXF export with 9 named layers",
+      "BOQ Excel with 11 quantity items",
+      "City-specific rules for Bangalore, Chennai, Delhi, Hyderabad, Pune",
+    ],
+    offers: [
+      { "@type": "Offer", price: "0", priceCurrency: "INR", name: "Free" },
+      { "@type": "Offer", price: "499", priceCurrency: "INR", name: "Basic" },
+      { "@type": "Offer", price: "999", priceCurrency: "INR", name: "Pro" },
+    ],
+    author: { "@type": "Organization", name: "PlanForge", url: "https://planforge.in" },
+  };
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map(({ q, a }) => ({
+      "@type": "Question",
+      name: q,
+      acceptedAnswer: { "@type": "Answer", text: a },
+    })),
+  };
+
   return (
     <>
+      <JsonLd data={softwareJsonLd} />
+      <JsonLd data={faqJsonLd} />
       {/* ── HERO ── */}
       <section className="relative overflow-hidden bg-background border-b border-border/50 min-h-[90vh] flex items-center">
         {/* Blueprint grid overlay */}
@@ -214,9 +295,14 @@ export default async function LandingPage() {
                     Layout A · Front Staircase · 2BHK · Bangalore
                   </span>
                 </div>
-                <div className="p-3">
-                  <AnimatedFloorPlan />
-                </div>
+                <Image
+                  src="/hero-illustration.png"
+                  alt="NBC-compliant G+1 floor plan with colour-coded rooms, dimension lines and north arrow"
+                  width={1200}
+                  height={630}
+                  className="w-full h-auto"
+                  priority
+                />
               </div>
               <div className="absolute -top-3 -right-3 bg-primary text-primary-foreground text-xs font-bold px-3 py-1.5 rounded-full shadow-lg shadow-primary/30 animate-float">
                 5 layouts
@@ -409,6 +495,36 @@ export default async function LandingPage() {
               See full pricing details &rarr;
             </Link>
           </p>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section className="py-24 lg:py-32 bg-muted/20 border-y border-border/50">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <FadeIn className="text-center mb-12">
+            <Badge className="mb-4 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
+              FAQ
+            </Badge>
+            <h2
+              className="text-3xl md:text-4xl font-bold text-foreground"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Frequently asked questions
+            </h2>
+          </FadeIn>
+          <StaggerChildren className="space-y-3">
+            {faqs.map(({ q, a }) => (
+              <StaggerItem key={q}>
+                <details className="group rounded-xl border border-border/60 bg-card px-5 py-4 cursor-pointer">
+                  <summary className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground list-none select-none">
+                    {q}
+                    <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{a}</p>
+                </details>
+              </StaggerItem>
+            ))}
+          </StaggerChildren>
         </div>
       </section>
 

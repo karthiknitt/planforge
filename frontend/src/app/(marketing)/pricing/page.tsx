@@ -1,6 +1,7 @@
 import { CheckCircle, Package, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/components/json-ld";
 import { CreditPackButton } from "@/components/credit-pack-button";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
@@ -15,8 +16,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Pricing — PlanForge",
-  description: "Simple, transparent pricing for PlanForge floor plan generator.",
+  title: "Pricing — Free, ₹499 & ₹999/month | PlanForge",
+  description:
+    "PlanForge pricing: Free (3 projects, PDF export), Basic ₹499/month (unlimited projects + DXF), Pro ₹999/month (BOQ Excel + priority support). No AutoCAD needed. Cancel anytime.",
+  openGraph: {
+    title: "PlanForge Pricing — Free, Basic & Pro Plans for Indian Builders",
+    description:
+      "Start free with 3 projects and PDF export. Upgrade to Basic (₹499/mo) for DXF export or Pro (₹999/mo) for BOQ Excel. NBC 2016 compliant floor plan generator.",
+  },
+  alternates: { canonical: "/pricing" },
 };
 
 const plans: Array<{
@@ -140,8 +148,19 @@ const faqs = [
 ];
 
 export default function PricingPage() {
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map(({ q, a }) => ({
+      "@type": "Question",
+      name: q,
+      acceptedAnswer: { "@type": "Answer", text: a },
+    })),
+  };
+
   return (
     <div className="bg-background">
+      <JsonLd data={faqJsonLd} />
       {/* Header */}
       <section className="py-20 lg:py-28 bg-gradient-to-b from-muted/40 to-background border-b border-border/50 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(249,115,22,0.07)_0%,transparent_60%)]" />

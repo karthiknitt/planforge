@@ -154,9 +154,15 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <p className="text-sm text-muted-foreground/60">
               &copy; {new Date().getFullYear()} PlanForge. All rights reserved.
             </p>
-            <p className="text-xs text-muted-foreground/40">
-              Built for Indian civil engineers & builders
-            </p>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground/50">
+              <Link href="/privacy" className="hover:text-muted-foreground transition-colors">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="hover:text-muted-foreground transition-colors">
+                Terms of Service
+              </Link>
+              <span>Built for Indian civil engineers &amp; builders</span>
+            </div>
           </div>
         </div>
       </footer>

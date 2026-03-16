@@ -10,14 +10,22 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/components/json-ld";
 import { FadeIn } from "@/components/motion/fade-in";
 import { SlideIn } from "@/components/motion/slide-in";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "How It Works — PlanForge",
-  description: "See how PlanForge generates NBC-compliant G+1 floor plans from your plot details.",
+  title: "How PlanForge Works — G+1 Floor Plan Generation in 4 Steps",
+  description:
+    "Enter your plot dimensions, road-facing direction, and BHK count — PlanForge generates 5 NBC 2016-compliant G+1 layout variations in under 1 second. Export as PDF, DXF, or BOQ Excel.",
+  openGraph: {
+    title: "How PlanForge Works — From Plot to Floor Plan in Under a Second",
+    description:
+      "4-step walkthrough: enter plot details → instant NBC-compliant layouts → review in browser → export PDF/DXF/BOQ. Built for Indian civil engineers.",
+  },
+  alternates: { canonical: "/how-it-works" },
 };
 
 /* ──────────────────────────────────────────────────────────────
@@ -259,9 +267,42 @@ const specs = [
   ["Supported cities", "6 (Bangalore, Chennai, Delhi, Hyderabad, Pune, Other)"],
 ];
 
+const howToJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "How to Generate an NBC-Compliant G+1 Floor Plan with PlanForge",
+  description:
+    "Generate 5 NBC 2016-compliant G+1 residential floor plan variations from your plot dimensions in under a second.",
+  step: [
+    {
+      "@type": "HowToStep",
+      name: "Enter Your Plot Details",
+      text: "Input plot dimensions, city, setbacks on all 4 sides, road-facing direction, BHK count (1–4), and optional rooms.",
+    },
+    {
+      "@type": "HowToStep",
+      name: "Generate 5 Layout Variations",
+      text: "PlanForge generates all 5 archetypes simultaneously and checks each against NBC 2016 and city-specific rules.",
+    },
+    {
+      "@type": "HowToStep",
+      name: "Review in Browser",
+      text: "Inspect colour-coded rooms, double-line walls, door arcs, dimension lines, and north arrow in the interactive SVG preview.",
+    },
+    {
+      "@type": "HowToStep",
+      name: "Export PDF, DXF, or BOQ Excel",
+      text: "Download a 1:100 scale PDF, AutoCAD DXF with 9 named layers, or BOQ Excel with 11 quantity line items.",
+    },
+  ],
+  tool: [{ "@type": "HowToTool", name: "PlanForge web app — no installation required" }],
+  totalTime: "PT1M",
+};
+
 export default function HowItWorksPage() {
   return (
     <div className="bg-background">
+      <JsonLd data={howToJsonLd} />
       {/* Header */}
       <section className="py-20 lg:py-24 bg-gradient-to-b from-card/30 to-background border-b border-border/30">
         <FadeIn className="mx-auto max-w-4xl px-4 text-center">
