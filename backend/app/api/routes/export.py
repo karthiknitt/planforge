@@ -224,8 +224,10 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         metres_to_ftin,
     )
 
-    doc = ezdxf.new("R2010")
-    doc.header["$INSUNITS"] = 6  # metres
+    doc = ezdxf.new("R2010", setup=True)       # setup=True loads standard linetypes
+    doc.header["$INSUNITS"]    = 6             # metres (geometry stored in metres)
+    doc.header["$MEASUREMENT"] = 1             # metric hatch/linetype scaling
+    doc.header["$LWDISPLAY"]   = 1             # show lineweights in DXF viewers
 
     layer_defs = [
         ("PLOT-BOUNDARY",   colors.GREEN,   0.25),
@@ -257,6 +259,11 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         lyr.lineweight = int(lw * 100)
         if lname in structural_layers:
             lyr.freeze()
+
+    # DEFPOINTS — non-printing layer required by DXF spec for dimension attachment points
+    if "DEFPOINTS" not in doc.layers:
+        _dp = doc.layers.new("DEFPOINTS")
+        _dp.dxf.plot = 0  # non-printing
 
     # Register DASHED linetype (used by plot boundary and structural grid)
     if "DASHED" not in doc.linetypes:
