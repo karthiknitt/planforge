@@ -1,6 +1,9 @@
 import json as _json
+import logging
 from decimal import Decimal
 from io import BytesIO, StringIO
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
@@ -264,6 +267,21 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if "DEFPOINTS" not in doc.layers:
         _dp = doc.layers.new("DEFPOINTS")
         _dp.dxf.plot = 0  # non-printing
+
+    # Architectural dimension style — created once per document
+    # ezdxf is imported at the top of this function; use it directly
+    _ds = doc.dimstyles.new("ARCH_MM")
+    _ds.dxf.dimtxt  = 0.25   # text height (m) → 2.5mm on paper at 1:100
+    _ds.dxf.dimasz  = 0.15   # arrow size
+    _ds.dxf.dimtad  = 1      # text above dim line
+    _ds.dxf.dimexo  = 0.10   # extension line offset
+    _ds.dxf.dimexe  = 0.15   # extension line overshoot
+    _ds.dxf.dimgap  = 0.08   # gap between text and dim line
+    _ds.dxf.dimdec  = 0      # no decimal places (text overridden by set_text to ft-in)
+    try:
+        _ds.set_arrows(blk=ezdxf.ARROWS.architectural_tick)
+    except Exception as exc:
+        logger.warning("Archtick arrow unavailable: %s", exc)
 
     # Register DASHED linetype (used by plot boundary and structural grid)
     if "DASHED" not in doc.linetypes:

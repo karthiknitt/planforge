@@ -511,15 +511,8 @@ def draw_dimension_chain(
     if len(positions) < 2:
         return
 
-    # Create ARCH_MM dimstyle on first call if not already present
-    if "ARCH_MM" not in msp.doc.dimstyles:
-        ds = msp.doc.dimstyles.new("ARCH_MM")
-        ds.dxf.dimtxt = 0.25
-        ds.dxf.dimasz = 0.15
-        ds.dxf.dimtad = 1
-        ds.dxf.dimexo = 0.1
-        ds.dxf.dimexe = 0.15
-
+    # ARCH_MM dimstyle is created once in export.py before modelspace is obtained.
+    # draw_dimension_chain() relies on it already existing in the document.
     for i in range(len(positions) - 1):
         p_start = positions[i]
         p_end = positions[i + 1]
