@@ -8,20 +8,21 @@
     "visual_quality": 16,
     "_vq_detail": {
       "issues": [
-        "Kitchen dimensions text (17'-3\" x 16'-2\") appears quite large and takes up significant space in the room",
-        "Living/Hall dimensions text orientation and size could be better proportioned",
-        "Some door swing arcs appear to overlap with wall lines in tight spaces",
-        "Minor alignment inconsistencies in dimension line placement at bottom"
+        "The staircase representation in the parking area could be more detailed with clearer tread lines",
+        "Some door swing arcs appear slightly inconsistent in line weight",
+        "The dimension line on the right side (38'-9\") is very close to the building outline, could have more clearance",
+        "Minor: The 'UP' arrow and staircase notation could be positioned more centrally in the parking space"
       ],
       "positives": [
-        "Clean wall lines with proper corners and no visible gaps",
-        "Title block is complete with all information clearly visible and well-organized",
-        "Room labels are properly placed within their respective spaces",
-        "Dimension lines are generally outside the building footprint",
-        "North arrow is clearly visible and properly positioned",
-        "Door swings are consistently shown with proper arcs",
-        "Overall professional appearance with standard CAD conventions followed",
-        "Scale and total area information properly displayed"
+        "Clean wall lines with proper corners and no gaps",
+        "All room labels are clearly positioned inside their respective rooms and fully readable",
+        "Dimensions are properly placed outside the building perimeter",
+        "Title block is complete, professional, and all text is visible without overlap",
+        "Door swings are properly indicated with arc symbols",
+        "Consistent line weights for walls and partitions",
+        "North arrow is clearly indicated",
+        "Scale and measurements are properly documented",
+        "Overall professional appearance suitable for construction documentation"
       ]
     },
     "_debug": {
@@ -38,29 +39,29 @@
     }
   },
   "approval": {
-    "total": 97.0,
+    "total": 96.0,
     "monochrome": 20.0,
     "dimension_density": 20,
     "ft_in_labels": 20,
     "layout_completeness": 20,
-    "visual_quality": 17,
+    "visual_quality": 16,
     "_vq_detail": {
       "issues": [
-        "Room dimension text in Kitchen and Dining appears slightly cramped but still readable",
-        "The setback annotations (R.S. 1.0m, etc.) could be positioned slightly cleaner",
-        "Minor: The UP arrow and staircase representation could be more detailed"
+        "The staircase 'UP' arrow and text placement could be more refined - appears slightly cramped in the corner",
+        "Room dimensions text in some areas (like Dining and Living/Hall) are positioned close to door swing arcs which slightly affects readability",
+        "The door swing arcs in multiple rooms overlap with dimension text, creating minor visual clutter",
+        "The scale reference '3 m' at bottom left could be better aligned with the drawing"
       ],
       "positives": [
-        "Clean wall lines with proper corners and no gaps or overlaps",
-        "All room labels are clearly inside their respective rooms and readable",
-        "Dimension lines are properly placed outside the building perimeter",
-        "Title block is complete with all information visible and properly formatted",
-        "Door swings are correctly shown with proper arcs",
-        "FAR calculation table is well-organized and clearly legible",
-        "North arrow is prominently displayed",
-        "Scale bar is present and clear",
-        "Professional layout with proper CMDA setback notation",
-        "All text is rendered properly without black squares or corruption"
+        "Clean wall lines with proper corners and no visible gaps",
+        "Title block is well-organized with all information clearly visible and readable",
+        "Room labels are properly positioned inside their respective rooms",
+        "Dimension lines (R.S. 1.0m, R.S. 1.5m CMDA) are appropriately placed outside the building perimeter",
+        "FAR calculation table is neatly presented without overlapping any drawing elements",
+        "Professional overall appearance with consistent line weights",
+        "North direction indicator is clearly visible",
+        "Door swings are properly shown with standard architectural notation",
+        "Square footage calculations are clearly labeled for each room"
       ]
     },
     "_debug": {

@@ -155,7 +155,6 @@ MARGIN   = 52   # page margins (larger for chain dimension zone)
 ROAD_H   = 18   # road strip height
 ROAD_GAP = 4    # gap between road strip top and plot boundary bottom
 TOP_PAD  = 30   # padding above plot for north arrow / scale bar
-COL_SZ   = 2.5  # column marker half-size (pt) — fits within wall thickness
 EXT_LW   = 2.0  # external wall lineweight (pt)
 INT_LW   = 1.0  # internal wall lineweight (pt)
 DIM_LW   = 0.5  # dimension line lineweight (pt)
@@ -444,18 +443,25 @@ def _draw_floor(
         # ── Door leaf + arc in interior wall gaps ─────────────────────────────
         _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
 
-    # ── Column markers (filled dark squares) ─────────────────────────────────
-    c.setFillColor(HexColor("#000000"))
-    c.setDash()
-    seen_cols: set[tuple[float, float]] = set()
-    for col in floor_plan.columns:
-        key = (round(col.x, 2), round(col.y, 2))
-        if key in seen_cols:
-            continue
-        seen_cols.add(key)
-        cx = ox + col.x * scale
-        cy = oy + col.y * scale
-        c.rect(cx - COL_SZ, cy - COL_SZ, COL_SZ * 2, COL_SZ * 2, fill=1, stroke=0)
+        # ── Column markers: sized to wall thickness, outer corners at wall centreline ─
+        c.setFillColor(HexColor("#000000"))
+        c.setDash()
+        col_half = max(2.5, ewt * scale / 2)
+        ewt_half = ewt / 2
+        col_tol = 0.02
+        seen_cols: set[tuple[float, float]] = set()
+        for col in floor_plan.columns:
+            key = (round(col.x, 2), round(col.y, 2))
+            if key in seen_cols:
+                continue
+            seen_cols.add(key)
+            col_cx = (col.x - ewt_half if abs(col.x - min_x) < col_tol else
+                      col.x + ewt_half if abs(col.x - max_x) < col_tol else col.x)
+            col_cy = (col.y - ewt_half if abs(col.y - min_y) < col_tol else
+                      col.y + ewt_half if abs(col.y - max_y) < col_tol else col.y)
+            cx = ox + col_cx * scale
+            cy = oy + col_cy * scale
+            c.rect(cx - col_half, cy - col_half, col_half * 2, col_half * 2, fill=1, stroke=0)
 
     # ── Room labels ───────────────────────────────────────────────────────────
     c.setLineWidth(1.0)
