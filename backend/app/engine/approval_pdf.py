@@ -20,7 +20,15 @@ from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+from app.engine.cad_primitives import metres_to_ftin
 from app.engine.models import FloorPlan, Layout, PlotConfig
+from app.engine.pdf import (
+    _pdf_draw_double_line_wall,
+    _dedup_wall_coords,
+    _draw_staircase_treads,
+    _draw_windows,
+    _draw_doors_in_gaps,
+)
 
 # ── Page geometry constants (points) ─────────────────────────────────────────
 MARGIN = 40
@@ -110,11 +118,11 @@ def _draw_site_location_plan(
     authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper()[:6])
 
     # Background
-    c.setFillColor(HexColor("#F8FAFC"))
+    c.setFillColor(HexColor("#FFFFFF"))
     c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
 
     # Page title bar
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.rect(0, page_h - 48, page_w, 48, fill=1, stroke=0)
     c.setFillColor(white)
     c.setFont("Helvetica-Bold", 14)
@@ -148,31 +156,31 @@ def _draw_site_location_plan(
     comp_w = (cfg.plot_width + cfg.setback_left + cfg.setback_right) * scale
     comp_h = (cfg.plot_length + cfg.setback_front + cfg.setback_rear) * scale
 
-    c.setStrokeColor(HexColor("#16A34A"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(0.75)
     c.setDash(6, 3)
     c.rect(comp_x, comp_y, comp_w, comp_h, fill=0, stroke=1)
     c.setDash()
 
     # Plot boundary — solid dark blue, thick
-    c.setStrokeColor(HexColor("#1E3A5F"))
-    c.setFillColor(HexColor("#EFF6FF"))
+    c.setStrokeColor(HexColor("#000000"))
+    c.setFillColor(HexColor("#FFFFFF"))
     c.setLineWidth(2.0)
     c.rect(ox, oy, plot_px, plot_py, fill=1, stroke=1)
 
     # Road strip — depends on road_side
     road_side = cfg.road_side.upper()
-    c.setFillColor(HexColor("#CBD5E1"))
+    c.setFillColor(HexColor("#CCCCCC"))
     if road_side == "S":
         c.rect(ox, oy - cfg.setback_front * scale - ROAD_H, plot_px, ROAD_H, fill=1, stroke=0)
-        c.setFillColor(HexColor("#475569"))
+        c.setFillColor(HexColor("#444444"))
         c.setFont("Helvetica", 7)
         c.drawCentredString(ox + plot_px / 2, oy - cfg.setback_front * scale - ROAD_H / 2 - 3,
                             "ROAD")
     elif road_side == "N":
         road_top = oy + plot_py + cfg.setback_rear * scale
         c.rect(ox, road_top, plot_px, ROAD_H, fill=1, stroke=0)
-        c.setFillColor(HexColor("#475569"))
+        c.setFillColor(HexColor("#444444"))
         c.setFont("Helvetica", 7)
         c.drawCentredString(ox + plot_px / 2, road_top + ROAD_H / 2 - 3, "ROAD")
 
@@ -182,18 +190,18 @@ def _draw_site_location_plan(
     bldg_w = (cfg.plot_width - cfg.setback_left - cfg.setback_right) * scale
     bldg_h = (cfg.plot_length - cfg.setback_front - cfg.setback_rear) * scale
 
-    c.setFillColor(HexColor("#BFDBFE"))
-    c.setStrokeColor(HexColor("#1E40AF"))
+    c.setFillColor(HexColor("#E8E8E8"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(1.5)
     if bldg_w > 4 and bldg_h > 4:
         c.rect(bldg_x, bldg_y, bldg_w, bldg_h, fill=1, stroke=1)
-        c.setFillColor(HexColor("#1E40AF"))
+        c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", max(7, min(10, bldg_w / 6)))
         c.drawCentredString(bldg_x + bldg_w / 2, bldg_y + bldg_h / 2 - 4, "BUILDING")
 
     # Setback dimension callouts
-    c.setFillColor(HexColor("#64748B"))
-    c.setStrokeColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
+    c.setStrokeColor(HexColor("#555555"))
     c.setLineWidth(DIM_LW)
     c.setFont("Helvetica", 7)
 
@@ -226,24 +234,24 @@ def _draw_site_location_plan(
     _draw_large_north_arrow(c, ox + compound_px + 24, oy + compound_py - 10, 22, cfg.road_side)
 
     # Plot dimensions
-    c.setFillColor(HexColor("#1E293B"))
+    c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", 9)
     c.drawCentredString(ox + plot_px / 2, oy + plot_py + 10,
                         f"{cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m")
 
     # Survey number label inside plot
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica", 7)
     c.drawCentredString(ox + plot_px / 2, oy + 8, f"S.No: {owner.survey_number}")
 
     # Locality + city label
-    c.setFillColor(HexColor("#475569"))
+    c.setFillColor(HexColor("#444444"))
     c.setFont("Helvetica-Oblique", 8)
     c.drawCentredString(ox + plot_px / 2, oy - cfg.setback_front * scale - ROAD_H - 14,
                         f"{owner.locality}, {owner.municipality}")
 
     # Bottom info bar
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.rect(0, 0, page_w, 95, fill=1, stroke=0)
     info_fields = [
         ("PLOT SURVEY NO.", owner.survey_number),
@@ -256,18 +264,18 @@ def _draw_site_location_plan(
     col_w = page_w / len(info_fields)
     for i, (label, value) in enumerate(info_fields):
         cx = col_w * i + col_w / 2
-        c.setFillColor(HexColor("#94A3B8"))
+        c.setFillColor(HexColor("#808080"))
         c.setFont("Helvetica", 6)
         c.drawCentredString(cx, 78, label)
         c.setFillColor(white)
         c.setFont("Helvetica-Bold", 8)
         c.drawCentredString(cx, 62, value)
         if i > 0:
-            c.setStrokeColor(HexColor("#334155"))
+            c.setStrokeColor(HexColor("#333333"))
             c.setLineWidth(0.4)
             c.line(col_w * i, 10, col_w * i, 90)
 
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 5)
     c.drawCentredString(page_w / 2, 8, "Generated by PlanForge · For Municipality Submission")
 
@@ -278,20 +286,20 @@ def _draw_setback_dim(
     label: str,
     vertical: bool,
 ) -> None:
-    c.setStrokeColor(HexColor("#DC2626"))
+    c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(0.6)
     c.setDash(3, 2)
     if vertical:
         c.line(x1, y1, x2, y2)
         mid_y = (y1 + y2) / 2
-        c.setFillColor(HexColor("#DC2626"))
+        c.setFillColor(HexColor("#333333"))
         c.setFont("Helvetica", 6)
         c.setDash()
         c.drawCentredString(x1 + 18, mid_y, label)
     else:
         c.line(x1, y1, x2, y2)
         mid_x = (x1 + x2) / 2
-        c.setFillColor(HexColor("#DC2626"))
+        c.setFillColor(HexColor("#333333"))
         c.setFont("Helvetica", 6)
         c.setDash()
         c.drawCentredString(mid_x, y1 + 8, label)
@@ -303,7 +311,7 @@ def _draw_large_north_arrow(
 ) -> None:
     """Prominent north arrow for approval plans."""
     c.setFillColor(white)
-    c.setStrokeColor(HexColor("#1E3A5F"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(1.5)
     c.circle(cx, cy, r, fill=1, stroke=1)
 
@@ -314,10 +322,10 @@ def _draw_large_north_arrow(
     p.lineTo(cx, cy - r * 0.1)
     p.lineTo(cx + r * 0.35, cy - r * 0.35)
     p.close()
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.drawPath(p, fill=1, stroke=0)
 
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", 9)
     c.drawCentredString(cx, cy - r - 11, "NORTH")
 
@@ -347,20 +355,20 @@ def _draw_approval_floor_plan(
     oy = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
 
     # Background
-    c.setFillColor(HexColor("#F8FAFC"))
+    c.setFillColor(HexColor("#FFFFFF"))
     c.rect(0, TITLE_H, page_w, page_h - TITLE_H, fill=1, stroke=0)
 
     # Road strip
     road_y = TITLE_H + MARGIN
-    c.setFillColor(HexColor("#CBD5E1"))
+    c.setFillColor(HexColor("#CCCCCC"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
-    c.setFillColor(HexColor("#475569"))
+    c.setFillColor(HexColor("#444444"))
     c.setFont("Helvetica-Bold", 7)
     c.drawCentredString(ox + plot_px / 2, road_y + ROAD_H / 2 - 3, "ROAD")
 
     # Plot boundary (dashed, light)
     c.setDash(5, 3)
-    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.75)
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
@@ -375,23 +383,23 @@ def _draw_approval_floor_plan(
     min_y = min(r.y for r in rooms)
     max_y = max(r.y + r.depth for r in rooms)
 
-    # Room fills — approval-appropriate muted palette
+    # Room fills — white for B&W CAD / municipal submission standard
     APPROVAL_PALETTE: dict[str, str] = {
-        "living":   "#FEF9C3",
-        "bedroom":  "#EDE9FE",
-        "master_bedroom": "#DDD6FE",
-        "kitchen":  "#DCFCE7",
-        "toilet":   "#E0F2FE",
-        "staircase":"#F1F5F9",
-        "parking":  "#F8FAFC",
-        "utility":  "#F8FAFC",
-        "pooja":    "#FFF7ED",
-        "study":    "#F0FDF4",
-        "balcony":  "#F0F9FF",
-        "dining":   "#FEFCE8",
+        "living":   "#FFFFFF",
+        "bedroom":  "#FFFFFF",
+        "master_bedroom": "#FFFFFF",
+        "kitchen":  "#FFFFFF",
+        "toilet":   "#FFFFFF",
+        "staircase":"#FFFFFF",
+        "parking":  "#FFFFFF",
+        "utility":  "#FFFFFF",
+        "pooja":    "#FFFFFF",
+        "study":    "#FFFFFF",
+        "balcony":  "#FFFFFF",
+        "dining":   "#FFFFFF",
     }
     for room in rooms:
-        fill_hex = APPROVAL_PALETTE.get(room.type, "#F8FAFC")
+        fill_hex = APPROVAL_PALETTE.get(room.type, "#FFFFFF")
         rx = ox + room.x * scale
         ry = oy + room.y * scale
         rw = room.width * scale
@@ -399,42 +407,144 @@ def _draw_approval_floor_plan(
         c.setFillColor(HexColor(fill_hex))
         c.rect(rx, ry, rw, rh, fill=1, stroke=0)
 
-    # External walls — IS code heavier lineweight (EXT_LW 2.5)
+    # ── Door gaps (internal walls) ─────────────────────────────────────────────
+    door_w_m = 0.9
+    vertical_door_gaps: dict[float, list[tuple[float, float]]] = {}
+    horizontal_door_gaps: dict[float, list[tuple[float, float]]] = {}
+    habitable_door = {"living", "bedroom", "master_bedroom", "kitchen",
+                      "study", "dining", "utility", "pooja"}
+
+    for i, ra in enumerate(rooms):
+        for j, rb in enumerate(rooms):
+            if j <= i:
+                continue
+            # Tolerance 0.15 covers rooms separated by internal wall thickness (~0.115m)
+            if abs(ra.x + ra.width - rb.x) < 0.15:
+                if ra.type in habitable_door or rb.type in habitable_door:
+                    y_lo = max(ra.y, rb.y)
+                    y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                    if y_hi - y_lo > door_w_m + 0.1:
+                        mid = (y_lo + y_hi) / 2
+                        gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                        vertical_door_gaps.setdefault(round(ra.x + ra.width, 3), []).append(gap)
+            elif abs(rb.x + rb.width - ra.x) < 0.15:
+                if ra.type in habitable_door or rb.type in habitable_door:
+                    y_lo = max(ra.y, rb.y)
+                    y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                    if y_hi - y_lo > door_w_m + 0.1:
+                        mid = (y_lo + y_hi) / 2
+                        gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                        vertical_door_gaps.setdefault(round(rb.x + rb.width, 3), []).append(gap)
+            if abs(ra.y + ra.depth - rb.y) < 0.15:
+                if ra.type in habitable_door or rb.type in habitable_door:
+                    x_lo = max(ra.x, rb.x)
+                    x_hi = min(ra.x + ra.width, rb.x + rb.width)
+                    if x_hi - x_lo > door_w_m + 0.1:
+                        mid = (x_lo + x_hi) / 2
+                        gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                        horizontal_door_gaps.setdefault(round(ra.y + ra.depth, 3), []).append(gap)
+            elif abs(rb.y + rb.depth - ra.y) < 0.15:
+                if ra.type in habitable_door or rb.type in habitable_door:
+                    x_lo = max(ra.x, rb.x)
+                    x_hi = min(ra.x + ra.width, rb.x + rb.width)
+                    if x_hi - x_lo > door_w_m + 0.1:
+                        mid = (x_lo + x_hi) / 2
+                        gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                        horizontal_door_gaps.setdefault(round(rb.y + rb.depth, 3), []).append(gap)
+
+    # ── Window gaps (external walls of habitable rooms) ────────────────────────
+    win_w_m = 1.2
+    habitable_win = {"living", "bedroom", "master_bedroom", "kitchen", "study", "dining"}
+    external_h_win_gaps: dict[float, list[tuple[float, float]]] = {}
+    external_v_win_gaps: dict[float, list[tuple[float, float]]] = {}
+
+    for room in rooms:
+        if room.type not in habitable_win:
+            continue
+        rcx = room.x + room.width / 2
+        rcy = room.y + room.depth / 2
+        ww_h = min(win_w_m, room.width * 0.6)
+        ww_v = min(win_w_m, room.depth * 0.6)
+        tol = 0.05
+        if abs(room.y - min_y) < tol:
+            external_h_win_gaps.setdefault(round(min_y, 3), []).append(
+                (rcx - ww_h / 2, rcx + ww_h / 2))
+        if abs(room.y + room.depth - max_y) < tol:
+            external_h_win_gaps.setdefault(round(max_y, 3), []).append(
+                (rcx - ww_h / 2, rcx + ww_h / 2))
+        if abs(room.x - min_x) < tol:
+            external_v_win_gaps.setdefault(round(min_x, 3), []).append(
+                (rcy - ww_v / 2, rcy + ww_v / 2))
+        if abs(room.x + room.width - max_x) < tol:
+            external_v_win_gaps.setdefault(round(max_x, 3), []).append(
+                (rcy - ww_v / 2, rcy + ww_v / 2))
+
+    # ── Double-line walls (IS code: external EXT_LW, internal INT_LW) ─────────
+    iwt = 0.115
+    ewt = 0.23
+    xs = _dedup_wall_coords(sorted({r.x for r in rooms} | {r.x + r.width for r in rooms}))
+    ys = _dedup_wall_coords(sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms}))
+
     bx = ox + min_x * scale
     by = oy + min_y * scale
     bw = (max_x - min_x) * scale
     bh = (max_y - min_y) * scale
-    ewt_px = 0.23 * scale
+    ewt_px = ewt * scale
+    iwt_px = iwt * scale
 
-    c.setStrokeColor(HexColor("#0F172A"))
-    c.setLineWidth(EXT_LW)
-    c.rect(bx, by, bw, bh, fill=0, stroke=1)
+    c.setStrokeColor(HexColor("#000000"))
 
-    # Internal walls — lighter (INT_LW 1.0)
-    xs = sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
-    ys = sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
-    c.setLineWidth(INT_LW)
-    c.setStrokeColor(HexColor("#334155"))
+    # Internal walls
+    py_lo = oy + min_y * scale + iwt_px
+    py_hi = oy + max_y * scale - iwt_px
+    px_lo = ox + min_x * scale + iwt_px
+    px_hi = ox + max_x * scale - iwt_px
 
     for x in xs[1:-1]:
-        px_x = ox + x * scale
-        c.line(px_x, oy + min_y * scale, px_x, oy + max_y * scale)
+        px1 = ox + x * scale
+        raw_gaps = vertical_door_gaps.get(round(x, 3), [])
+        gaps_px = [
+            ((g_s - min_y) * scale - iwt_px, (g_e - min_y) * scale - iwt_px)
+            for g_s, g_e in raw_gaps
+        ]
+        _pdf_draw_double_line_wall(c, px1, py_lo, px1, py_hi, iwt_px, gaps_px, INT_LW)
+
     for y in ys[1:-1]:
-        py_y = oy + y * scale
-        c.line(ox + min_x * scale, py_y, ox + max_x * scale, py_y)
+        py1 = oy + y * scale
+        raw_gaps = horizontal_door_gaps.get(round(y, 3), [])
+        gaps_px = [
+            ((g_s - min_x) * scale - iwt_px, (g_e - min_x) * scale - iwt_px)
+            for g_s, g_e in raw_gaps
+        ]
+        _pdf_draw_double_line_wall(c, px_lo, py1, px_hi, py1, iwt_px, gaps_px, INT_LW)
+
+    # External walls — solid (no gaps); window symbols drawn on top by _draw_windows()
+    _pdf_draw_double_line_wall(c, bx, by, bx + bw, by, ewt_px, [], EXT_LW)
+    _pdf_draw_double_line_wall(c, bx, by + bh, bx + bw, by + bh, ewt_px, [], EXT_LW)
+    _pdf_draw_double_line_wall(c, bx, by, bx, by + bh, ewt_px, [], EXT_LW)
+    _pdf_draw_double_line_wall(c, bx + bw, by, bx + bw, by + bh, ewt_px, [], EXT_LW)
+
+    # Corner fills
+    ch = ewt_px / 2
+    c.setFillColor(HexColor("#000000"))
+    c.setStrokeColor(HexColor("#000000"))
+    for cx_c, cy_c in [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)]:
+        c.rect(cx_c - ch, cy_c - ch, ewt_px, ewt_px, fill=1, stroke=0)
 
     # Setback dimension lines FROM plot boundary (mandatory for approval)
     _draw_setback_dims_on_plan(c, cfg, scale, ox, oy, plot_px, plot_py, bx, by, bw, bh, authority)
 
-    # FAR calculation table in bottom-right corner of drawing area
+    # FAR: compute and draw table ABOVE the plot boundary (not on drawing)
     gf_area = sum(r.area for r in layout.ground_floor.rooms)
     ff_area = sum(r.area for r in layout.first_floor.rooms)
-    total_built = gf_area + ff_area
     plot_area = cfg.plot_width * cfg.plot_length
-    far = total_built / plot_area if plot_area > 0 else 0.0
+    far = (gf_area + ff_area) / plot_area if plot_area > 0 else 0.0
     far_allowed = _FAR_LIMITS.get(authority, 2.0)
-    _draw_far_table(c, ox + plot_px - 2, oy + 4, plot_area, gf_area, ff_area, far, far_allowed,
-                    authority)
+    # Place FAR table above the plot top-right corner — ~144 pts available there
+    _draw_far_table(
+        c, ox + plot_px, oy + plot_py + 8,
+        plot_area, gf_area, ff_area, far, far_allowed, authority,
+    )
 
     # Room labels with dimensions in METRES (approval requirement)
     c.setLineWidth(1.0)
@@ -443,26 +553,39 @@ def _draw_approval_floor_plan(
         ry = oy + room.y * scale
         rw = room.width * scale
         rh = room.depth * scale
-        if rw >= 36 and rh >= 28:
+        if rw >= 55 and rh >= 28:
+            # Only label rooms wide enough to avoid text bleeding into adjacent rooms
             cx_pt = rx + rw / 2
             cy_pt = ry + rh / 2
             fs = max(6, min(8, rw / 9, rh / 5))
-            c.setFillColor(HexColor("#0F172A"))
+            c.setFillColor(HexColor("#000000"))
+            ftin_str = f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}"
+            sqft_str = f"{round(room.area * 10.764)} SQFT"
             if rh >= 46:
+                # 3-line label (name + dimensions + sqft)
                 c.setFont("Helvetica-Bold", fs)
-                c.drawCentredString(cx_pt, cy_pt + fs * 0.8, room.name)
+                c.drawCentredString(cx_pt, cy_pt + fs * 1.2, room.name)
                 c.setFont("Helvetica", fs - 1)
-                dim_str = f"{room.width:.2f}m \u00d7 {room.depth:.2f}m = {room.area} sqm"
-                c.drawCentredString(cx_pt, cy_pt - fs * 0.4, dim_str)
+                c.drawCentredString(cx_pt, cy_pt + fs * 0.1, ftin_str)
+                c.drawCentredString(cx_pt, cy_pt - fs * 0.9, sqft_str)
             else:
                 c.setFont("Helvetica", fs)
                 c.drawCentredString(
                     cx_pt, cy_pt - fs * 0.3,
-                    f"{room.name}: {room.width:.1f}\u00d7{room.depth:.1f}m"
+                    f"{room.name} {ftin_str}"
                 )
 
+    # Staircase treads
+    _draw_staircase_treads(c, rooms, scale, ox, oy)
+
+    # Window symbols
+    _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y)
+
+    # Door symbols
+    _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
+
     # Column markers
-    c.setFillColor(HexColor("#0F172A"))
+    c.setFillColor(HexColor("#000000"))
     c.setDash()
     seen_cols: set[tuple[float, float]] = set()
     for col in floor_plan.columns:
@@ -481,7 +604,7 @@ def _draw_approval_floor_plan(
     _draw_scale_bar(c, ox + 4, oy + 18, scale)
 
     # Approval title block
-    _draw_approval_title_block(c, layout, cfg, owner, floor_label, authority, page_w)
+    _draw_approval_title_block(c, layout, cfg, owner, floor_label, authority, page_w, far)
 
 
 def _draw_setback_dims_on_plan(
@@ -494,8 +617,8 @@ def _draw_setback_dims_on_plan(
     authority: str,
 ) -> None:
     """Draw dimension lines showing setbacks from plot boundary to building face."""
-    c.setStrokeColor(HexColor("#DC2626"))
-    c.setFillColor(HexColor("#DC2626"))
+    c.setStrokeColor(HexColor("#333333"))
+    c.setFillColor(HexColor("#333333"))
     c.setLineWidth(0.5)
     c.setFont("Helvetica", 6)
 
@@ -522,8 +645,8 @@ def _draw_setback_dims_on_plan(
         c.setDash(3, 2)
         c.line(mid_x, y_bldg_top, mid_x, y_plot_top)
         c.setDash()
-        c.drawCentredString(mid_x + 22, (y_bldg_top + y_plot_top) / 2,
-                            f"R.S. {sb_rear:.1f}m")
+        c.drawString(ox + 4, (y_bldg_top + y_plot_top) / 2,
+                     f"R.S. {sb_rear:.1f}m")
 
     # Left setback
     sb_left = cfg.setback_left
@@ -581,13 +704,13 @@ def _draw_far_table(
     tx = right_x - table_w
     ty = bottom_y
 
-    c.setFillColor(HexColor("#F8FAFC"))
-    c.setStrokeColor(HexColor("#334155"))
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(0.6)
     c.rect(tx, ty, table_w, table_h, fill=1, stroke=1)
 
     # Header
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.rect(tx, ty + table_h - 16, table_w, 16, fill=1, stroke=0)
     c.setFillColor(white)
     c.setFont("Helvetica-Bold", 7)
@@ -596,14 +719,14 @@ def _draw_far_table(
     for i, (label, value) in enumerate(rows):
         row_y = ty + table_h - 16 - (i + 1) * row_h
         if far > far_allowed and label.startswith("FAR Achieved"):
-            c.setFillColor(HexColor("#FEE2E2"))
+            c.setFillColor(HexColor("#FFEEEE"))
             c.rect(tx + 0.3, row_y, table_w - 0.6, row_h, fill=1, stroke=0)
-        c.setFillColor(HexColor("#334155"))
+        c.setFillColor(HexColor("#333333"))
         c.setFont("Helvetica", 6)
         c.drawString(tx + 4, row_y + 3.5, label)
         c.setFont("Helvetica-Bold", 6)
         c.drawRightString(tx + table_w - 4, row_y + 3.5, value)
-        c.setStrokeColor(HexColor("#E2E8F0"))
+        c.setStrokeColor(HexColor("#EBEBEB"))
         c.setLineWidth(0.3)
         c.line(tx, row_y, tx + table_w, row_y)
 
@@ -625,11 +748,11 @@ def _draw_section_and_title_block(
     section_h = page_h - tb_h - 20
 
     # Background
-    c.setFillColor(HexColor("#F8FAFC"))
+    c.setFillColor(HexColor("#FFFFFF"))
     c.rect(0, tb_h, page_w, page_h - tb_h, fill=1, stroke=0)
 
     # Page header
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.rect(0, page_h - 36, page_w, 36, fill=1, stroke=0)
     c.setFillColor(white)
     c.setFont("Helvetica-Bold", 11)
@@ -669,48 +792,48 @@ def _draw_section_view(
     gl_y = tb_h + 20 + found_d_m * scale
 
     # GL line (ground level)
-    c.setStrokeColor(HexColor("#334155"))
+    c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(1.0)
     c.setDash(4, 2)
     c.line(MARGIN, gl_y, page_w - MARGIN, gl_y)
     c.setDash()
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 7)
     c.drawString(MARGIN + 2, gl_y + 3, "G.L.")
 
     # Foundation
     c.setFillColor(HexColor("#D1D5DB"))
-    c.setStrokeColor(HexColor("#374151"))
+    c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(0.5)
     found_w_px = bldg_w_m * scale + ewt_m * 2 * scale + 0.3 * scale
     found_h_px = found_d_m * scale
     c.rect(sx - ewt_m * scale, gl_y - found_h_px, found_w_px, found_h_px, fill=1, stroke=1)
-    c.setFillColor(HexColor("#374151"))
+    c.setFillColor(HexColor("#333333"))
     c.setFont("Helvetica", 6)
     c.drawCentredString(sx + bldg_w_m * scale / 2, gl_y - found_h_px / 2 - 3, "FOUNDATION")
 
     # Floors
-    floor_colors = ["#BFDBFE", "#C7D2FE"]
+    floor_colors = ["#E8E8E8", "#EEEEEE"]
     for floor_idx in range(num_floors):
         floor_y = gl_y + floor_idx * floor_h_m * scale
         floor_py = floor_h_m * scale - slab_t_m * scale
 
         # Wall fill
         c.setFillColor(HexColor(floor_colors[floor_idx % len(floor_colors)]))
-        c.setStrokeColor(HexColor("#1E3A5F"))
+        c.setStrokeColor(HexColor("#000000"))
         c.setLineWidth(EXT_LW)
         c.rect(sx, floor_y, bldg_w_m * scale, floor_py, fill=1, stroke=1)
 
         # Slab
         slab_y = floor_y + floor_py
-        c.setFillColor(HexColor("#94A3B8"))
-        c.setStrokeColor(HexColor("#475569"))
+        c.setFillColor(HexColor("#808080"))
+        c.setStrokeColor(HexColor("#444444"))
         c.setLineWidth(1.0)
         c.rect(sx, slab_y, bldg_w_m * scale, slab_t_m * scale, fill=1, stroke=1)
 
         # Floor label
         label = "GROUND FLOOR" if floor_idx == 0 else "FIRST FLOOR"
-        c.setFillColor(HexColor("#1E293B"))
+        c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", 7)
         c.drawCentredString(sx + bldg_w_m * scale / 2, floor_y + floor_py / 2 - 3, label)
         c.setFont("Helvetica", 6)
@@ -719,44 +842,44 @@ def _draw_section_view(
 
         # Height dimension line (right side)
         dim_x = sx + bldg_w_m * scale + 20
-        c.setStrokeColor(HexColor("#64748B"))
+        c.setStrokeColor(HexColor("#555555"))
         c.setLineWidth(DIM_LW)
         c.line(dim_x, floor_y, dim_x, floor_y + floor_py)
         c.line(dim_x - 4, floor_y, dim_x + 4, floor_y)
         c.line(dim_x - 4, floor_y + floor_py, dim_x + 4, floor_y + floor_py)
-        c.setFillColor(HexColor("#64748B"))
+        c.setFillColor(HexColor("#555555"))
         c.setFont("Helvetica", 6)
         c.drawString(dim_x + 5, floor_y + floor_py / 2 - 3, f"{floor_h_m:.1f}m")
 
     # Parapet
     parapet_y = gl_y + num_floors * floor_h_m * scale
-    c.setFillColor(HexColor("#E2E8F0"))
-    c.setStrokeColor(HexColor("#475569"))
+    c.setFillColor(HexColor("#EBEBEB"))
+    c.setStrokeColor(HexColor("#444444"))
     c.setLineWidth(1.0)
     # Left parapet wall
     c.rect(sx, parapet_y, ewt_m * scale * 1.5, parapet_h_m * scale, fill=1, stroke=1)
     # Right parapet wall
     c.rect(sx + bldg_w_m * scale - ewt_m * scale * 1.5, parapet_y,
            ewt_m * scale * 1.5, parapet_h_m * scale, fill=1, stroke=1)
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 6)
     c.drawCentredString(sx + bldg_w_m * scale / 2, parapet_y + parapet_h_m * scale / 2,
                         f"PARAPET {parapet_h_m:.1f}m")
 
     # Building width dimension at top
     top_y = parapet_y + parapet_h_m * scale + 8
-    c.setStrokeColor(HexColor("#64748B"))
+    c.setStrokeColor(HexColor("#555555"))
     c.setLineWidth(DIM_LW)
     c.line(sx, top_y, sx + bldg_w_m * scale, top_y)
     c.line(sx, top_y - 4, sx, top_y + 4)
     c.line(sx + bldg_w_m * scale, top_y - 4, sx + bldg_w_m * scale, top_y + 4)
-    c.setFillColor(HexColor("#334155"))
+    c.setFillColor(HexColor("#333333"))
     c.setFont("Helvetica", 7)
     c.drawCentredString(sx + bldg_w_m * scale / 2, top_y + 5, f"{bldg_w_m:.2f}m")
 
     # Total height annotation
     total_h_px = total_above_gl * scale
-    c.setStrokeColor(HexColor("#1E3A5F"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(0.5)
     left_dim_x = sx - 28
     c.line(left_dim_x, gl_y, left_dim_x, gl_y + total_h_px)
@@ -765,19 +888,19 @@ def _draw_section_view(
     c.saveState()
     c.translate(left_dim_x - 8, gl_y + total_h_px / 2)
     c.rotate(90)
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", 7)
     c.drawCentredString(0, 0, f"Total Ht: {total_above_gl:.2f}m")
     c.restoreState()
 
     # Slab label
-    c.setFillColor(HexColor("#475569"))
+    c.setFillColor(HexColor("#444444"))
     c.setFont("Helvetica", 6)
     c.drawString(sx + bldg_w_m * scale + 5, gl_y + num_floors * floor_h_m * scale - slab_t_m * scale / 2 - 3,
                  "150mm slab")
 
     # Section cut symbol header
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica-Bold", 9)
     c.drawString(sx - 20, gl_y + total_h_px + 20, "A")
     c.drawString(sx + bldg_w_m * scale + 5, gl_y + total_h_px + 20, "A")
@@ -794,12 +917,12 @@ def _draw_professional_title_block(
 ) -> None:
     """Full professional title block for municipality submission."""
     # Outer border
-    c.setStrokeColor(HexColor("#0F172A"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(2.0)
     c.rect(MARGIN, 8, page_w - 2 * MARGIN, tb_h - 12, fill=0, stroke=1)
 
     # Inner header band
-    c.setFillColor(HexColor("#1E3A5F"))
+    c.setFillColor(HexColor("#000000"))
     c.rect(MARGIN, tb_h - 12 - 28, page_w - 2 * MARGIN, 28, fill=1, stroke=0)
 
     project_title = f"Residential Building at {owner.locality}, {owner.municipality}"
@@ -838,17 +961,17 @@ def _draw_professional_title_block(
         fy = tb_content_top - (row + 1) * row_h
 
         # Cell border
-        c.setStrokeColor(HexColor("#CBD5E1"))
+        c.setStrokeColor(HexColor("#CCCCCC"))
         c.setLineWidth(0.4)
         c.rect(fx, fy, col_w, row_h, fill=0, stroke=1)
 
         # Label
-        c.setFillColor(HexColor("#64748B"))
+        c.setFillColor(HexColor("#555555"))
         c.setFont("Helvetica", 6)
         c.drawString(fx + 4, fy + row_h - 9, label)
 
         # Value
-        c.setFillColor(HexColor("#0F172A"))
+        c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", 8)
         c.drawString(fx + 4, fy + 4, value[:35] if len(value) > 35 else value)
 
@@ -858,42 +981,42 @@ def _draw_professional_title_block(
     sig_w = (page_w - 2 * MARGIN) / 2
 
     # Signature box (left half)
-    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.5)
     c.rect(MARGIN, sig_y, sig_w, sig_h, fill=0, stroke=1)
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 7)
     c.drawString(MARGIN + 6, sig_y + sig_h - 12, "Signature of Architect/Engineer:")
-    c.setStrokeColor(HexColor("#94A3B8"))
+    c.setStrokeColor(HexColor("#808080"))
     c.setLineWidth(0.5)
     sig_line_y = sig_y + sig_h * 0.4
     c.line(MARGIN + 8, sig_line_y, MARGIN + sig_w - 8, sig_line_y)
-    c.setFillColor(HexColor("#94A3B8"))
+    c.setFillColor(HexColor("#808080"))
     c.setFont("Helvetica-Oblique", 6)
     c.drawCentredString(MARGIN + sig_w / 2, sig_line_y - 9, "(Authorised Signatory)")
 
     # Seal box (right half)
-    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.5)
     c.rect(MARGIN + sig_w, sig_y, sig_w, sig_h, fill=0, stroke=1)
     seal_cx = MARGIN + sig_w + sig_w / 2
     seal_cy = sig_y + sig_h / 2
     seal_r = min(sig_h / 2 - 4, sig_w / 3)
-    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.75)
     c.circle(seal_cx, seal_cy, seal_r, fill=0, stroke=1)
-    c.setStrokeColor(HexColor("#E2E8F0"))
+    c.setStrokeColor(HexColor("#EBEBEB"))
     c.circle(seal_cx, seal_cy, seal_r * 0.8, fill=0, stroke=1)
-    c.setFillColor(HexColor("#CBD5E1"))
+    c.setFillColor(HexColor("#CCCCCC"))
     c.setFont("Helvetica", 6)
     c.drawCentredString(seal_cx, seal_cy + 3, "SEAL")
     c.drawCentredString(seal_cx, seal_cy - 6, "(Office Stamp)")
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 7)
     c.drawString(MARGIN + sig_w + 6, sig_y + sig_h - 12, "Official Seal:")
 
     # Footer
-    c.setFillColor(HexColor("#94A3B8"))
+    c.setFillColor(HexColor("#808080"))
     c.setFont("Helvetica", 5)
     c.drawCentredString(page_w / 2, 2,
                         "Generated by PlanForge · NBC 2016 Compliant · For Municipality Submission Only")
@@ -903,13 +1026,13 @@ def _draw_professional_title_block(
 
 def _draw_scale_bar(c: canvas.Canvas, x: float, y: float, scale: float) -> None:
     bar_pt = 3.0 * scale
-    c.setStrokeColor(HexColor("#334155"))
+    c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(1.5)
     c.line(x, y, x + bar_pt, y)
     c.setLineWidth(1.0)
     c.line(x, y - 3, x, y + 3)
     c.line(x + bar_pt, y - 3, x + bar_pt, y + 3)
-    c.setFillColor(HexColor("#334155"))
+    c.setFillColor(HexColor("#333333"))
     c.setFont("Helvetica", 6)
     c.drawCentredString(x + bar_pt / 2, y - 11, "3 m")
     c.setFont("Helvetica", 5)
@@ -924,50 +1047,58 @@ def _draw_approval_title_block(
     floor_label: str,
     authority: str,
     page_w: float,
+    far: float = 0.0,
 ) -> None:
     """Compact title block for floor plan pages."""
-    c.setStrokeColor(HexColor("#0F172A"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(1.0)
     c.line(0, TITLE_H, page_w, TITLE_H)
-    c.setStrokeColor(HexColor("#E2E8F0"))
+    c.setStrokeColor(HexColor("#EBEBEB"))
     c.setLineWidth(0.3)
     c.line(0, TITLE_H - 36, page_w, TITLE_H - 36)
 
     scale_ratio = 100  # Fixed 1:100
 
+    # Compute built-up area in SQFT for title block
+    gf_sqft = round(sum(r.area for r in layout.ground_floor.rooms) * 10.764)
+    ff_sqft = round(sum(r.area for r in layout.first_floor.rooms) * 10.764)
+    total_sqft = gf_sqft + ff_sqft
+    far_allowed = _FAR_LIMITS.get(authority, 2.0)
+
     fields = [
         ("PROJECT", (owner.locality + ", " + owner.municipality)[:28]),
-        ("LAYOUT", f"{layout.id} \u2013 {layout.name}"),
+        ("LAYOUT", f"{layout.id} - {layout.name}"),
         ("FLOOR", floor_label),
-        ("PLOT", f"{cfg.plot_width}\u00d7{cfg.plot_length}m"),
+        ("PLOT", f"{cfg.plot_width}x{cfg.plot_length}m"),
         ("SURVEY NO.", owner.survey_number),
         ("SCALE", f"1:{scale_ratio}"),
         ("AUTHORITY", authority),
+        ("TOTAL AREA", f"{total_sqft} SQFT"),
+        ("FAR", f"{far:.2f}/{far_allowed:.2f}"),
         ("DATE", date.today().strftime("%d/%m/%Y")),
-        ("ENGINEER", owner.engineer_name[:20] if owner.engineer_name else "—"),
-        ("LIC. NO.", owner.license_number[:14] if owner.license_number else "—"),
+        ("ENGINEER", owner.engineer_name[:18] if owner.engineer_name else "-"),
     ]
 
     col_w = page_w / len(fields)
     for i, (label, value) in enumerate(fields):
         cx = col_w * i + col_w / 2
         if i > 0:
-            c.setStrokeColor(HexColor("#E2E8F0"))
+            c.setStrokeColor(HexColor("#EBEBEB"))
             c.setLineWidth(0.4)
             c.line(col_w * i, 0, col_w * i, TITLE_H)
 
-        c.setFillColor(HexColor("#64748B"))
+        c.setFillColor(HexColor("#555555"))
         c.setFont("Helvetica", 5.5)
         c.drawCentredString(cx, TITLE_H - 14, label)
 
-        c.setFillColor(HexColor("#0F172A"))
+        c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", 7)
         c.drawCentredString(cx, TITLE_H - 27, value)
 
     # Bottom sub-row: owner details
-    c.setFillColor(HexColor("#F1F5F9"))
+    c.setFillColor(HexColor("#F0F0F0"))
     c.rect(0, 0, page_w, 36, fill=1, stroke=0)
-    c.setFillColor(HexColor("#334155"))
+    c.setFillColor(HexColor("#333333"))
     c.setFont("Helvetica", 7)
     owner_line = f"Owner: {owner.owner_name}  |  Plot No.: {owner.survey_number}  |  {owner.locality}, {owner.municipality}"
     c.drawCentredString(page_w / 2, 26, owner_line)
@@ -976,6 +1107,6 @@ def _draw_approval_title_block(
         page_w / 2, 13,
         f"Prepared by: {owner.engineer_name}  |  Lic. No.: {owner.license_number}  |  {authority} Submission"
     )
-    c.setFillColor(HexColor("#94A3B8"))
+    c.setFillColor(HexColor("#808080"))
     c.setFont("Helvetica", 5)
     c.drawCentredString(page_w / 2, 3, "Generated by PlanForge · NBC 2016 Compliant")

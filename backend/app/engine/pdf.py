@@ -8,6 +8,7 @@ from reportlab.lib.colors import Color, HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+from app.engine.cad_primitives import metres_to_ftin
 from app.engine.models import FloorPlan, Layout, PlotConfig
 
 # ---------------------------------------------------------------------------
@@ -78,6 +79,22 @@ def _pdf_draw_double_line_wall(
         )
 
 
+def _dedup_wall_coords(coords: list[float], tol: float = 0.125) -> list[float]:
+    """Remove near-duplicate coordinates from adjacent room faces separated by wall thickness.
+
+    When rooms are separated by an internal wall (0.115m), xs contains both the right
+    face of room A and the left face of room B — two values ~0.115m apart.  Keeping
+    both causes two overlapping double-line walls to be drawn at each internal position,
+    producing 3-4 lines with varying apparent thickness.  We keep only the first of
+    any pair closer than `tol` (default 0.125 m ~ iwt + 10mm clearance).
+    """
+    result: list[float] = []
+    for c in coords:
+        if not result or abs(c - result[-1]) >= tol:
+            result.append(c)
+    return result
+
+
 def _pdf_draw_door_arc(
     c: canvas.Canvas,
     hinge_x: float, hinge_y: float,
@@ -119,30 +136,31 @@ def _pdf_draw_door_arc(
 
 # ── Colour palette (fill, stroke) ────────────────────────────────────────────
 PALETTE: dict[str, tuple[str, str]] = {
-    "living":    ("#FEF9C3", "#CA8A04"),
-    "bedroom":   ("#EDE9FE", "#7C3AED"),
-    "kitchen":   ("#DCFCE7", "#16A34A"),
-    "toilet":    ("#E0F2FE", "#0284C7"),
-    "staircase": ("#F1F5F9", "#64748B"),
-    "parking":   ("#F8FAFC", "#94A3B8"),
-    "utility":   ("#F8FAFC", "#94A3B8"),
-    "pooja":     ("#FFF7ED", "#EA580C"),
-    "study":     ("#F0FDF4", "#15803D"),
-    "balcony":   ("#F0F9FF", "#0369A1"),
-    "dining":    ("#FEFCE8", "#A16207"),
+    "living":    ("#FFFFFF", "#000000"),
+    "bedroom":   ("#FFFFFF", "#000000"),
+    "kitchen":   ("#FFFFFF", "#000000"),
+    "toilet":    ("#FFFFFF", "#000000"),
+    "staircase": ("#FFFFFF", "#000000"),
+    "parking":   ("#FFFFFF", "#000000"),
+    "utility":   ("#FFFFFF", "#000000"),
+    "pooja":     ("#FFFFFF", "#000000"),
+    "study":     ("#FFFFFF", "#000000"),
+    "balcony":   ("#FFFFFF", "#000000"),
+    "dining":    ("#FFFFFF", "#000000"),
 }
 
 # ── Page constants (points) ───────────────────────────────────────────────────
-TITLE_H  = 72   # title block height
-MARGIN   = 36   # page margins
+TITLE_H  = 90   # title block height (larger to accommodate area schedule)
+MARGIN   = 52   # page margins (larger for chain dimension zone)
 ROAD_H   = 18   # road strip height
 ROAD_GAP = 4    # gap between road strip top and plot boundary bottom
-TOP_PAD  = 28   # padding above plot for north arrow / scale bar
-COL_SZ   = 4    # column marker half-size (pt) — larger for CAD feel
+TOP_PAD  = 30   # padding above plot for north arrow / scale bar
+COL_SZ   = 2.5  # column marker half-size (pt) — fits within wall thickness
 EXT_LW   = 2.0  # external wall lineweight (pt)
 INT_LW   = 1.0  # internal wall lineweight (pt)
 DIM_LW   = 0.5  # dimension line lineweight (pt)
 WIN_LW   = 0.75 # window line lineweight (pt)
+MIN_DIM_SPAN = 0.5  # metres — filter out wall-thickness micro-gaps from chain dims
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -214,22 +232,27 @@ def _draw_floor(
     page_w, page_h = A4
     scale, ox, oy, plot_px, plot_py = _compute_layout(cfg, page_w, page_h)
 
-    # ── Background ────────────────────────────────────────────────────────────
-    c.setFillColor(HexColor("#F8FAFC"))
-    c.rect(0, TITLE_H, page_w, page_h - TITLE_H, fill=1, stroke=0)
-
     # ── Road strip ────────────────────────────────────────────────────────────
     road_y = TITLE_H + MARGIN
-    c.setFillColor(HexColor("#CBD5E1"))
+    # Road strip: two lines — floor plan label (top) + road direction (bottom)
+    c.setFillColor(HexColor("#CCCCCC"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
-    c.setFillColor(HexColor("#475569"))
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(ox + plot_px / 2, road_y + ROAD_H / 2 - 3, "ROAD")
+    road_side_name = {"S": "SOUTH", "N": "NORTH", "E": "EAST", "W": "WEST"}.get(cfg.road_side, "")
+    cx_road = ox + plot_px / 2
+    # Floor plan label — upper line (bold, black)
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica-Bold", 7)
+    c.drawCentredString(cx_road, road_y + ROAD_H - 7, floor_label.upper() + " PLAN")
+    # Road direction — lower line (smaller, gray)
+    c.setFillColor(HexColor("#444444"))
+    c.setFont("Helvetica", 5.5)
+    road_text = f"ROAD  ({road_side_name})" if road_side_name else "ROAD"
+    c.drawCentredString(cx_road, road_y + 3, road_text)
 
-    # ── Plot boundary (dashed) ────────────────────────────────────────────────
+    # ── Plot boundary (dashed) — thin black dashed rectangle, CAD convention ──
     c.setDash(5, 3)
-    c.setStrokeColor(HexColor("#CBD5E1"))
-    c.setLineWidth(0.75)
+    c.setStrokeColor(HexColor("#333333"))
+    c.setLineWidth(0.5)
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners and len(cfg.plot_corners) == 4:
         pts = [(ox + cx * scale, oy + cy * scale) for cx, cy in cfg.plot_corners]
         p = c.beginPath()
@@ -259,8 +282,8 @@ def _draw_floor(
     ewt = 0.23    # external wall thickness (m)
     rooms = floor_plan.rooms
     if rooms:
-        xs = sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
-        ys = sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
+        xs = _dedup_wall_coords(sorted({r.x for r in rooms} | {r.x + r.width for r in rooms}))
+        ys = _dedup_wall_coords(sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms}))
 
         min_x = min(r.x for r in rooms)
         max_x = max(r.x + r.width for r in rooms)
@@ -282,47 +305,40 @@ def _draw_floor(
                 if j <= i:
                     continue
                 # Vertical shared wall (ra right ≈ rb left)
-                if abs(ra.x + ra.width - rb.x) < 0.05:
+                # Tolerance 0.15 covers rooms separated by internal wall thickness (~0.115m)
+                if abs(ra.x + ra.width - rb.x) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
                         y_lo = max(ra.y, rb.y)
                         y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
                         if y_hi - y_lo > door_w_m + 0.1:
                             mid = (y_lo + y_hi) / 2
-                            wx = round(ra.x + ra.width, 3)
-                            vertical_door_gaps.setdefault(wx, []).append(
-                                (mid - door_w_m / 2, mid + door_w_m / 2)
-                            )
-                elif abs(rb.x + rb.width - ra.x) < 0.05:
+                            gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                            vertical_door_gaps.setdefault(round(ra.x + ra.width, 3), []).append(gap)
+                elif abs(rb.x + rb.width - ra.x) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
                         y_lo = max(ra.y, rb.y)
                         y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
                         if y_hi - y_lo > door_w_m + 0.1:
                             mid = (y_lo + y_hi) / 2
-                            wx = round(rb.x + rb.width, 3)
-                            vertical_door_gaps.setdefault(wx, []).append(
-                                (mid - door_w_m / 2, mid + door_w_m / 2)
-                            )
+                            gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                            vertical_door_gaps.setdefault(round(rb.x + rb.width, 3), []).append(gap)
                 # Horizontal shared wall (ra top ≈ rb bottom)
-                if abs(ra.y + ra.depth - rb.y) < 0.05:
+                if abs(ra.y + ra.depth - rb.y) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
                         x_lo = max(ra.x, rb.x)
                         x_hi = min(ra.x + ra.width, rb.x + rb.width)
                         if x_hi - x_lo > door_w_m + 0.1:
                             mid = (x_lo + x_hi) / 2
-                            wy = round(ra.y + ra.depth, 3)
-                            horizontal_door_gaps.setdefault(wy, []).append(
-                                (mid - door_w_m / 2, mid + door_w_m / 2)
-                            )
-                elif abs(rb.y + rb.depth - ra.y) < 0.05:
+                            gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                            horizontal_door_gaps.setdefault(round(ra.y + ra.depth, 3), []).append(gap)
+                elif abs(rb.y + rb.depth - ra.y) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
                         x_lo = max(ra.x, rb.x)
                         x_hi = min(ra.x + ra.width, rb.x + rb.width)
                         if x_hi - x_lo > door_w_m + 0.1:
                             mid = (x_lo + x_hi) / 2
-                            wy = round(rb.y + rb.depth, 3)
-                            horizontal_door_gaps.setdefault(wy, []).append(
-                                (mid - door_w_m / 2, mid + door_w_m / 2)
-                            )
+                            gap = (mid - door_w_m / 2, mid + door_w_m / 2)
+                            horizontal_door_gaps.setdefault(round(rb.y + rb.depth, 3), []).append(gap)
 
         # Build window-gap information for external walls: 1.2 m window at room centre
         win_w_m = 1.2
@@ -358,40 +374,42 @@ def _draw_floor(
             if abs(room.x + room.width - max_x) < tol:
                 wx = round(max_x, 3)
                 external_v_win_gaps.setdefault(wx, []).append(
-                    (rcx - ww_h / 2, rcx + ww_h / 2)
+                    (rcy - ww_v / 2, rcy + ww_v / 2)
                 )
 
-        c.setStrokeColor(HexColor("#334155"))
+        c.setStrokeColor(HexColor("#000000"))
 
         # ── Internal double-line walls with door gaps ──────────────────────────
         iwt_px = iwt * scale
+        # Internal walls start/end at inner face of external wall (not at wall centre).
+        # ewt/2 = 0.115m = iwt, so offset is exactly iwt_px.
+        py_lo = oy + min_y * scale + iwt_px   # inner face of front external wall
+        py_hi = oy + max_y * scale - iwt_px   # inner face of rear external wall
+        px_lo = ox + min_x * scale + iwt_px   # inner face of left external wall
+        px_hi = ox + max_x * scale - iwt_px   # inner face of right external wall
+
         for x in xs[1:-1]:  # skip outer edges
             px1 = ox + x * scale
-            py1 = oy + min_y * scale
-            py2 = oy + max_y * scale
-            wall_len_px = py2 - py1
-            # Convert door gaps from metres to px offsets along wall
+            # Gap offset is from py_lo, not from raw min_y
             raw_gaps = vertical_door_gaps.get(round(x, 3), [])
             gaps_px = [
-                ((g_s - min_y) * scale, (g_e - min_y) * scale)
+                ((g_s - min_y) * scale - iwt_px, (g_e - min_y) * scale - iwt_px)
                 for g_s, g_e in raw_gaps
             ]
             _pdf_draw_double_line_wall(
-                c, px1, py1, px1, py2,
+                c, px1, py_lo, px1, py_hi,
                 iwt_px, gaps_px, INT_LW,
             )
 
         for y in ys[1:-1]:
             py1 = oy + y * scale
-            px1 = ox + min_x * scale
-            px2 = ox + max_x * scale
             raw_gaps = horizontal_door_gaps.get(round(y, 3), [])
             gaps_px = [
-                ((g_s - min_x) * scale, (g_e - min_x) * scale)
+                ((g_s - min_x) * scale - iwt_px, (g_e - min_x) * scale - iwt_px)
                 for g_s, g_e in raw_gaps
             ]
             _pdf_draw_double_line_wall(
-                c, px1, py1, px2, py1,
+                c, px_lo, py1, px_hi, py1,
                 iwt_px, gaps_px, INT_LW,
             )
 
@@ -402,37 +420,20 @@ def _draw_floor(
         bh = (max_y - min_y) * scale
         ewt_px = ewt * scale
 
-        # Front wall (bottom, horizontal, y=min_y)
-        raw_gaps_front = external_h_win_gaps.get(round(min_y, 3), [])
-        gaps_px_front = [
-            ((g_s - min_x) * scale, (g_e - min_x) * scale)
-            for g_s, g_e in raw_gaps_front
-        ]
-        _pdf_draw_double_line_wall(c, bx, by, bx + bw, by, ewt_px, gaps_px_front, EXT_LW)
+        # External walls — solid (no gaps); window symbols drawn on top by _draw_windows()
+        _pdf_draw_double_line_wall(c, bx, by, bx + bw, by, ewt_px, [], EXT_LW)
+        _pdf_draw_double_line_wall(c, bx, by + bh, bx + bw, by + bh, ewt_px, [], EXT_LW)
+        _pdf_draw_double_line_wall(c, bx, by, bx, by + bh, ewt_px, [], EXT_LW)
+        _pdf_draw_double_line_wall(c, bx + bw, by, bx + bw, by + bh, ewt_px, [], EXT_LW)
 
-        # Rear wall (top, horizontal, y=max_y)
-        raw_gaps_rear = external_h_win_gaps.get(round(max_y, 3), [])
-        gaps_px_rear = [
-            ((g_s - min_x) * scale, (g_e - min_x) * scale)
-            for g_s, g_e in raw_gaps_rear
-        ]
-        _pdf_draw_double_line_wall(c, bx, by + bh, bx + bw, by + bh, ewt_px, gaps_px_rear, EXT_LW)
-
-        # Left wall (vertical, x=min_x)
-        raw_gaps_left = external_v_win_gaps.get(round(min_x, 3), [])
-        gaps_px_left = [
-            ((g_s - min_y) * scale, (g_e - min_y) * scale)
-            for g_s, g_e in raw_gaps_left
-        ]
-        _pdf_draw_double_line_wall(c, bx, by, bx, by + bh, ewt_px, gaps_px_left, EXT_LW)
-
-        # Right wall (vertical, x=max_x)
-        raw_gaps_right = external_v_win_gaps.get(round(max_x, 3), [])
-        gaps_px_right = [
-            ((g_s - min_y) * scale, (g_e - min_y) * scale)
-            for g_s, g_e in raw_gaps_right
-        ]
-        _pdf_draw_double_line_wall(c, bx + bw, by, bx + bw, by + bh, ewt_px, gaps_px_right, EXT_LW)
+        # ── Corner junction fills — tight fill to close wall gap at outer corners ─
+        # Size = half wall thickness (fills gap without over-extending outside wall)
+        ch = ewt_px / 2  # half wall thickness
+        jf = ch * 0.7    # junction fill size: 70% of half-wall — keeps corners clean
+        c.setFillColor(HexColor("#000000"))
+        c.setStrokeColor(HexColor("#000000"))
+        for cx_c, cy_c in [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)]:
+            c.rect(cx_c - jf, cy_c - jf, jf * 2, jf * 2, fill=1, stroke=0)
 
         # ── Staircase treads ──────────────────────────────────────────────────
         _draw_staircase_treads(c, rooms, scale, ox, oy)
@@ -444,7 +445,7 @@ def _draw_floor(
         _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
 
     # ── Column markers (filled dark squares) ─────────────────────────────────
-    c.setFillColor(HexColor("#1E293B"))
+    c.setFillColor(HexColor("#000000"))
     c.setDash()
     seen_cols: set[tuple[float, float]] = set()
     for col in floor_plan.columns:
@@ -463,42 +464,48 @@ def _draw_floor(
         ry = oy + room.y * scale
         rw = room.width * scale
         rh = room.depth * scale
-        if rw >= 30 and rh >= 22:
-            cx_pt = rx + rw / 2
-            cy_pt = ry + rh / 2
-            fs = max(6, min(9, rw / 8, rh / 4))
-            c.setFillColor(HexColor("#1E293B"))
-            if rh >= 38:
-                c.setFont("Helvetica-Bold", fs)
-                c.drawCentredString(cx_pt, cy_pt + fs * 0.6, room.name)
-                c.setFont("Helvetica", fs - 1)
-                c.drawCentredString(cx_pt, cy_pt - fs * 0.8, f"{room.area} m\u00b2")
-            else:
-                c.setFont("Helvetica", fs)
-                c.drawCentredString(cx_pt, cy_pt - fs * 0.3, f"{room.name} \u00b7 {room.area}m\u00b2")
+        # Skip labels in rooms too small to show anything readable
+        if rw < 22 or rh < 16:
+            continue
+        cx_pt = rx + rw / 2
+        cy_pt = ry + rh / 2
+        # Font size: bounded by room size, never too large
+        fs = max(5.5, min(10.0, rw / 9, rh / 4.5))
+        c.setFillColor(HexColor("#000000"))
+        ftin_label = f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}"
+        # Show name + dimensions only when room is wide enough to display cleanly.
+        # Narrow rooms (staircase, toilet) are identified by geometry + area schedule.
+        name_upper = room.name.upper()
+        if rh >= 36 and rw >= 55:
+            c.setFont("Helvetica-Bold", fs)
+            c.drawCentredString(cx_pt, cy_pt + fs * 0.6, name_upper)
+            c.setFont("Helvetica", fs)
+            c.drawCentredString(cx_pt, cy_pt - fs * 0.9, ftin_label)
+        elif rw >= 55:
+            c.setFont("Helvetica-Bold", fs)
+            c.drawCentredString(cx_pt, cy_pt - fs * 0.3, name_upper)
+        # Narrow rooms (rw < 55pt ≈ < 1.3m): skip label — avoids bleed into adjacent rooms
 
     # ── Annotation notes ──────────────────────────────────────────────────────
     if annotations:
         _draw_annotations(c, floor_plan.rooms, annotations, scale, ox, oy)
 
     # ── Dimension lines ───────────────────────────────────────────────────────
-    _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py)
+    _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan)
 
-    # ── Scale bar ─────────────────────────────────────────────────────────────
-    _draw_scale_bar(c, ox + 4, oy + 16, scale)
+    # ── Scale bar (placed in the margin zone, left of chain dims) ─────────────
+    _draw_scale_bar(c, ox + 4, TITLE_H + MARGIN // 2 - 4, scale)
 
     # ── North arrow ───────────────────────────────────────────────────────────
     _draw_north_arrow(c, ox + plot_px - 16, oy + plot_py - 16, 12)
 
     # ── Title block ───────────────────────────────────────────────────────────
     _draw_title_block(c, project_name, layout.id, layout.name, floor_label, cfg,
-                      num_bedrooms, scale, page_w)
+                      num_bedrooms, scale, page_w, floor_plan=floor_plan)
 
 
 def _draw_staircase_treads(c, rooms, scale, ox, oy):
-    """Draw horizontal tread lines + mid cut-line + UP label for staircase rooms."""
-    c.setStrokeColor(HexColor("#94A3B8"))
-    c.setLineWidth(0.5)
+    """Draw staircase: floor-level indicator, tread lines, break line, UP arrow + label."""
     c.setDash()
 
     for room in rooms:
@@ -508,35 +515,61 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy):
         ry = oy + room.y * scale
         rw = room.width * scale
         rh = room.depth * scale
+        inset = 0.115 * scale / 2  # stop at inner wall face
 
-        tread_h = max(4, min(10, scale * 0.3))
-        num_treads = max(3, int(rh / tread_h))
-        step = rh / num_treads
+        # ── Floor-level indicator (thick first tread at stair entry / bottom) ──
+        c.setStrokeColor(HexColor("#000000"))
+        c.setLineWidth(1.8)
+        c.line(rx + inset, ry, rx + rw - inset, ry)
 
-        for i in range(1, num_treads):
+        # ── Tread lines — evenly spaced, using target 270mm tread depth ─────────
+        tread_depth_m = 0.27  # standard residential tread depth
+        num_treads = max(3, min(16, int((room.depth * 0.5) / tread_depth_m)))
+        lower_half = rh / 2  # draw treads in lower half only (above break line)
+        step = lower_half / (num_treads + 1) if num_treads > 0 else lower_half / 4
+        c.setStrokeColor(HexColor("#333333"))
+        c.setLineWidth(0.5)
+        for i in range(1, num_treads + 1):
             ly = ry + i * step
-            c.line(rx, ly, rx + rw, ly)
+            c.line(rx + inset, ly, rx + rw - inset, ly)
 
-        # Cut line (dashed, mid-height)
+        # ── Break line (dashed zigzag, mid-height) ───────────────────────────────
         mid_y = ry + rh / 2
         c.setDash(4, 2)
-        c.setLineWidth(1.0)
-        c.setStrokeColor(HexColor("#64748B"))
-        c.line(rx, mid_y, rx + rw, mid_y)
+        c.setLineWidth(0.75)
+        c.setStrokeColor(HexColor("#000000"))
+        c.line(rx + inset, mid_y, rx + rw - inset, mid_y)
         c.setDash()
-        c.setLineWidth(0.5)
-        c.setStrokeColor(HexColor("#94A3B8"))
 
-        # UP label
-        c.setFillColor(HexColor("#64748B"))
-        c.setFont("Helvetica-Bold", max(5, scale * 0.12))
-        c.drawCentredString(rx + rw / 2, mid_y + 4, "UP")
+        # ── UP label + arrow (upper tread zone, above break line) ────────────────
+        if rw >= 18:
+            lbl_fs = max(7, min(9, rw * 0.25))
+            cx_s = rx + rw / 2
+            # Arrow stem + head pointing up, positioned in upper zone
+            arrow_base_y = ry + rh * 0.60
+            arrow_tip_y  = ry + rh * 0.80
+            stem_x = cx_s
+            c.setStrokeColor(HexColor("#000000"))
+            c.setLineWidth(0.75)
+            c.line(stem_x, arrow_base_y, stem_x, arrow_tip_y)  # vertical stem
+            arrow_w = min(rw * 0.22, 5)
+            p = c.beginPath()
+            p.moveTo(stem_x, arrow_tip_y + arrow_w)              # tip
+            p.lineTo(stem_x - arrow_w / 2, arrow_tip_y)          # left wing
+            p.lineTo(stem_x + arrow_w / 2, arrow_tip_y)          # right wing
+            p.close()
+            c.setFillColor(HexColor("#000000"))
+            c.drawPath(p, fill=1, stroke=0)
+            # "UP" text below the arrow stem
+            c.setFillColor(HexColor("#000000"))
+            c.setFont("Helvetica-Bold", lbl_fs)
+            c.drawCentredString(cx_s, arrow_base_y - lbl_fs - 1, "UP")
 
 
 def _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y):
     """Draw window symbols on exterior-facing walls of habitable rooms."""
     habitable = {"living", "bedroom", "kitchen", "study", "dining"}
-    c.setStrokeColor(HexColor("#0369A1"))
+    c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(WIN_LW)
     win_w_m = 1.2  # window width in metres
 
@@ -567,16 +600,25 @@ def _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y):
 
 
 def _draw_window_symbol(c, cx, cy, width_px, horizontal: bool):
-    """Three parallel lines: the architectural window symbol."""
-    gap = 3  # pt gap between lines
+    """Three parallel lines + perpendicular jamb caps: architectural window-in-wall box symbol."""
+    gap = 3  # pt gap between parallel lines (fits within ewt_px ≈ 9.4pt)
+    hw = width_px / 2
     if horizontal:
-        c.line(cx - width_px / 2, cy - gap, cx + width_px / 2, cy - gap)
-        c.line(cx - width_px / 2, cy,       cx + width_px / 2, cy)
-        c.line(cx - width_px / 2, cy + gap, cx + width_px / 2, cy + gap)
+        # 3 horizontal lines spanning the window width
+        c.line(cx - hw, cy - gap, cx + hw, cy - gap)
+        c.line(cx - hw, cy,       cx + hw, cy)
+        c.line(cx - hw, cy + gap, cx + hw, cy + gap)
+        # Perpendicular jamb caps at left and right ends (close the box)
+        c.line(cx - hw, cy - gap, cx - hw, cy + gap)
+        c.line(cx + hw, cy - gap, cx + hw, cy + gap)
     else:
-        c.line(cx - gap, cy - width_px / 2, cx - gap, cy + width_px / 2)
-        c.line(cx,       cy - width_px / 2, cx,       cy + width_px / 2)
-        c.line(cx + gap, cy - width_px / 2, cx + gap, cy + width_px / 2)
+        # 3 vertical lines spanning the window height
+        c.line(cx - gap, cy - hw, cx - gap, cy + hw)
+        c.line(cx,       cy - hw, cx,       cy + hw)
+        c.line(cx + gap, cy - hw, cx + gap, cy + hw)
+        # Perpendicular jamb caps at bottom and top ends (close the box)
+        c.line(cx - gap, cy - hw, cx + gap, cy - hw)
+        c.line(cx - gap, cy + hw, cx + gap, cy + hw)
 
 
 def _draw_doors(c, rooms, scale, ox, oy):
@@ -587,7 +629,7 @@ def _draw_doors(c, rooms, scale, ox, oy):
     """
     door_w_m = 0.9
     habitable = {"living", "bedroom", "kitchen", "study", "dining", "utility", "pooja"}
-    c.setStrokeColor(HexColor("#64748B"))
+    c.setStrokeColor(HexColor("#555555"))
     c.setLineWidth(0.75)
 
     for room in rooms:
@@ -618,9 +660,11 @@ def _draw_doors_in_gaps(
     vertical_door_gaps  : {x_coord_m: [(y_start_m, y_end_m), ...]}
     horizontal_door_gaps: {y_coord_m: [(x_start_m, x_end_m), ...]}
     """
-    c.setStrokeColor(HexColor("#475569"))
-    c.setLineWidth(0.75)
+    c.setStrokeColor(HexColor("#000000"))
     c.setDash()
+
+    LEAF_LW = INT_LW   # door leaf = same weight as internal wall
+    ARC_LW  = 0.4      # door swing arc = thin pen (architectural convention)
 
     # Doors on vertical walls (wall runs N-S at fixed x)
     for x_m, gaps in vertical_door_gaps.items():
@@ -629,9 +673,11 @@ def _draw_doors_in_gaps(
             door_px = (y_e - y_s) * scale
             hy = oy + y_s * scale  # hinge at start of gap
             # Door leaf: horizontal line from hinge into room (rightward)
+            c.setLineWidth(LEAF_LW)
             c.line(wx, hy, wx + door_px, hy)
-            # Quarter-circle arc: centred on hinge, sweeping 90° into room
-            c.arc(wx, hy, wx + door_px, hy + door_px, 90, 90)
+            # Swing arc: thin pen (architectural convention)
+            c.setLineWidth(ARC_LW)
+            c.arc(wx - door_px, hy - door_px, wx + door_px, hy + door_px, 0, 90)
 
     # Doors on horizontal walls (wall runs E-W at fixed y)
     for y_m, gaps in horizontal_door_gaps.items():
@@ -640,9 +686,11 @@ def _draw_doors_in_gaps(
             door_px = (x_e - x_s) * scale
             hx = ox + x_s * scale  # hinge at start of gap
             # Door leaf: vertical line from hinge into room (upward)
+            c.setLineWidth(LEAF_LW)
             c.line(hx, wy, hx, wy + door_px)
-            # Quarter-circle arc: centred on hinge, sweeping 90° into room
-            c.arc(hx, wy, hx + door_px, wy + door_px, 90, 90)
+            # Swing arc: thin pen
+            c.setLineWidth(ARC_LW)
+            c.arc(hx - door_px, wy - door_px, hx + door_px, wy + door_px, 0, 90)
 
 
 def _draw_annotations(c: canvas.Canvas, rooms, annotations: dict, scale: float, ox: float, oy: float) -> None:
@@ -669,50 +717,125 @@ def _draw_annotations(c: canvas.Canvas, rooms, annotations: dict, scale: float, 
         rect_h = fs + 2 * pad
         # Light grey background rectangle
         c.setFillColor(HexColor("#F1F5F9"))
-        c.setStrokeColor(HexColor("#94A3B8"))
+        c.setStrokeColor(HexColor("#808080"))
         c.setLineWidth(0.4)
         c.rect(cx - rect_w / 2, note_y - pad, rect_w, rect_h, fill=1, stroke=1)
         # Text
-        c.setFillColor(HexColor("#475569"))
+        c.setFillColor(HexColor("#444444"))
         c.drawCentredString(cx, note_y + 1, label)
 
 
-def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py):
-    """Draw IS-compliant overall dimension chains."""
-    c.setFillColor(HexColor("#64748B"))
-    c.setStrokeColor(HexColor("#64748B"))
+def _filter_dim_positions(positions: list[float]) -> list[float]:
+    """Remove positions that create spans < MIN_DIM_SPAN (wall thickness noise)."""
+    if len(positions) <= 2:
+        return list(positions)
+    kept = [positions[0]]
+    for p in positions[1:]:
+        if p - kept[-1] >= MIN_DIM_SPAN:
+            kept.append(p)
+    # Ensure last position is always included
+    if kept[-1] < positions[-1] - 0.01:
+        if positions[-1] - kept[-1] < MIN_DIM_SPAN:
+            kept[-1] = positions[-1]
+        else:
+            kept.append(positions[-1])
+    return kept
+
+
+def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=None):
+    """
+    Draw IS-style chain dimension lines in feet-inches.
+
+    Layout (MARGIN = 52 pts between title block top and road strip bottom):
+      Bottom: 2 rows — inner room spans at y≈TITLE_H+38, outer total at y≈TITLE_H+16
+      Right:  2 rows — inner room spans at x≈right_edge+14, outer total at x≈right_edge+36
+    """
+    c.setFillColor(HexColor("#000000"))
+    c.setStrokeColor(HexColor("#000000"))
+
+    rooms = floor_plan.rooms if floor_plan else []
+
+    # Collect and filter room boundary positions
+    if rooms:
+        raw_x = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
+        raw_y = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
+    else:
+        raw_x = [0.0, cfg.plot_width]
+        raw_y = [0.0, cfg.plot_length]
+
+    x_pos = _filter_dim_positions(raw_x)
+    y_pos = _filter_dim_positions(raw_y)
+
+    # ── BOTTOM HORIZONTAL CHAIN ───────────────────────────────────────────────
+    # MARGIN zone: y = TITLE_H to y = TITLE_H + MARGIN (road strip)
+    # Inner row: bar at TITLE_H + MARGIN - 12 (just below road strip start)
+    # Outer row: bar at TITLE_H + MARGIN - 36 (middle of margin)
+    inner_y = TITLE_H + MARGIN - 12   # ≈ 130
+    outer_y = TITLE_H + MARGIN - 36   # ≈ 106
+
+    # Inner chain — room span segments
+    # 45° diagonal tick marks (architectural standard: slash at each dim endpoint)
     c.setLineWidth(DIM_LW)
-    c.setFont("Helvetica", 7)
+    c.setStrokeColor(HexColor("#000000"))
+    for xm in x_pos:
+        px = ox + xm * scale
+        c.line(px - 3.5, inner_y - 3.5, px + 3.5, inner_y + 3.5)  # 45° tick
+    c.line(ox + x_pos[0] * scale, inner_y, ox + x_pos[-1] * scale, inner_y)  # bar
 
-    # Width dimension (bottom, below road strip)
-    dim_y = TITLE_H + (MARGIN * 0.55)
-    c.drawCentredString(ox + plot_px / 2, dim_y, f"{cfg.plot_width:.2f} m")
-    c.line(ox, dim_y + 3, ox, dim_y + 8)
-    c.line(ox + plot_px, dim_y + 3, ox + plot_px, dim_y + 8)
-    c.line(ox, dim_y + 5.5, ox + plot_px, dim_y + 5.5)
-    # Arrows
-    _draw_arrow(c, ox, dim_y + 5.5, right=True)
-    _draw_arrow(c, ox + plot_px, dim_y + 5.5, right=False)
+    c.setFont("Helvetica", 5.5)
+    c.setFillColor(HexColor("#000000"))
+    for i in range(len(x_pos) - 1):
+        span = x_pos[i + 1] - x_pos[i]
+        mid_px = ox + (x_pos[i] + span / 2) * scale
+        c.drawCentredString(mid_px, inner_y + 7, metres_to_ftin(span))
 
-    # Depth dimension (left side, rotated)
+    # Outer chain — overall plot width
+    c.setLineWidth(DIM_LW + 0.3)
+    c.line(ox, outer_y, ox + plot_px, outer_y)
+    c.line(ox - 4, outer_y - 4, ox + 4, outer_y + 4)        # 45° tick at start
+    c.line(ox + plot_px - 4, outer_y - 4, ox + plot_px + 4, outer_y + 4)  # 45° tick at end
+    c.setFont("Helvetica-Bold", 6.5)
+    c.drawCentredString(ox + plot_px / 2, outer_y + 8, metres_to_ftin(cfg.plot_width))
+
+    # ── RIGHT VERTICAL CHAIN ──────────────────────────────────────────────────
+    right_x = ox + plot_px
+    inner_x = right_x + 30   # wider gap from building edge for clean dimension clearance
+    outer_x = right_x + 54   # proportionally wider for outer overall dim
+
+    # Inner chain — room span segments (45° diagonal ticks)
+    c.setLineWidth(DIM_LW)
+    for ym in y_pos:
+        py = oy + ym * scale
+        c.line(inner_x - 3.5, py - 3.5, inner_x + 3.5, py + 3.5)  # 45° tick
+    c.line(inner_x, oy + y_pos[0] * scale, inner_x, oy + y_pos[-1] * scale)  # bar
+
+    c.setFont("Helvetica", 5.5)
+    for i in range(len(y_pos) - 1):
+        span = y_pos[i + 1] - y_pos[i]
+        mid_py = oy + (y_pos[i] + span / 2) * scale
+        c.saveState()
+        c.translate(inner_x + 8, mid_py)
+        c.rotate(90)
+        c.drawCentredString(0, 0, metres_to_ftin(span))
+        c.restoreState()
+
+    # Outer chain — overall plot length (45° ticks)
+    c.setLineWidth(DIM_LW + 0.3)
+    c.line(outer_x, oy, outer_x, oy + plot_py)
+    c.line(outer_x - 4, oy - 4, outer_x + 4, oy + 4)               # 45° tick at bottom
+    c.line(outer_x - 4, oy + plot_py - 4, outer_x + 4, oy + plot_py + 4)  # 45° tick at top
     c.saveState()
-    c.setFillColor(HexColor("#64748B"))
-    c.setFont("Helvetica", 7)
-    c.translate(ox - 18, oy + plot_py / 2)
+    c.translate(outer_x + 8, oy + plot_py / 2)
     c.rotate(90)
-    c.drawCentredString(0, 0, f"{cfg.plot_length:.2f} m")
+    c.setFont("Helvetica-Bold", 6.5)
+    c.drawCentredString(0, 0, metres_to_ftin(cfg.plot_length))
     c.restoreState()
-    c.setStrokeColor(HexColor("#64748B"))
-    c.setLineWidth(DIM_LW)
-    c.line(ox - 12, oy, ox - 8, oy)
-    c.line(ox - 12, oy + plot_py, ox - 8, oy + plot_py)
-    c.line(ox - 10, oy, ox - 10, oy + plot_py)
 
 
 def _draw_arrow(c, x, y, right: bool):
     sz = 4
     dx = sz if right else -sz
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     p = c.beginPath()
     p.moveTo(x, y)
     p.lineTo(x + dx, y + sz / 2)
@@ -723,20 +846,20 @@ def _draw_arrow(c, x, y, right: bool):
 
 def _draw_scale_bar(c: canvas.Canvas, x: float, y: float, scale: float) -> None:
     bar_pt = 3.0 * scale
-    c.setStrokeColor(HexColor("#64748B"))
+    c.setStrokeColor(HexColor("#555555"))
     c.setLineWidth(1.5)
     c.line(x, y, x + bar_pt, y)
     c.setLineWidth(1.0)
     c.line(x, y - 3, x, y + 3)
     c.line(x + bar_pt, y - 3, x + bar_pt, y + 3)
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 6)
     c.drawCentredString(x + bar_pt / 2, y - 10, "3 m")
 
 
 def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
     c.setFillColor(white)
-    c.setStrokeColor(HexColor("#94A3B8"))
+    c.setStrokeColor(HexColor("#808080"))
     c.setLineWidth(0.75)
     c.circle(cx, cy, r, fill=1, stroke=1)
 
@@ -746,12 +869,12 @@ def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
     p.lineTo(cx, cy - r * 0.1)
     p.lineTo(cx + r * 0.3, cy - r * 0.3)
     p.close()
-    c.setFillColor(HexColor("#1E293B"))
+    c.setFillColor(HexColor("#000000"))
     c.drawPath(p, fill=1, stroke=0)
 
-    c.setFillColor(HexColor("#64748B"))
+    c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", 6)
-    c.drawCentredString(cx, cy - r - 7, "N")
+    c.drawCentredString(cx, cy - r - 7, "NORTH")
 
 
 def _draw_structural_floor(
@@ -775,13 +898,13 @@ def _draw_structural_floor(
     road_y = TITLE_H + MARGIN
     c.setFillColor(HexColor("#E2E8F0"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
-    c.setFillColor(HexColor("#94A3B8"))
+    c.setFillColor(HexColor("#808080"))
     c.setFont("Helvetica", 7)
     c.drawCentredString(ox + plot_px / 2, road_y + ROAD_H / 2 - 3, "ROAD")
 
     # Plot boundary
     c.setDash(5, 3)
-    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.75)
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
@@ -800,7 +923,7 @@ def _draw_structural_floor(
     max_y = max(r.y + r.depth for r in rooms)
 
     # Room outlines — light gray, no fill
-    c.setStrokeColor(HexColor("#CBD5E1"))
+    c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.5)
     c.setDash()
     for room in rooms:
@@ -814,7 +937,7 @@ def _draw_structural_floor(
     xs = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
     ys = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
 
-    c.setStrokeColor(HexColor("#94A3B8"))
+    c.setStrokeColor(HexColor("#808080"))
     c.setLineWidth(0.4)
     c.setDash(4, 3)
     bx_lo = ox + min_x * scale
@@ -834,7 +957,7 @@ def _draw_structural_floor(
     # Grid bubble labels (A, B, C… / 1, 2, 3…)
     import string as _string
     bubble_r = 6  # pt
-    c.setStrokeColor(HexColor("#64748B"))
+    c.setStrokeColor(HexColor("#555555"))
     c.setFillColor(HexColor("#FFFFFF"))
     c.setLineWidth(0.6)
 
@@ -843,7 +966,7 @@ def _draw_structural_floor(
         px_x = ox + x * scale
         for bubble_y in [by_lo - ext - bubble_r - 2, by_hi + ext + bubble_r + 2]:
             c.circle(px_x, bubble_y, bubble_r, fill=1, stroke=1)
-            c.setFillColor(HexColor("#334155"))
+            c.setFillColor(HexColor("#333333"))
             c.setFont("Helvetica-Bold", 6)
             c.drawCentredString(px_x, bubble_y - 2.5, lbl)
             c.setFillColor(HexColor("#FFFFFF"))
@@ -853,7 +976,7 @@ def _draw_structural_floor(
         px_y = oy + y * scale
         for bubble_x in [bx_lo - ext - bubble_r - 2, bx_hi + ext + bubble_r + 2]:
             c.circle(bubble_x, px_y, bubble_r, fill=1, stroke=1)
-            c.setFillColor(HexColor("#334155"))
+            c.setFillColor(HexColor("#333333"))
             c.setFont("Helvetica-Bold", 6)
             c.drawCentredString(bubble_x, px_y - 2.5, lbl)
             c.setFillColor(HexColor("#FFFFFF"))
@@ -874,7 +997,7 @@ def _draw_structural_floor(
             col_xs.setdefault(round(col.x, 2), []).append(col)
             col_ys.setdefault(round(col.y, 2), []).append(col)
 
-        c.setStrokeColor(HexColor("#1E293B"))
+        c.setStrokeColor(HexColor("#000000"))
         c.setLineWidth(1.5)
         c.setDash()
 
@@ -900,7 +1023,7 @@ def _draw_structural_floor(
 
         # Column squares with numbers
         col_sz = max(5, 0.3 * scale)
-        c.setFillColor(HexColor("#1E293B"))
+        c.setFillColor(HexColor("#000000"))
         for idx, col in enumerate(unique_cols):
             cx = ox + col.x * scale
             cy = oy + col.y * scale
@@ -909,7 +1032,7 @@ def _draw_structural_floor(
             c.setFillColor(HexColor("#FFFFFF"))
             c.setFont("Helvetica-Bold", max(4, col_sz * 0.55))
             c.drawCentredString(cx, cy - col_sz * 0.2, f"C{idx + 1}")
-            c.setFillColor(HexColor("#1E293B"))
+            c.setFillColor(HexColor("#000000"))
 
     # Scale bar + north arrow
     _draw_scale_bar(c, ox + 4, oy + 16, scale)
@@ -932,42 +1055,79 @@ def _draw_title_block(
     num_bedrooms: int,
     scale: float,
     page_w: float,
+    floor_plan: "FloorPlan | None" = None,
 ) -> None:
-    c.setStrokeColor(HexColor("#CBD5E1"))
-    c.setLineWidth(0.75)
+    # Outer border around entire title block
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(1.0)
+    c.rect(0, 0, page_w, TITLE_H, fill=0, stroke=1)
+    # Heavy top border line separating title block from drawing
+    c.setLineWidth(1.5)
     c.line(0, TITLE_H, page_w, TITLE_H)
 
     scale_ratio = round(1000 / (scale * (25.4 / 72)))
 
+    # Compute area total in sqft when floor plan is available
+    sqm_total = sum(r.area for r in floor_plan.rooms) if floor_plan else 0.0
+    sqft_total = round(sqm_total * 10.764)
+
     city_label = cfg.city.title() if cfg.city != "other" else "NBC Defaults"
     fields = [
         ("PROJECT",  (project_name[:22] + "…") if len(project_name) > 24 else project_name),
-        ("LAYOUT",   f"{layout_id} \u2013 {layout_name}"),
+        ("LAYOUT",   f"{layout_id} - {layout_name}"),
         ("FLOOR",    floor_label),
-        ("PLOT",     f"{cfg.plot_width}\u00d7{cfg.plot_length} m"),
+        ("PLOT",     f"{cfg.plot_width}x{cfg.plot_length} m"),
         ("CONFIG",   f"{num_bedrooms} BHK · {cfg.city.title()}"),
         ("SCALE",    f"1:{scale_ratio}"),
+        ("TOTAL AREA", f"{sqft_total} SQFT" if floor_plan else "—"),
         ("DATE",     date.today().strftime("%d %b %Y")),
-        ("DRAWN BY", "PlanForge"),
     ]
 
+    # Field cells — upper 40pt for fields, lower zone for area schedule
+    FIELD_H = 40  # height of the field row
     col_w = page_w / len(fields)
     for i, (label, value) in enumerate(fields):
         cx = col_w * i + col_w / 2
+        cell_x = col_w * i
+        # Dark header band for each field label
+        c.setFillColor(HexColor("#222222"))
+        c.rect(cell_x, TITLE_H - 18, col_w, 18, fill=1, stroke=0)
+        # Field label in white on dark background
+        c.setFillColor(HexColor("#FFFFFF"))
+        c.setFont("Helvetica-Bold", 6)
+        c.drawCentredString(cx, TITLE_H - 12, label)
+        # Value in black below
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica-Bold", 7.5)
+        c.drawCentredString(cx, TITLE_H - 34, value)
+        # Vertical divider between cells
         if i > 0:
-            c.setStrokeColor(HexColor("#E2E8F0"))
+            c.setStrokeColor(HexColor("#000000"))
             c.setLineWidth(0.5)
-            c.line(col_w * i, 0, col_w * i, TITLE_H)
+            c.line(cell_x, 0, cell_x, TITLE_H)
+    # Horizontal separator between fields and area schedule zone
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.5)
+    c.line(0, TITLE_H - FIELD_H, page_w, TITLE_H - FIELD_H)
 
-        c.setFillColor(HexColor("#94A3B8"))
-        c.setFont("Helvetica", 6)
-        c.drawCentredString(cx, TITLE_H - 16, label)
+    # Area schedule: list room names and sizes in the lower zone
+    if floor_plan and floor_plan.rooms:
+        sched_y_top = TITLE_H - FIELD_H - 4
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica-Bold", 5.5)
+        c.drawString(4, sched_y_top, "AREA SCHEDULE:")
+        c.setFont("Helvetica", 5)
+        schedule_parts = [
+            f"{r.name.upper()}: {round(r.area * 10.764)} SQFT"
+            for r in floor_plan.rooms
+            if r.type not in {"staircase", "parking", "parking_4w", "parking_2w"}
+        ]
+        schedule_line = "   |   ".join(schedule_parts[:8])
+        c.drawString(4, sched_y_top - 10, schedule_line[:190])
+        c.setFont("Helvetica-Bold", 5.5)
+        c.drawString(4, sched_y_top - 20, f"TOTAL BUILT-UP AREA: {sqft_total} SQFT  ({sqm_total:.1f} SQ.M)")
 
-        c.setFillColor(HexColor("#1E293B"))
-        c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(cx, TITLE_H - 32, value)
-
-    # PlanForge branding line
-    c.setFillColor(HexColor("#94A3B8"))
+    # Branding
+    c.setFillColor(HexColor("#888888"))
     c.setFont("Helvetica", 5)
-    c.drawCentredString(page_w / 2, 8, "Generated by PlanForge · NBC 2016 Compliant")
+    c.drawRightString(page_w - 4, 8, "Generated by PlanForge · NBC 2016 Compliant")
