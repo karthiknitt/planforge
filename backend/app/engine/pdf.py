@@ -470,7 +470,7 @@ def _draw_floor(
         cx_pt = rx + rw / 2
         cy_pt = ry + rh / 2
         # Font size: bounded by room size, never too large
-        fs = max(5.5, min(10.0, rw / 9, rh / 4.5))
+        fs = max(6.0, min(12.0, rw / 7.5, rh / 4.0))
         c.setFillColor(HexColor("#000000"))
         ftin_label = f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}"
         # Show name + dimensions only when room is wide enough to display cleanly.
@@ -496,8 +496,8 @@ def _draw_floor(
     # ── Scale bar (placed in the margin zone, left of chain dims) ─────────────
     _draw_scale_bar(c, ox + 4, TITLE_H + MARGIN // 2 - 4, scale)
 
-    # ── North arrow ───────────────────────────────────────────────────────────
-    _draw_north_arrow(c, ox + plot_px - 16, oy + plot_py - 16, 12)
+    # ── North arrow (placed in top-right margin, away from plot boundary) ─────
+    _draw_north_arrow(c, ox + plot_px - 22, oy + plot_py + TOP_PAD * 0.45, 16)
 
     # ── Title block ───────────────────────────────────────────────────────────
     _draw_title_block(c, project_name, layout.id, layout.name, floor_label, cfg,
@@ -543,16 +543,16 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy):
 
         # ── UP label + arrow (upper tread zone, above break line) ────────────────
         if rw >= 18:
-            lbl_fs = max(7, min(9, rw * 0.25))
+            lbl_fs = max(8, min(12, rw * 0.30))
             cx_s = rx + rw / 2
             # Arrow stem + head pointing up, positioned in upper zone
-            arrow_base_y = ry + rh * 0.60
+            arrow_base_y = ry + rh * 0.58
             arrow_tip_y  = ry + rh * 0.80
             stem_x = cx_s
             c.setStrokeColor(HexColor("#000000"))
-            c.setLineWidth(0.75)
+            c.setLineWidth(1.0)
             c.line(stem_x, arrow_base_y, stem_x, arrow_tip_y)  # vertical stem
-            arrow_w = min(rw * 0.22, 5)
+            arrow_w = min(rw * 0.28, 7)
             p = c.beginPath()
             p.moveTo(stem_x, arrow_tip_y + arrow_w)              # tip
             p.lineTo(stem_x - arrow_w / 2, arrow_tip_y)          # left wing
@@ -560,10 +560,10 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy):
             p.close()
             c.setFillColor(HexColor("#000000"))
             c.drawPath(p, fill=1, stroke=0)
-            # "UP" text below the arrow stem
+            # "UP" text above the arrow tip
             c.setFillColor(HexColor("#000000"))
             c.setFont("Helvetica-Bold", lbl_fs)
-            c.drawCentredString(cx_s, arrow_base_y - lbl_fs - 1, "UP")
+            c.drawCentredString(cx_s, arrow_tip_y + arrow_w + 2, "UP")
 
 
 def _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y):
@@ -1036,7 +1036,7 @@ def _draw_structural_floor(
 
     # Scale bar + north arrow
     _draw_scale_bar(c, ox + 4, oy + 16, scale)
-    _draw_north_arrow(c, ox + plot_px - 16, oy + plot_py - 16, 12)
+    _draw_north_arrow(c, ox + plot_px - 22, oy + plot_py + TOP_PAD * 0.45, 16)
 
     # Structural title block
     _draw_title_block(
