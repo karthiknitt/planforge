@@ -43,8 +43,8 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 - **Room annotations** — sticky notes on rooms, exported to PDF
 
 ### Export
-- **PDF export** — ReportLab A4 at 1:100, title block, room labels, dimensions (free)
-- **Approval drawing PDF** — municipality-format 4-page package with title block, owner info, engineer seal (per-submission add-on)
+- **PDF export** — ReportLab A4 at 1:100; professional double-line walls, boxed window symbols, single door arcs, chain dimensions in ft-in, room schedule, north arrow (free)
+- **Approval drawing PDF** — municipality-format 4-page package; solid B&W walls, setback dims, FAR table, owner info, engineer seal, CMDA/BBMP/GHMC/PMC/MCGM submission ready (per-submission add-on)
 - **DXF export** — ezdxf with CAD layers, ANSI hatch fills, door/window symbols, per-layer lineweights (0.09–0.50mm), ARCH_MM dimstyle (text above line), graphical scale bar (Basic+)
 - **Bill of Quantities** — city-linked material rates for 8 cities; JSON (free) + formatted Excel (Pro)
 
@@ -179,7 +179,7 @@ PlanForge/
 │   ├── app/
 │   │   ├── api/routes/        # projects, generate, export, payments, rooms
 │   │   ├── config/            # compliance_rules.json, room_specs.json
-│   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, PDF, BOQ
+│   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, pdf, approval_pdf, BOQ
 │   │   ├── models/            # SQLAlchemy ORM models
 │   │   └── schemas/           # Pydantic I/O schemas
 │   └── tests/                 # 159 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD)

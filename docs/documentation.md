@@ -88,7 +88,8 @@ All backend routes require `X-User-Id` header (set by frontend middleware from B
 | `engine/vastu.py` | 8-zone Vastu Shastra engine with SVG overlay zone data |
 | `engine/cad_primitives.py` | DXF drawing functions: walls, doors, windows, stairs, dimensions, north arrow, scale bar |
 | `engine/cad_advanced.py` | DXF building footprint, compound wall, furniture, structural grid, terrace hatch, setback zones |
-| `engine/pdf.py` | ReportLab PDF renderer (1:100, A4) |
+| `engine/pdf.py` | ReportLab standard PDF (1:100, A4); `_dedup_wall_coords()`, `_pdf_draw_double_line_wall()`, `_draw_windows()`, `_draw_doors_in_gaps()` |
+| `engine/approval_pdf.py` | Municipality submission PDF (4-page); imports wall/window/door helpers from `pdf.py`; adds setback dims, FAR table, owner/engineer block |
 | `engine/boq.py` | Bill of Quantities with city-linked material rates |
 
 ### Frontend components
@@ -162,3 +163,42 @@ Key config files (not environment variables):
 - SVG hatch for a ring area (two nested rects) is cleanest with `fillRule="evenodd"` on a `<path>` containing both rect outlines — no clipPath or white-fill masking needed.
 - `dimstyle` is a direct kwarg to `add_linear_dim()`, not inside `dxfattribs`. The `msp.doc.dimstyles` table supports `in` operator for existence check.
 - 159 backend pytest tests pass (up from 108 documented previously — growth from L-shaped, approval PDF, compliance-check, and CAD test additions in recent sessions).
+
+---
+
+### 2026-03-21 — PDF CAD Quality: Autoresearch Loop, AI Benchmark, Wall/Window/Door Fixes
+
+**What was built:**
+
+- **Autoresearch CAD quality loop (Phases 1–5)** — iterative CCQS-scored improvement of `pdf.py` and `approval_pdf.py`. CCQS metric: 5 components × 20pts (monochromaticity, dimension density, ft-in labels, layout completeness, visual quality via Claude vision API). Scores rose from 53/66 (baseline) to 96/96 (standard/approval).
+- **Monochrome B&W palette** — all room fills `#FFFFFF`; external wall colors desaturated to grays/black; mean pixel saturation = 0.0 (20/20 mono component).
+- **Ft-in room labels and chain dimensions** — `metres_to_ftin()` used for room labels (e.g. `12'-0" x 10'-0"`) and perimeter dimension chains in all four directions. 28 ft-in strings in standard PDF → 20/20 ft-in and dimension density components.
+- **Title block** — dark header band (`#222222`), room area schedule, TOTAL AREA in SQFT, scale bar, north arrow labelled NORTH.
+- **Staircase tread rendering** — floor indicator (thick line), evenly-spaced tread lines in lower half, dashed break line at mid-height, UP arrow with filled arrowhead.
+- **Door arc improvement** — `ARC_LW = 0.4pt` (architectural thin-pen convention for swing arc); door leaf at `INT_LW = 1.0pt`.
+- **AI benchmark — Nano Banana Pro** — generated a floor plan using Google Gemini 3 Pro Image Preview (`google/gemini-3-pro-image-preview`) via OpenRouter. Our system: 96/100 vs AI: 35.83/100. AI scores 0 on all text-based components (raster pixels, no PDF text). VQ tied at 16/20. Results in `experiments/ai_benchmark.md`.
+- **Three structural PDF bugs fixed:**
+  1. **Window wall breaks** — external walls were passing window positions as gap intervals to `_pdf_draw_double_line_wall`, physically opening the wall. Fixed by passing `[]` gaps; `_draw_windows()` draws the symbol on top of the solid wall.
+  2. **Double door arcs** — door gap was stored at both `ra.x+ra.width` (wx1) and `rb.x` (wx2, the other wall face). Both keys appeared in `vertical_door_gaps`; `_draw_doors_in_gaps` drew two arcs ~4.7pt apart. Fixed by storing gap at wx1 only (removed duplicate `setdefault(wx2, ...)` calls).
+  3. **Internal wall overlap / north wall mess** — `xs[1:-1]` contained both faces of each internal wall (two values ~0.115m apart), causing two overlapping `_pdf_draw_double_line_wall` calls → 3–4 lines at every internal wall. Fixed with `_dedup_wall_coords()` which filters coordinates within 0.125m of the previous.
+- **Boxed window symbol** — `_draw_window_symbol()` now adds perpendicular jamb cap lines at both ends of the window, closing the symbol into a proper architectural box (3 parallel glass lines + 2 end caps).
+- All fixes applied identically to both `pdf.py` and `approval_pdf.py`. Merged to `main` (commit `cf0ca3c`).
+
+**Key files changed:**
+
+- `backend/app/engine/pdf.py` — `_dedup_wall_coords()` added; xs/ys deduplication; external walls pass `[]` gaps; single door gap key per wall; `_draw_window_symbol` with jamb caps; all autoresearch palette/label/dim improvements
+- `backend/app/engine/approval_pdf.py` — imports `_dedup_wall_coords` from `pdf.py`; same deduplication, external wall solid, single door gap key; all Phase 1–5 autoresearch improvements
+- `experiments/eval.py` — 5-component CCQS metric (monochromaticity, dim density, ft-in labels, layout completeness, Claude vision quality judge)
+- `experiments/prepare.py` — fixed PlotConfig test harness; generates `current_standard.pdf` + `current_approval.pdf` + `scores.json`
+- `experiments/generate_ai_cad.py` — OpenRouter Nano Banana Pro benchmark script
+- `experiments/ai_benchmark.md` — benchmark findings and structural AI image-gen limitations
+
+**Patterns established:**
+
+- **`git checkout <branch> -- <files>`** is the cleanest way to bring specific files from a feature branch to main when commits mix concerns. Avoids pulling in unrelated experiment scripts or dependency changes.
+- **`_dedup_wall_coords(coords, tol=0.125)`**: when rooms are separated by a 0.115m wall gap, both `ra.x+ra.width` and `rb.x` appear in the room coordinate set. Keeping both causes doubled walls. The dedup helper drops any coord within `tol` of its predecessor (sorted list), keeping the first (left/bottom face).
+- **Window symbol on solid wall**: architecturally correct approach is solid wall + 3 parallel lines + end jamb caps drawn on top. Do NOT open the wall for window positions.
+- **Door gap key discipline**: store under the face coordinate of the "first" room only (`ra.x+ra.width` for vertical, `ra.y+ra.depth` for horizontal). The deduplication of xs/ys ensures the matching coordinate is visited exactly once.
+- **OpenRouter Gemini response format** (non-standard): images are in `choices[0]["message"]["images"][0]["image_url"]["url"]`, NOT in `message.content` (which is `null`). Standard OpenAI content array does not apply.
+- **VQ ceiling at 16/20**: the LLM visual-quality judge has ±1pt stochasticity. Both our system and the AI benchmark hit the same 16/20 ceiling. Cannot improve further without fundamental layout geometry changes (narrow 0.9m staircase, door arcs at wall face = correct architectural convention).
+- CCQS scores: Standard **96/100**, Approval **96/100** (Visual Quality 16/20 — geometric ceiling confirmed).
