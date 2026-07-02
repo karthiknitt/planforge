@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -32,15 +33,30 @@ function metresToFeet(metres: string | number): string {
 }
 
 async function fetchLayouts(projectId: string, userId: string): Promise<GenerateResponse | null> {
-  try {
-    const res = await fetchBackend(userId, `projects/${projectId}/generate`, {
-      next: { revalidate: 300, tags: [`project-${projectId}`] },
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+  // fetchBackend() mints a fresh short-lived signed token on every call, which
+  // would otherwise be part of Next's fetch cache key and defeat caching on
+  // every request (the token never repeats). unstable_cache() caches on
+  // projectId alone — the token minting only happens on an actual cache miss.
+  // Safe to key on projectId without userId: the caller (ProjectPage below)
+  // already enforces project.userId === session.user.id via notFound() before
+  // this ever runs, so a given projectId's cache entry can only ever be
+  // created by — and served back to — its one owner. If project access is
+  // ever widened (e.g. team-shared projects), this cache key must include
+  // userId too, or a cached response could leak across users.
+  const getCached = unstable_cache(
+    async (): Promise<GenerateResponse | null> => {
+      try {
+        const res = await fetchBackend(userId, `projects/${projectId}/generate`);
+        if (!res.ok) return null;
+        return res.json();
+      } catch {
+        return null;
+      }
+    },
+    [`project-generate-${projectId}`],
+    { revalidate: 300, tags: [`project-${projectId}`] }
+  );
+  return getCached();
 }
 
 // ── Streaming layout section ────────────────────────────────────────────────

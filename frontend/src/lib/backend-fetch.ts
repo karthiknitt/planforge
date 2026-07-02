@@ -12,12 +12,16 @@ export async function fetchBackend(
     throw new Error("INTERNAL_AUTH_SECRET is not set");
   }
   const token = await signInternalAuthToken(userId, secret);
+  // Normalize via Headers() first — init.headers may legitimately be a plain
+  // object, a Headers instance, or a [string, string][] tuple array, and
+  // object-spreading only handles the first of those correctly.
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("X-Internal-Auth", token);
   return fetch(`${BACKEND_URL}/api/${path.replace(/^\//, "")}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers as Record<string, string> | undefined),
-      "X-Internal-Auth": token,
-    },
+    headers,
   });
 }
