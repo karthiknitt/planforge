@@ -2,33 +2,9 @@ import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { signInternalAuthToken } from "@/lib/internal-auth";
+import { forwardableHeaders } from "@/lib/proxy-headers";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
-
-// Headers that should not be forwarded to the backend
-const HEADER_BLOCKLIST = new Set([
-  "host",
-  "connection",
-  "content-length",
-  "cookie",
-  "x-internal-auth", // this proxy sets its own, never trust one from the client
-  "transfer-encoding",
-  "te",
-]);
-
-function forwardableHeaders(reqHeaders: Headers): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [key, value] of reqHeaders.entries()) {
-    if (!HEADER_BLOCKLIST.has(key.toLowerCase())) {
-      result[key] = value;
-    }
-  }
-  // Ensure Content-Type is set if not already present
-  if (!result["content-type"] && !result["Content-Type"]) {
-    result["Content-Type"] = "application/json";
-  }
-  return result;
-}
 
 type Params = Promise<{ path: string[] }>;
 
