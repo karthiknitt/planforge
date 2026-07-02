@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from app.dependencies.auth import get_current_user_id
 
-SECRET = "test-secret-value"
+SECRET = "test-secret-value-at-least-32-bytes-long-for-pyjwt"
 
 
 def _token(user_id: str, exp_offset_seconds: int = 60, secret: str = SECRET) -> str:
@@ -48,4 +48,28 @@ def test_malformed_token_raises_401(monkeypatch):
     )
     with pytest.raises(HTTPException) as exc_info:
         get_current_user_id(x_internal_auth="not-a-jwt")
+    assert exc_info.value.status_code == 401
+
+
+def test_token_missing_user_id_claim_raises_401(monkeypatch):
+    monkeypatch.setattr(
+        "app.dependencies.auth.settings.internal_auth_secret", SECRET
+    )
+    # Create a token with only exp, no user_id
+    payload = {"exp": time.time() + 60}
+    token = jwt.encode(payload, SECRET, algorithm="HS256")
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user_id(x_internal_auth=token)
+    assert exc_info.value.status_code == 401
+
+
+def test_token_missing_exp_claim_raises_401(monkeypatch):
+    monkeypatch.setattr(
+        "app.dependencies.auth.settings.internal_auth_secret", SECRET
+    )
+    # Create a token with only user_id, no exp
+    payload = {"user_id": "user-123"}
+    token = jwt.encode(payload, SECRET, algorithm="HS256")
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user_id(x_internal_auth=token)
     assert exc_info.value.status_code == 401
