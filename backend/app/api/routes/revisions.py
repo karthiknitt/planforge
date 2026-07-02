@@ -14,11 +14,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.models.project import Project
@@ -40,10 +41,6 @@ from app.schemas.revision import (
 )
 
 router = APIRouter()
-
-
-def _get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
 
 
 async def _require_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
@@ -223,7 +220,7 @@ async def save_auto_revision(
 )
 async def list_revisions(
     project_id: str,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProjectRevision]:
     await _require_project(project_id, user_id, db)
@@ -248,7 +245,7 @@ async def list_revisions(
 async def create_revision(
     project_id: str,
     body: RevisionCreate,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectRevision:
     project = await _require_project(project_id, user_id, db)
@@ -340,7 +337,7 @@ async def create_revision(
 async def get_revision(
     project_id: str,
     version: int,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectRevision:
     await _require_project(project_id, user_id, db)
@@ -370,7 +367,7 @@ async def get_revision(
 async def delete_revision(
     project_id: str,
     version: int,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await _require_project(project_id, user_id, db)

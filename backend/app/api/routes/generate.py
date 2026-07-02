@@ -1,10 +1,11 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.models.project import Project
@@ -24,10 +25,6 @@ router = APIRouter()
 
 def _to_float(v) -> float:
     return float(v) if isinstance(v, Decimal) else v
-
-
-def _user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
 
 
 def _floor_plan_out(fp) -> FloorPlanOut:
@@ -55,7 +52,7 @@ def _floor_plan_out(fp) -> FloorPlanOut:
 @router.get("/projects/{project_id}/generate", response_model=GenerateResponse)
 async def generate_layouts(
     project_id: str,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenerateResponse:
     result = await db.execute(

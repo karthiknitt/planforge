@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.models.project import Project
 from app.models.user import User
 
@@ -52,9 +53,6 @@ def _pop_undo(key: str) -> dict | None:
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
-def _user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
-
 
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -248,7 +246,7 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
 async def list_rooms(
     project_id: str,
     floor: str = "all",
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -273,7 +271,7 @@ async def list_rooms(
 async def get_room(
     project_id: str,
     room_id: str,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -292,7 +290,7 @@ async def move_room(
     project_id: str,
     room_id: str,
     body: MoveRequest,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -325,7 +323,7 @@ async def resize_room(
     project_id: str,
     room_id: str,
     body: ResizeRequest,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -360,7 +358,7 @@ async def resize_room(
 async def swap_rooms(
     project_id: str,
     body: SwapRequest,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -395,7 +393,7 @@ async def swap_rooms(
 async def add_room(
     project_id: str,
     body: AddRoomRequest,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -458,7 +456,7 @@ async def add_room(
 async def delete_room(
     project_id: str,
     room_id: str,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -482,7 +480,7 @@ async def delete_room(
 async def available_space(
     project_id: str,
     floor: str = "gf",
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -515,7 +513,7 @@ async def available_space(
 @router.get("/projects/{project_id}/compliance")
 async def check_compliance(
     project_id: str,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -599,7 +597,7 @@ async def compliance_check_rooms(
     layout_id: str,
     body: ComplianceCheckRequest,
     x_project_id: str = Header(..., alias="X-Project-Id"),
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Live compliance check for edited rooms.
@@ -716,7 +714,7 @@ async def compliance_check_rooms(
 @router.post("/projects/{project_id}/rooms/undo")
 async def undo_last(
     project_id: str,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
@@ -758,7 +756,7 @@ def _state_to_layout_dict(state: dict) -> dict:
 @router.get("/projects/{project_id}/rooms/layout-state")
 async def get_layout_state(
     project_id: str,
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Return the current in-memory layout state as a LayoutData-compatible dict.

@@ -12,12 +12,13 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.models.project import Project
@@ -32,10 +33,6 @@ from app.schemas.layout import (
 )
 
 router = APIRouter()
-
-
-def _get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
 
 
 def _to_float(v) -> float:
@@ -207,7 +204,7 @@ class ApprovalStatusResponse(BaseModel):
 )
 async def create_share_link(
     project_id: str,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ShareTokenResponse:
     result = await db.execute(select(Project).where(Project.id == project_id))
@@ -327,7 +324,7 @@ async def request_changes_shared_project(
 )
 async def get_approval_status(
     project_id: str,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalStatusResponse:
     result = await db.execute(select(Project).where(Project.id == project_id))
