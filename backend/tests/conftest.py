@@ -1,5 +1,9 @@
 """Shared pytest fixtures for API integration tests."""
 
+import os
+
+os.environ.setdefault("INTERNAL_AUTH_SECRET", "test-secret-for-ci")
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
