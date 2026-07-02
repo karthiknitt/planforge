@@ -1,4 +1,5 @@
 import json as _json
+import logging
 from decimal import Decimal
 from io import BytesIO, StringIO
 
@@ -17,6 +18,7 @@ from app.engine.pdf import render_pdf
 from app.models.project import Project
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -224,8 +226,10 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         metres_to_ftin,
     )
 
-    doc = ezdxf.new("R2010")
-    doc.header["$INSUNITS"] = 6  # metres
+    doc = ezdxf.new("R2010", setup=True)       # setup=True loads standard linetypes
+    doc.header["$INSUNITS"]    = 6             # metres (geometry stored in metres)
+    doc.header["$MEASUREMENT"] = 1             # metric hatch/linetype scaling
+    doc.header["$LWDISPLAY"]   = 1             # show lineweights in DXF viewers
 
     layer_defs = [
         ("PLOT-BOUNDARY",   colors.GREEN,   0.25),
@@ -257,6 +261,26 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         lyr.lineweight = int(lw * 100)
         if lname in structural_layers:
             lyr.freeze()
+
+    # DEFPOINTS — non-printing layer required by DXF spec for dimension attachment points
+    if "DEFPOINTS" not in doc.layers:
+        _dp = doc.layers.new("DEFPOINTS")
+        _dp.dxf.plot = 0  # non-printing
+
+    # Architectural dimension style — created once per document
+    # ezdxf is imported at the top of this function; use it directly
+    _ds = doc.dimstyles.new("ARCH_MM")
+    _ds.dxf.dimtxt  = 0.25   # text height (m) → 2.5mm on paper at 1:100
+    _ds.dxf.dimasz  = 0.15   # arrow size
+    _ds.dxf.dimtad  = 1      # text above dim line
+    _ds.dxf.dimexo  = 0.10   # extension line offset
+    _ds.dxf.dimexe  = 0.15   # extension line overshoot
+    _ds.dxf.dimgap  = 0.08   # gap between text and dim line
+    _ds.dxf.dimdec  = 0      # no decimal places (text overridden by set_text to ft-in)
+    try:
+        _ds.set_arrows(blk=ezdxf.ARROWS.architectural_tick)
+    except Exception as exc:
+        logger.warning("Archtick arrow unavailable: %s", exc)
 
     # Register DASHED linetype (used by plot boundary and structural grid)
     if "DASHED" not in doc.linetypes:

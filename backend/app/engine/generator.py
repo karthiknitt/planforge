@@ -158,8 +158,8 @@ def _fill_blank_areas(
         return notes
 
     # Decompose MultiPolygon into individual pieces
-    if hasattr(leftover, "geoms"):
-        regions = [g for g in leftover.geoms if g.area >= 0.5]
+    if leftover.geom_type in ("MultiPolygon", "GeometryCollection"):
+        regions = [g for g in leftover.geoms if g.geom_type == "Polygon" and g.area >= 0.5]
     else:
         regions = [leftover] if leftover.area >= 0.5 else []
 

@@ -32,9 +32,9 @@ def shapely_poly_to_dxf(msp, poly, layer: str, z: float) -> None:
     if poly is None or poly.is_empty:
         return
 
-    if hasattr(poly, "geoms"):  # MultiPolygon / GeometryCollection
+    if poly.geom_type in ("MultiPolygon", "GeometryCollection"):
         for geom in poly.geoms:
-            if hasattr(geom, "exterior"):
+            if geom.geom_type == "Polygon":
                 shapely_poly_to_dxf(msp, geom, layer, z)
         return
 
@@ -60,9 +60,9 @@ def _hatch_polygon(msp, poly, pattern: str, scale: float, layer: str, z: float) 
     if poly is None or poly.is_empty:
         return
 
-    if hasattr(poly, "geoms"):
+    if poly.geom_type in ("MultiPolygon", "GeometryCollection"):
         for geom in poly.geoms:
-            if hasattr(geom, "exterior"):
+            if geom.geom_type == "Polygon":
                 _hatch_polygon(msp, geom, pattern, scale, layer, z)
         return
 
@@ -232,8 +232,8 @@ def draw_compound_wall(msp, cfg, layer: str, z: float) -> None:
     ]
 
     def _buf_and_draw(ls: "LineString") -> None:
-        buf = ls.buffer(wall_t, cap_style=2, join_style=2)
-        if not buf.is_empty and hasattr(buf, "exterior"):
+        buf = ls.buffer(wall_t, cap_style="flat", join_style="mitre")
+        if not buf.is_empty and buf.geom_type == "Polygon":
             pts = [(x, y) for x, y in buf.exterior.coords[:-1]]
             _draw_wall_segment_poly(msp, pts, layer, z)
 

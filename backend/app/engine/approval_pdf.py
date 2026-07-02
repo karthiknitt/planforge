@@ -40,7 +40,6 @@ ROAD_GAP = 6
 EXT_LW = 2.5           # external wall lineweight (IS code: heavier)
 INT_LW = 1.0           # internal wall lineweight
 DIM_LW = 0.5
-COL_SZ = 5             # column marker half-size
 
 # Municipality → building authority label mapping
 _MUNICIPALITY_LABELS: dict[str, str] = {
@@ -584,18 +583,25 @@ def _draw_approval_floor_plan(
     # Door symbols
     _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
 
-    # Column markers
+    # Column markers: sized to wall thickness, outer corners at wall centreline
     c.setFillColor(HexColor("#000000"))
     c.setDash()
+    col_half = max(3.0, ewt * scale / 2)
+    ewt_half = ewt / 2
+    col_tol = 0.02
     seen_cols: set[tuple[float, float]] = set()
     for col in floor_plan.columns:
         key = (round(col.x, 2), round(col.y, 2))
         if key in seen_cols:
             continue
         seen_cols.add(key)
-        cx = ox + col.x * scale
-        cy_c = oy + col.y * scale
-        c.rect(cx - COL_SZ, cy_c - COL_SZ, COL_SZ * 2, COL_SZ * 2, fill=1, stroke=0)
+        col_cx = (col.x - ewt_half if abs(col.x - min_x) < col_tol else
+                  col.x + ewt_half if abs(col.x - max_x) < col_tol else col.x)
+        col_cy = (col.y - ewt_half if abs(col.y - min_y) < col_tol else
+                  col.y + ewt_half if abs(col.y - max_y) < col_tol else col.y)
+        cx = ox + col_cx * scale
+        cy_c = oy + col_cy * scale
+        c.rect(cx - col_half, cy_c - col_half, col_half * 2, col_half * 2, fill=1, stroke=0)
 
     # Prominent NORTH arrow
     _draw_large_north_arrow(c, ox + plot_px - 24, oy + plot_py - 24, 18, cfg.road_side)

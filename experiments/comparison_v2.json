@@ -1,0 +1,77 @@
+{
+  "generated_on": "2026-03-21",
+  "branch": "feature/cad-quality-v2",
+  "description": "CCQS comparison after cad-quality-v2 improvements vs AI reference floor plan",
+
+  "baseline_scores": {
+    "note": "Scores from main branch before this session (from scores.json pre-commit)",
+    "standard": { "total": 96.0, "visual_quality": 16 },
+    "approval": { "total": 96.0, "visual_quality": 16 }
+  },
+
+  "v2_scores": {
+    "standard": {
+      "total": 96.0,
+      "monochrome": 20.0,
+      "dimension_density": 20,
+      "ft_in_labels": 20,
+      "layout_completeness": 20,
+      "visual_quality": 16,
+      "vq_issues": [
+        "Kitchen dimensions text appears quite large",
+        "Living/Hall dimensions text orientation and size could be better proportioned",
+        "Some door swing arcs overlap with wall lines in tight spaces",
+        "Minor alignment inconsistencies in dimension line placement"
+      ]
+    },
+    "approval": {
+      "total": 97.0,
+      "monochrome": 20.0,
+      "dimension_density": 20,
+      "ft_in_labels": 20,
+      "layout_completeness": 20,
+      "visual_quality": 17,
+      "vq_issues": [
+        "Room dimension text in Kitchen and Dining appears slightly cramped",
+        "Setback annotations could be positioned slightly cleaner",
+        "UP arrow and staircase representation could be more detailed"
+      ]
+    }
+  },
+
+  "ai_reference": {
+    "total": 36.83,
+    "monochrome": 19.83,
+    "dimension_density": 0.0,
+    "ft_in_labels": 0.0,
+    "layout_completeness": 0,
+    "visual_quality": 17,
+    "note": "AI-generated image PDF lacks parseable dimension text, ft-in labels, and area schedules — scores 0 on 3 of 5 automated metrics despite strong visual quality"
+  },
+
+  "delta_v2_vs_baseline": {
+    "standard_total": 0,
+    "standard_visual_quality": 0,
+    "approval_total": "+1",
+    "approval_visual_quality": "+1"
+  },
+
+  "improvements_shipped": [
+    "DXF: $MEASUREMENT=1, $LWDISPLAY=1, setup=True (metric headers)",
+    "DXF: DEFPOINTS layer created at doc init (non-plotting)",
+    "DXF: ARCH_MM dimstyle with architectural tick arrow (archtick)",
+    "DXF: Wall hatches now solid fill (was silently dropped due to 'elevation' float bug)",
+    "DXF: logger.warning() instead of silent except:pass on 4 geometry error paths",
+    "Shapely: geom_type string dispatch replaces hasattr(poly, 'geoms') duck-typing",
+    "Shapely: cap_style/join_style integer form replaced with string literals",
+    "PDF: Room label font cap raised 10pt -> 12pt with tighter size scaling",
+    "PDF: Staircase UP arrow larger (thicker stem, bigger head), 'UP' text above tip",
+    "PDF: North arrow radius 12->16pt, repositioned into top-right margin above plot"
+  ],
+
+  "analysis": {
+    "vs_ai_reference": "PlanForge v2 outperforms AI reference by +59 points (97 vs 36.83). AI reference scores well on visual quality (17/20) but produces no machine-readable text, failing dimension_density, ft_in_labels, and layout_completeness entirely.",
+    "vs_baseline": "Approval PDF improved +1 point (96->97) on visual quality. Standard PDF held at 96. Key structural bug fixed: wall hatches were silently dropped on all previous DXF exports — now correctly solid-fill.",
+    "remaining_vq_gaps": "Dimension text size in kitchen/dining too prominent relative to room size. Door swing arcs occasionally overlap walls in tight spaces. These require layout-aware label sizing."
+  }
+}

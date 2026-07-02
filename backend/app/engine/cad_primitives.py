@@ -13,9 +13,12 @@ Produces Indian construction drawing standard output:
 """
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -310,7 +313,9 @@ def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: flo
         p4 = (wall.x1 + t1 * dx - h * px, wall.y1 + t1 * dy - h * py, z)
         msp.add_line(p3, p4, dxfattribs={"layer": layer, "lineweight": 50})
 
-        # Hatch fill
+        # Solid fill for cut wall sections (IS:962 / AIA floor-plan convention).
+        # Note: 'elevation' must NOT be in dxfattribs for HATCH entities — it
+        # causes TypeError in ezdxf. Z-stacking is not needed for 2D plan hatches.
         hatch_corners = [
             (p1[0], p1[1]),
             (p2[0], p2[1]),
@@ -318,14 +323,14 @@ def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: flo
             (p3[0], p3[1]),
         ]
         try:
-            hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z, "lineweight": 9})
-            hatch.set_pattern_fill(
-                "ANSI31" if wall.thickness >= 0.23 else "ANSI37",
-                scale=0.05,
+            hatch = msp.add_hatch(
+                color=0,  # ByBlock → renders as black
+                dxfattribs={"layer": layer, "lineweight": 9},
             )
+            hatch.set_solid_fill()
             hatch.paths.add_polyline_path(hatch_corners, is_closed=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Wall hatch failed on layer %s: %s", layer, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -407,11 +412,11 @@ def draw_window(
     # Glazing hatch between the two outer lines
     try:
         hatch_corners_2d = [(p[0], p[1]) for p in outer_pts]
-        hatch = msp.add_hatch(dxfattribs={"layer": layer, "elevation": z, "lineweight": 9})
+        hatch = msp.add_hatch(dxfattribs={"layer": layer, "lineweight": 9})
         hatch.set_pattern_fill("ANSI31", scale=0.02)
         hatch.paths.add_polyline_path(hatch_corners_2d, is_closed=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Window hatch failed on layer %s: %s", layer, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -506,15 +511,8 @@ def draw_dimension_chain(
     if len(positions) < 2:
         return
 
-    # Create ARCH_MM dimstyle on first call if not already present
-    if "ARCH_MM" not in msp.doc.dimstyles:
-        ds = msp.doc.dimstyles.new("ARCH_MM")
-        ds.dxf.dimtxt = 0.25
-        ds.dxf.dimasz = 0.15
-        ds.dxf.dimtad = 1
-        ds.dxf.dimexo = 0.1
-        ds.dxf.dimexe = 0.15
-
+    # ARCH_MM dimstyle is created once in export.py before modelspace is obtained.
+    # draw_dimension_chain() relies on it already existing in the document.
     for i in range(len(positions) - 1):
         p_start = positions[i]
         p_end = positions[i + 1]
@@ -545,8 +543,8 @@ def draw_dimension_chain(
             )
             dim.set_text(dim_text)
             dim.render()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Dimension render failed: %s", exc)
 
     # Overall outer dimension (0.8 m further out)
     total = positions[-1] - positions[0]
@@ -573,8 +571,8 @@ def draw_dimension_chain(
         )
         dim.set_text(metres_to_ftin(total))
         dim.render()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Outer dimension render failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -620,8 +618,8 @@ def draw_north_arrow(
                     [(lx, ly), (tip_x, tip_y), (rx, ry), (cx, cy)],
                     is_closed=True,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("North arrow hatch failed: %s", exc)
 
         # Compass label
         label_x = cx + (size + 0.2) * math.cos(angle_rad)
