@@ -21,6 +21,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://planforge:planforge@db:5432/planforge
+      PORT: "8000"
     depends_on:
       db:
         condition: service_healthy
