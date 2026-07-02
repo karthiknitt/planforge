@@ -17,12 +17,20 @@ dependencies = [
     "uvicorn[standard]>=0.41.0",
 ]
 
+[project.optional-dependencies]
+ifc-experiment = [
+    "ifcopenshell>=0.8.0",
+    "numpy>=1.26",
+    "pymupdf>=1.24",
+]
+
 [dependency-groups]
 dev = [
     "aiosqlite>=0.22.1",
     "httpx>=0.28.1",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.9",
 ]
 
 [tool.pytest.ini_options]
