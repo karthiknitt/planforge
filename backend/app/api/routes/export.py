@@ -3,8 +3,6 @@ import logging
 from decimal import Decimal
 from io import BytesIO, StringIO
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -20,6 +18,7 @@ from app.engine.pdf import render_pdf
 from app.models.project import Project
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
