@@ -24,4 +24,8 @@ describe("signInternalAuthToken", () => {
     const token = await signInternalAuthToken("user-123", SECRET);
     await expect(jwtVerify(token, new TextEncoder().encode("wrong-secret"))).rejects.toThrow();
   });
+
+  test("throws when secret is empty", async () => {
+    await expect(signInternalAuthToken("user-123", "")).rejects.toThrow("secret must not be empty");
+  });
 });
