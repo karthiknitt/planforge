@@ -11,7 +11,7 @@ Covers:
   - Room below minimum area is surfaced in room_issues map by its id
   - Undersized staircase triggers staircase width violation
   - Missing project returns 404
-  - Missing X-User-Id returns 422
+  - Missing X-Test-User-Id returns 422
 """
 
 USER_ID = "user-cc-001"
