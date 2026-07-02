@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { fetchBackend } from "@/lib/backend-fetch";
 
 interface InviteBody {
   teamId: number;
@@ -16,11 +17,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const body = (await req.json()) as InviteBody;
 
-  const res = await fetch(new URL(`/api/backend/teams/${body.teamId}/members`, req.url), {
+  const res = await fetchBackend(session.user.id, `teams/${body.teamId}/members`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify({ email: body.email, role: body.role }),
   });
 
