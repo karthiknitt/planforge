@@ -61,3 +61,13 @@ def test_token_missing_exp_claim_raises_401(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         get_current_user_id(x_internal_auth=token)
     assert exc_info.value.status_code == 401
+
+
+def test_empty_configured_secret_raises_401_not_500(monkeypatch):
+    """jwt.decode() with an empty HMAC key raises InvalidKeyError, a sibling
+    of InvalidTokenError (not a subclass) — verifies it's still caught cleanly."""
+    monkeypatch.setattr("app.dependencies.auth.settings.internal_auth_secret", "")
+    token = _token("user-123")
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user_id(x_internal_auth=token)
+    assert exc_info.value.status_code == 401

@@ -14,7 +14,7 @@ def get_current_user_id(
             algorithms=["HS256"],
             options={"require": ["exp", "user_id"]},
         )
-    except jwt.InvalidTokenError as exc:
+    except jwt.PyJWTError as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Invalid or expired internal auth token"
         ) from exc
