@@ -16,7 +16,9 @@ from app.main import app
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
-def _test_user_id_override(x_test_user_id: str = Header(..., alias="X-Test-User-Id")) -> str:
+def _test_user_id_override(
+    x_test_user_id: str = Header(..., alias="X-Test-User-Id"),
+) -> str:
     return x_test_user_id
 
 

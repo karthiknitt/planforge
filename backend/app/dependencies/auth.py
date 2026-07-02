@@ -4,7 +4,9 @@ from fastapi import Header, HTTPException, status
 from app.config.settings import settings
 
 
-def get_current_user_id(x_internal_auth: str = Header(..., alias="X-Internal-Auth")) -> str:
+def get_current_user_id(
+    x_internal_auth: str = Header(..., alias="X-Internal-Auth"),
+) -> str:
     try:
         payload = jwt.decode(
             x_internal_auth,

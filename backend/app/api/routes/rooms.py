@@ -54,6 +54,7 @@ def _pop_undo(key: str) -> dict | None:
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
+
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
     result = await db.execute(select(User).where(User.id == user_id))
     u = result.scalar_one_or_none()
