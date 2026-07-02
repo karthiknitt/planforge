@@ -1,0 +1,22 @@
+# Docker volumes — owned by root, cannot be scanned
+data/
+
+# Python artifacts
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.pytest_cache/
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/.next/
+
+# Local env files
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Misc
+.git/
+*.log
