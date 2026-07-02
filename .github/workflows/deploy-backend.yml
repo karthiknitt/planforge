@@ -1,0 +1,68 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        working-directory: backend
+        run: |
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/planforge-backend/api:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: planforge-backend
+          region: ${{ vars.GCP_REGION }}
+          image: ${{ env.IMAGE }}
+          flags: >-
+            --min-instances=0
+            --max-instances=3
+            --concurrency=4
+            --timeout=300
+            --cpu=1
+            --memory=1Gi
+            --allow-unauthenticated
+          # deploy-cloudrun's env_vars parser splits on BOTH commas and newlines between
+          # KEY=VALUE pairs. If BACKEND_ALLOWED_ORIGINS ever needs more than one origin
+          # (backend/app/config/cors.py's parse_allowed_origins supports comma-separated
+          # lists), escape each comma as \, when setting the secret, e.g.:
+          #   gh secret set BACKEND_ALLOWED_ORIGINS --body 'https://a.com\,https://b.com'
+          # An unescaped comma in the value is otherwise silently read as a new pair.
+          env_vars: |
+            DATABASE_URL=${{ secrets.NEON_DATABASE_URL }}
+            DB_USE_NULLPOOL=true
+            ALLOWED_ORIGINS=${{ secrets.BACKEND_ALLOWED_ORIGINS }}
+            RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}
+            RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}
