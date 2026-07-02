@@ -16,7 +16,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const body = (await req.json()) as InviteBody;
 
-  const res = await fetch(`/api/backend/teams/${body.teamId}/members`, {
+  const res = await fetch(new URL(`/api/backend/teams/${body.teamId}/members`, req.url), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

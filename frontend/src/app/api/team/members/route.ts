@@ -15,9 +15,10 @@ export async function DELETE(req: Request): Promise<NextResponse> {
 
   const body = (await req.json()) as DeleteBody;
 
-  const res = await fetch(`/api/backend/teams/${body.teamId}/members/${body.targetUserId}`, {
-    method: "DELETE",
-  });
+  const res = await fetch(
+    new URL(`/api/backend/teams/${body.teamId}/members/${body.targetUserId}`, req.url),
+    { method: "DELETE" }
+  );
 
   if (!res.ok) {
     const data = (await res.json()) as { detail?: string };

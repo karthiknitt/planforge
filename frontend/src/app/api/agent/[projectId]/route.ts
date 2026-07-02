@@ -9,7 +9,9 @@ import {
   streamText,
   tool,
 } from "ai";
+import { headers } from "next/headers";
 import { z } from "zod";
+import { auth } from "@/lib/auth";
 import { DEFAULT_MODEL_ID, getModelProvider } from "@/lib/models";
 
 export const maxDuration = 60;
@@ -53,7 +55,7 @@ BEHAVIOUR
 - Keep undo available — remind users they can say "undo" after changes.`;
 }
 
-function buildTools(projectId: string, backendHeaders: Record<string, string>) {
+function buildTools(projectId: string, backendHeaders: Record<string, string>, origin: string) {
   return {
     get_room_list: tool({
       description: "List all rooms on a floor or all floors",
@@ -61,9 +63,12 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         floor: z.enum(["gf", "ff", "sf", "basement", "all"]).describe("Which floor to list"),
       }),
       execute: async ({ floor }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms?floor=${floor}`, {
-          headers: backendHeaders,
-        });
+        const res = await fetch(
+          `${origin}${BACKEND}/api/projects/${projectId}/rooms?floor=${floor}`,
+          {
+            headers: backendHeaders,
+          }
+        );
         return res.json();
       },
     }),
@@ -72,7 +77,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
       description: "Get details for a specific room by ID",
       inputSchema: z.object({ room_id: z.string() }),
       execute: async ({ room_id }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/${room_id}`, {
+        const res = await fetch(`${origin}${BACKEND}/api/projects/${projectId}/rooms/${room_id}`, {
           headers: backendHeaders,
         });
         return res.json();
@@ -83,7 +88,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
       description: "Check current compliance status of the layout",
       inputSchema: z.object({}),
       execute: async () => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/compliance`, {
+        const res = await fetch(`${origin}${BACKEND}/api/projects/${projectId}/compliance`, {
           headers: backendHeaders,
         });
         return res.json();
@@ -97,7 +102,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
       }),
       execute: async ({ floor }) => {
         const res = await fetch(
-          `${BACKEND}/api/projects/${projectId}/available-space?floor=${floor}`,
+          `${origin}${BACKEND}/api/projects/${projectId}/available-space?floor=${floor}`,
           { headers: backendHeaders }
         );
         return res.json();
@@ -112,11 +117,14 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         new_y: z.number().describe("New Y position in metres"),
       }),
       execute: async ({ room_id, new_x, new_y }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/${room_id}/move`, {
-          method: "POST",
-          headers: backendHeaders,
-          body: JSON.stringify({ x: new_x, y: new_y }),
-        });
+        const res = await fetch(
+          `${origin}${BACKEND}/api/projects/${projectId}/rooms/${room_id}/move`,
+          {
+            method: "POST",
+            headers: backendHeaders,
+            body: JSON.stringify({ x: new_x, y: new_y }),
+          }
+        );
         return res.json();
       },
     }),
@@ -129,11 +137,14 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         new_depth: z.number().optional().describe("New depth in metres"),
       }),
       execute: async ({ room_id, new_width, new_depth }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/${room_id}/resize`, {
-          method: "POST",
-          headers: backendHeaders,
-          body: JSON.stringify({ new_width, new_depth }),
-        });
+        const res = await fetch(
+          `${origin}${BACKEND}/api/projects/${projectId}/rooms/${room_id}/resize`,
+          {
+            method: "POST",
+            headers: backendHeaders,
+            body: JSON.stringify({ new_width, new_depth }),
+          }
+        );
         return res.json();
       },
     }),
@@ -145,7 +156,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         room_id_b: z.string(),
       }),
       execute: async ({ room_id_a, room_id_b }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/swap`, {
+        const res = await fetch(`${origin}${BACKEND}/api/projects/${projectId}/rooms/swap`, {
           method: "POST",
           headers: backendHeaders,
           body: JSON.stringify({ room_id_a, room_id_b }),
@@ -166,7 +177,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         depth: z.number().optional(),
       }),
       execute: async ({ floor, type, name, x, y, width, depth }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms`, {
+        const res = await fetch(`${origin}${BACKEND}/api/projects/${projectId}/rooms`, {
           method: "POST",
           headers: backendHeaders,
           body: JSON.stringify({ floor, type, name, x, y, width, depth }),
@@ -179,7 +190,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
       description: "Remove a room from the layout",
       inputSchema: z.object({ room_id: z.string() }),
       execute: async ({ room_id }) => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/${room_id}`, {
+        const res = await fetch(`${origin}${BACKEND}/api/projects/${projectId}/rooms/${room_id}`, {
           method: "DELETE",
           headers: backendHeaders,
         });
@@ -191,7 +202,7 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
       description: "Undo the last room modification",
       inputSchema: z.object({}),
       execute: async () => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/undo`, {
+        const res = await fetch(`${origin}${BACKEND}/api/projects/${projectId}/rooms/undo`, {
           method: "POST",
           headers: backendHeaders,
         });
@@ -204,9 +215,12 @@ function buildTools(projectId: string, backendHeaders: Record<string, string>) {
         "Fetch the current layout state so the floor plan re-renders. Call this after every successful room modification (move, resize, add, remove, swap, undo).",
       inputSchema: z.object({}),
       execute: async () => {
-        const res = await fetch(`${BACKEND}/api/projects/${projectId}/rooms/layout-state`, {
-          headers: backendHeaders,
-        });
+        const res = await fetch(
+          `${origin}${BACKEND}/api/projects/${projectId}/rooms/layout-state`,
+          {
+            headers: backendHeaders,
+          }
+        );
         return res.json(); // { layout: LayoutData }
       },
     }),
@@ -223,6 +237,11 @@ type Params = Promise<{ projectId: string }>;
 
 export async function POST(req: Request, { params }: { params: Params }) {
   const { projectId } = await params;
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -304,6 +323,8 @@ export async function POST(req: Request, { params }: { params: Params }) {
       });
   }
 
+  const origin = new URL(req.url).origin;
+
   const backendHeaders: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -331,7 +352,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
   }
 
   const systemPrompt = buildSystemPrompt(layoutState);
-  const tools = buildTools(projectId, backendHeaders);
+  const tools = buildTools(projectId, backendHeaders, origin);
 
   // Use createUIMessageStream to enable runtime model fallback:
   // if primary model fails (billing, rate limit), transparently retry with next model
