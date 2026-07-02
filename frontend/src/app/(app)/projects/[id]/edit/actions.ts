@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 
 export async function invalidateProjectLayouts(projectId: string): Promise<void> {
-  revalidateTag(`project-${projectId}`);
+  revalidatePath(`/projects/${projectId}`);
 }
