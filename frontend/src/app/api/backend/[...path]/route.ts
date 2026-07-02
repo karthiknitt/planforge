@@ -12,7 +12,13 @@ async function proxy(
   { params }: { params: Params },
   method: string
 ): Promise<NextResponse> {
-  const session = await auth.api.getSession({ headers: await headers() });
+  let session = null as Awaited<ReturnType<typeof auth.api.getSession>>;
+  try {
+    session = await auth.api.getSession({ headers: await headers() });
+  } catch (error) {
+    console.error("Session retrieval failed:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -28,28 +34,35 @@ async function proxy(
   const targetUrl = `${BACKEND_URL}/api/${path.join("/")}${search}`;
 
   // For GET/DELETE, skip body handling to avoid issues with bodyless requests
-  const body = method === "GET" || method === "DELETE" ? undefined : await req.text();
+  const body = method === "GET" || method === "DELETE" ? undefined : await req.arrayBuffer();
 
-  const backendResponse = await fetch(targetUrl, {
-    method,
-    headers: {
-      "Content-Type": req.headers.get("content-type") ?? "application/json",
-      "X-Internal-Auth": token,
-    },
-    body,
-  });
+  let backendResponse: Response;
+  try {
+    backendResponse = await fetch(targetUrl, {
+      method,
+      headers: {
+        "Content-Type": req.headers.get("content-type") ?? "application/json",
+        "X-Internal-Auth": token,
+      },
+      body,
+    });
+  } catch (error) {
+    console.error("Backend request failed:", error);
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+  }
 
   // Use arrayBuffer to preserve binary content (PDF, DXF, etc.)
   const responseBody = await backendResponse.arrayBuffer();
   const contentType = backendResponse.headers.get("content-type") ?? "application/json";
+  const contentDisposition = backendResponse.headers.get("content-disposition");
 
   return new NextResponse(responseBody, {
     status: backendResponse.status,
     headers: {
       "Content-Type": contentType,
       // Preserve Content-Disposition for file downloads
-      ...(backendResponse.headers.get("content-disposition") && {
-        "Content-Disposition": backendResponse.headers.get("content-disposition")!,
+      ...(contentDisposition && {
+        "Content-Disposition": contentDisposition,
       }),
     },
   });
