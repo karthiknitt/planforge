@@ -27,9 +27,8 @@ export function InviteMemberForm({ teamId }: InviteMemberFormProps) {
     setError(null);
     setSuccess(false);
 
-    // Get the user ID from the session cookie via the backend
-    // The X-User-Id header is set by the frontend — we read it from the session via a server action
-    // For the invite, we call the backend directly using the current user's session via the proxy
+    // Call the backend invite endpoint via the proxy (/api/team/invite)
+    // The proxy mints X-Internal-Auth and forwards the request to the backend
     try {
       const res = await fetch(`/api/team/invite`, {
         method: "POST",
