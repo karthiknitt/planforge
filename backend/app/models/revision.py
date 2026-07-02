@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime, JSON

@@ -5,6 +5,7 @@ but missing from the actual Postgres database.
 Runs at backend startup (lifespan) — safe to call every boot.
 ALTER TABLE ... ADD COLUMN IF NOT EXISTS is idempotent.
 """
+
 import logging
 from typing import Any
 
@@ -45,7 +46,10 @@ def _server_default_sql(col: Any) -> str:
     if hasattr(arg, "text"):
         return f"DEFAULT {arg.text}"
     raw = str(arg).strip("'")
-    if raw.lower() in ("now()", "true", "false") or raw.replace(".", "").lstrip("-").isdigit():
+    if (
+        raw.lower() in ("now()", "true", "false")
+        or raw.replace(".", "").lstrip("-").isdigit()
+    ):
         return f"DEFAULT {raw}"
     return f"DEFAULT '{raw}'"
 
@@ -75,7 +79,8 @@ async def auto_migrate_missing_columns(engine: AsyncEngine) -> None:
                     logger.warning(
                         "Schema drift: %s.%s is NOT NULL but has no server_default — "
                         "adding as NULLABLE to avoid data errors. Fix the model.",
-                        table_name, col.name,
+                        table_name,
+                        col.name,
                     )
                     null_clause = ""
                 else:

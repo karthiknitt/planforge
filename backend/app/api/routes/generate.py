@@ -9,8 +9,13 @@ from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.models.project import Project
 from app.schemas.layout import (
-    ColumnOut, ComplianceOut, FloorPlanOut,
-    GenerateResponse, LayoutOut, LayoutScoreOut, RoomOut,
+    ColumnOut,
+    ComplianceOut,
+    FloorPlanOut,
+    GenerateResponse,
+    LayoutOut,
+    LayoutScoreOut,
+    RoomOut,
 )
 from app.api.routes.revisions import save_auto_revision
 
@@ -32,8 +37,14 @@ def _floor_plan_out(fp) -> FloorPlanOut:
         needs_mech_ventilation=getattr(fp, "needs_mech_ventilation", False),
         rooms=[
             RoomOut(
-                id=r.id, name=r.name, type=r.type,
-                x=r.x, y=r.y, width=r.width, depth=r.depth, area=r.area,
+                id=r.id,
+                name=r.name,
+                type=r.type,
+                x=r.x,
+                y=r.y,
+                width=r.width,
+                depth=r.depth,
+                area=r.area,
             )
             for r in fp.rooms
         ],
@@ -52,9 +63,12 @@ async def generate_layouts(
     )
     project = result.scalar_one_or_none()
     if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
 
     import json
+
     custom_room_config = None
     raw_crc = getattr(project, "custom_room_config", None)
     if raw_crc:
@@ -108,7 +122,9 @@ async def generate_layouts(
     # Auto-snapshot the current state before delivering new results.
     # Fire-and-forget: failure must not block the response.
     try:
-        await save_auto_revision(db, project, label_prefix="Auto-save before generation")
+        await save_auto_revision(
+            db, project, label_prefix="Auto-save before generation"
+        )
     except Exception:
         pass
 
@@ -125,8 +141,12 @@ async def generate_layouts(
                 ),
                 ground_floor=_floor_plan_out(lay.ground_floor),
                 first_floor=_floor_plan_out(lay.first_floor),
-                second_floor=_floor_plan_out(lay.second_floor) if lay.second_floor else None,
-                basement_floor=_floor_plan_out(lay.basement_floor) if lay.basement_floor else None,
+                second_floor=_floor_plan_out(lay.second_floor)
+                if lay.second_floor
+                else None,
+                basement_floor=_floor_plan_out(lay.basement_floor)
+                if lay.basement_floor
+                else None,
                 score=LayoutScoreOut(
                     total=lay.score.total,
                     natural_light=lay.score.natural_light,
@@ -134,7 +154,9 @@ async def generate_layouts(
                     aspect_ratio=lay.score.aspect_ratio,
                     circulation=lay.score.circulation,
                     vastu=lay.score.vastu,
-                ) if lay.score else None,
+                )
+                if lay.score
+                else None,
                 space_notes=getattr(lay, "space_notes", []),
                 auto_added_rooms=getattr(lay, "space_notes", []),
             )

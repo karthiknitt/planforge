@@ -4,6 +4,7 @@ Public gallery endpoint — no auth required.
 Returns pre-generated sample plans for the SEO acquisition funnel.
 Results are cached in module-level memory after first run.
 """
+
 from __future__ import annotations
 
 import logging
@@ -159,7 +160,9 @@ def _build_plan(preset: dict[str, Any]) -> dict[str, Any]:
 
     # BOQ for total cost estimate
     try:
-        boq = _boq_engine.calculate(best, cfg, project_name=preset["name"], city="Generic")
+        boq = _boq_engine.calculate(
+            best, cfg, project_name=preset["name"], city="Generic"
+        )
         total_cost = boq.total_cost
     except Exception:
         total_cost = 0.0
@@ -228,7 +231,9 @@ def _get_all_plans() -> list[dict[str, Any]]:
                     _cache[pid] = result
                     logger.info("Gallery: built plan %s", pid)
                 else:
-                    logger.warning("Gallery: generator returned empty layouts for %s", pid)
+                    logger.warning(
+                        "Gallery: generator returned empty layouts for %s", pid
+                    )
                     continue
             except Exception as exc:
                 logger.warning("Gallery: failed to build plan %s: %s", pid, exc)

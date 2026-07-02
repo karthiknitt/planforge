@@ -9,6 +9,7 @@ Produces:
 - Structural grid with alphanumeric bubble labels
 - Furniture symbols dispatched by room type
 """
+
 from __future__ import annotations
 
 import math
@@ -18,6 +19,7 @@ import string
 # ─────────────────────────────────────────────────────────────────────────────
 # Shapely → DXF conversion helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def shapely_poly_to_dxf(msp, poly, layer: str, z: float) -> None:
     """Convert a Shapely Polygon (with possible holes) to DXF LWPOLYLINE(s).
@@ -85,6 +87,7 @@ def _hatch_polygon(msp, poly, pattern: str, scale: float, layer: str, z: float) 
 # Building footprint
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def draw_building_footprint(msp, rooms: list, layer: str, z: float):
     """
     Compute ``unary_union`` of all room bounding boxes and draw as a bold LWPOLYLINE.
@@ -112,6 +115,7 @@ def draw_building_footprint(msp, rooms: list, layer: str, z: float):
 # Setback dimension callouts
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def draw_setback_zones(
     msp,
     cfg,
@@ -130,7 +134,10 @@ def draw_setback_zones(
     def _dim(base, p1, p2, angle: int, text: str) -> None:
         try:
             dim = msp.add_linear_dim(
-                base=base, p1=p1, p2=p2, angle=angle,
+                base=base,
+                p1=p1,
+                p2=p2,
+                angle=angle,
                 dxfattribs={"layer": layer},
             )
             dim.set_text(text)
@@ -185,7 +192,10 @@ def draw_setback_zones(
 # Compound boundary wall
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _draw_gate_post(msp, cx: float, cy: float, size: float, layer: str, z: float) -> None:
+
+def _draw_gate_post(
+    msp, cx: float, cy: float, size: float, layer: str, z: float
+) -> None:
     h = size / 2
     pts = [(cx - h, cy - h), (cx + h, cy - h), (cx + h, cy + h), (cx - h, cy + h)]
     ent = msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": layer})
@@ -225,10 +235,10 @@ def draw_compound_wall(msp, cfg, layer: str, z: float) -> None:
 
     # Four sides: (start, end, side_id)
     sides: list[tuple] = [
-        ((0.0, 0.0), (pw,  0.0), "S"),
-        ((pw,  0.0), (pw,  pl),  "E"),
-        ((pw,  pl),  (0.0, pl),  "N"),
-        ((0.0, pl),  (0.0, 0.0), "W"),
+        ((0.0, 0.0), (pw, 0.0), "S"),
+        ((pw, 0.0), (pw, pl), "E"),
+        ((pw, pl), (0.0, pl), "N"),
+        ((0.0, pl), (0.0, 0.0), "W"),
     ]
 
     def _buf_and_draw(ls: "LineString") -> None:
@@ -273,6 +283,7 @@ def draw_compound_wall(msp, cfg, layer: str, z: float) -> None:
 # Open terrace / setback hatching
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def draw_open_terrace(msp, plot_poly, building_poly, layer: str, z: float) -> None:
     """Hatch the area between plot boundary and building footprint (terrace/setbacks)."""
     try:
@@ -289,6 +300,7 @@ def draw_open_terrace(msp, plot_poly, building_poly, layer: str, z: float) -> No
 # ─────────────────────────────────────────────────────────────────────────────
 # Structural grid
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def draw_structural_grid(
     msp,
@@ -310,8 +322,12 @@ def draw_structural_grid(
     if not rooms:
         return
 
-    xs = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
-    ys = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
+    xs = sorted(
+        {round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms}
+    )
+    ys = sorted(
+        {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
+    )
 
     bubble_r = 0.35
     ext = 0.8  # extension beyond building for grid lines
@@ -322,7 +338,8 @@ def draw_structural_grid(
         y_lo = bld_y - ext - bubble_r * 2
         y_hi = bld_y + bld_d + ext + bubble_r * 2
         msp.add_line(
-            (x, y_lo, z), (x, y_hi, z),
+            (x, y_lo, z),
+            (x, y_hi, z),
             dxfattribs={"layer": layer, "linetype": "DASHED"},
         )
         for cy in [bld_y - ext - bubble_r, bld_y + bld_d + ext + bubble_r]:
@@ -330,8 +347,10 @@ def draw_structural_grid(
             msp.add_mtext(
                 col_label,
                 dxfattribs={
-                    "layer": layer, "char_height": 0.28,
-                    "insert": (x, cy, z), "attachment_point": 5,
+                    "layer": layer,
+                    "char_height": 0.28,
+                    "insert": (x, cy, z),
+                    "attachment_point": 5,
                 },
             )
 
@@ -341,7 +360,8 @@ def draw_structural_grid(
         x_lo = bld_x - ext - bubble_r * 2
         x_hi = bld_x + bld_w + ext + bubble_r * 2
         msp.add_line(
-            (x_lo, y, z), (x_hi, y, z),
+            (x_lo, y, z),
+            (x_hi, y, z),
             dxfattribs={"layer": layer, "linetype": "DASHED"},
         )
         for cx in [bld_x - ext - bubble_r, bld_x + bld_w + ext + bubble_r]:
@@ -349,8 +369,10 @@ def draw_structural_grid(
             msp.add_mtext(
                 row_label,
                 dxfattribs={
-                    "layer": layer, "char_height": 0.28,
-                    "insert": (cx, y, z), "attachment_point": 5,
+                    "layer": layer,
+                    "char_height": 0.28,
+                    "insert": (cx, y, z),
+                    "attachment_point": 5,
                 },
             )
 
@@ -368,16 +390,19 @@ def draw_structural_grid(
 # Rule: all furniture is pushed against a wall; nothing floats in the centre.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _rect(msp, x: float, y: float, w: float, d: float, layer: str, z: float) -> None:
     """Convenience: draw a closed rectangle."""
     ent = msp.add_lwpolyline(
         [(x, y), (x + w, y), (x + w, y + d), (x, y + d)],
-        close=True, dxfattribs={"layer": layer},
+        close=True,
+        dxfattribs={"layer": layer},
     )
     ent.dxf.elevation = z
 
 
 # ── Bedroom / Master Bedroom ──────────────────────────────────────────────────
+
 
 def _furniture_bedroom(msp, room, layer: str, z: float) -> None:
     """
@@ -404,7 +429,8 @@ def _furniture_bedroom(msp, room, layer: str, z: float) -> None:
     msp.add_arc(
         center=(bx + bed_w / 2, by + bed_d - 0.25),
         radius=min(0.35, bed_w / 3),
-        start_angle=0, end_angle=180,
+        start_angle=0,
+        end_angle=180,
         dxfattribs={"layer": layer, "elevation": z},
     )
 
@@ -419,6 +445,7 @@ def _furniture_bedroom(msp, room, layer: str, z: float) -> None:
 
 
 # ── Living Room ───────────────────────────────────────────────────────────────
+
 
 def _furniture_living(msp, room, layer: str, z: float) -> None:
     """
@@ -462,6 +489,7 @@ def _furniture_living(msp, room, layer: str, z: float) -> None:
 
 # ── Dining Room ───────────────────────────────────────────────────────────────
 
+
 def _furniture_dining(msp, room, layer: str, z: float) -> None:
     """
     Rectangular dining table centred in the room.
@@ -485,20 +513,31 @@ def _furniture_dining(msp, room, layer: str, z: float) -> None:
     for i in range(num_side_chairs):
         cx = tx + tbl_w / (num_side_chairs + 1) * (i + 1)
         # Bottom chairs
-        msp.add_circle((cx, ty - gap - chair_r), radius=chair_r,
-                       dxfattribs={"layer": layer})
+        msp.add_circle(
+            (cx, ty - gap - chair_r), radius=chair_r, dxfattribs={"layer": layer}
+        )
         # Top chairs
-        msp.add_circle((cx, ty + tbl_d + gap + chair_r), radius=chair_r,
-                       dxfattribs={"layer": layer})
+        msp.add_circle(
+            (cx, ty + tbl_d + gap + chair_r),
+            radius=chair_r,
+            dxfattribs={"layer": layer},
+        )
 
     # One chair on each short side
-    msp.add_circle((tx - gap - chair_r, ty + tbl_d / 2), radius=chair_r,
-                   dxfattribs={"layer": layer})
-    msp.add_circle((tx + tbl_w + gap + chair_r, ty + tbl_d / 2), radius=chair_r,
-                   dxfattribs={"layer": layer})
+    msp.add_circle(
+        (tx - gap - chair_r, ty + tbl_d / 2),
+        radius=chair_r,
+        dxfattribs={"layer": layer},
+    )
+    msp.add_circle(
+        (tx + tbl_w + gap + chair_r, ty + tbl_d / 2),
+        radius=chair_r,
+        dxfattribs={"layer": layer},
+    )
 
 
 # ── Kitchen ───────────────────────────────────────────────────────────────────
+
 
 def _furniture_kitchen(msp, room, layer: str, z: float) -> None:
     """
@@ -508,7 +547,7 @@ def _furniture_kitchen(msp, room, layer: str, z: float) -> None:
     Stove on the rear counter (left end).
     """
     margin = 0.05
-    cw = 0.6   # counter depth/width
+    cw = 0.6  # counter depth/width
     if room.width < 1.2 or room.depth < 1.2:
         return
 
@@ -529,8 +568,9 @@ def _furniture_kitchen(msp, room, layer: str, z: float) -> None:
     sink_x = rear_x0 + rear_len - 0.65
     sink_y = rear_y
     _rect(msp, sink_x, sink_y, 0.55, cw, layer, z)
-    msp.add_circle((sink_x + 0.275, sink_y + cw / 2), radius=0.18,
-                   dxfattribs={"layer": layer})
+    msp.add_circle(
+        (sink_x + 0.275, sink_y + cw / 2), radius=0.18, dxfattribs={"layer": layer}
+    )
 
     # Stove: on the rear counter, left end
     stove_w = min(0.6, rear_len * 0.4)
@@ -546,6 +586,7 @@ def _furniture_kitchen(msp, room, layer: str, z: float) -> None:
 
 
 # ── Toilet / Bathroom ─────────────────────────────────────────────────────────
+
 
 def _furniture_toilet(msp, room, layer: str, z: float) -> None:
     """
@@ -571,19 +612,20 @@ def _furniture_toilet(msp, room, layer: str, z: float) -> None:
     msp.add_arc(
         center=(wc_cx, bowl_cy),
         radius=0.18,
-        start_angle=180, end_angle=360,
+        start_angle=180,
+        end_angle=360,
         dxfattribs={"layer": layer, "elevation": z},
     )
     msp.add_line(
-        (wc_cx - 0.18, bowl_cy, z), (wc_cx + 0.18, bowl_cy, z),
+        (wc_cx - 0.18, bowl_cy, z),
+        (wc_cx + 0.18, bowl_cy, z),
         dxfattribs={"layer": layer},
     )
 
     # Wash basin — front-right corner (near the door)
     basin_cx = rx + rw - margin - 0.2
     basin_cy = ry + margin + 0.2
-    msp.add_circle((basin_cx, basin_cy), radius=0.18,
-                   dxfattribs={"layer": layer})
+    msp.add_circle((basin_cx, basin_cy), radius=0.18, dxfattribs={"layer": layer})
 
     # Bathtub — along rear wall if room is large enough (bathroom)
     if room.type == "bathroom" and rd >= 1.5 and rw >= 1.2:
@@ -593,11 +635,13 @@ def _furniture_toilet(msp, room, layer: str, z: float) -> None:
         bt_y = ry + rd - margin - bt_d
         _rect(msp, bt_x, bt_y, bt_w, bt_d, layer, z)
         # Drain circle
-        msp.add_circle((bt_x + bt_w / 2, bt_y + bt_d / 2), radius=0.07,
-                       dxfattribs={"layer": layer})
+        msp.add_circle(
+            (bt_x + bt_w / 2, bt_y + bt_d / 2), radius=0.07, dxfattribs={"layer": layer}
+        )
 
 
 # ── Study / Home Office ───────────────────────────────────────────────────────
+
 
 def _furniture_study(msp, room, layer: str, z: float) -> None:
     """
@@ -622,8 +666,7 @@ def _furniture_study(msp, room, layer: str, z: float) -> None:
     ret_w = desk_d
     ret_d = min(1.0, rd - 2 * margin - desk_d)
     if ret_d > 0.4:
-        _rect(msp, rx + rw - margin - ret_w,
-              desk_y - ret_d, ret_w, ret_d, layer, z)
+        _rect(msp, rx + rw - margin - ret_w, desk_y - ret_d, ret_w, ret_d, layer, z)
 
     # Chair (circle) in front of desk
     chair_r = 0.3
@@ -640,6 +683,7 @@ def _furniture_study(msp, room, layer: str, z: float) -> None:
 
 
 # ── Pooja Room ────────────────────────────────────────────────────────────────
+
 
 def _furniture_pooja(msp, room, layer: str, z: float) -> None:
     """
@@ -669,6 +713,7 @@ def _furniture_pooja(msp, room, layer: str, z: float) -> None:
 
 # ── Balcony ───────────────────────────────────────────────────────────────────
 
+
 def _furniture_balcony(msp, room, layer: str, z: float) -> None:
     """
     Two patio chairs (circles) along the rear wall and a small table (circle) between them.
@@ -694,6 +739,7 @@ def _furniture_balcony(msp, room, layer: str, z: float) -> None:
 
 
 # ── Utility / Laundry ────────────────────────────────────────────────────────
+
 
 def _furniture_utility(msp, room, layer: str, z: float) -> None:
     """
@@ -724,6 +770,7 @@ def _furniture_utility(msp, room, layer: str, z: float) -> None:
 
 # ── Servant Quarter ───────────────────────────────────────────────────────────
 
+
 def _furniture_servant_quarter(msp, room, layer: str, z: float) -> None:
     """
     Single bed (1.0 m wide) against the rear wall.
@@ -752,6 +799,7 @@ def _furniture_servant_quarter(msp, room, layer: str, z: float) -> None:
 
 # ── Parking / Garage ─────────────────────────────────────────────────────────
 
+
 def _furniture_parking(msp, room, layer: str, z: float) -> None:
     """
     Dashed stall outline marking the parking bay.
@@ -759,8 +807,12 @@ def _furniture_parking(msp, room, layer: str, z: float) -> None:
     """
     # Dashed stall outline
     ent = msp.add_lwpolyline(
-        [(room.x, room.y), (room.x + room.width, room.y),
-         (room.x + room.width, room.y + room.depth), (room.x, room.y + room.depth)],
+        [
+            (room.x, room.y),
+            (room.x + room.width, room.y),
+            (room.x + room.width, room.y + room.depth),
+            (room.x, room.y + room.depth),
+        ],
         close=True,
         dxfattribs={"layer": layer, "linetype": "DASHED"},
     )
@@ -807,8 +859,12 @@ def _furniture_gym(msp, room, layer: str, z: float) -> None:
     mat_d = max(0.5, tm_y - mat_y - 0.3)
     if mat_d > 0.5:
         ent = msp.add_lwpolyline(
-            [(mat_x, mat_y), (mat_x + mat_w, mat_y),
-             (mat_x + mat_w, mat_y + mat_d), (mat_x, mat_y + mat_d)],
+            [
+                (mat_x, mat_y),
+                (mat_x + mat_w, mat_y),
+                (mat_x + mat_w, mat_y + mat_d),
+                (mat_x, mat_y + mat_d),
+            ],
             close=True,
             dxfattribs={"layer": layer, "linetype": "DASHED"},
         )
@@ -818,22 +874,22 @@ def _furniture_gym(msp, room, layer: str, z: float) -> None:
 # ── Dispatch table ────────────────────────────────────────────────────────────
 
 _FURNITURE_DISPATCH = {
-    "bedroom":          _furniture_bedroom,
-    "master_bedroom":   _furniture_bedroom,
-    "living":           _furniture_living,
-    "dining":           _furniture_dining,
-    "kitchen":          _furniture_kitchen,
-    "toilet":           _furniture_toilet,
-    "bathroom":         _furniture_toilet,
-    "study":            _furniture_study,
-    "home_office":      _furniture_study,
-    "pooja":            _furniture_pooja,
-    "balcony":          _furniture_balcony,
-    "utility":          _furniture_utility,
-    "servant_quarter":  _furniture_servant_quarter,
-    "parking":          _furniture_parking,
-    "garage":           _furniture_parking,
-    "gym":              _furniture_gym,
+    "bedroom": _furniture_bedroom,
+    "master_bedroom": _furniture_bedroom,
+    "living": _furniture_living,
+    "dining": _furniture_dining,
+    "kitchen": _furniture_kitchen,
+    "toilet": _furniture_toilet,
+    "bathroom": _furniture_toilet,
+    "study": _furniture_study,
+    "home_office": _furniture_study,
+    "pooja": _furniture_pooja,
+    "balcony": _furniture_balcony,
+    "utility": _furniture_utility,
+    "servant_quarter": _furniture_servant_quarter,
+    "parking": _furniture_parking,
+    "garage": _furniture_parking,
+    "gym": _furniture_gym,
     # No furniture: staircase, passage, store_room (empty by design)
 }
 

@@ -41,29 +41,29 @@ from .models import Layout, PlotConfig
 #   col 0 = left side,                       col 2 = right side
 
 ZONE_GRID_ROAD_S = [
-    ["NW", "N",  "NE"],   # rear zone (y near plot_length)
-    ["W",  "C",  "E" ],   # middle zone
-    ["SW", "S",  "SE"],   # front zone (y near 0)
+    ["NW", "N", "NE"],  # rear zone (y near plot_length)
+    ["W", "C", "E"],  # middle zone
+    ["SW", "S", "SE"],  # front zone (y near 0)
 ]
 
 # Zone grid rotated for each road direction
 # For road N: y=0 is North, y=max is South → grid flips vertically and L/R swap
 ZONE_GRID_ROAD_N = [
-    ["SE", "S",  "SW"],
-    ["E",  "C",  "W" ],
-    ["NE", "N",  "NW"],
+    ["SE", "S", "SW"],
+    ["E", "C", "W"],
+    ["NE", "N", "NW"],
 ]
 
 ZONE_GRID_ROAD_E = [
-    ["NE", "E",  "SE"],
-    ["N",  "C",  "S" ],
-    ["NW", "W",  "SW"],
+    ["NE", "E", "SE"],
+    ["N", "C", "S"],
+    ["NW", "W", "SW"],
 ]
 
 ZONE_GRID_ROAD_W = [
-    ["SW", "W",  "NW"],
-    ["S",  "C",  "N" ],
-    ["SE", "E",  "NE"],
+    ["SW", "W", "NW"],
+    ["S", "C", "N"],
+    ["SE", "E", "NE"],
 ]
 
 ZONE_GRIDS: dict[str, list[list[str]]] = {
@@ -82,71 +82,73 @@ ZONE_GRIDS: dict[str, list[list[str]]] = {
 VASTU_RULES: dict[str, dict] = {
     "NE": {
         "preferred": ["pooja", "utility", "balcony", "staircase"],
-        "avoid":     ["bedroom", "parking"],
-        "prohibit":  ["kitchen", "toilet"],
-        "name":      "Ishanya (NE)",
-        "notes":     "Sacred zone — ideal for Pooja, open space, water",
+        "avoid": ["bedroom", "parking"],
+        "prohibit": ["kitchen", "toilet"],
+        "name": "Ishanya (NE)",
+        "notes": "Sacred zone — ideal for Pooja, open space, water",
     },
     "E": {
         "preferred": ["bedroom", "dining", "bathroom", "toilet"],
-        "avoid":     [],
-        "prohibit":  [],
-        "name":      "Purva (E)",
-        "notes":     "East — sunrise zone, good for bedrooms and dining",
+        "avoid": [],
+        "prohibit": [],
+        "name": "Purva (E)",
+        "notes": "East — sunrise zone, good for bedrooms and dining",
     },
     "SE": {
         "preferred": ["kitchen"],
-        "avoid":     ["bedroom", "pooja"],
-        "prohibit":  ["toilet"],
-        "name":      "Agni (SE)",
-        "notes":     "Fire zone — kitchen must be here or NW",
+        "avoid": ["bedroom", "pooja"],
+        "prohibit": ["toilet"],
+        "name": "Agni (SE)",
+        "notes": "Fire zone — kitchen must be here or NW",
     },
     "S": {
         "preferred": ["bedroom", "parking"],
-        "avoid":     ["pooja", "living"],
-        "prohibit":  [],
-        "name":      "Yama (S)",
-        "notes":     "South — guest bedroom, parking; avoid main entrance",
+        "avoid": ["pooja", "living"],
+        "prohibit": [],
+        "name": "Yama (S)",
+        "notes": "South — guest bedroom, parking; avoid main entrance",
     },
     "SW": {
         "preferred": ["bedroom"],
-        "avoid":     ["pooja", "balcony"],
-        "prohibit":  ["toilet", "kitchen"],
-        "name":      "Nairutya (SW)",
-        "notes":     "Most stable corner — master bedroom, heavy storage",
+        "avoid": ["pooja", "balcony"],
+        "prohibit": ["toilet", "kitchen"],
+        "name": "Nairutya (SW)",
+        "notes": "Most stable corner — master bedroom, heavy storage",
     },
     "W": {
         "preferred": ["bedroom", "study", "dining"],
-        "avoid":     [],
-        "prohibit":  [],
-        "name":      "Varuna (W)",
-        "notes":     "West — children's bedroom, study",
+        "avoid": [],
+        "prohibit": [],
+        "name": "Varuna (W)",
+        "notes": "West — children's bedroom, study",
     },
     "NW": {
         "preferred": ["bedroom", "toilet", "utility", "parking"],
-        "avoid":     [],
-        "prohibit":  [],
-        "name":      "Vayu (NW)",
-        "notes":     "Air zone — guest room, toilet, storage acceptable",
+        "avoid": [],
+        "prohibit": [],
+        "name": "Vayu (NW)",
+        "notes": "Air zone — guest room, toilet, storage acceptable",
     },
     "N": {
         "preferred": ["living", "study", "dining"],
-        "avoid":     ["kitchen", "toilet"],
-        "prohibit":  [],
-        "name":      "Kubera (N)",
-        "notes":     "Wealth direction — living, study, treasury",
+        "avoid": ["kitchen", "toilet"],
+        "prohibit": [],
+        "name": "Kubera (N)",
+        "notes": "Wealth direction — living, study, treasury",
     },
     "C": {
         "preferred": ["utility"],
-        "avoid":     ["bedroom", "kitchen"],
-        "prohibit":  ["toilet"],
-        "name":      "Brahmasthan (Centre)",
-        "notes":     "Sacred centre — should remain open or light use only",
+        "avoid": ["bedroom", "kitchen"],
+        "prohibit": ["toilet"],
+        "name": "Brahmasthan (Centre)",
+        "notes": "Sacred centre — should remain open or light use only",
     },
 }
 
 
-def _get_zone(cx: float, cy: float, plot_w: float, plot_l: float, road_side: str) -> str:
+def _get_zone(
+    cx: float, cy: float, plot_w: float, plot_l: float, road_side: str
+) -> str:
     """Map a room centre point to one of 9 Vastu zones."""
     grid = ZONE_GRIDS.get(road_side.upper(), ZONE_GRID_ROAD_S)
 
@@ -169,7 +171,9 @@ def _get_zone(cx: float, cy: float, plot_w: float, plot_l: float, road_side: str
     return grid[row][col]
 
 
-def check_vastu(layout: Layout, cfg: PlotConfig, road_side: str = "S") -> tuple[list[str], list[str]]:
+def check_vastu(
+    layout: Layout, cfg: PlotConfig, road_side: str = "S"
+) -> tuple[list[str], list[str]]:
     """
     Check Vastu compliance for a layout.
 

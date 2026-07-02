@@ -3,19 +3,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .models import ComplianceResult, Layout, PlotConfig, RoomType
+from .models import ComplianceResult, Layout, PlotConfig
 
 _RULES_PATH = Path(__file__).parent.parent / "config" / "compliance_rules.json"
-_CITY_PATH  = Path(__file__).parent.parent / "config" / "city_rules.json"
+_CITY_PATH = Path(__file__).parent.parent / "config" / "city_rules.json"
 _CITIES_DIR = Path(__file__).parent.parent / "config" / "cities"
 
 _MUNICIPALITY_MAP: dict[str, str] = {
-    "Chennai (CMDA)":     "chennai_cmda.json",
-    "Bangalore (BBMP)":   "bangalore_bbmp.json",
-    "Hyderabad (GHMC)":   "hyderabad_ghmc.json",
-    "Pune (PMC)":         "pune_pmc.json",
-    "Mumbai (MCGM)":      "mumbai_mcgm.json",
-    "Generic (NBC)":      "nbc_generic.json",
+    "Chennai (CMDA)": "chennai_cmda.json",
+    "Bangalore (BBMP)": "bangalore_bbmp.json",
+    "Hyderabad (GHMC)": "hyderabad_ghmc.json",
+    "Pune (PMC)": "pune_pmc.json",
+    "Mumbai (MCGM)": "mumbai_mcgm.json",
+    "Generic (NBC)": "nbc_generic.json",
 }
 
 
@@ -65,7 +65,9 @@ def get_city_far(city: str, road_width_m: float, city_data: dict) -> float | Non
     return None
 
 
-def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> ComplianceResult:
+def check(
+    layout: Layout, cfg: PlotConfig, rules: dict | None = None
+) -> ComplianceResult:
     if rules is None:
         rules = load_rules()
 
@@ -76,11 +78,15 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
 
     # --- Minimum plot dimensions ---
     min_length = rules["min_plot_length_m"]
-    min_width  = rules["min_plot_width_m"]
+    min_width = rules["min_plot_width_m"]
     if cfg.plot_length < min_length:
-        violations.append(f"Plot length {cfg.plot_length} m is below minimum {min_length} m")
+        violations.append(
+            f"Plot length {cfg.plot_length} m is below minimum {min_length} m"
+        )
     if cfg.plot_width < min_width:
-        violations.append(f"Plot width {cfg.plot_width} m is below minimum {min_width} m")
+        violations.append(
+            f"Plot width {cfg.plot_width} m is below minimum {min_width} m"
+        )
 
     all_floors = [layout.ground_floor, layout.first_floor]
     if layout.second_floor is not None:
@@ -91,11 +97,28 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
 
     # ── Stilt / basement habitable room checks ───────────────────────────────
     # Stilt floor: no habitable spaces of any kind
-    stilt_banned = {"living", "bedroom", "master_bedroom", "kitchen", "dining",
-                    "study", "home_office", "gym", "servant_quarter"}
+    stilt_banned = {
+        "living",
+        "bedroom",
+        "master_bedroom",
+        "kitchen",
+        "dining",
+        "study",
+        "home_office",
+        "gym",
+        "servant_quarter",
+    }
     # Basement: per NBC — habitable rooms not allowed, but gym/store/utility OK
-    basement_banned = {"living", "bedroom", "master_bedroom", "kitchen", "dining",
-                       "study", "home_office", "servant_quarter"}
+    basement_banned = {
+        "living",
+        "bedroom",
+        "master_bedroom",
+        "kitchen",
+        "dining",
+        "study",
+        "home_office",
+        "servant_quarter",
+    }
 
     if getattr(layout.ground_floor, "floor_type", "ground") == "stilt":
         for room in layout.ground_floor.rooms:
@@ -115,45 +138,53 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
         warnings.append("G+2 building: structural engineer review required (NBC §6).")
 
     # --- Minimum/maximum room areas ---
-    min_bed     = rules["min_bedroom_sqm"]
-    min_bed_w   = rules["min_bedroom_width_m"]
-    min_kit     = rules["min_kitchen_sqm"]
-    min_kit_w   = rules["min_kitchen_width_m"]
-    max_kit     = rules.get("max_kitchen_sqm", 15.0)
-    min_wc      = rules["min_toilet_sqm"]
-    min_wc_w    = rules["min_toilet_width_m"]
-    max_wc      = rules.get("max_toilet_sqm", 6.0)
+    min_bed = rules["min_bedroom_sqm"]
+    min_bed_w = rules["min_bedroom_width_m"]
+    min_kit = rules["min_kitchen_sqm"]
+    min_kit_w = rules["min_kitchen_width_m"]
+    max_kit = rules.get("max_kitchen_sqm", 15.0)
+    min_wc = rules["min_toilet_sqm"]
+    min_wc_w = rules["min_toilet_width_m"]
+    max_wc = rules.get("max_toilet_sqm", 6.0)
     min_wc_only = rules.get("min_wc_only_sqm", 1.1)
     max_wc_only = rules.get("max_wc_only_sqm", 2.5)
     min_wc_only_w = rules.get("min_wc_only_width_m", 0.9)
-    min_bath_m  = rules.get("min_bathroom_master_sqm", 4.5)
-    max_bath_m  = rules.get("max_bathroom_master_sqm", 9.0)
+    min_bath_m = rules.get("min_bathroom_master_sqm", 4.5)
+    max_bath_m = rules.get("max_bathroom_master_sqm", 9.0)
     min_bath_m_w = rules.get("min_bathroom_master_width_m", 1.8)
-    max_pooja   = rules.get("max_pooja_sqm", 4.5)
+    max_pooja = rules.get("max_pooja_sqm", 4.5)
     min_pooja_w = rules.get("min_pooja_width_m", 0.9)
-    min_p4w     = rules.get("min_parking_4w_sqm", 12.5)
-    min_p4w_w   = rules.get("min_parking_4w_width_m", 2.5)
-    max_p4w     = rules.get("max_parking_4w_sqm", 30.0)
-    min_p2w     = rules.get("min_parking_2w_sqm", 3.0)
-    min_p2w_w   = rules.get("min_parking_2w_width_m", 1.2)
-    max_p2w     = rules.get("max_parking_2w_sqm", 9.0)
+    min_p4w = rules.get("min_parking_4w_sqm", 12.5)
+    min_p4w_w = rules.get("min_parking_4w_width_m", 2.5)
+    max_p4w = rules.get("max_parking_4w_sqm", 30.0)
+    min_p2w = rules.get("min_parking_2w_sqm", 3.0)
+    min_p2w_w = rules.get("min_parking_2w_width_m", 1.2)
+    max_p2w = rules.get("max_parking_2w_sqm", 9.0)
     min_stair_w = rules["min_stair_width_mm"] / 1000
 
-    min_living     = rules.get("min_living_sqm", 9.5)
-    min_living_w   = rules.get("min_living_width_m", 2.4)
-    min_win_ratio  = rules.get("min_window_to_floor_ratio", 0.1)
-    min_bath_vent  = rules.get("min_bath_ventilation_sqm", 0.37)
-    min_kit_win    = rules.get("min_kitchen_window_sqm", 1.0)
+    min_living = rules.get("min_living_sqm", 9.5)
+    min_living_w = rules.get("min_living_width_m", 2.4)
+    min_win_ratio = rules.get("min_window_to_floor_ratio", 0.1)
+    min_bath_vent = rules.get("min_bath_ventilation_sqm", 0.37)
+    min_kit_win = rules.get("min_kitchen_window_sqm", 1.0)
 
     # Collect master_bedroom and toilet room sets for adjacency check
     master_beds = [r for r in all_rooms if r.type == "master_bedroom"]
-    bath_types  = {"toilet", "wc_only", "bathroom_master"}
-    bath_rooms  = [r for r in all_rooms if r.type in bath_types]
+    bath_types = {"toilet", "wc_only", "bathroom_master"}
+    bath_rooms = [r for r in all_rooms if r.type in bath_types]
 
     for room in all_rooms:
         if room.type in ("bedroom", "master_bedroom"):
-            min_b = rules.get("min_master_bedroom_sqm", 12.0) if room.type == "master_bedroom" else min_bed
-            min_bw = rules.get("min_master_bedroom_width_m", 3.0) if room.type == "master_bedroom" else min_bed_w
+            min_b = (
+                rules.get("min_master_bedroom_sqm", 12.0)
+                if room.type == "master_bedroom"
+                else min_bed
+            )
+            min_bw = (
+                rules.get("min_master_bedroom_width_m", 3.0)
+                if room.type == "master_bedroom"
+                else min_bed_w
+            )
             if room.area < min_b:
                 violations.append(
                     f"{room.name}: {room.area:.1f} sqm < {min_b} sqm minimum (NBC)"
@@ -270,7 +301,9 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                     f"{room.name}: {room.area:.1f} sqm < {min_p4w} sqm minimum for car parking (NBC 2.5 m × 5.0 m)"
                 )
             if room.area > max_p4w:
-                warnings.append(f"{room.name}: {room.area:.1f} sqm > {max_p4w} sqm — unusually large car bay")
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_p4w} sqm — unusually large car bay"
+                )
             if min(room.width, room.depth) < min_p4w_w:
                 violations.append(
                     f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_p4w_w} m minimum (car)"
@@ -282,7 +315,9 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
                     f"{room.name}: {room.area:.1f} sqm < {min_p2w} sqm minimum for 2-wheeler parking"
                 )
             if room.area > max_p2w:
-                warnings.append(f"{room.name}: {room.area:.1f} sqm > {max_p2w} sqm — consider splitting into separate bays")
+                warnings.append(
+                    f"{room.name}: {room.area:.1f} sqm > {max_p2w} sqm — consider splitting into separate bays"
+                )
             if min(room.width, room.depth) < min_p2w_w:
                 violations.append(
                     f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_p2w_w} m minimum (2-wheeler)"
@@ -296,8 +331,12 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
             # Rooms are adjacent if they share an edge (within tol)
             x_overlap = mb.x < b.x + b.width + tol and b.x < mb.x + mb.width + tol
             y_overlap = mb.y < b.y + b.depth + tol and b.y < mb.y + mb.depth + tol
-            x_touch   = (abs(mb.x - (b.x + b.width)) < tol or abs(b.x - (mb.x + mb.width)) < tol)
-            y_touch   = (abs(mb.y - (b.y + b.depth)) < tol or abs(b.y - (mb.y + mb.depth)) < tol)
+            x_touch = (
+                abs(mb.x - (b.x + b.width)) < tol or abs(b.x - (mb.x + mb.width)) < tol
+            )
+            y_touch = (
+                abs(mb.y - (b.y + b.depth)) < tol or abs(b.y - (mb.y + mb.depth)) < tol
+            )
             if (x_touch and y_overlap) or (y_touch and x_overlap):
                 has_attached = True
                 break
@@ -325,23 +364,31 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     # --- Floor coverage ---
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         from shapely.geometry import Polygon as _Polygon
+
         plot_poly = _Polygon(cfg.plot_corners)
         plot_area = plot_poly.area
-        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        avg_sb = (
+            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+        ) / 4
         inset = plot_poly.buffer(-avg_sb, join_style=2)
         footprint = inset.area if not inset.is_empty else 0.0
-    elif cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+    elif (
+        cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0
+    ):
         from app.engine.generator import compute_l_shaped_polygon
+
         l_poly = compute_l_shaped_polygon(cfg)
         plot_area = l_poly.area
-        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        avg_sb = (
+            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+        ) / 4
         inset = l_poly.buffer(-avg_sb, join_style=2)
         footprint = inset.area if not inset.is_empty else 0.0
     else:
-        buildable_w = cfg.plot_width  - cfg.setback_left  - cfg.setback_right
+        buildable_w = cfg.plot_width - cfg.setback_left - cfg.setback_right
         buildable_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
-        footprint   = buildable_w * buildable_d
-        plot_area   = cfg.plot_width * cfg.plot_length
+        footprint = buildable_w * buildable_d
+        plot_area = cfg.plot_width * cfg.plot_length
     coverage_pct = (footprint / plot_area) * 100
 
     max_cov = muni_rules.get("max_ground_coverage_pct", rules["max_floor_coverage_pct"])
@@ -353,11 +400,13 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
 
     # --- FAR check (municipality-aware, falls back to city_rules table) ---
     # Count habitable floors (basement excluded per most Indian bylaws)
-    habitable_floors = sum([
-        1,  # GF or stilt
-        1,  # FF (always)
-        1 if layout.second_floor is not None else 0,
-    ])
+    habitable_floors = sum(
+        [
+            1,  # GF or stilt
+            1,  # FF (always)
+            1 if layout.second_floor is not None else 0,
+        ]
+    )
     total_built = footprint * habitable_floors
     # Municipality-specific FAR takes priority; city_rules road-width table is secondary
     muni_far = muni_rules.get("max_far")
@@ -382,32 +431,43 @@ def check(layout: Layout, cfg: PlotConfig, rules: dict | None = None) -> Complia
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         # Derive boundary from the same Shapely inset used by _quad_floor_plate
         from shapely.geometry import Polygon as _Polygon
+
         _poly = _Polygon(cfg.plot_corners)
-        _avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        _avg_sb = (
+            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+        ) / 4
         _inset = _poly.buffer(-(_avg_sb + ewt), join_style="mitre")
         if _inset.is_empty:
             violations.append("Plot too small after setbacks — no buildable area")
-            return ComplianceResult(passed=False, violations=violations, warnings=warnings)
+            return ComplianceResult(
+                passed=False, violations=violations, warnings=warnings
+            )
         min_x, min_y, max_x, max_y = _inset.bounds
-    elif cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+    elif (
+        cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0
+    ):
         # L-shaped uses the same rectangular setback boundary as the floor plate.
         # The cutout zone is handled by _remove_cutout_overlap in generator.py.
-        min_x = cfg.setback_left  + ewt
-        max_x = cfg.plot_width    - cfg.setback_right - ewt
+        min_x = cfg.setback_left + ewt
+        max_x = cfg.plot_width - cfg.setback_right - ewt
         min_y = cfg.setback_front + ewt
-        max_y = cfg.plot_length   - cfg.setback_rear  - ewt
+        max_y = cfg.plot_length - cfg.setback_rear - ewt
     else:
-        min_x = cfg.setback_left  + ewt
-        max_x = cfg.plot_width    - cfg.setback_right - ewt
+        min_x = cfg.setback_left + ewt
+        max_x = cfg.plot_width - cfg.setback_right - ewt
         min_y = cfg.setback_front + ewt
-        max_y = cfg.plot_length   - cfg.setback_rear  - ewt
-    tol   = 0.005  # 5 mm floating-point tolerance
-    basement_rooms = set(r.id for r in (layout.basement_floor.rooms if layout.basement_floor else []))
+        max_y = cfg.plot_length - cfg.setback_rear - ewt
+    tol = 0.005  # 5 mm floating-point tolerance
+    basement_rooms = set(
+        r.id for r in (layout.basement_floor.rooms if layout.basement_floor else [])
+    )
     for room in all_rooms:
         if room.id in basement_rooms:
             continue  # basement has no surface setbacks
         if room.x < min_x - tol or room.x + room.width > max_x + tol:
-            violations.append(f"{room.name} extends outside horizontal setback boundary")
+            violations.append(
+                f"{room.name} extends outside horizontal setback boundary"
+            )
         if room.y < min_y - tol or room.y + room.depth > max_y + tol:
             violations.append(f"{room.name} extends outside vertical setback boundary")
 

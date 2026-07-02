@@ -11,6 +11,7 @@ Produces Indian construction drawing standard output:
 - 8-point compass north arrow
 - Bordered title block with area schedule
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 # Unit conversion
 # ---------------------------------------------------------------------------
 
+
 def metres_to_ftin(m: float) -> str:
     """Convert metres to feet-inches string. e.g. 3.048 → \"10'-0\""""
     total_inches = m / 0.0254
@@ -43,15 +45,17 @@ def metres_to_ftin(m: float) -> str:
 # Opening data class
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Opening:
     """An opening (door / window / ventilator) on a wall segment."""
-    wall_key: tuple          # (round(x1,2), round(y1,2), round(x2,2), round(y2,2))
-    t_start: float           # normalised position along wall [0..1]
+
+    wall_key: tuple  # (round(x1,2), round(y1,2), round(x2,2), round(y2,2))
+    t_start: float  # normalised position along wall [0..1]
     t_end: float
-    kind: str                # "door" | "window" | "ventilator"
-    width: float             # metres
-    wall_length: float       # used to convert t back to absolute coords
+    kind: str  # "door" | "window" | "ventilator"
+    width: float  # metres
+    wall_length: float  # used to convert t back to absolute coords
     # centre point in absolute coords (set by collect_openings)
     cx: float = 0.0
     cy: float = 0.0
@@ -62,7 +66,10 @@ class Opening:
 # Gap subtraction helper
 # ---------------------------------------------------------------------------
 
-def _gap_subtract(total: float, gaps: list[tuple[float, float]]) -> list[tuple[float, float]]:
+
+def _gap_subtract(
+    total: float, gaps: list[tuple[float, float]]
+) -> list[tuple[float, float]]:
     """Return solid segments of [0..total] after removing all gap intervals."""
     gaps_sorted = sorted(gaps)
     segments: list[tuple[float, float]] = []
@@ -84,7 +91,7 @@ def _gap_subtract(total: float, gaps: list[tuple[float, float]]) -> list[tuple[f
 
 _HABITABLE = {"living", "bedroom", "master_bedroom", "kitchen", "study", "dining"}
 _TOILET_TYPES = {"toilet", "bathroom", "utility"}
-_DOOR_WIDTH = 0.9   # metres
+_DOOR_WIDTH = 0.9  # metres
 
 
 def collect_openings(
@@ -138,9 +145,19 @@ def collect_openings(
                         wall_len = bld_d
                         t_c = (my - bld_y) / wall_len
                         half_t = (_DOOR_WIDTH / 2) / wall_len
-                        _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                                     "door", _DOOR_WIDTH, wall_len,
-                                     cx=wx, cy=my, is_vertical_wall=True))
+                        _add(
+                            Opening(
+                                wk,
+                                max(0, t_c - half_t),
+                                min(1, t_c + half_t),
+                                "door",
+                                _DOOR_WIDTH,
+                                wall_len,
+                                cx=wx,
+                                cy=my,
+                                is_vertical_wall=True,
+                            )
+                        )
 
             # Vertical shared wall: rb right ≈ ra left
             elif abs(rb.x + rb.width - ra.x) < 0.05:
@@ -156,9 +173,19 @@ def collect_openings(
                         wall_len = bld_d
                         t_c = (my - bld_y) / wall_len
                         half_t = (_DOOR_WIDTH / 2) / wall_len
-                        _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                                     "door", _DOOR_WIDTH, wall_len,
-                                     cx=wx, cy=my, is_vertical_wall=True))
+                        _add(
+                            Opening(
+                                wk,
+                                max(0, t_c - half_t),
+                                min(1, t_c + half_t),
+                                "door",
+                                _DOOR_WIDTH,
+                                wall_len,
+                                cx=wx,
+                                cy=my,
+                                is_vertical_wall=True,
+                            )
+                        )
 
             # Horizontal shared wall: ra top ≈ rb bottom
             if abs(ra.y + ra.depth - rb.y) < 0.05:
@@ -174,9 +201,19 @@ def collect_openings(
                         wall_len = bld_w
                         t_c = (mx - bld_x) / wall_len
                         half_t = (_DOOR_WIDTH / 2) / wall_len
-                        _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                                     "door", _DOOR_WIDTH, wall_len,
-                                     cx=mx, cy=wy, is_vertical_wall=False))
+                        _add(
+                            Opening(
+                                wk,
+                                max(0, t_c - half_t),
+                                min(1, t_c + half_t),
+                                "door",
+                                _DOOR_WIDTH,
+                                wall_len,
+                                cx=mx,
+                                cy=wy,
+                                is_vertical_wall=False,
+                            )
+                        )
 
             elif abs(rb.y + rb.depth - ra.y) < 0.05:
                 x_lo = max(ra.x, rb.x)
@@ -191,9 +228,19 @@ def collect_openings(
                         wall_len = bld_w
                         t_c = (mx - bld_x) / wall_len
                         half_t = (_DOOR_WIDTH / 2) / wall_len
-                        _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                                     "door", _DOOR_WIDTH, wall_len,
-                                     cx=mx, cy=wy, is_vertical_wall=False))
+                        _add(
+                            Opening(
+                                wk,
+                                max(0, t_c - half_t),
+                                min(1, t_c + half_t),
+                                "door",
+                                _DOOR_WIDTH,
+                                wall_len,
+                                cx=mx,
+                                cy=wy,
+                                is_vertical_wall=False,
+                            )
+                        )
 
     # ── Windows (habitable rooms on exterior) ────────────────────────────────
     for room in rooms:
@@ -204,35 +251,77 @@ def collect_openings(
         win_w_h = min(1.2, room.width * 0.6)
         win_w_v = min(1.2, room.depth * 0.6)
 
-        if abs(room.y - bld_y) < 0.05:            # front wall
+        if abs(room.y - bld_y) < 0.05:  # front wall
             wk = _hwall_key(bld_y)
             wall_len = bld_w
             t_c = (rcx - bld_x) / wall_len
             half_t = (win_w_h / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "window", win_w_h, wall_len, cx=rcx, cy=bld_y))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "window",
+                    win_w_h,
+                    wall_len,
+                    cx=rcx,
+                    cy=bld_y,
+                )
+            )
         elif abs(room.y + room.depth - by2) < 0.05:  # rear wall
             wk = _hwall_key(by2)
             wall_len = bld_w
             t_c = (rcx - bld_x) / wall_len
             half_t = (win_w_h / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "window", win_w_h, wall_len, cx=rcx, cy=by2))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "window",
+                    win_w_h,
+                    wall_len,
+                    cx=rcx,
+                    cy=by2,
+                )
+            )
 
-        if abs(room.x - bld_x) < 0.05:            # left wall
+        if abs(room.x - bld_x) < 0.05:  # left wall
             wk = _vwall_key(bld_x)
             wall_len = bld_d
             t_c = (rcy - bld_y) / wall_len
             half_t = (win_w_v / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "window", win_w_v, wall_len, cx=bld_x, cy=rcy, is_vertical_wall=True))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "window",
+                    win_w_v,
+                    wall_len,
+                    cx=bld_x,
+                    cy=rcy,
+                    is_vertical_wall=True,
+                )
+            )
         elif abs(room.x + room.width - bx2) < 0.05:  # right wall
             wk = _vwall_key(bx2)
             wall_len = bld_d
             t_c = (rcy - bld_y) / wall_len
             half_t = (win_w_v / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "window", win_w_v, wall_len, cx=bx2, cy=rcy, is_vertical_wall=True))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "window",
+                    win_w_v,
+                    wall_len,
+                    cx=bx2,
+                    cy=rcy,
+                    is_vertical_wall=True,
+                )
+            )
 
     # ── Ventilators (toilet/bathroom on exterior) ────────────────────────────
     vent_w = 0.6
@@ -247,29 +336,71 @@ def collect_openings(
             wall_len = bld_w
             t_c = (rcx - bld_x) / wall_len
             half_t = (vent_w / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "ventilator", vent_w, wall_len, cx=rcx, cy=bld_y))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "ventilator",
+                    vent_w,
+                    wall_len,
+                    cx=rcx,
+                    cy=bld_y,
+                )
+            )
         elif abs(room.y + room.depth - by2) < 0.05:
             wk = _hwall_key(by2)
             wall_len = bld_w
             t_c = (rcx - bld_x) / wall_len
             half_t = (vent_w / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "ventilator", vent_w, wall_len, cx=rcx, cy=by2))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "ventilator",
+                    vent_w,
+                    wall_len,
+                    cx=rcx,
+                    cy=by2,
+                )
+            )
         if abs(room.x - bld_x) < 0.05:
             wk = _vwall_key(bld_x)
             wall_len = bld_d
             t_c = (rcy - bld_y) / wall_len
             half_t = (vent_w / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "ventilator", vent_w, wall_len, cx=bld_x, cy=rcy, is_vertical_wall=True))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "ventilator",
+                    vent_w,
+                    wall_len,
+                    cx=bld_x,
+                    cy=rcy,
+                    is_vertical_wall=True,
+                )
+            )
         elif abs(room.x + room.width - bx2) < 0.05:
             wk = _vwall_key(bx2)
             wall_len = bld_d
             t_c = (rcy - bld_y) / wall_len
             half_t = (vent_w / 2) / wall_len
-            _add(Opening(wk, max(0, t_c - half_t), min(1, t_c + half_t),
-                         "ventilator", vent_w, wall_len, cx=bx2, cy=rcy, is_vertical_wall=True))
+            _add(
+                Opening(
+                    wk,
+                    max(0, t_c - half_t),
+                    min(1, t_c + half_t),
+                    "ventilator",
+                    vent_w,
+                    wall_len,
+                    cx=bx2,
+                    cy=rcy,
+                    is_vertical_wall=True,
+                )
+            )
 
     # Sort each wall's openings by t_start
     for ops in result.values():
@@ -282,7 +413,10 @@ def collect_openings(
 # Wall drawing with breaks
 # ---------------------------------------------------------------------------
 
-def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: float) -> None:
+
+def draw_wall_with_breaks(
+    msp, wall, openings: list[Opening], layer: str, z: float
+) -> None:
     """Draw double-line wall leaving gaps at opening positions."""
     from ezdxf import colors as _c  # noqa: F401 — imported for side-effects in ezdxf internals
 
@@ -292,7 +426,7 @@ def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: flo
     if length < 0.001:
         return
 
-    px = -dy / length   # perpendicular unit vector
+    px = -dy / length  # perpendicular unit vector
     py = dx / length
     h = wall.thickness / 2
 
@@ -337,6 +471,7 @@ def draw_wall_with_breaks(msp, wall, openings: list[Opening], layer: str, z: flo
 # Door symbol
 # ---------------------------------------------------------------------------
 
+
 def draw_door(
     msp,
     cx: float,
@@ -352,33 +487,58 @@ def draw_door(
         # Door leaf runs perpendicular (horizontal) into room
         hinge_y = cy - width / 2 if swing_left else cy + width / 2
         leaf_end_x = cx + width if swing_left else cx - width
-        msp.add_line((cx, hinge_y, z), (leaf_end_x, hinge_y, z), dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_line(
+            (cx, hinge_y, z),
+            (leaf_end_x, hinge_y, z),
+            dxfattribs={"layer": layer, "lineweight": 25},
+        )
         if swing_left:
-            msp.add_arc(center=(cx, hinge_y), radius=width,
-                        start_angle=0, end_angle=90,
-                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
+            msp.add_arc(
+                center=(cx, hinge_y),
+                radius=width,
+                start_angle=0,
+                end_angle=90,
+                dxfattribs={"layer": layer, "elevation": z, "lineweight": 25},
+            )
         else:
-            msp.add_arc(center=(cx, hinge_y), radius=width,
-                        start_angle=90, end_angle=180,
-                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
+            msp.add_arc(
+                center=(cx, hinge_y),
+                radius=width,
+                start_angle=90,
+                end_angle=180,
+                dxfattribs={"layer": layer, "elevation": z, "lineweight": 25},
+            )
     else:
         # Door leaf runs perpendicular (vertical) into room
         hinge_x = cx - width / 2 if swing_left else cx + width / 2
         leaf_end_y = cy + width if swing_left else cy - width
-        msp.add_line((hinge_x, cy, z), (hinge_x, leaf_end_y, z), dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_line(
+            (hinge_x, cy, z),
+            (hinge_x, leaf_end_y, z),
+            dxfattribs={"layer": layer, "lineweight": 25},
+        )
         if swing_left:
-            msp.add_arc(center=(hinge_x, cy), radius=width,
-                        start_angle=0, end_angle=90,
-                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
+            msp.add_arc(
+                center=(hinge_x, cy),
+                radius=width,
+                start_angle=0,
+                end_angle=90,
+                dxfattribs={"layer": layer, "elevation": z, "lineweight": 25},
+            )
         else:
-            msp.add_arc(center=(hinge_x, cy), radius=width,
-                        start_angle=270, end_angle=360,
-                        dxfattribs={"layer": layer, "elevation": z, "lineweight": 25})
+            msp.add_arc(
+                center=(hinge_x, cy),
+                radius=width,
+                start_angle=270,
+                end_angle=360,
+                dxfattribs={"layer": layer, "elevation": z, "lineweight": 25},
+            )
 
 
 # ---------------------------------------------------------------------------
 # Window symbol
 # ---------------------------------------------------------------------------
+
 
 def draw_window(
     msp,
@@ -423,6 +583,7 @@ def draw_window(
 # Ventilator symbol
 # ---------------------------------------------------------------------------
 
+
 def draw_ventilator(
     msp,
     cx: float,
@@ -438,16 +599,23 @@ def draw_ventilator(
 
     for off in offsets:
         if is_horizontal:
-            msp.add_line((cx - hw, cy + off, z), (cx + hw, cy + off, z),
-                         dxfattribs={"layer": layer, "lineweight": 25})
+            msp.add_line(
+                (cx - hw, cy + off, z),
+                (cx + hw, cy + off, z),
+                dxfattribs={"layer": layer, "lineweight": 25},
+            )
         else:
-            msp.add_line((cx + off, cy - hw, z), (cx + off, cy + hw, z),
-                         dxfattribs={"layer": layer, "lineweight": 25})
+            msp.add_line(
+                (cx + off, cy - hw, z),
+                (cx + off, cy + hw, z),
+                dxfattribs={"layer": layer, "lineweight": 25},
+            )
 
 
 # ---------------------------------------------------------------------------
 # Staircase
 # ---------------------------------------------------------------------------
+
 
 def draw_staircase(msp, room, layer: str, z: float) -> None:
     """Draw staircase treads, diagonal cut line, and UP arrow."""
@@ -458,19 +626,31 @@ def draw_staircase(msp, room, layer: str, z: float) -> None:
         tread_count = max(2, int(rd / 0.25))
         for i in range(1, tread_count):
             y = ry + i * (rd / tread_count)
-            msp.add_line((rx, y, z), (rx + rw, y, z), dxfattribs={"layer": layer, "lineweight": 25})
+            msp.add_line(
+                (rx, y, z),
+                (rx + rw, y, z),
+                dxfattribs={"layer": layer, "lineweight": 25},
+            )
     else:
         # Stairs run E-W; treads are vertical lines
         tread_count = max(2, int(rw / 0.25))
         for i in range(1, tread_count):
             x = rx + i * (rw / tread_count)
-            msp.add_line((x, ry, z), (x, ry + rd, z), dxfattribs={"layer": layer, "lineweight": 25})
+            msp.add_line(
+                (x, ry, z),
+                (x, ry + rd, z),
+                dxfattribs={"layer": layer, "lineweight": 25},
+            )
 
     # Diagonal cut line (zig-zag at ~60% height)
     mid_y = ry + rd * 0.6
     msp.add_lwpolyline(
-        [(rx, mid_y), (rx + rw * 0.4, mid_y + 0.15),
-         (rx + rw * 0.6, mid_y - 0.15), (rx + rw, mid_y)],
+        [
+            (rx, mid_y),
+            (rx + rw * 0.4, mid_y + 0.15),
+            (rx + rw * 0.6, mid_y - 0.15),
+            (rx + rw, mid_y),
+        ],
         dxfattribs={"layer": layer, "elevation": z, "lineweight": 25},
     )
 
@@ -478,8 +658,11 @@ def draw_staircase(msp, room, layer: str, z: float) -> None:
     arrow_x = rx + rw / 2
     arrow_y_start = ry + 0.15
     arrow_y_end = ry + rd * 0.55
-    msp.add_line((arrow_x, arrow_y_start, z), (arrow_x, arrow_y_end, z),
-                 dxfattribs={"layer": layer, "lineweight": 25})
+    msp.add_line(
+        (arrow_x, arrow_y_start, z),
+        (arrow_x, arrow_y_end, z),
+        dxfattribs={"layer": layer, "lineweight": 25},
+    )
     msp.add_mtext(
         "UP",
         dxfattribs={
@@ -494,6 +677,7 @@ def draw_staircase(msp, room, layer: str, z: float) -> None:
 # ---------------------------------------------------------------------------
 # Dimension chain (feet-inches)
 # ---------------------------------------------------------------------------
+
 
 def draw_dimension_chain(
     msp,
@@ -579,6 +763,7 @@ def draw_dimension_chain(
 # North arrow (8-point compass rose)
 # ---------------------------------------------------------------------------
 
+
 def draw_north_arrow(
     msp,
     cx: float,
@@ -607,7 +792,9 @@ def draw_north_arrow(
         ry = cy + size * 0.3 * math.sin(right_rad)
 
         spike_pts = [(lx, ly), (tip_x, tip_y), (rx, ry), (cx, cy)]
-        msp.add_lwpolyline(spike_pts, close=True, dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_lwpolyline(
+            spike_pts, close=True, dxfattribs={"layer": layer, "lineweight": 25}
+        )
 
         # Fill north spike
         if direction == north_dir:
@@ -640,12 +827,15 @@ def draw_north_arrow(
         angle_rad = math.radians(angle_deg)
         tip_x = cx + size * 0.6 * math.cos(angle_rad)
         tip_y = cy + size * 0.6 * math.sin(angle_rad)
-        msp.add_line((cx, cy), (tip_x, tip_y), dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_line(
+            (cx, cy), (tip_x, tip_y), dxfattribs={"layer": layer, "lineweight": 25}
+        )
 
 
 # ---------------------------------------------------------------------------
 # Scale bar (graphical 1:100 bar)
 # ---------------------------------------------------------------------------
+
 
 def draw_scale_bar(msp, x: float, y: float, layer: str, z: float = 0) -> None:
     """Draw a 3m graphical scale bar subdivided at 0, 1m, 2m, 3m."""
@@ -653,13 +843,23 @@ def draw_scale_bar(msp, x: float, y: float, layer: str, z: float = 0) -> None:
     labels = ["0", "1m", "2m", "3m"]
 
     # Horizontal bar (0 to 3m)
-    msp.add_line((x, y, z), (x + 3.0, y, z), dxfattribs={"layer": layer, "lineweight": 25})
+    msp.add_line(
+        (x, y, z), (x + 3.0, y, z), dxfattribs={"layer": layer, "lineweight": 25}
+    )
 
     # Tick marks and labels at each metre
     for i, label in enumerate(labels):
         tx = x + float(i)
-        msp.add_line((tx, y, z), (tx, y + tick_h, z), dxfattribs={"layer": layer, "lineweight": 25})
-        msp.add_line((tx, y, z), (tx, y - tick_h, z), dxfattribs={"layer": layer, "lineweight": 25})
+        msp.add_line(
+            (tx, y, z),
+            (tx, y + tick_h, z),
+            dxfattribs={"layer": layer, "lineweight": 25},
+        )
+        msp.add_line(
+            (tx, y, z),
+            (tx, y - tick_h, z),
+            dxfattribs={"layer": layer, "lineweight": 25},
+        )
         msp.add_mtext(
             label,
             dxfattribs={
@@ -688,6 +888,7 @@ def draw_scale_bar(msp, x: float, y: float, layer: str, z: float = 0) -> None:
 # Title block
 # ---------------------------------------------------------------------------
 
+
 def draw_title_block(
     msp,
     project_name: str,
@@ -706,15 +907,20 @@ def draw_title_block(
 
     # Outer border
     border = [
-        (x0, y0), (x0 + blk_w, y0),
-        (x0 + blk_w, y0 + blk_h), (x0, y0 + blk_h),
+        (x0, y0),
+        (x0 + blk_w, y0),
+        (x0 + blk_w, y0 + blk_h),
+        (x0, y0 + blk_h),
     ]
-    msp.add_lwpolyline(border, close=True, dxfattribs={"layer": "A-TITLE", "lineweight": 50})
+    msp.add_lwpolyline(
+        border, close=True, dxfattribs={"layer": "A-TITLE", "lineweight": 50}
+    )
 
     # Title row divider at y0+blk_h-0.9
     title_row_y = y0 + blk_h - 0.9
-    msp.add_line((x0, title_row_y), (x0 + blk_w, title_row_y),
-                 dxfattribs={"layer": "A-TITLE"})
+    msp.add_line(
+        (x0, title_row_y), (x0 + blk_w, title_row_y), dxfattribs={"layer": "A-TITLE"}
+    )
 
     # Vertical divider at x0 + blk_w/2
     mid_x = x0 + blk_w / 2

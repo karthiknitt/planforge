@@ -46,15 +46,15 @@ def _get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
     return x_user_id
 
 
-async def _require_project(
-    project_id: str, user_id: str, db: AsyncSession
-) -> Project:
+async def _require_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
     result = await db.execute(
         select(Project).where(Project.id == project_id, Project.user_id == user_id)
     )
     project = result.scalar_one_or_none()
     if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     return project
 
 
@@ -79,8 +79,14 @@ def _floor_plan_out(fp: Any) -> FloorPlanOut:
         needs_mech_ventilation=getattr(fp, "needs_mech_ventilation", False),
         rooms=[
             RoomOut(
-                id=r.id, name=r.name, type=r.type,
-                x=r.x, y=r.y, width=r.width, depth=r.depth, area=r.area,
+                id=r.id,
+                name=r.name,
+                type=r.type,
+                x=r.x,
+                y=r.y,
+                width=r.width,
+                depth=r.depth,
+                area=r.area,
             )
             for r in fp.rooms
         ],
@@ -102,8 +108,12 @@ def _build_snapshot(project_id: str, layouts: list[Any]) -> dict[str, Any]:
             ),
             ground_floor=_floor_plan_out(lay.ground_floor),
             first_floor=_floor_plan_out(lay.first_floor),
-            second_floor=_floor_plan_out(lay.second_floor) if lay.second_floor else None,
-            basement_floor=_floor_plan_out(lay.basement_floor) if lay.basement_floor else None,
+            second_floor=_floor_plan_out(lay.second_floor)
+            if lay.second_floor
+            else None,
+            basement_floor=_floor_plan_out(lay.basement_floor)
+            if lay.basement_floor
+            else None,
             score=LayoutScoreOut(
                 total=lay.score.total,
                 natural_light=lay.score.natural_light,
@@ -111,7 +121,9 @@ def _build_snapshot(project_id: str, layouts: list[Any]) -> dict[str, Any]:
                 aspect_ratio=lay.score.aspect_ratio,
                 circulation=lay.score.circulation,
                 vastu=lay.score.vastu,
-            ) if lay.score else None,
+            )
+            if lay.score
+            else None,
             space_notes=getattr(lay, "space_notes", []),
             auto_added_rooms=getattr(lay, "space_notes", []),
         )
@@ -166,9 +178,13 @@ async def save_auto_revision(
             has_study=getattr(project, "has_study", False) or False,
             has_balcony=getattr(project, "has_balcony", False) or False,
             plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-            plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
+            plot_front_width=_to_float(
+                getattr(project, "plot_front_width", 0.0) or 0.0
+            ),
             plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
-            plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
+            plot_side_offset=_to_float(
+                getattr(project, "plot_side_offset", 0.0) or 0.0
+            ),
             plot_corners=plot_corners,
             cutout_corner=getattr(project, "cutout_corner", None),
             cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
@@ -274,9 +290,13 @@ async def create_revision(
             has_study=getattr(project, "has_study", False) or False,
             has_balcony=getattr(project, "has_balcony", False) or False,
             plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-            plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
+            plot_front_width=_to_float(
+                getattr(project, "plot_front_width", 0.0) or 0.0
+            ),
             plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
-            plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
+            plot_side_offset=_to_float(
+                getattr(project, "plot_side_offset", 0.0) or 0.0
+            ),
             plot_corners=plot_corners,
             cutout_corner=getattr(project, "cutout_corner", None),
             cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),

@@ -9,8 +9,6 @@ Covers:
   - 403 / 404 guard rails
 """
 
-import pytest
-
 USER_ID = "user-rev-001"
 OTHER_USER = "user-rev-002"
 HEADERS = {"X-User-Id": USER_ID}
@@ -38,6 +36,7 @@ async def _create_project(client) -> str:
 
 
 # ── Create revision ────────────────────────────────────────────────────────────
+
 
 async def test_create_revision_returns_201(client):
     pid = await _create_project(client)
@@ -86,6 +85,7 @@ async def test_create_revision_wrong_user_returns_404(client):
 
 # ── List revisions ─────────────────────────────────────────────────────────────
 
+
 async def test_list_revisions_empty(client):
     pid = await _create_project(client)
     r = await client.get(f"/api/projects/{pid}/revisions", headers=HEADERS)
@@ -98,7 +98,7 @@ async def test_list_revisions_newest_first(client):
     for i in range(3):
         await client.post(
             f"/api/projects/{pid}/revisions",
-            json={"label": f"Rev {i+1}"},
+            json={"label": f"Rev {i + 1}"},
             headers=HEADERS,
         )
     r = await client.get(f"/api/projects/{pid}/revisions", headers=HEADERS)
@@ -115,6 +115,7 @@ async def test_list_revisions_capped_at_10(client):
 
 
 # ── Get revision ───────────────────────────────────────────────────────────────
+
 
 async def test_get_revision_by_version(client):
     pid = await _create_project(client)
@@ -140,6 +141,7 @@ async def test_get_revision_not_found_returns_404(client):
 
 
 # ── Delete revision ────────────────────────────────────────────────────────────
+
 
 async def test_delete_revision(client):
     pid = await _create_project(client)

@@ -13,7 +13,6 @@ Financial data: wrong rates erode trust with users. These tests guard against:
 import json
 from pathlib import Path
 
-import pytest
 
 from app.engine.boq import QuantityEngine, _load_rates, _supported_cities
 from app.engine.generator import generate
@@ -41,6 +40,7 @@ EXPECTED_CITIES = ["Generic", "Chennai", "Bangalore", "Hyderabad", "Pune", "Mumb
 
 
 # ── File-level structural checks ──────────────────────────────────────────────
+
 
 def test_rates_file_exists():
     assert RATES_PATH.exists(), "material_rates.json is missing"
@@ -70,6 +70,7 @@ def test_all_required_fields_present_for_each_city():
 
 # ── Rate logic checks ─────────────────────────────────────────────────────────
 
+
 def test_city_rates_differ_from_generic():
     """Each non-Generic city must have at least one field that differs from Generic."""
     cities = json.loads(RATES_PATH.read_text())["cities"]
@@ -78,7 +79,9 @@ def test_city_rates_differ_from_generic():
         if city == "Generic":
             continue
         differs = any(rates[f] != generic[f] for f in REQUIRED_FIELDS)
-        assert differs, f"City '{city}' rates are identical to Generic — data likely copy-pasted"
+        assert differs, (
+            f"City '{city}' rates are identical to Generic — data likely copy-pasted"
+        )
 
 
 def test_load_rates_returns_generic_for_unknown_city():
@@ -96,6 +99,7 @@ def test_supported_cities_includes_generic_and_majors():
 
 # ── Relative price ordering (market reality check) ────────────────────────────
 
+
 def test_mumbai_more_expensive_than_trichy():
     """Mumbai labour cost must exceed Trichy — basic Indian market sanity check."""
     mumbai = _load_rates("Mumbai")
@@ -112,6 +116,7 @@ def test_chennai_more_expensive_than_trichy():
 
 
 # ── Integration: BOQ produces valid output ────────────────────────────────────
+
 
 def _base_cfg(city: str = "Generic") -> PlotConfig:
     return PlotConfig(
@@ -138,7 +143,9 @@ def test_boq_engine_produces_nonzero_total(tmp_path):
     engine = QuantityEngine()
     result = engine.calculate(layout, cfg, project_name="BOQ Test", city="Chennai")
 
-    assert result.total_cost > 0, "BOQ total cost is zero — rate or quantity calculation broken"
+    assert result.total_cost > 0, (
+        "BOQ total cost is zero — rate or quantity calculation broken"
+    )
     assert len(result.line_items) > 0, "BOQ has no line items"
 
 
@@ -160,8 +167,12 @@ def test_boq_engine_city_total_higher_than_generic():
     layout = layouts[0]
 
     engine = QuantityEngine()
-    total_generic = engine.calculate(layout, cfg_generic, project_name="Generic", city="Generic").total_cost
-    total_mumbai  = engine.calculate(layout, cfg_mumbai,  project_name="Mumbai",  city="Mumbai").total_cost
+    total_generic = engine.calculate(
+        layout, cfg_generic, project_name="Generic", city="Generic"
+    ).total_cost
+    total_mumbai = engine.calculate(
+        layout, cfg_mumbai, project_name="Mumbai", city="Mumbai"
+    ).total_cost
 
     assert total_mumbai > total_generic, (
         f"Mumbai BOQ ({total_mumbai}) should exceed Generic BOQ ({total_generic})"

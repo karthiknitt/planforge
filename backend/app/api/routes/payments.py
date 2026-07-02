@@ -56,20 +56,29 @@ async def create_order(
     if body.plan not in PLAN_AMOUNTS:
         raise HTTPException(400, "Invalid plan. Choose 'basic', 'pro', or 'firm'.")
 
-    if not settings.razorpay_key_id or settings.razorpay_key_id == "rzp_test_PLACEHOLDER":
-        raise HTTPException(503, "Payment gateway not configured. Add Razorpay keys to backend/.env.")
+    if (
+        not settings.razorpay_key_id
+        or settings.razorpay_key_id == "rzp_test_PLACEHOLDER"
+    ):
+        raise HTTPException(
+            503, "Payment gateway not configured. Add Razorpay keys to backend/.env."
+        )
 
     try:
         import razorpay
     except ImportError:
         raise HTTPException(503, "razorpay package not installed. Run: uv add razorpay")
 
-    client = razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
-    order = client.order.create({
-        "amount": PLAN_AMOUNTS[body.plan],
-        "currency": "INR",
-        "notes": {"plan": body.plan, "user_id": user_id},
-    })
+    client = razorpay.Client(
+        auth=(settings.razorpay_key_id, settings.razorpay_key_secret)
+    )
+    order = client.order.create(
+        {
+            "amount": PLAN_AMOUNTS[body.plan],
+            "currency": "INR",
+            "notes": {"plan": body.plan, "user_id": user_id},
+        }
+    )
     return {
         "order_id": order["id"],
         "amount": order["amount"],
@@ -115,10 +124,17 @@ async def create_credits_order(
     user_id: str = Depends(_get_user_id),
 ) -> dict:
     if body.pack_id not in CREDIT_PACKS:
-        raise HTTPException(400, f"Invalid pack_id. Choose one of: {', '.join(CREDIT_PACKS)}")
+        raise HTTPException(
+            400, f"Invalid pack_id. Choose one of: {', '.join(CREDIT_PACKS)}"
+        )
 
-    if not settings.razorpay_key_id or settings.razorpay_key_id == "rzp_test_PLACEHOLDER":
-        raise HTTPException(503, "Payment gateway not configured. Add Razorpay keys to backend/.env.")
+    if (
+        not settings.razorpay_key_id
+        or settings.razorpay_key_id == "rzp_test_PLACEHOLDER"
+    ):
+        raise HTTPException(
+            503, "Payment gateway not configured. Add Razorpay keys to backend/.env."
+        )
 
     try:
         import razorpay
@@ -126,12 +142,20 @@ async def create_credits_order(
         raise HTTPException(503, "razorpay package not installed. Run: uv add razorpay")
 
     pack = CREDIT_PACKS[body.pack_id]
-    client = razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
-    order = client.order.create({
-        "amount": pack["price_paise"],
-        "currency": "INR",
-        "notes": {"pack_id": body.pack_id, "credits": pack["credits"], "user_id": user_id},
-    })
+    client = razorpay.Client(
+        auth=(settings.razorpay_key_id, settings.razorpay_key_secret)
+    )
+    order = client.order.create(
+        {
+            "amount": pack["price_paise"],
+            "currency": "INR",
+            "notes": {
+                "pack_id": body.pack_id,
+                "credits": pack["credits"],
+                "user_id": user_id,
+            },
+        }
+    )
     return {
         "order_id": order["id"],
         "amount": order["amount"],

@@ -4,7 +4,7 @@ import math
 from datetime import date
 from io import BytesIO
 
-from reportlab.lib.colors import Color, HexColor, white
+from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -15,9 +15,13 @@ from app.engine.models import FloorPlan, Layout, PlotConfig
 # Internal CAD drawing helpers (ReportLab, not ezdxf)
 # ---------------------------------------------------------------------------
 
+
 def _pdf_draw_double_line_wall(
     c: canvas.Canvas,
-    x1: float, y1: float, x2: float, y2: float,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
     thickness_px: float,
     gaps_px: list[tuple[float, float]],
     lw: float,
@@ -42,7 +46,7 @@ def _pdf_draw_double_line_wall(
     # Unit vector along wall and perpendicular
     ux = dx / length
     uy = dy / length
-    px = -uy   # perpendicular
+    px = -uy  # perpendicular
     py = ux
     h = thickness_px / 2
 
@@ -69,13 +73,17 @@ def _pdf_draw_double_line_wall(
         t1 = seg_end / length
         # Outer line (away from origin perpendicular)
         c.line(
-            x1 + t0 * dx + h * px, y1 + t0 * dy + h * py,
-            x1 + t1 * dx + h * px, y1 + t1 * dy + h * py,
+            x1 + t0 * dx + h * px,
+            y1 + t0 * dy + h * py,
+            x1 + t1 * dx + h * px,
+            y1 + t1 * dy + h * py,
         )
         # Inner line
         c.line(
-            x1 + t0 * dx - h * px, y1 + t0 * dy - h * py,
-            x1 + t1 * dx - h * px, y1 + t1 * dy - h * py,
+            x1 + t0 * dx - h * px,
+            y1 + t0 * dy - h * py,
+            x1 + t1 * dx - h * px,
+            y1 + t1 * dy - h * py,
         )
 
 
@@ -97,7 +105,8 @@ def _dedup_wall_coords(coords: list[float], tol: float = 0.125) -> list[float]:
 
 def _pdf_draw_door_arc(
     c: canvas.Canvas,
-    hinge_x: float, hinge_y: float,
+    hinge_x: float,
+    hinge_y: float,
     door_px: float,
     wall_is_horizontal: bool,
     swing_into_room: bool,
@@ -114,14 +123,15 @@ def _pdf_draw_door_arc(
     c.setDash()
     if wall_is_horizontal:
         # Door leaf goes vertically (into the room above the wall)
-        direction = 1 if swing_into_room else -1
         leaf_end_x = hinge_x + door_px
         leaf_end_y = hinge_y
         c.line(hinge_x, hinge_y, leaf_end_x, leaf_end_y)
         # Quarter-circle arc centered at hinge, radius = door width
         # Arc from 0° to 90° (counterclockwise into room)
         if swing_into_room:
-            c.arc(hinge_x, hinge_y, hinge_x + door_px * 2, hinge_y + door_px * 2, 90, 90)
+            c.arc(
+                hinge_x, hinge_y, hinge_x + door_px * 2, hinge_y + door_px * 2, 90, 90
+            )
         else:
             c.arc(hinge_x - door_px * 2, hinge_y - door_px * 2, hinge_x, hinge_y, 0, 90)
     else:
@@ -132,37 +142,41 @@ def _pdf_draw_door_arc(
         if swing_into_room:
             c.arc(hinge_x, hinge_y, hinge_x + door_px * 2, hinge_y + door_px * 2, 0, 90)
         else:
-            c.arc(hinge_x - door_px * 2, hinge_y - door_px * 2, hinge_x, hinge_y, 270, 90)
+            c.arc(
+                hinge_x - door_px * 2, hinge_y - door_px * 2, hinge_x, hinge_y, 270, 90
+            )
+
 
 # ── Colour palette (fill, stroke) ────────────────────────────────────────────
 PALETTE: dict[str, tuple[str, str]] = {
-    "living":    ("#FFFFFF", "#000000"),
-    "bedroom":   ("#FFFFFF", "#000000"),
-    "kitchen":   ("#FFFFFF", "#000000"),
-    "toilet":    ("#FFFFFF", "#000000"),
+    "living": ("#FFFFFF", "#000000"),
+    "bedroom": ("#FFFFFF", "#000000"),
+    "kitchen": ("#FFFFFF", "#000000"),
+    "toilet": ("#FFFFFF", "#000000"),
     "staircase": ("#FFFFFF", "#000000"),
-    "parking":   ("#FFFFFF", "#000000"),
-    "utility":   ("#FFFFFF", "#000000"),
-    "pooja":     ("#FFFFFF", "#000000"),
-    "study":     ("#FFFFFF", "#000000"),
-    "balcony":   ("#FFFFFF", "#000000"),
-    "dining":    ("#FFFFFF", "#000000"),
+    "parking": ("#FFFFFF", "#000000"),
+    "utility": ("#FFFFFF", "#000000"),
+    "pooja": ("#FFFFFF", "#000000"),
+    "study": ("#FFFFFF", "#000000"),
+    "balcony": ("#FFFFFF", "#000000"),
+    "dining": ("#FFFFFF", "#000000"),
 }
 
 # ── Page constants (points) ───────────────────────────────────────────────────
-TITLE_H  = 90   # title block height (larger to accommodate area schedule)
-MARGIN   = 52   # page margins (larger for chain dimension zone)
-ROAD_H   = 18   # road strip height
-ROAD_GAP = 4    # gap between road strip top and plot boundary bottom
-TOP_PAD  = 30   # padding above plot for north arrow / scale bar
-EXT_LW   = 2.0  # external wall lineweight (pt)
-INT_LW   = 1.0  # internal wall lineweight (pt)
-DIM_LW   = 0.5  # dimension line lineweight (pt)
-WIN_LW   = 0.75 # window line lineweight (pt)
+TITLE_H = 90  # title block height (larger to accommodate area schedule)
+MARGIN = 52  # page margins (larger for chain dimension zone)
+ROAD_H = 18  # road strip height
+ROAD_GAP = 4  # gap between road strip top and plot boundary bottom
+TOP_PAD = 30  # padding above plot for north arrow / scale bar
+EXT_LW = 2.0  # external wall lineweight (pt)
+INT_LW = 1.0  # internal wall lineweight (pt)
+DIM_LW = 0.5  # dimension line lineweight (pt)
+WIN_LW = 0.75  # window line lineweight (pt)
 MIN_DIM_SPAN = 0.5  # metres — filter out wall-thickness micro-gaps from chain dims
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def render_pdf(
     project_name: str,
@@ -185,14 +199,24 @@ def render_pdf(
     # ── Architectural pages ────────────────────────────────────────────────────
     for floor_plan in [layout.ground_floor, layout.first_floor]:
         floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
-        _draw_floor(c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label,
-                    annotations=annotations)
+        _draw_floor(
+            c,
+            floor_plan,
+            layout,
+            cfg,
+            project_name,
+            num_bedrooms,
+            floor_label,
+            annotations=annotations,
+        )
         c.showPage()
 
     # ── Structural pages ───────────────────────────────────────────────────────
     for floor_plan in [layout.ground_floor, layout.first_floor]:
         floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
-        _draw_structural_floor(c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label)
+        _draw_structural_floor(
+            c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label
+        )
         c.showPage()
 
     c.save()
@@ -201,6 +225,7 @@ def render_pdf(
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _compute_layout(
     cfg: PlotConfig, page_w: float, page_h: float
 ) -> tuple[float, float, float, float, float]:
@@ -208,8 +233,8 @@ def _compute_layout(
     avail_w = page_w - 2 * MARGIN
     avail_h = page_h - TITLE_H - 2 * MARGIN - ROAD_H - ROAD_GAP - TOP_PAD
 
-    scale   = min(avail_w / cfg.plot_width, avail_h / cfg.plot_length)
-    plot_px = cfg.plot_width  * scale
+    scale = min(avail_w / cfg.plot_width, avail_h / cfg.plot_length)
+    plot_px = cfg.plot_width * scale
     plot_py = cfg.plot_length * scale
 
     offset_x = MARGIN + (avail_w - plot_px) / 2
@@ -236,7 +261,9 @@ def _draw_floor(
     # Road strip: two lines — floor plan label (top) + road direction (bottom)
     c.setFillColor(HexColor("#CCCCCC"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
-    road_side_name = {"S": "SOUTH", "N": "NORTH", "E": "EAST", "W": "WEST"}.get(cfg.road_side, "")
+    road_side_name = {"S": "SOUTH", "N": "NORTH", "E": "EAST", "W": "WEST"}.get(
+        cfg.road_side, ""
+    )
     cx_road = ox + plot_px / 2
     # Floor plan label — upper line (bold, black)
     c.setFillColor(HexColor("#000000"))
@@ -252,7 +279,11 @@ def _draw_floor(
     c.setDash(5, 3)
     c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(0.5)
-    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners and len(cfg.plot_corners) == 4:
+    if (
+        cfg.plot_shape == "quadrilateral"
+        and cfg.plot_corners
+        and len(cfg.plot_corners) == 4
+    ):
         pts = [(ox + cx * scale, oy + cy * scale) for cx, cy in cfg.plot_corners]
         p = c.beginPath()
         p.moveTo(*pts[0])
@@ -277,12 +308,16 @@ def _draw_floor(
         c.rect(rx, ry, rw, rh, fill=1, stroke=0)
 
     # ── Walls, doors, windows (CAD-accurate) ─────────────────────────────────
-    iwt = 0.115   # internal wall thickness (m)
-    ewt = 0.23    # external wall thickness (m)
+    iwt = 0.115  # internal wall thickness (m)
+    ewt = 0.23  # external wall thickness (m)
     rooms = floor_plan.rooms
     if rooms:
-        xs = _dedup_wall_coords(sorted({r.x for r in rooms} | {r.x + r.width for r in rooms}))
-        ys = _dedup_wall_coords(sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms}))
+        xs = _dedup_wall_coords(
+            sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
+        )
+        ys = _dedup_wall_coords(
+            sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
+        )
 
         min_x = min(r.x for r in rooms)
         max_x = max(r.x + r.width for r in rooms)
@@ -296,8 +331,16 @@ def _draw_floor(
         vertical_door_gaps: dict[float, list[tuple[float, float]]] = {}
         # horizontal_gaps[y_coord] = list of (x_start, x_end)
         horizontal_door_gaps: dict[float, list[tuple[float, float]]] = {}
-        habitable_door = {"living", "bedroom", "master_bedroom", "kitchen",
-                          "study", "dining", "utility", "pooja"}
+        habitable_door = {
+            "living",
+            "bedroom",
+            "master_bedroom",
+            "kitchen",
+            "study",
+            "dining",
+            "utility",
+            "pooja",
+        }
 
         for i, ra in enumerate(rooms):
             for j, rb in enumerate(rooms):
@@ -312,7 +355,9 @@ def _draw_floor(
                         if y_hi - y_lo > door_w_m + 0.1:
                             mid = (y_lo + y_hi) / 2
                             gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                            vertical_door_gaps.setdefault(round(ra.x + ra.width, 3), []).append(gap)
+                            vertical_door_gaps.setdefault(
+                                round(ra.x + ra.width, 3), []
+                            ).append(gap)
                 elif abs(rb.x + rb.width - ra.x) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
                         y_lo = max(ra.y, rb.y)
@@ -320,7 +365,9 @@ def _draw_floor(
                         if y_hi - y_lo > door_w_m + 0.1:
                             mid = (y_lo + y_hi) / 2
                             gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                            vertical_door_gaps.setdefault(round(rb.x + rb.width, 3), []).append(gap)
+                            vertical_door_gaps.setdefault(
+                                round(rb.x + rb.width, 3), []
+                            ).append(gap)
                 # Horizontal shared wall (ra top ≈ rb bottom)
                 if abs(ra.y + ra.depth - rb.y) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
@@ -329,7 +376,9 @@ def _draw_floor(
                         if x_hi - x_lo > door_w_m + 0.1:
                             mid = (x_lo + x_hi) / 2
                             gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                            horizontal_door_gaps.setdefault(round(ra.y + ra.depth, 3), []).append(gap)
+                            horizontal_door_gaps.setdefault(
+                                round(ra.y + ra.depth, 3), []
+                            ).append(gap)
                 elif abs(rb.y + rb.depth - ra.y) < 0.15:
                     if ra.type in habitable_door or rb.type in habitable_door:
                         x_lo = max(ra.x, rb.x)
@@ -337,11 +386,20 @@ def _draw_floor(
                         if x_hi - x_lo > door_w_m + 0.1:
                             mid = (x_lo + x_hi) / 2
                             gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                            horizontal_door_gaps.setdefault(round(rb.y + rb.depth, 3), []).append(gap)
+                            horizontal_door_gaps.setdefault(
+                                round(rb.y + rb.depth, 3), []
+                            ).append(gap)
 
         # Build window-gap information for external walls: 1.2 m window at room centre
         win_w_m = 1.2
-        habitable_win = {"living", "bedroom", "master_bedroom", "kitchen", "study", "dining"}
+        habitable_win = {
+            "living",
+            "bedroom",
+            "master_bedroom",
+            "kitchen",
+            "study",
+            "dining",
+        }
         # external_h_gaps[y_coord] = list of (x_start, x_end) for horizontal walls
         external_h_win_gaps: dict[float, list[tuple[float, float]]] = {}
         # external_v_gaps[x_coord] = list of (y_start, y_end) for vertical walls
@@ -382,10 +440,10 @@ def _draw_floor(
         iwt_px = iwt * scale
         # Internal walls start/end at inner face of external wall (not at wall centre).
         # ewt/2 = 0.115m = iwt, so offset is exactly iwt_px.
-        py_lo = oy + min_y * scale + iwt_px   # inner face of front external wall
-        py_hi = oy + max_y * scale - iwt_px   # inner face of rear external wall
-        px_lo = ox + min_x * scale + iwt_px   # inner face of left external wall
-        px_hi = ox + max_x * scale - iwt_px   # inner face of right external wall
+        py_lo = oy + min_y * scale + iwt_px  # inner face of front external wall
+        py_hi = oy + max_y * scale - iwt_px  # inner face of rear external wall
+        px_lo = ox + min_x * scale + iwt_px  # inner face of left external wall
+        px_hi = ox + max_x * scale - iwt_px  # inner face of right external wall
 
         for x in xs[1:-1]:  # skip outer edges
             px1 = ox + x * scale
@@ -396,8 +454,14 @@ def _draw_floor(
                 for g_s, g_e in raw_gaps
             ]
             _pdf_draw_double_line_wall(
-                c, px1, py_lo, px1, py_hi,
-                iwt_px, gaps_px, INT_LW,
+                c,
+                px1,
+                py_lo,
+                px1,
+                py_hi,
+                iwt_px,
+                gaps_px,
+                INT_LW,
             )
 
         for y in ys[1:-1]:
@@ -408,8 +472,14 @@ def _draw_floor(
                 for g_s, g_e in raw_gaps
             ]
             _pdf_draw_double_line_wall(
-                c, px_lo, py1, px_hi, py1,
-                iwt_px, gaps_px, INT_LW,
+                c,
+                px_lo,
+                py1,
+                px_hi,
+                py1,
+                iwt_px,
+                gaps_px,
+                INT_LW,
             )
 
         # ── External wall boundary (thick double lines with window gaps) ───────
@@ -428,7 +498,7 @@ def _draw_floor(
         # ── Corner junction fills — tight fill to close wall gap at outer corners ─
         # Size = half wall thickness (fills gap without over-extending outside wall)
         ch = ewt_px / 2  # half wall thickness
-        jf = ch * 0.7    # junction fill size: 70% of half-wall — keeps corners clean
+        jf = ch * 0.7  # junction fill size: 70% of half-wall — keeps corners clean
         c.setFillColor(HexColor("#000000"))
         c.setStrokeColor(HexColor("#000000"))
         for cx_c, cy_c in [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)]:
@@ -441,7 +511,9 @@ def _draw_floor(
         _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y)
 
         # ── Door leaf + arc in interior wall gaps ─────────────────────────────
-        _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
+        _draw_doors_in_gaps(
+            c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps
+        )
 
         # ── Column markers: sized to wall thickness, outer corners at wall centreline ─
         c.setFillColor(HexColor("#000000"))
@@ -455,13 +527,30 @@ def _draw_floor(
             if key in seen_cols:
                 continue
             seen_cols.add(key)
-            col_cx = (col.x - ewt_half if abs(col.x - min_x) < col_tol else
-                      col.x + ewt_half if abs(col.x - max_x) < col_tol else col.x)
-            col_cy = (col.y - ewt_half if abs(col.y - min_y) < col_tol else
-                      col.y + ewt_half if abs(col.y - max_y) < col_tol else col.y)
+            col_cx = (
+                col.x - ewt_half
+                if abs(col.x - min_x) < col_tol
+                else col.x + ewt_half
+                if abs(col.x - max_x) < col_tol
+                else col.x
+            )
+            col_cy = (
+                col.y - ewt_half
+                if abs(col.y - min_y) < col_tol
+                else col.y + ewt_half
+                if abs(col.y - max_y) < col_tol
+                else col.y
+            )
             cx = ox + col_cx * scale
             cy = oy + col_cy * scale
-            c.rect(cx - col_half, cy - col_half, col_half * 2, col_half * 2, fill=1, stroke=0)
+            c.rect(
+                cx - col_half,
+                cy - col_half,
+                col_half * 2,
+                col_half * 2,
+                fill=1,
+                stroke=0,
+            )
 
     # ── Room labels ───────────────────────────────────────────────────────────
     c.setLineWidth(1.0)
@@ -506,8 +595,18 @@ def _draw_floor(
     _draw_north_arrow(c, ox + plot_px - 22, oy + plot_py + TOP_PAD * 0.45, 16)
 
     # ── Title block ───────────────────────────────────────────────────────────
-    _draw_title_block(c, project_name, layout.id, layout.name, floor_label, cfg,
-                      num_bedrooms, scale, page_w, floor_plan=floor_plan)
+    _draw_title_block(
+        c,
+        project_name,
+        layout.id,
+        layout.name,
+        floor_label,
+        cfg,
+        num_bedrooms,
+        scale,
+        page_w,
+        floor_plan=floor_plan,
+    )
 
 
 def _draw_staircase_treads(c, rooms, scale, ox, oy):
@@ -553,16 +652,16 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy):
             cx_s = rx + rw / 2
             # Arrow stem + head pointing up, positioned in upper zone
             arrow_base_y = ry + rh * 0.58
-            arrow_tip_y  = ry + rh * 0.80
+            arrow_tip_y = ry + rh * 0.80
             stem_x = cx_s
             c.setStrokeColor(HexColor("#000000"))
             c.setLineWidth(1.0)
             c.line(stem_x, arrow_base_y, stem_x, arrow_tip_y)  # vertical stem
             arrow_w = min(rw * 0.28, 7)
             p = c.beginPath()
-            p.moveTo(stem_x, arrow_tip_y + arrow_w)              # tip
-            p.lineTo(stem_x - arrow_w / 2, arrow_tip_y)          # left wing
-            p.lineTo(stem_x + arrow_w / 2, arrow_tip_y)          # right wing
+            p.moveTo(stem_x, arrow_tip_y + arrow_w)  # tip
+            p.lineTo(stem_x - arrow_w / 2, arrow_tip_y)  # left wing
+            p.lineTo(stem_x + arrow_w / 2, arrow_tip_y)  # right wing
             p.close()
             c.setFillColor(HexColor("#000000"))
             c.drawPath(p, fill=1, stroke=0)
@@ -612,7 +711,7 @@ def _draw_window_symbol(c, cx, cy, width_px, horizontal: bool):
     if horizontal:
         # 3 horizontal lines spanning the window width
         c.line(cx - hw, cy - gap, cx + hw, cy - gap)
-        c.line(cx - hw, cy,       cx + hw, cy)
+        c.line(cx - hw, cy, cx + hw, cy)
         c.line(cx - hw, cy + gap, cx + hw, cy + gap)
         # Perpendicular jamb caps at left and right ends (close the box)
         c.line(cx - hw, cy - gap, cx - hw, cy + gap)
@@ -620,7 +719,7 @@ def _draw_window_symbol(c, cx, cy, width_px, horizontal: bool):
     else:
         # 3 vertical lines spanning the window height
         c.line(cx - gap, cy - hw, cx - gap, cy + hw)
-        c.line(cx,       cy - hw, cx,       cy + hw)
+        c.line(cx, cy - hw, cx, cy + hw)
         c.line(cx + gap, cy - hw, cx + gap, cy + hw)
         # Perpendicular jamb caps at bottom and top ends (close the box)
         c.line(cx - gap, cy - hw, cx + gap, cy - hw)
@@ -669,8 +768,8 @@ def _draw_doors_in_gaps(
     c.setStrokeColor(HexColor("#000000"))
     c.setDash()
 
-    LEAF_LW = INT_LW   # door leaf = same weight as internal wall
-    ARC_LW  = 0.4      # door swing arc = thin pen (architectural convention)
+    LEAF_LW = INT_LW  # door leaf = same weight as internal wall
+    ARC_LW = 0.4  # door swing arc = thin pen (architectural convention)
 
     # Doors on vertical walls (wall runs N-S at fixed x)
     for x_m, gaps in vertical_door_gaps.items():
@@ -699,7 +798,9 @@ def _draw_doors_in_gaps(
             c.arc(hx - door_px, wy - door_px, hx + door_px, wy + door_px, 0, 90)
 
 
-def _draw_annotations(c: canvas.Canvas, rooms, annotations: dict, scale: float, ox: float, oy: float) -> None:
+def _draw_annotations(
+    c: canvas.Canvas, rooms, annotations: dict, scale: float, ox: float, oy: float
+) -> None:
     """Render engineer annotation notes near room centres in the PDF."""
     room_map = {r.id: r for r in rooms}
     for room_id, ann in annotations.items():
@@ -763,8 +864,12 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
 
     # Collect and filter room boundary positions
     if rooms:
-        raw_x = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
-        raw_y = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
+        raw_x = sorted(
+            {round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms}
+        )
+        raw_y = sorted(
+            {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
+        )
     else:
         raw_x = [0.0, cfg.plot_width]
         raw_y = [0.0, cfg.plot_length]
@@ -776,8 +881,8 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
     # MARGIN zone: y = TITLE_H to y = TITLE_H + MARGIN (road strip)
     # Inner row: bar at TITLE_H + MARGIN - 12 (just below road strip start)
     # Outer row: bar at TITLE_H + MARGIN - 36 (middle of margin)
-    inner_y = TITLE_H + MARGIN - 12   # ≈ 130
-    outer_y = TITLE_H + MARGIN - 36   # ≈ 106
+    inner_y = TITLE_H + MARGIN - 12  # ≈ 130
+    outer_y = TITLE_H + MARGIN - 36  # ≈ 106
 
     # Inner chain — room span segments
     # 45° diagonal tick marks (architectural standard: slash at each dim endpoint)
@@ -798,15 +903,17 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
     # Outer chain — overall plot width
     c.setLineWidth(DIM_LW + 0.3)
     c.line(ox, outer_y, ox + plot_px, outer_y)
-    c.line(ox - 4, outer_y - 4, ox + 4, outer_y + 4)        # 45° tick at start
-    c.line(ox + plot_px - 4, outer_y - 4, ox + plot_px + 4, outer_y + 4)  # 45° tick at end
+    c.line(ox - 4, outer_y - 4, ox + 4, outer_y + 4)  # 45° tick at start
+    c.line(
+        ox + plot_px - 4, outer_y - 4, ox + plot_px + 4, outer_y + 4
+    )  # 45° tick at end
     c.setFont("Helvetica-Bold", 6.5)
     c.drawCentredString(ox + plot_px / 2, outer_y + 8, metres_to_ftin(cfg.plot_width))
 
     # ── RIGHT VERTICAL CHAIN ──────────────────────────────────────────────────
     right_x = ox + plot_px
-    inner_x = right_x + 30   # wider gap from building edge for clean dimension clearance
-    outer_x = right_x + 54   # proportionally wider for outer overall dim
+    inner_x = right_x + 30  # wider gap from building edge for clean dimension clearance
+    outer_x = right_x + 54  # proportionally wider for outer overall dim
 
     # Inner chain — room span segments (45° diagonal ticks)
     c.setLineWidth(DIM_LW)
@@ -828,8 +935,10 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
     # Outer chain — overall plot length (45° ticks)
     c.setLineWidth(DIM_LW + 0.3)
     c.line(outer_x, oy, outer_x, oy + plot_py)
-    c.line(outer_x - 4, oy - 4, outer_x + 4, oy + 4)               # 45° tick at bottom
-    c.line(outer_x - 4, oy + plot_py - 4, outer_x + 4, oy + plot_py + 4)  # 45° tick at top
+    c.line(outer_x - 4, oy - 4, outer_x + 4, oy + 4)  # 45° tick at bottom
+    c.line(
+        outer_x - 4, oy + plot_py - 4, outer_x + 4, oy + plot_py + 4
+    )  # 45° tick at top
     c.saveState()
     c.translate(outer_x + 8, oy + plot_py / 2)
     c.rotate(90)
@@ -918,8 +1027,15 @@ def _draw_structural_floor(
     rooms = floor_plan.rooms
     if not rooms:
         _draw_title_block(
-            c, project_name, layout.id, layout.name,
-            f"{floor_label} — Structural", cfg, num_bedrooms, scale, page_w,
+            c,
+            project_name,
+            layout.id,
+            layout.name,
+            f"{floor_label} — Structural",
+            cfg,
+            num_bedrooms,
+            scale,
+            page_w,
         )
         return
 
@@ -940,8 +1056,12 @@ def _draw_structural_floor(
         c.rect(rx, ry, rw, rh, fill=0, stroke=1)
 
     # Structural grid dashed lines
-    xs = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
-    ys = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
+    xs = sorted(
+        {round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms}
+    )
+    ys = sorted(
+        {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
+    )
 
     c.setStrokeColor(HexColor("#808080"))
     c.setLineWidth(0.4)
@@ -962,6 +1082,7 @@ def _draw_structural_floor(
 
     # Grid bubble labels (A, B, C… / 1, 2, 3…)
     import string as _string
+
     bubble_r = 6  # pt
     c.setStrokeColor(HexColor("#555555"))
     c.setFillColor(HexColor("#FFFFFF"))
@@ -1014,8 +1135,12 @@ def _draw_structural_floor(
             sorted_cols = sorted(col_list, key=lambda col: col.y)
             for k in range(len(sorted_cols) - 1):
                 c1, c2 = sorted_cols[k], sorted_cols[k + 1]
-                c.line(ox + c1.x * scale, oy + c1.y * scale,
-                       ox + c2.x * scale, oy + c2.y * scale)
+                c.line(
+                    ox + c1.x * scale,
+                    oy + c1.y * scale,
+                    ox + c2.x * scale,
+                    oy + c2.y * scale,
+                )
 
         # Horizontal beams (same Y, different X)
         for _y, col_list in col_ys.items():
@@ -1024,8 +1149,12 @@ def _draw_structural_floor(
             sorted_cols = sorted(col_list, key=lambda col: col.x)
             for k in range(len(sorted_cols) - 1):
                 c1, c2 = sorted_cols[k], sorted_cols[k + 1]
-                c.line(ox + c1.x * scale, oy + c1.y * scale,
-                       ox + c2.x * scale, oy + c2.y * scale)
+                c.line(
+                    ox + c1.x * scale,
+                    oy + c1.y * scale,
+                    ox + c2.x * scale,
+                    oy + c2.y * scale,
+                )
 
         # Column squares with numbers
         col_sz = max(5, 0.3 * scale)
@@ -1046,8 +1175,15 @@ def _draw_structural_floor(
 
     # Structural title block
     _draw_title_block(
-        c, project_name, layout.id, layout.name,
-        f"{floor_label} — Beam/Column Layout", cfg, num_bedrooms, scale, page_w,
+        c,
+        project_name,
+        layout.id,
+        layout.name,
+        f"{floor_label} — Beam/Column Layout",
+        cfg,
+        num_bedrooms,
+        scale,
+        page_w,
     )
 
 
@@ -1077,16 +1213,18 @@ def _draw_title_block(
     sqm_total = sum(r.area for r in floor_plan.rooms) if floor_plan else 0.0
     sqft_total = round(sqm_total * 10.764)
 
-    city_label = cfg.city.title() if cfg.city != "other" else "NBC Defaults"
     fields = [
-        ("PROJECT",  (project_name[:22] + "…") if len(project_name) > 24 else project_name),
-        ("LAYOUT",   f"{layout_id} - {layout_name}"),
-        ("FLOOR",    floor_label),
-        ("PLOT",     f"{cfg.plot_width}x{cfg.plot_length} m"),
-        ("CONFIG",   f"{num_bedrooms} BHK · {cfg.city.title()}"),
-        ("SCALE",    f"1:{scale_ratio}"),
+        (
+            "PROJECT",
+            (project_name[:22] + "…") if len(project_name) > 24 else project_name,
+        ),
+        ("LAYOUT", f"{layout_id} - {layout_name}"),
+        ("FLOOR", floor_label),
+        ("PLOT", f"{cfg.plot_width}x{cfg.plot_length} m"),
+        ("CONFIG", f"{num_bedrooms} BHK · {cfg.city.title()}"),
+        ("SCALE", f"1:{scale_ratio}"),
         ("TOTAL AREA", f"{sqft_total} SQFT" if floor_plan else "—"),
-        ("DATE",     date.today().strftime("%d %b %Y")),
+        ("DATE", date.today().strftime("%d %b %Y")),
     ]
 
     # Field cells — upper 40pt for fields, lower zone for area schedule
@@ -1131,7 +1269,11 @@ def _draw_title_block(
         schedule_line = "   |   ".join(schedule_parts[:8])
         c.drawString(4, sched_y_top - 10, schedule_line[:190])
         c.setFont("Helvetica-Bold", 5.5)
-        c.drawString(4, sched_y_top - 20, f"TOTAL BUILT-UP AREA: {sqft_total} SQFT  ({sqm_total:.1f} SQ.M)")
+        c.drawString(
+            4,
+            sched_y_top - 20,
+            f"TOTAL BUILT-UP AREA: {sqft_total} SQFT  ({sqm_total:.1f} SQ.M)",
+        )
 
     # Branding
     c.setFillColor(HexColor("#888888"))

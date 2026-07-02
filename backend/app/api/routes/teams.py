@@ -19,6 +19,7 @@ def _get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class TeamCreate(BaseModel):
     name: str
 
@@ -52,15 +53,20 @@ class InviteMemberRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 async def _get_team_or_404(team_id: int, db: AsyncSession) -> Team:
     result = await db.execute(select(Team).where(Team.id == team_id))
     team = result.scalar_one_or_none()
     if not team:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+        )
     return team
 
 
-async def _get_membership(team_id: int, user_id: str, db: AsyncSession) -> TeamMember | None:
+async def _get_membership(
+    team_id: int, user_id: str, db: AsyncSession
+) -> TeamMember | None:
     result = await db.execute(
         select(TeamMember).where(
             TeamMember.team_id == team_id,
@@ -80,6 +86,7 @@ async def _require_admin(team_id: int, user_id: str, db: AsyncSession) -> None:
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/teams", response_model=TeamRead, status_code=status.HTTP_201_CREATED)
 async def create_team(
@@ -130,11 +137,11 @@ async def list_members(
     await _get_team_or_404(team_id, db)
     membership = await _get_membership(team_id, user_id, db)
     if not membership:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a team member")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not a team member"
+        )
 
-    result = await db.execute(
-        select(TeamMember).where(TeamMember.team_id == team_id)
-    )
+    result = await db.execute(select(TeamMember).where(TeamMember.team_id == team_id))
     return list(result.scalars().all())
 
 
@@ -164,11 +171,13 @@ async def invite_member(
         )
     )
     if dup.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="This email has already been invited")
+        raise HTTPException(
+            status_code=409, detail="This email has already been invited"
+        )
 
     member = TeamMember(
         team_id=team_id,
-        user_id="",          # empty until the invitee logs in and claims the invite
+        user_id="",  # empty until the invitee logs in and claims the invite
         role=body.role,
         invited_email=body.email,
     )
@@ -178,7 +187,9 @@ async def invite_member(
     return member
 
 
-@router.delete("/teams/{team_id}/members/{target_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/teams/{team_id}/members/{target_user_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def remove_member(
     team_id: int,
     target_user_id: str,
@@ -196,7 +207,9 @@ async def remove_member(
     )
     member = result.scalar_one_or_none()
     if not member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
 
     await db.delete(member)
     await db.commit()
@@ -211,7 +224,9 @@ async def list_team_projects(
     await _get_team_or_404(team_id, db)
     membership = await _get_membership(team_id, user_id, db)
     if not membership:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a team member")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not a team member"
+        )
 
     result = await db.execute(
         select(Project)

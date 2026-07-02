@@ -1,4 +1,5 @@
 """Tests for DXF wall hatch convention: solid fill (not ANSI31/37 pattern)."""
+
 import io
 import pytest
 import ezdxf
@@ -37,7 +38,8 @@ def test_wall_hatches_exist_and_are_solid(dxf_doc):
     hatches = [e for e in dxf_doc.modelspace() if e.dxftype() == "HATCH"]
     # wall-brick and wall-int hatches come from draw_wall_with_breaks
     wall_hatches = [
-        h for h in hatches
+        h
+        for h in hatches
         if any(k in h.dxf.layer.upper() for k in ("WALL-BRICK", "WALL-INT"))
     ]
     assert len(wall_hatches) > 0, (

@@ -63,12 +63,16 @@ def _serialize_project_data(data: dict) -> dict:
 
     corners = data.get("plot_corners")
     if corners is not None and not isinstance(corners, str):
-        data["plot_corners"] = json.dumps(corners) if isinstance(corners, list) else None
+        data["plot_corners"] = (
+            json.dumps(corners) if isinstance(corners, list) else None
+        )
 
     return data
 
 
-@router.post("/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED
+)
 async def create_project(
     body: ProjectCreate,
     user_id: str = Depends(get_user_id),
@@ -125,9 +129,13 @@ async def update_project(
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     if not await _can_access_project(project, user_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
 
     data = _serialize_project_data(body.model_dump(exclude_none=True))
 
@@ -179,6 +187,7 @@ async def list_projects(
 
 # ── Annotation routes ─────────────────────────────────────────────────────────
 
+
 class AnnotationItem(BaseModel):
     room_id: str
     room_name: str
@@ -196,9 +205,13 @@ async def get_annotations(
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     if not await _can_access_project(project, user_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
     return project.annotations or {}
 
 
@@ -212,9 +225,13 @@ async def put_annotations(
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     if not await _can_access_project(project, user_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
     project.annotations = body
     await db.commit()
     await db.refresh(project)

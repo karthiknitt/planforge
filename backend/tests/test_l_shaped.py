@@ -1,8 +1,5 @@
 """Tests for L-shaped plot support — geometry, compliance, and generation."""
 
-import pytest
-from shapely.geometry import Polygon
-
 from app.engine.generator import compute_l_shaped_polygon, generate
 from app.engine.models import PlotConfig
 
@@ -154,9 +151,8 @@ def test_l_shaped_compliance_uses_polygon_boundary():
 
     # Verify no floor coverage violation — polygon area (108) vs bounding rect (120)
     # Coverage violations reference polygon area, not W*L
-    cov_violations = [v for v in result.violations if "coverage" in v.lower()]
-    # Should not violate floor coverage (polygon is smaller so coverage % may actually be higher,
-    # but that's the correct calculation — we just verify no crash and result is returned)
+    # (polygon is smaller so coverage % may actually be higher, but that's the
+    # correct calculation — we just verify no crash and result is returned)
     assert result is not None, "Compliance check must return a result"
 
 

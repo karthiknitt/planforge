@@ -1,4 +1,5 @@
 """Tests for DXF document-level setup: metric headers, LWDISPLAY, DEFPOINTS."""
+
 import io
 import pytest
 import ezdxf
