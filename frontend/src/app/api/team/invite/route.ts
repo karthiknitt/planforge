@@ -15,13 +15,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const body = (await req.json()) as InviteBody;
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
 
-  const res = await fetch(`${backendUrl}/api/teams/${body.teamId}/members`, {
+  const res = await fetch(`/api/backend/teams/${body.teamId}/members`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-User-Id": session.user.id,
     },
     body: JSON.stringify({ email: body.email, role: body.role }),
   });

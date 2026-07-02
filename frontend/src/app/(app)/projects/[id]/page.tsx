@@ -30,15 +30,11 @@ function metresToFeet(metres: string | number): string {
   return (Math.round((parseFloat(String(metres)) / 0.3048) * 10) / 10).toFixed(1);
 }
 
-async function fetchLayouts(projectId: string, userId: string): Promise<GenerateResponse | null> {
+async function fetchLayouts(projectId: string): Promise<GenerateResponse | null> {
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/generate`,
-      {
-        headers: { "X-User-Id": userId },
-        next: { revalidate: 300, tags: [`project-${projectId}`] },
-      }
-    );
+    const res = await fetch(`/api/backend/projects/${projectId}/generate`, {
+      next: { revalidate: 300, tags: [`project-${projectId}`] },
+    });
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -51,7 +47,6 @@ async function fetchLayouts(projectId: string, userId: string): Promise<Generate
 interface LayoutSectionProps {
   projectId: string;
   projectName: string;
-  userId: string;
   plotWidth: number;
   plotLength: number;
   roadSide: string;
@@ -75,7 +70,6 @@ interface LayoutSectionProps {
 async function LayoutSection({
   projectId,
   projectName,
-  userId,
   plotWidth,
   plotLength,
   roadSide,
@@ -95,7 +89,7 @@ async function LayoutSection({
   approvalNote,
   approvalUpdatedAt,
 }: LayoutSectionProps) {
-  const generateData = await fetchLayouts(projectId, userId);
+  const generateData = await fetchLayouts(projectId);
   return (
     <LayoutViewer
       generateData={generateData}
@@ -313,7 +307,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         <LayoutSection
           projectId={id}
           projectName={project.name}
-          userId={session.user.id}
           plotWidth={parseFloat(project.plotWidth)}
           plotLength={parseFloat(project.plotLength)}
           roadSide={project.roadSide}

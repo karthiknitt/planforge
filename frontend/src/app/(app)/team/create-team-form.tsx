@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-interface CreateTeamFormProps {
-  userId: string;
-}
-
-export function CreateTeamForm({ userId }: CreateTeamFormProps) {
+export function CreateTeamForm() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,17 +20,13 @@ export function CreateTeamForm({ userId }: CreateTeamFormProps) {
     setError(null);
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000"}/api/teams`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-User-Id": userId,
-          },
-          body: JSON.stringify({ name: name.trim() }),
-        }
-      );
+      const res = await fetch(`/api/backend/teams`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: name.trim() }),
+      });
 
       if (!res.ok) {
         const data = (await res.json()) as { detail?: string };

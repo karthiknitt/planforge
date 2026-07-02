@@ -14,11 +14,9 @@ export async function DELETE(req: Request): Promise<NextResponse> {
   }
 
   const body = (await req.json()) as DeleteBody;
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
 
-  const res = await fetch(`${backendUrl}/api/teams/${body.teamId}/members/${body.targetUserId}`, {
+  const res = await fetch(`/api/backend/teams/${body.teamId}/members/${body.targetUserId}`, {
     method: "DELETE",
-    headers: { "X-User-Id": session.user.id },
   });
 
   if (!res.ok) {

@@ -14,7 +14,7 @@ import { DEFAULT_MODEL_ID, getModelProvider } from "@/lib/models";
 
 export const maxDuration = 60;
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BACKEND = "/api/backend";
 
 function buildSystemPrompt(layoutState: unknown): string {
   return `You are PlanForge's AI layout assistant. You help users refine their residential floor plans through natural language.
@@ -231,11 +231,7 @@ export async function POST(req: Request, { params }: { params: Params }) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { messages, layoutState, userId, selectedModel } = body;
-
-  if (!userId) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { messages, layoutState, selectedModel } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: "No messages provided" }, { status: 400 });
@@ -310,7 +306,6 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
   const backendHeaders: Record<string, string> = {
     "Content-Type": "application/json",
-    "X-User-Id": userId as string,
   };
 
   let modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>;
