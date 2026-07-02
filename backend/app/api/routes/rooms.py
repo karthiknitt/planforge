@@ -30,7 +30,7 @@ router = APIRouter()
 # ── In-memory room state + undo stack ────────────────────────────────────────
 # Key: "{project_id}:{user_id}" → deque of serialised layout snapshots
 _undo_stacks: dict[str, deque[str]] = {}
-_layout_state: dict[str, dict] = {}   # live layout per session key
+_layout_state: dict[str, dict] = {}  # live layout per session key
 MAX_UNDO = 10
 
 
@@ -87,8 +87,13 @@ def _buildable_box(project: Project):
 
 
 def _check_placement(
-    room_id: str, x: float, y: float, w: float, d: float,
-    rooms: list[dict], project: Project
+    room_id: str,
+    x: float,
+    y: float,
+    w: float,
+    d: float,
+    rooms: list[dict],
+    project: Project,
 ) -> tuple[bool, str]:
     new_poly = box(x, y, x + w, y + d)
     buildable = _buildable_box(project)
@@ -104,7 +109,12 @@ def _check_placement(
 
 
 def _get_state_rooms(state: dict, floor: str) -> list[dict]:
-    floor_map = {"gf": "ground_floor", "ff": "first_floor", "sf": "second_floor", "basement": "basement_floor"}
+    floor_map = {
+        "gf": "ground_floor",
+        "ff": "first_floor",
+        "sf": "second_floor",
+        "basement": "basement_floor",
+    }
     fp_key = floor_map.get(floor, "ground_floor")
     fp = state.get(fp_key)
     if not fp:
@@ -157,7 +167,7 @@ class RoomEditItem(BaseModel):
     x: float
     y: float
     width: float
-    height: float   # frontend sends "height" = backend "depth"
+    height: float  # frontend sends "height" = backend "depth"
     floor: str = "gf"
 
 
@@ -171,9 +181,9 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
     if key not in _layout_state:
         # Generate fresh and cache first layout
         project = await _get_project(project_id, user_id, db)
-        from decimal import Decimal
         from app.engine.generator import generate
         from app.engine.models import PlotConfig
+
         cfg = PlotConfig(
             plot_length=_to_float(project.plot_length),
             plot_width=_to_float(project.plot_width),
@@ -195,7 +205,9 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
         )
         layouts = generate(cfg)
         if not layouts:
-            raise HTTPException(status_code=422, detail="No compliant layouts could be generated")
+            raise HTTPException(
+                status_code=422, detail="No compliant layouts could be generated"
+            )
         layout = layouts[0]
 
         def _fp_to_dict(fp) -> dict:
@@ -203,8 +215,16 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
                 "floor": fp.floor,
                 "floor_type": getattr(fp, "floor_type", "ground"),
                 "rooms": [
-                    {"id": r.id, "name": r.name, "type": r.type,
-                     "x": r.x, "y": r.y, "width": r.width, "depth": r.depth, "area": r.area}
+                    {
+                        "id": r.id,
+                        "name": r.name,
+                        "type": r.type,
+                        "x": r.x,
+                        "y": r.y,
+                        "width": r.width,
+                        "depth": r.depth,
+                        "area": r.area,
+                    }
                     for r in fp.rooms
                 ],
                 "columns": [{"x": c.x, "y": c.y} for c in fp.columns],
@@ -213,8 +233,12 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
         _layout_state[key] = {
             "ground_floor": _fp_to_dict(layout.ground_floor),
             "first_floor": _fp_to_dict(layout.first_floor),
-            "second_floor": _fp_to_dict(layout.second_floor) if layout.second_floor else None,
-            "basement_floor": _fp_to_dict(layout.basement_floor) if layout.basement_floor else None,
+            "second_floor": _fp_to_dict(layout.second_floor)
+            if layout.second_floor
+            else None,
+            "basement_floor": _fp_to_dict(layout.basement_floor)
+            if layout.basement_floor
+            else None,
         }
     return _layout_state[key]
 
@@ -247,7 +271,8 @@ async def list_rooms(
 
 @router.get("/projects/{project_id}/rooms/{room_id}")
 async def get_room(
-    project_id: str, room_id: str,
+    project_id: str,
+    room_id: str,
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -264,7 +289,9 @@ async def get_room(
 
 @router.post("/projects/{project_id}/rooms/{room_id}/move")
 async def move_room(
-    project_id: str, room_id: str, body: MoveRequest,
+    project_id: str,
+    room_id: str,
+    body: MoveRequest,
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -281,7 +308,9 @@ async def move_room(
         raise HTTPException(404, "Room not found")
 
     all_rooms = state[floor_key]["rooms"]
-    ok, err = _check_placement(room_id, body.x, body.y, room["width"], room["depth"], all_rooms, project)
+    ok, err = _check_placement(
+        room_id, body.x, body.y, room["width"], room["depth"], all_rooms, project
+    )
     if not ok:
         return {"success": False, "error": err}
 
@@ -293,7 +322,9 @@ async def move_room(
 
 @router.post("/projects/{project_id}/rooms/{room_id}/resize")
 async def resize_room(
-    project_id: str, room_id: str, body: ResizeRequest,
+    project_id: str,
+    room_id: str,
+    body: ResizeRequest,
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -312,7 +343,9 @@ async def resize_room(
     new_w = body.new_width or room["width"]
     new_d = body.new_depth or room["depth"]
     all_rooms = state[floor_key]["rooms"]
-    ok, err = _check_placement(room_id, room["x"], room["y"], new_w, new_d, all_rooms, project)
+    ok, err = _check_placement(
+        room_id, room["x"], room["y"], new_w, new_d, all_rooms, project
+    )
     if not ok:
         return {"success": False, "error": err, "adjusted": False}
 
@@ -325,7 +358,8 @@ async def resize_room(
 
 @router.post("/projects/{project_id}/rooms/swap")
 async def swap_rooms(
-    project_id: str, body: SwapRequest,
+    project_id: str,
+    body: SwapRequest,
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -345,7 +379,12 @@ async def swap_rooms(
 
     _push_undo(key, json.loads(json.dumps(state)))
     ax, ay, aw, ad = room_a["x"], room_a["y"], room_a["width"], room_a["depth"]
-    room_a["x"], room_a["y"], room_a["width"], room_a["depth"] = room_b["x"], room_b["y"], room_b["width"], room_b["depth"]
+    room_a["x"], room_a["y"], room_a["width"], room_a["depth"] = (
+        room_b["x"],
+        room_b["y"],
+        room_b["width"],
+        room_b["depth"],
+    )
     room_a["area"] = round(room_b["width"] * room_b["depth"], 2)
     room_b["x"], room_b["y"], room_b["width"], room_b["depth"] = ax, ay, aw, ad
     room_b["area"] = round(aw * ad, 2)
@@ -354,7 +393,8 @@ async def swap_rooms(
 
 @router.post("/projects/{project_id}/rooms")
 async def add_room(
-    project_id: str, body: AddRoomRequest,
+    project_id: str,
+    body: AddRoomRequest,
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -362,11 +402,13 @@ async def add_room(
     if tier != "pro":
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    import json, uuid as _uuid
-    from app.config import room_specs_path
+    import json
+    import uuid as _uuid
     import pathlib
 
-    specs_path = pathlib.Path(__file__).parent.parent.parent / "config" / "room_specs.json"
+    specs_path = (
+        pathlib.Path(__file__).parent.parent.parent / "config" / "room_specs.json"
+    )
     specs = json.loads(specs_path.read_text())
     spec = specs.get(body.type, specs.get("utility"))
 
@@ -374,10 +416,18 @@ async def add_room(
     state = await _get_or_init_state(project_id, user_id, db)
     key = _session_key(project_id, user_id)
 
-    floor_map = {"gf": "ground_floor", "ff": "first_floor", "sf": "second_floor", "basement": "basement_floor"}
+    floor_map = {
+        "gf": "ground_floor",
+        "ff": "first_floor",
+        "sf": "second_floor",
+        "basement": "basement_floor",
+    }
     floor_key = floor_map.get(body.floor, "ground_floor")
     if floor_key not in state or state[floor_key] is None:
-        return {"success": False, "error": f"Floor '{body.floor}' does not exist in this layout"}
+        return {
+            "success": False,
+            "error": f"Floor '{body.floor}' does not exist in this layout",
+        }
 
     w = body.width or spec["min_width_m"] * 1.5
     d = body.depth or spec["min_width_m"] * 1.5
@@ -394,7 +444,10 @@ async def add_room(
         "id": f"custom_{_uuid.uuid4().hex[:8]}",
         "name": body.name or body.type.replace("_", " ").title(),
         "type": body.type,
-        "x": x, "y": y, "width": w, "depth": d,
+        "x": x,
+        "y": y,
+        "width": w,
+        "depth": d,
         "area": round(w * d, 2),
     }
     state[floor_key]["rooms"].append(new_room)
@@ -403,7 +456,8 @@ async def add_room(
 
 @router.delete("/projects/{project_id}/rooms/{room_id}")
 async def delete_room(
-    project_id: str, room_id: str,
+    project_id: str,
+    room_id: str,
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -418,13 +472,16 @@ async def delete_room(
         raise HTTPException(404, "Room not found")
 
     _push_undo(key, json.loads(json.dumps(state)))
-    state[floor_key]["rooms"] = [r for r in state[floor_key]["rooms"] if r["id"] != room_id]
+    state[floor_key]["rooms"] = [
+        r for r in state[floor_key]["rooms"] if r["id"] != room_id
+    ]
     return {"success": True}
 
 
 @router.get("/projects/{project_id}/available-space")
 async def available_space(
-    project_id: str, floor: str = "gf",
+    project_id: str,
+    floor: str = "gf",
     user_id: str = Depends(_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -438,7 +495,12 @@ async def available_space(
 
     buildable = _buildable_box(project)
     if rooms:
-        used = unary_union([box(r["x"], r["y"], r["x"] + r["width"], r["y"] + r["depth"]) for r in rooms])
+        used = unary_union(
+            [
+                box(r["x"], r["y"], r["x"] + r["width"], r["y"] + r["depth"])
+                for r in rooms
+            ]
+        )
         free = buildable.difference(used)
     else:
         free = buildable
@@ -464,18 +526,35 @@ async def check_compliance(
     state = await _get_or_init_state(project_id, user_id, db)
 
     from app.engine.compliance import check, load_rules
-    from app.engine.models import (Column, ComplianceResult, FloorPlan, Layout,
-                                    PlotConfig, Room)
+    from app.engine.models import (
+        Column,
+        ComplianceResult,
+        FloorPlan,
+        Layout,
+        PlotConfig,
+        Room,
+    )
 
-    def _state_to_floor(state_dict: dict | None, floor_num: int, ftype: str) -> FloorPlan | None:
+    def _state_to_floor(
+        state_dict: dict | None, floor_num: int, ftype: str
+    ) -> FloorPlan | None:
         if not state_dict:
             return None
         return FloorPlan(
             floor=floor_num,
             floor_type=ftype,
-            rooms=[Room(id=r["id"], name=r["name"], type=r["type"],
-                        x=r["x"], y=r["y"], width=r["width"], depth=r["depth"])
-                   for r in state_dict.get("rooms", [])],
+            rooms=[
+                Room(
+                    id=r["id"],
+                    name=r["name"],
+                    type=r["type"],
+                    x=r["x"],
+                    y=r["y"],
+                    width=r["width"],
+                    depth=r["depth"],
+                )
+                for r in state_dict.get("rooms", [])
+            ],
             columns=[Column(x=c["x"], y=c["y"]) for c in state_dict.get("columns", [])],
         )
 
@@ -487,7 +566,8 @@ async def check_compliance(
         setback_left=_to_float(project.setback_left),
         setback_right=_to_float(project.setback_right),
         num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets, parking=project.parking,
+        toilets=project.toilets,
+        parking=project.parking,
         city=getattr(project, "city", "other") or "other",
         vastu_enabled=getattr(project, "vastu_enabled", False) or False,
         road_side=getattr(project, "road_side", "S") or "S",
@@ -497,7 +577,8 @@ async def check_compliance(
         cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
     )
     layout = Layout(
-        id="live", name="Live",
+        id="live",
+        name="Live",
         ground_floor=_state_to_floor(state.get("ground_floor"), 0, "ground"),
         first_floor=_state_to_floor(state.get("first_floor"), 1, "first"),
         second_floor=_state_to_floor(state.get("second_floor"), 2, "second"),
@@ -506,7 +587,11 @@ async def check_compliance(
     )
     rules = load_rules()
     result = check(layout, cfg, rules)
-    return {"passed": result.passed, "violations": result.violations, "warnings": result.warnings}
+    return {
+        "passed": result.passed,
+        "violations": result.violations,
+        "warnings": result.warnings,
+    }
 
 
 @router.post("/layouts/{layout_id}/compliance-check")
@@ -526,8 +611,13 @@ async def compliance_check_rooms(
     project = await _get_project(x_project_id, user_id, db)
 
     from app.engine.compliance import check, load_rules
-    from app.engine.models import (Column, ComplianceResult, FloorPlan, Layout,
-                                    PlotConfig, Room)
+    from app.engine.models import (
+        ComplianceResult,
+        FloorPlan,
+        Layout,
+        PlotConfig,
+        Room,
+    )
 
     floor_map_in = {
         "gf": ("ground_floor", 0, "ground"),
@@ -562,8 +652,16 @@ async def compliance_check_rooms(
 
     gf = _make_floor("ground_floor", 0, "ground")
     ff = _make_floor("first_floor", 1, "first")
-    sf = _make_floor("second_floor", 2, "second") if floor_rooms["second_floor"] else None
-    bf = _make_floor("basement_floor", -1, "basement") if floor_rooms["basement_floor"] else None
+    sf = (
+        _make_floor("second_floor", 2, "second")
+        if floor_rooms["second_floor"]
+        else None
+    )
+    bf = (
+        _make_floor("basement_floor", -1, "basement")
+        if floor_rooms["basement_floor"]
+        else None
+    )
 
     cfg = PlotConfig(
         plot_length=_to_float(project.plot_length),
@@ -635,6 +733,7 @@ async def undo_last(
 
 def _state_to_layout_dict(state: dict) -> dict:
     """Convert in-memory floor-plan state to a LayoutData-compatible dict."""
+
     def _ensure_floor(fp: dict | None) -> dict | None:
         if fp is None:
             return None

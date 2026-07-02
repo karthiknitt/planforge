@@ -11,8 +11,6 @@ Covers:
   - Authenticated approval status poll
 """
 
-import pytest
-
 USER_ID = "user-share-001"
 OTHER_USER = "user-share-002"
 HEADERS = {"X-User-Id": USER_ID}
@@ -41,13 +39,14 @@ async def _create_project(client) -> str:
 
 # ── Token generation ───────────────────────────────────────────────────────────
 
+
 async def test_create_share_token_returns_token(client):
     pid = await _create_project(client)
     r = await client.post(f"/api/projects/{pid}/share", headers=HEADERS)
     assert r.status_code == 200
     data = r.json()
     assert "token" in data
-    assert len(data["token"]) == 36          # UUID format
+    assert len(data["token"]) == 36  # UUID format
     assert data["share_url"] == f"/share/{data['token']}"
 
 
@@ -68,13 +67,12 @@ async def test_create_share_token_wrong_user_returns_403(client):
 
 
 async def test_create_share_token_unknown_project_returns_404(client):
-    r = await client.post(
-        "/api/projects/nonexistent-id/share", headers=HEADERS
-    )
+    r = await client.post("/api/projects/nonexistent-id/share", headers=HEADERS)
     assert r.status_code == 404
 
 
 # ── Public read via token ──────────────────────────────────────────────────────
+
 
 async def test_get_shared_project_returns_layouts(client):
     pid = await _create_project(client)
@@ -99,9 +97,12 @@ async def test_get_shared_project_unknown_token_returns_404(client):
 
 # ── Client approval flow ───────────────────────────────────────────────────────
 
+
 async def test_approve_shared_project(client):
     pid = await _create_project(client)
-    token = (await client.post(f"/api/projects/{pid}/share", headers=HEADERS)).json()["token"]
+    token = (await client.post(f"/api/projects/{pid}/share", headers=HEADERS)).json()[
+        "token"
+    ]
 
     r = await client.post(
         f"/api/share/{token}/approve",
@@ -118,7 +119,9 @@ async def test_approve_shared_project(client):
 
 async def test_request_changes_shared_project(client):
     pid = await _create_project(client)
-    token = (await client.post(f"/api/projects/{pid}/share", headers=HEADERS)).json()["token"]
+    token = (await client.post(f"/api/projects/{pid}/share", headers=HEADERS)).json()[
+        "token"
+    ]
 
     r = await client.post(
         f"/api/share/{token}/request-changes",
@@ -142,9 +145,12 @@ async def test_approve_unknown_token_returns_404(client):
 
 # ── Engineer polls approval status ────────────────────────────────────────────
 
+
 async def test_approval_status_endpoint(client):
     pid = await _create_project(client)
-    token = (await client.post(f"/api/projects/{pid}/share", headers=HEADERS)).json()["token"]
+    token = (await client.post(f"/api/projects/{pid}/share", headers=HEADERS)).json()[
+        "token"
+    ]
 
     # Before any client action
     r = await client.get(f"/api/projects/{pid}/approval-status", headers=HEADERS)
@@ -152,7 +158,9 @@ async def test_approval_status_endpoint(client):
     assert r.json()["approval_status"] is None
 
     # After client approves
-    await client.post(f"/api/share/{token}/approve", json={"selected_layout_ids": ["B"]})
+    await client.post(
+        f"/api/share/{token}/approve", json={"selected_layout_ids": ["B"]}
+    )
     r = await client.get(f"/api/projects/{pid}/approval-status", headers=HEADERS)
     data = r.json()
     assert data["approval_status"] == "approved"

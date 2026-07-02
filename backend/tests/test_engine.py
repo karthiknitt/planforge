@@ -109,7 +109,9 @@ def test_staircase_aligned_vertically():
     for lay in generate(STANDARD_CFG):
         gf_stairs = [r for r in lay.ground_floor.rooms if r.type == "staircase"]
         ff_stairs = [r for r in lay.first_floor.rooms if r.type == "staircase"]
-        assert gf_stairs and ff_stairs, f"Layout {lay.id}: missing staircase on one floor"
+        assert gf_stairs and ff_stairs, (
+            f"Layout {lay.id}: missing staircase on one floor"
+        )
         assert gf_stairs[0].x == pytest.approx(ff_stairs[0].x, abs=0.01)
         assert gf_stairs[0].y == pytest.approx(ff_stairs[0].y, abs=0.01)
 

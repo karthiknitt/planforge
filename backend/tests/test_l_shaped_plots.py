@@ -1,7 +1,5 @@
 """Tests for L-shaped plot support — polygon construction and layout generation."""
 
-import pytest
-
 from app.engine.generator import compute_l_shaped_polygon, generate
 from app.engine.models import PlotConfig
 
@@ -71,10 +69,18 @@ def test_l_shaped_polygon_has_six_vertices():
 def test_l_shaped_polygon_all_corners():
     """All four cutout corners (NE/NW/SE/SW) produce valid 6-vertex polygons."""
     base = dict(
-        plot_length=12.0, plot_width=9.0,
-        setback_front=1.2, setback_rear=1.2, setback_left=1.0, setback_right=1.0,
-        num_bedrooms=2, toilets=2, parking=False,
-        plot_shape="l_shaped", cutout_width=3.0, cutout_height=3.0,
+        plot_length=12.0,
+        plot_width=9.0,
+        setback_front=1.2,
+        setback_rear=1.2,
+        setback_left=1.0,
+        setback_right=1.0,
+        num_bedrooms=2,
+        toilets=2,
+        parking=False,
+        plot_shape="l_shaped",
+        cutout_width=3.0,
+        cutout_height=3.0,
     )
     for corner in ("NE", "NW", "SE", "SW"):
         cfg = PlotConfig(**base, cutout_corner=corner)

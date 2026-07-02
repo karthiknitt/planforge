@@ -109,13 +109,16 @@ def _plate_box(cfg: PlotConfig, ewt: float):
     For all other shapes, returns a simple rectangle.
     """
     from shapely.geometry import box
+
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
     w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
     d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
     if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
         l_poly = compute_l_shaped_polygon(cfg)
-        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        avg_sb = (
+            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+        ) / 4
         inset = l_poly.buffer(-(avg_sb + ewt), join_style="mitre")
         return inset if not inset.is_empty else box(ox, oy, ox + w, oy + d)
     return box(ox, oy, ox + w, oy + d)
@@ -159,7 +162,9 @@ def _fill_blank_areas(
 
     # Decompose MultiPolygon into individual pieces
     if leftover.geom_type in ("MultiPolygon", "GeometryCollection"):
-        regions = [g for g in leftover.geoms if g.geom_type == "Polygon" and g.area >= 0.5]
+        regions = [
+            g for g in leftover.geoms if g.geom_type == "Polygon" and g.area >= 0.5
+        ]
     else:
         regions = [leftover] if leftover.area >= 0.5 else []
 
@@ -184,38 +189,42 @@ def _fill_blank_areas(
                 # Large top-floor leftover → Open Terrace (min 1.5 m each dimension)
                 if rw >= 1.5 and rd >= 1.5:
                     room_id = _next_id("open_terrace")
-                    floor_plan.rooms.append(Room(
-                        id=room_id,
-                        name="Open Terrace",
-                        type="balcony",  # closest existing type for compliance purposes
-                        x=round(minx, 3),
-                        y=round(miny, 3),
-                        width=rw,
-                        depth=rd,
-                    ))
-                    notes.append(
-                        f"Open Terrace ({area:.1f} sqm) added to top floor."
+                    floor_plan.rooms.append(
+                        Room(
+                            id=room_id,
+                            name="Open Terrace",
+                            type="balcony",  # closest existing type for compliance purposes
+                            x=round(minx, 3),
+                            y=round(miny, 3),
+                            width=rw,
+                            depth=rd,
+                        )
                     )
+                    notes.append(f"Open Terrace ({area:.1f} sqm) added to top floor.")
                 else:
-                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+                    _absorb_into_adjacent(
+                        floor_plan, region, minx, miny, maxx, maxy, notes
+                    )
             elif area >= 4.0:
                 # Medium top-floor leftover → Utility
                 if rw >= 1.5 and rd >= 1.5:
                     room_id = _next_id("utility_auto")
-                    floor_plan.rooms.append(Room(
-                        id=room_id,
-                        name="Utility",
-                        type="utility",
-                        x=round(minx, 3),
-                        y=round(miny, 3),
-                        width=rw,
-                        depth=rd,
-                    ))
-                    notes.append(
-                        f"Utility ({area:.1f} sqm) added to top floor."
+                    floor_plan.rooms.append(
+                        Room(
+                            id=room_id,
+                            name="Utility",
+                            type="utility",
+                            x=round(minx, 3),
+                            y=round(miny, 3),
+                            width=rw,
+                            depth=rd,
+                        )
                     )
+                    notes.append(f"Utility ({area:.1f} sqm) added to top floor.")
                 else:
-                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+                    _absorb_into_adjacent(
+                        floor_plan, region, minx, miny, maxx, maxy, notes
+                    )
             else:
                 # < 4 m² → merge into adjacent room
                 _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
@@ -225,38 +234,42 @@ def _fill_blank_areas(
                 # Large gap → Store Room
                 if rw >= 1.5 and rd >= 1.5:
                     room_id = _next_id("store_auto")
-                    floor_plan.rooms.append(Room(
-                        id=room_id,
-                        name="Store Room",
-                        type="store_room",
-                        x=round(minx, 3),
-                        y=round(miny, 3),
-                        width=rw,
-                        depth=rd,
-                    ))
-                    notes.append(
-                        f"Store Room ({area:.1f} sqm) added to Ground Floor."
+                    floor_plan.rooms.append(
+                        Room(
+                            id=room_id,
+                            name="Store Room",
+                            type="store_room",
+                            x=round(minx, 3),
+                            y=round(miny, 3),
+                            width=rw,
+                            depth=rd,
+                        )
                     )
+                    notes.append(f"Store Room ({area:.1f} sqm) added to Ground Floor.")
                 else:
-                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+                    _absorb_into_adjacent(
+                        floor_plan, region, minx, miny, maxx, maxy, notes
+                    )
             elif area >= 4.0:
                 # Medium gap → Utility
                 if rw >= 1.5 and rd >= 1.5:
                     room_id = _next_id("utility_auto")
-                    floor_plan.rooms.append(Room(
-                        id=room_id,
-                        name="Utility",
-                        type="utility",
-                        x=round(minx, 3),
-                        y=round(miny, 3),
-                        width=rw,
-                        depth=rd,
-                    ))
-                    notes.append(
-                        f"Utility ({area:.1f} sqm) added to Ground Floor."
+                    floor_plan.rooms.append(
+                        Room(
+                            id=room_id,
+                            name="Utility",
+                            type="utility",
+                            x=round(minx, 3),
+                            y=round(miny, 3),
+                            width=rw,
+                            depth=rd,
+                        )
                     )
+                    notes.append(f"Utility ({area:.1f} sqm) added to Ground Floor.")
                 else:
-                    _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+                    _absorb_into_adjacent(
+                        floor_plan, region, minx, miny, maxx, maxy, notes
+                    )
             else:
                 # < 4 m² → merge into adjacent room
                 _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
@@ -267,7 +280,10 @@ def _fill_blank_areas(
 def _absorb_into_adjacent(
     floor_plan: FloorPlan,
     region,
-    minx: float, miny: float, maxx: float, maxy: float,
+    minx: float,
+    miny: float,
+    maxx: float,
+    maxy: float,
     notes: list[str],
 ) -> None:
     """Expand the largest room that shares an edge with the leftover region."""
@@ -275,10 +291,18 @@ def _absorb_into_adjacent(
     candidates = []
     for room in floor_plan.rooms:
         # Shares right edge with leftover's left edge
-        if abs(room.x + room.width - minx) < tol and room.y < maxy and room.y + room.depth > miny:
+        if (
+            abs(room.x + room.width - minx) < tol
+            and room.y < maxy
+            and room.y + room.depth > miny
+        ):
             candidates.append((room, "right"))
         # Shares top edge with leftover's bottom edge
-        elif abs(room.y + room.depth - miny) < tol and room.x < maxx and room.x + room.width > minx:
+        elif (
+            abs(room.y + room.depth - miny) < tol
+            and room.x < maxx
+            and room.x + room.width > minx
+        ):
             candidates.append((room, "top"))
         # Shares left edge with leftover's right edge
         elif abs(room.x - maxx) < tol and room.y < maxy and room.y + room.depth > miny:
@@ -327,7 +351,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
     except Exception:
         pass  # always fall through to archetypes
 
-    solver_ids = {l.id for l in solver_layouts}
+    solver_ids = {lay.id for lay in solver_layouts}
 
     # ── Archetype fallback ────────────────────────────────────────────────────
     archetype_layouts: list[Layout] = []
@@ -364,15 +388,13 @@ def generate(cfg: PlotConfig) -> list[Layout]:
 
     # ── L-shaped plot: remove rooms in the cutout zone ────────────────────────
     if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
-        cutout_polygon = compute_l_shaped_polygon(cfg).difference(
-            compute_l_shaped_polygon(cfg).buffer(-0.001)
-        )
         # Build the actual cutout rectangle (the removed corner)
         W = cfg.plot_width
         H = cfg.plot_length
         cw = cfg.cutout_width
         ch = cfg.cutout_height
         from shapely.geometry import box as _sbox
+
         if cfg.cutout_corner == "NE":
             cutout_zone = _sbox(W - cw, H - ch, W, H)
         elif cfg.cutout_corner == "NW":
@@ -384,11 +406,17 @@ def generate(cfg: PlotConfig) -> list[Layout]:
 
         for layout in all_layouts:
             cutout_notes: list[str] = []
-            for fp in [layout.ground_floor, layout.first_floor,
-                       layout.second_floor, layout.basement_floor]:
+            for fp in [
+                layout.ground_floor,
+                layout.first_floor,
+                layout.second_floor,
+                layout.basement_floor,
+            ]:
                 if fp is None or not fp.rooms:
                     continue
-                fp.rooms = _remove_cutout_overlap(fp.rooms, cutout_zone, cutout_notes, fp.floor)
+                fp.rooms = _remove_cutout_overlap(
+                    fp.rooms, cutout_zone, cutout_notes, fp.floor
+                )
             # prepend cutout notes so they appear first in space_notes
             layout.space_notes = cutout_notes + layout.space_notes
 

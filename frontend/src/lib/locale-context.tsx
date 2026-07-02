@@ -34,6 +34,9 @@ function getInitialLocale(): Locale {
 }
 
 function setLocaleCookie(locale: Locale) {
+  // Cookie Store API is async and lacks Safari/Firefox support; this needs a
+  // synchronous write on locale switch.
+  // biome-ignore lint/suspicious/noDocumentCookie: sync write required, see above
   document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
 }
 

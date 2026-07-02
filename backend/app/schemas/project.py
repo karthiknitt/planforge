@@ -13,6 +13,7 @@ FloorPreference = Literal["basement", "stilt", "gf", "ff", "sf", "either"]
 
 class CustomRoomSpec(BaseModel):
     """User-defined room added via the advanced room config interface."""
+
     type: str
     name: str | None = None
     min_area_sqm: float | None = None
@@ -22,7 +23,9 @@ class CustomRoomSpec(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    plot_length: float = Field(ge=5.0, description="Plot length in metres (minimum 5 m)")
+    plot_length: float = Field(
+        ge=5.0, description="Plot length in metres (minimum 5 m)"
+    )
     plot_width: float = Field(ge=5.0, description="Plot width in metres (minimum 5 m)")
     setback_front: float = Field(ge=0)
     setback_rear: float = Field(ge=0)
@@ -49,7 +52,9 @@ class ProjectCreate(BaseModel):
     cutout_width: float = 0.0
     cutout_height: float = 0.0
     # Multi-floor (Phase E)
-    num_floors: int = Field(default=1, ge=1, le=3, description="Number of floors: 1=G, 2=G+1, 3=G+2")
+    num_floors: int = Field(
+        default=1, ge=1, le=3, description="Number of floors: 1=G, 2=G+1, 3=G+2"
+    )
     has_stilt: bool = False
     has_basement: bool = False
     # Municipality / building authority selector
@@ -120,7 +125,7 @@ class ProjectRead(BaseModel):
     plot_front_width: float | None = None
     plot_rear_width: float | None = None
     plot_side_offset: float | None = None
-    plot_corners: str | None = None   # raw JSON string from DB: [[x,y], ...]
+    plot_corners: str | None = None  # raw JSON string from DB: [[x,y], ...]
     cutout_corner: str = "NE"
     cutout_width: float = 0.0
     cutout_height: float = 0.0
@@ -128,7 +133,7 @@ class ProjectRead(BaseModel):
     has_stilt: bool = False
     has_basement: bool = False
     municipality: str | None = None
-    custom_room_config: str | None = None   # raw JSON string from DB
+    custom_room_config: str | None = None  # raw JSON string from DB
     team_id: int | None = None
     created_at: datetime
     updated_at: datetime

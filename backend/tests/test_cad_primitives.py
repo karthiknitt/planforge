@@ -1,13 +1,17 @@
 """Unit tests for cad_primitives.py"""
-import pytest
 
-from app.engine.cad_primitives import Opening, _gap_subtract, collect_openings, metres_to_ftin
+from app.engine.cad_primitives import (
+    _gap_subtract,
+    collect_openings,
+    metres_to_ftin,
+)
 from app.engine.models import Room
 
 
 # ---------------------------------------------------------------------------
 # metres_to_ftin
 # ---------------------------------------------------------------------------
+
 
 def test_metres_to_ftin_whole_feet():
     assert metres_to_ftin(3.048) == "10'-0\""
@@ -30,6 +34,7 @@ def test_metres_to_ftin_inch_rollover():
 # ---------------------------------------------------------------------------
 # _gap_subtract
 # ---------------------------------------------------------------------------
+
 
 def test_gap_subtract_no_gaps():
     segs = _gap_subtract(5.0, [])
@@ -71,6 +76,7 @@ def test_gap_subtract_unsorted_gaps():
 # collect_openings — helper fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_room(rid, name, rtype, x, y, width, depth):
     return Room(id=rid, name=name, type=rtype, x=x, y=y, width=width, depth=depth)
 
@@ -98,6 +104,7 @@ def _toilet_touching_exterior():
 # collect_openings — door detection
 # ---------------------------------------------------------------------------
 
+
 def test_collect_openings_finds_door_on_shared_vertical_wall():
     rooms, bld_x, bld_y, bld_w, bld_d = _two_adjacent_rooms_vertical()
     result = collect_openings(rooms, 0.23, 0.115, bld_x, bld_y, bld_w, bld_d)
@@ -122,6 +129,7 @@ def test_collect_openings_door_on_correct_wall():
 # collect_openings — window detection
 # ---------------------------------------------------------------------------
 
+
 def test_collect_openings_finds_window_on_exterior():
     rooms, bld_x, bld_y, bld_w, bld_d = _room_touching_front()
     result = collect_openings(rooms, 0.23, 0.115, bld_x, bld_y, bld_w, bld_d)
@@ -133,6 +141,7 @@ def test_collect_openings_finds_window_on_exterior():
 # ---------------------------------------------------------------------------
 # collect_openings — ventilator detection
 # ---------------------------------------------------------------------------
+
 
 def test_collect_openings_ventilator_for_toilet():
     rooms, bld_x, bld_y, bld_w, bld_d = _toilet_touching_exterior()
@@ -146,13 +155,16 @@ def test_collect_openings_ventilator_for_toilet():
 # Opening gaps are sorted and non-overlapping
 # ---------------------------------------------------------------------------
 
+
 def test_opening_gaps_are_sorted():
     rooms, bld_x, bld_y, bld_w, bld_d = _two_adjacent_rooms_vertical()
     result = collect_openings(rooms, 0.23, 0.115, bld_x, bld_y, bld_w, bld_d)
 
     for ops in result.values():
         for i in range(len(ops) - 1):
-            assert ops[i].t_start <= ops[i + 1].t_start, "Openings not sorted by t_start"
+            assert ops[i].t_start <= ops[i + 1].t_start, (
+                "Openings not sorted by t_start"
+            )
 
 
 def test_opening_t_values_in_range():
@@ -169,6 +181,7 @@ def test_opening_t_values_in_range():
 # ---------------------------------------------------------------------------
 # Wall key round-trip
 # ---------------------------------------------------------------------------
+
 
 def test_wall_key_format_matches_openings_map():
     """Wall keys from collect_openings must match (round(x1,2),...) format."""

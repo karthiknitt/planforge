@@ -14,8 +14,19 @@ from .models import Layout, LayoutScore, PlotConfig, Room
 
 
 # ── Habitable room types (rooms that benefit from natural light) ──────────────
-_HABITABLE = frozenset(["living", "bedroom", "master_bedroom", "kitchen",
-                         "dining", "study", "home_office", "gym", "servant_quarter"])
+_HABITABLE = frozenset(
+    [
+        "living",
+        "bedroom",
+        "master_bedroom",
+        "kitchen",
+        "dining",
+        "study",
+        "home_office",
+        "gym",
+        "servant_quarter",
+    ]
+)
 
 # ── Adjacency preference table ────────────────────────────────────────────────
 _ADJACENCY_PAIRS: list[tuple[str, str, float]] = [
@@ -32,12 +43,14 @@ def _shares_wall(a: Room, b: Room, tol: float = 0.05) -> bool:
     """Pure-Python adjacency check — no Shapely needed for scoring."""
     x_ov = max(0.0, min(a.x + a.width, b.x + b.width) - max(a.x, b.x))
     y_ov = max(0.0, min(a.y + a.depth, b.y + b.depth) - max(a.y, b.y))
-    abuts_x = (abs(a.x + a.width - b.x) < 0.2 or abs(b.x + b.width - a.x) < 0.2)
-    abuts_y = (abs(a.y + a.depth - b.y) < 0.2 or abs(b.y + b.depth - a.y) < 0.2)
+    abuts_x = abs(a.x + a.width - b.x) < 0.2 or abs(b.x + b.width - a.x) < 0.2
+    abuts_y = abs(a.y + a.depth - b.y) < 0.2 or abs(b.y + b.depth - a.y) < 0.2
     return (abuts_x and y_ov > tol) or (abuts_y and x_ov > tol)
 
 
-def _touches_boundary(room: Room, cfg: PlotConfig, ewt: float, tol: float = 0.1) -> bool:
+def _touches_boundary(
+    room: Room, cfg: PlotConfig, ewt: float, tol: float = 0.1
+) -> bool:
     """True if any edge of the room is within tol of the buildable boundary."""
     bx_min = cfg.setback_left + ewt
     bx_max = cfg.plot_width - cfg.setback_right - ewt
@@ -94,7 +107,7 @@ def _score_aspect_ratio(layout: Layout) -> float:
     for r in habitable:
         ratio = max(r.width, r.depth) / max(min(r.width, r.depth), 0.01)
         if ratio > 2.0:
-            penalty += (ratio - 2.0) * 10.0   # 10 pts per unit over 2:1
+            penalty += (ratio - 2.0) * 10.0  # 10 pts per unit over 2:1
     return max(0.0, 100.0 - penalty / len(habitable))
 
 
@@ -117,6 +130,7 @@ def _score_vastu(layout: Layout, cfg: PlotConfig) -> float:
     if not cfg.vastu_enabled:
         return 100.0  # neutral when vastu not requested
     from .vastu import check_vastu
+
     violations, warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
     score = 100.0 - len(violations) * 20.0 - len(warnings) * 5.0
     return max(0.0, score)
@@ -125,12 +139,13 @@ def _score_vastu(layout: Layout, cfg: PlotConfig) -> float:
 def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
     """Compute a weighted quality score for a layout."""
     from .compliance import load_rules
+
     rules = load_rules()
     ewt = rules["external_wall_thickness_mm"] / 1000
 
-    nl  = _score_natural_light(layout, cfg, ewt)
+    nl = _score_natural_light(layout, cfg, ewt)
     adj = _score_adjacency(layout)
-    ar  = _score_aspect_ratio(layout)
+    ar = _score_aspect_ratio(layout)
     cir = _score_circulation(layout, cfg, ewt)
     vas = _score_vastu(layout, cfg)
 
@@ -146,7 +161,9 @@ def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
     )
 
 
-def rank_and_select(layouts: list[Layout], cfg: PlotConfig, top_n: int = 3) -> list[Layout]:
+def rank_and_select(
+    layouts: list[Layout], cfg: PlotConfig, top_n: int = 3
+) -> list[Layout]:
     """Score all layouts, attach scores, return top_n sorted by score descending."""
     scored: list[tuple[float, Layout]] = []
     for layout in layouts:

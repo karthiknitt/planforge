@@ -7,10 +7,18 @@ from app.engine.solver import solve_layouts, _load_specs, _build_room_list
 
 def _basic_cfg(**kwargs) -> PlotConfig:
     defaults = dict(
-        plot_length=12.0, plot_width=9.0,
-        setback_front=1.5, setback_rear=1.0, setback_left=0.9, setback_right=0.9,
-        num_bedrooms=2, toilets=2, parking=False,
-        city="other", road_side="S", vastu_enabled=False,
+        plot_length=12.0,
+        plot_width=9.0,
+        setback_front=1.5,
+        setback_rear=1.0,
+        setback_left=0.9,
+        setback_right=0.9,
+        num_bedrooms=2,
+        toilets=2,
+        parking=False,
+        city="other",
+        road_side="S",
+        vastu_enabled=False,
     )
     defaults.update(kwargs)
     return PlotConfig(**defaults)
@@ -43,10 +51,12 @@ def test_room_list_optional_rooms():
 
 
 def test_room_list_custom_rooms():
-    cfg = _basic_cfg(custom_room_config=[
-        {"type": "gym", "name": "Home Gym", "floor_preference": "ff"},
-        {"type": "servant_quarter", "floor_preference": "gf"},
-    ])
+    cfg = _basic_cfg(
+        custom_room_config=[
+            {"type": "gym", "name": "Home Gym", "floor_preference": "ff"},
+            {"type": "servant_quarter", "floor_preference": "gf"},
+        ]
+    )
     rooms = _build_room_list(cfg, _load_specs())
     types = [r["type"] for r in rooms]
     assert "gym" in types
@@ -66,12 +76,20 @@ def test_solve_layouts_pass_compliance():
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
     for layout in layouts:
-        assert layout.compliance.passed, f"Layout {layout.id} failed: {layout.compliance.violations}"
+        assert layout.compliance.passed, (
+            f"Layout {layout.id} failed: {layout.compliance.violations}"
+        )
 
 
 def test_solve_too_small_plot_returns_empty():
-    cfg = _basic_cfg(plot_length=5.0, plot_width=5.0, setback_front=2.0, setback_rear=2.0,
-                     setback_left=1.5, setback_right=1.5)
+    cfg = _basic_cfg(
+        plot_length=5.0,
+        plot_width=5.0,
+        setback_front=2.0,
+        setback_rear=2.0,
+        setback_left=1.5,
+        setback_right=1.5,
+    )
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
     # Very small buildable area — should return no solver layouts (graceful)

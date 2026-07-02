@@ -14,7 +14,9 @@ class Team(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # Better Auth user ID
+    owner_id: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )  # Better Auth user ID
     plan_tier: Mapped[str] = mapped_column(String(20), default="firm", nullable=False)
     plan_expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -31,8 +33,12 @@ class TeamMember(Base):
     team_id: Mapped[int] = mapped_column(
         ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # Better Auth user ID
-    role: Mapped[str] = mapped_column(String(20), default="member", nullable=False)  # "admin" | "member"
+    user_id: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )  # Better Auth user ID
+    role: Mapped[str] = mapped_column(
+        String(20), default="member", nullable=False
+    )  # "admin" | "member"
     invited_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

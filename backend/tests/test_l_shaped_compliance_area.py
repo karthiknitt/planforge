@@ -12,20 +12,10 @@ Covers:
   - Inset area shrinks correctly when setbacks are applied
 """
 
-import math
-
-import pytest
-from shapely.geometry import Polygon
-
 from app.engine.compliance import check, load_rules
 from app.engine.generator import compute_l_shaped_polygon, generate
 from app.engine.models import (
-    Column,
-    ComplianceResult,
-    FloorPlan,
-    Layout,
     PlotConfig,
-    Room,
 )
 
 
@@ -49,10 +39,11 @@ def _l_cfg(cutout_corner: str = "NE") -> PlotConfig:
 
 # ── Polygon geometry ───────────────────────────────────────────────────────────
 
+
 def test_l_polygon_area_ne():
     cfg = _l_cfg("NE")
     poly = compute_l_shaped_polygon(cfg)
-    expected = 12.0 * 15.0 - 4.0 * 4.0   # 180 - 16 = 164
+    expected = 12.0 * 15.0 - 4.0 * 4.0  # 180 - 16 = 164
     assert abs(poly.area - expected) < 0.01
 
 
@@ -82,16 +73,21 @@ def test_ne_and_sw_polygons_differ():
     poly_ne = compute_l_shaped_polygon(_l_cfg("NE"))
     poly_sw = compute_l_shaped_polygon(_l_cfg("SW"))
     # Centroids differ even though areas are the same
-    assert abs(poly_ne.centroid.x - poly_sw.centroid.x) > 0.1 or \
-           abs(poly_ne.centroid.y - poly_sw.centroid.y) > 0.1
+    assert (
+        abs(poly_ne.centroid.x - poly_sw.centroid.x) > 0.1
+        or abs(poly_ne.centroid.y - poly_sw.centroid.y) > 0.1
+    )
 
 
 # ── Inset area (used for coverage / FAR) ─────────────────────────────────────
 
+
 def test_l_polygon_inset_is_smaller_than_full():
     cfg = _l_cfg("NE")
     poly = compute_l_shaped_polygon(cfg)
-    avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+    avg_sb = (
+        cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+    ) / 4
     inset = poly.buffer(-avg_sb, join_style=2)
     assert inset.area < poly.area
 
@@ -104,11 +100,13 @@ def test_l_polygon_inset_area_less_than_rectangular_inset():
     """
     cfg = _l_cfg("NE")
     poly = compute_l_shaped_polygon(cfg)
-    avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+    avg_sb = (
+        cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+    ) / 4
     inset_l = poly.buffer(-avg_sb, join_style=2).area
 
     # Rectangular bounding box inset
-    rect_w = cfg.plot_width  - cfg.setback_left  - cfg.setback_right
+    rect_w = cfg.plot_width - cfg.setback_left - cfg.setback_right
     rect_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
     inset_rect = rect_w * rect_d
 
@@ -118,6 +116,7 @@ def test_l_polygon_inset_area_less_than_rectangular_inset():
 
 
 # ── Compliance on generated L-shaped layout ───────────────────────────────────
+
 
 def test_l_shaped_generate_and_compliance_no_exception():
     """Full pipeline: generate → compliance check must not raise."""
@@ -152,6 +151,7 @@ def test_l_shaped_far_uses_polygon_not_bounding_box():
         # The number in the warning should reflect actual_far = footprint / 164
         # Extract the first float from the warning to sanity-check it's not absurd
         import re
+
         match = re.search(r"FAR (\d+\.\d+)", w)
         if match:
             actual_far = float(match.group(1))

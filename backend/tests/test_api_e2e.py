@@ -28,6 +28,7 @@ BASE_PAYLOAD = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 async def _create_project(client, payload=None):
     r = await client.post(
         "/api/projects", json=payload or BASE_PAYLOAD, headers=HEADERS
@@ -37,6 +38,7 @@ async def _create_project(client, payload=None):
 
 
 # ── Main workflow ─────────────────────────────────────────────────────────────
+
 
 async def test_health_check(client):
     r = await client.get("/api/health")
@@ -71,12 +73,20 @@ async def test_generate_layouts(client):
 
     for lay in gen["layouts"]:
         assert lay["id"], "Layout must have an ID"
-        assert len(lay["ground_floor"]["rooms"]) > 0, f"Layout {lay['id']} has no ground floor rooms"
-        assert len(lay["first_floor"]["rooms"]) > 0, f"Layout {lay['id']} has no first floor rooms"
-        assert len(lay["ground_floor"]["columns"]) > 0, f"Layout {lay['id']} has no columns"
+        assert len(lay["ground_floor"]["rooms"]) > 0, (
+            f"Layout {lay['id']} has no ground floor rooms"
+        )
+        assert len(lay["first_floor"]["rooms"]) > 0, (
+            f"Layout {lay['id']} has no first floor rooms"
+        )
+        assert len(lay["ground_floor"]["columns"]) > 0, (
+            f"Layout {lay['id']} has no columns"
+        )
         # Scorer attaches score to every layout
         assert lay["score"] is not None, f"Layout {lay['id']} missing score"
-        assert 0 <= lay["score"]["total"] <= 100, f"Score out of range for layout {lay['id']}"
+        assert 0 <= lay["score"]["total"] <= 100, (
+            f"Score out of range for layout {lay['id']}"
+        )
 
 
 async def test_export_pdf_all_layouts(client):
@@ -93,14 +103,20 @@ async def test_export_pdf_all_layouts(client):
             f"/api/projects/{project_id}/export/pdf?layout_id={layout_id}",
             headers=HEADERS,
         )
-        assert r.status_code == 200, f"Expected 200 for layout {layout_id}, got {r.status_code}"
+        assert r.status_code == 200, (
+            f"Expected 200 for layout {layout_id}, got {r.status_code}"
+        )
         assert r.headers["content-type"] == "application/pdf"
-        assert r.content[:4] == b"%PDF", f"Layout {layout_id} response is not a valid PDF"
+        assert r.content[:4] == b"%PDF", (
+            f"Layout {layout_id} response is not a valid PDF"
+        )
         assert (
             r.headers["content-disposition"]
             == f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
         )
-        assert len(r.content) > 5_000, f"PDF for layout {layout_id} is suspiciously small ({len(r.content)} bytes)"
+        assert len(r.content) > 5_000, (
+            f"PDF for layout {layout_id} is suspiciously small ({len(r.content)} bytes)"
+        )
 
 
 async def test_full_workflow(client):
@@ -117,22 +133,32 @@ async def test_full_workflow(client):
     # 3. Export first generated layout (scorer determines which layout IDs are top-ranked)
     first_layout_id = layouts[0]["id"]
     r = await client.get(
-        f"/api/projects/{project_id}/export/pdf?layout_id={first_layout_id}", headers=HEADERS
+        f"/api/projects/{project_id}/export/pdf?layout_id={first_layout_id}",
+        headers=HEADERS,
     )
     assert r.status_code == 200
     assert r.content[:4] == b"%PDF"
 
     # 4. Auth isolation
     other = {"X-User-Id": "someone-else"}
-    assert (await client.get(f"/api/projects/{project_id}/generate", headers=other)).status_code == 404
-    assert (await client.get(f"/api/projects/{project_id}/export/pdf", headers=other)).status_code == 404
+    assert (
+        await client.get(f"/api/projects/{project_id}/generate", headers=other)
+    ).status_code == 404
+    assert (
+        await client.get(f"/api/projects/{project_id}/export/pdf", headers=other)
+    ).status_code == 404
 
     # 5. Non-existent project
-    assert (await client.get("/api/projects/no-such-id/export/pdf", headers=HEADERS)).status_code == 404
-    assert (await client.get("/api/projects/no-such-id/generate", headers=HEADERS)).status_code == 404
+    assert (
+        await client.get("/api/projects/no-such-id/export/pdf", headers=HEADERS)
+    ).status_code == 404
+    assert (
+        await client.get("/api/projects/no-such-id/generate", headers=HEADERS)
+    ).status_code == 404
 
 
 # ── Error paths ───────────────────────────────────────────────────────────────
+
 
 async def test_missing_user_id_returns_422(client):
     r = await client.get("/api/projects")
@@ -154,6 +180,7 @@ async def test_validation_rejects_bad_payload(client):
 
 
 # ── Fix regression tests ──────────────────────────────────────────────────────
+
 
 async def test_plot_below_minimum_rejected(client):
     """Schema rejects plots smaller than 5 m on either dimension."""
@@ -215,6 +242,7 @@ async def test_rooms_respect_wall_thickness(client):
 
 # ── BHK variants ─────────────────────────────────────────────────────────────
 
+
 async def test_1bhk_project(client):
     payload = {**BASE_PAYLOAD, "name": "1BHK Plot", "num_bedrooms": 1, "toilets": 1}
     project_id = await _create_project(client, payload)
@@ -224,8 +252,13 @@ async def test_1bhk_project(client):
 
 
 async def test_3bhk_project(client):
-    payload = {**BASE_PAYLOAD, "name": "3BHK Plot", "num_bedrooms": 3,
-               "toilets": 3, "parking": True}
+    payload = {
+        **BASE_PAYLOAD,
+        "name": "3BHK Plot",
+        "num_bedrooms": 3,
+        "toilets": 3,
+        "parking": True,
+    }
     project_id = await _create_project(client, payload)
 
     r = await client.get(f"/api/projects/{project_id}/generate", headers=HEADERS)
@@ -233,8 +266,8 @@ async def test_3bhk_project(client):
 
     for lay in r.json()["layouts"]:
         ground_types = {rm["type"] for rm in lay["ground_floor"]["rooms"]}
-        first_types  = {rm["type"] for rm in lay["first_floor"]["rooms"]}
-        all_types    = ground_types | first_types
+        first_types = {rm["type"] for rm in lay["first_floor"]["rooms"]}
+        all_types = ground_types | first_types
         assert "bedroom" in first_types
         assert "kitchen" in ground_types
         assert "living" in all_types

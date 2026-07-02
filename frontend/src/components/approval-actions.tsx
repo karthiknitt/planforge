@@ -186,7 +186,7 @@ export function ApprovalActions({
                   ].join(" ")}
                 >
                   {selected && (
-                    <svg viewBox="0 0 12 10" className="h-3 w-3 fill-current">
+                    <svg viewBox="0 0 12 10" className="h-3 w-3 fill-current" aria-hidden="true">
                       <path
                         d="M1 5l3 4L11 1"
                         stroke="currentColor"
@@ -258,7 +258,7 @@ export function ApprovalActions({
               ? "Approving…"
               : selectedLayouts.length === 0
                 ? "✅ Approve (select a layout first)"
-                : `✅ Approve ${selectedLayouts.length === 1 ? "Layout " + selectedLayouts[0] : `${selectedLayouts.length} layouts`}`}
+                : `✅ Approve ${selectedLayouts.length === 1 ? `Layout ${selectedLayouts[0]}` : `${selectedLayouts.length} layouts`}`}
           </Button>
           <Button
             variant="outline"

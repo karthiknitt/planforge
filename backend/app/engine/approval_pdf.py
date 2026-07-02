@@ -9,9 +9,9 @@ Page 2 — Ground Floor Approval Plan
 Page 3 — First Floor Approval Plan
 Page 4 — Section View + Professional Title Block
 """
+
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
@@ -32,13 +32,13 @@ from app.engine.pdf import (
 
 # ── Page geometry constants (points) ─────────────────────────────────────────
 MARGIN = 40
-TITLE_H = 120          # approval title block (taller than standard PDF)
+TITLE_H = 120  # approval title block (taller than standard PDF)
 TOP_PAD = 32
 ROAD_H = 20
 ROAD_GAP = 6
 
-EXT_LW = 2.5           # external wall lineweight (IS code: heavier)
-INT_LW = 1.0           # internal wall lineweight
+EXT_LW = 2.5  # external wall lineweight (IS code: heavier)
+INT_LW = 1.0  # internal wall lineweight
 DIM_LW = 0.5
 
 # Municipality → building authority label mapping
@@ -71,6 +71,7 @@ class OwnerInfo:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def generate_approval_pdf(
     layout: Layout,
@@ -108,13 +109,16 @@ def generate_approval_pdf(
 
 # ── Page 1: Site Location Plan ────────────────────────────────────────────────
 
+
 def _draw_site_location_plan(
     c: canvas.Canvas,
     cfg: PlotConfig,
     owner: OwnerInfo,
 ) -> None:
     page_w, page_h = A4
-    authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper()[:6])
+    authority = _MUNICIPALITY_LABELS.get(
+        owner.municipality, owner.municipality.upper()[:6]
+    )
 
     # Background
     c.setFillColor(HexColor("#FFFFFF"))
@@ -139,7 +143,9 @@ def _draw_site_location_plan(
     total_w = cfg.plot_width + cfg.setback_left + cfg.setback_right + 4
     total_l = cfg.plot_length + cfg.setback_front + cfg.setback_rear + 4
 
-    scale = min(draw_w / total_w, draw_h / total_l) * 0.75  # 75% of available for margins
+    scale = (
+        min(draw_w / total_w, draw_h / total_l) * 0.75
+    )  # 75% of available for margins
     plot_px = cfg.plot_width * scale
     plot_py = cfg.plot_length * scale
 
@@ -171,11 +177,19 @@ def _draw_site_location_plan(
     road_side = cfg.road_side.upper()
     c.setFillColor(HexColor("#CCCCCC"))
     if road_side == "S":
-        c.rect(ox, oy - cfg.setback_front * scale - ROAD_H, plot_px, ROAD_H, fill=1, stroke=0)
+        c.rect(
+            ox,
+            oy - cfg.setback_front * scale - ROAD_H,
+            plot_px,
+            ROAD_H,
+            fill=1,
+            stroke=0,
+        )
         c.setFillColor(HexColor("#444444"))
         c.setFont("Helvetica", 7)
-        c.drawCentredString(ox + plot_px / 2, oy - cfg.setback_front * scale - ROAD_H / 2 - 3,
-                            "ROAD")
+        c.drawCentredString(
+            ox + plot_px / 2, oy - cfg.setback_front * scale - ROAD_H / 2 - 3, "ROAD"
+        )
     elif road_side == "N":
         road_top = oy + plot_py + cfg.setback_rear * scale
         c.rect(ox, road_top, plot_px, ROAD_H, fill=1, stroke=0)
@@ -209,34 +223,67 @@ def _draw_site_location_plan(
         sb_mid_x = ox + plot_px / 2
         sb_y_bot = oy
         sb_y_top = bldg_y
-        _draw_setback_dim(c, sb_mid_x, sb_y_bot, sb_mid_x, sb_y_top,
-                          f"Front: {cfg.setback_front:.1f}m", vertical=True)
+        _draw_setback_dim(
+            c,
+            sb_mid_x,
+            sb_y_bot,
+            sb_mid_x,
+            sb_y_top,
+            f"Front: {cfg.setback_front:.1f}m",
+            vertical=True,
+        )
 
     # Rear setback
     if cfg.setback_rear > 0:
         sb_top_y = oy + plot_py
         sb_bld_top = bldg_y + bldg_h
-        _draw_setback_dim(c, ox + plot_px / 2, sb_bld_top, ox + plot_px / 2, sb_top_y,
-                          f"Rear: {cfg.setback_rear:.1f}m", vertical=True)
+        _draw_setback_dim(
+            c,
+            ox + plot_px / 2,
+            sb_bld_top,
+            ox + plot_px / 2,
+            sb_top_y,
+            f"Rear: {cfg.setback_rear:.1f}m",
+            vertical=True,
+        )
 
     # Left setback
     if cfg.setback_left > 0:
-        _draw_setback_dim(c, ox, oy + plot_py / 2, bldg_x, oy + plot_py / 2,
-                          f"Left: {cfg.setback_left:.1f}m", vertical=False)
+        _draw_setback_dim(
+            c,
+            ox,
+            oy + plot_py / 2,
+            bldg_x,
+            oy + plot_py / 2,
+            f"Left: {cfg.setback_left:.1f}m",
+            vertical=False,
+        )
 
     # Right setback
     if cfg.setback_right > 0:
-        _draw_setback_dim(c, bldg_x + bldg_w, oy + plot_py / 2, ox + plot_px, oy + plot_py / 2,
-                          f"Right: {cfg.setback_right:.1f}m", vertical=False)
+        _draw_setback_dim(
+            c,
+            bldg_x + bldg_w,
+            oy + plot_py / 2,
+            ox + plot_px,
+            oy + plot_py / 2,
+            f"Right: {cfg.setback_right:.1f}m",
+            vertical=False,
+        )
 
     # North arrow — prominent, upper-right
-    _draw_large_north_arrow(c, ox + compound_px + 24, oy + compound_py - 10, 22, cfg.road_side)
+    _draw_large_north_arrow(
+        c, ox + compound_px + 24, oy + compound_py - 10, 22, cfg.road_side
+    )
 
     # Plot dimensions
     c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", 9)
-    c.drawCentredString(ox + plot_px / 2, oy + plot_py + 10,
-                        f"{cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m")
+    c.drawCentredString(
+        ox + plot_px / 2,
+        oy + plot_py + 10,
+        f"{cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m",
+    )
 
     # Survey number label inside plot
     c.setFillColor(HexColor("#000000"))
@@ -246,8 +293,11 @@ def _draw_site_location_plan(
     # Locality + city label
     c.setFillColor(HexColor("#444444"))
     c.setFont("Helvetica-Oblique", 8)
-    c.drawCentredString(ox + plot_px / 2, oy - cfg.setback_front * scale - ROAD_H - 14,
-                        f"{owner.locality}, {owner.municipality}")
+    c.drawCentredString(
+        ox + plot_px / 2,
+        oy - cfg.setback_front * scale - ROAD_H - 14,
+        f"{owner.locality}, {owner.municipality}",
+    )
 
     # Bottom info bar
     c.setFillColor(HexColor("#000000"))
@@ -276,12 +326,17 @@ def _draw_site_location_plan(
 
     c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 5)
-    c.drawCentredString(page_w / 2, 8, "Generated by PlanForge · For Municipality Submission")
+    c.drawCentredString(
+        page_w / 2, 8, "Generated by PlanForge · For Municipality Submission"
+    )
 
 
 def _draw_setback_dim(
     c: canvas.Canvas,
-    x1: float, y1: float, x2: float, y2: float,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
     label: str,
     vertical: bool,
 ) -> None:
@@ -331,6 +386,7 @@ def _draw_large_north_arrow(
 
 # ── Page 2 & 3: Approval Floor Plan ──────────────────────────────────────────
 
+
 def _draw_approval_floor_plan(
     c: canvas.Canvas,
     floor_plan: FloorPlan,
@@ -340,7 +396,9 @@ def _draw_approval_floor_plan(
     floor_label: str,
 ) -> None:
     page_w, page_h = A4
-    authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper()[:6])
+    authority = _MUNICIPALITY_LABELS.get(
+        owner.municipality, owner.municipality.upper()[:6]
+    )
 
     # Available drawing area (above title block, below top padding)
     avail_w = page_w - 2 * MARGIN
@@ -374,7 +432,9 @@ def _draw_approval_floor_plan(
 
     rooms = floor_plan.rooms
     if not rooms:
-        _draw_approval_title_block(c, layout, cfg, owner, floor_label, authority, page_w)
+        _draw_approval_title_block(
+            c, layout, cfg, owner, floor_label, authority, page_w
+        )
         return
 
     min_x = min(r.x for r in rooms)
@@ -384,18 +444,18 @@ def _draw_approval_floor_plan(
 
     # Room fills — white for B&W CAD / municipal submission standard
     APPROVAL_PALETTE: dict[str, str] = {
-        "living":   "#FFFFFF",
-        "bedroom":  "#FFFFFF",
+        "living": "#FFFFFF",
+        "bedroom": "#FFFFFF",
         "master_bedroom": "#FFFFFF",
-        "kitchen":  "#FFFFFF",
-        "toilet":   "#FFFFFF",
-        "staircase":"#FFFFFF",
-        "parking":  "#FFFFFF",
-        "utility":  "#FFFFFF",
-        "pooja":    "#FFFFFF",
-        "study":    "#FFFFFF",
-        "balcony":  "#FFFFFF",
-        "dining":   "#FFFFFF",
+        "kitchen": "#FFFFFF",
+        "toilet": "#FFFFFF",
+        "staircase": "#FFFFFF",
+        "parking": "#FFFFFF",
+        "utility": "#FFFFFF",
+        "pooja": "#FFFFFF",
+        "study": "#FFFFFF",
+        "balcony": "#FFFFFF",
+        "dining": "#FFFFFF",
     }
     for room in rooms:
         fill_hex = APPROVAL_PALETTE.get(room.type, "#FFFFFF")
@@ -410,8 +470,16 @@ def _draw_approval_floor_plan(
     door_w_m = 0.9
     vertical_door_gaps: dict[float, list[tuple[float, float]]] = {}
     horizontal_door_gaps: dict[float, list[tuple[float, float]]] = {}
-    habitable_door = {"living", "bedroom", "master_bedroom", "kitchen",
-                      "study", "dining", "utility", "pooja"}
+    habitable_door = {
+        "living",
+        "bedroom",
+        "master_bedroom",
+        "kitchen",
+        "study",
+        "dining",
+        "utility",
+        "pooja",
+    }
 
     for i, ra in enumerate(rooms):
         for j, rb in enumerate(rooms):
@@ -425,7 +493,9 @@ def _draw_approval_floor_plan(
                     if y_hi - y_lo > door_w_m + 0.1:
                         mid = (y_lo + y_hi) / 2
                         gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                        vertical_door_gaps.setdefault(round(ra.x + ra.width, 3), []).append(gap)
+                        vertical_door_gaps.setdefault(
+                            round(ra.x + ra.width, 3), []
+                        ).append(gap)
             elif abs(rb.x + rb.width - ra.x) < 0.15:
                 if ra.type in habitable_door or rb.type in habitable_door:
                     y_lo = max(ra.y, rb.y)
@@ -433,7 +503,9 @@ def _draw_approval_floor_plan(
                     if y_hi - y_lo > door_w_m + 0.1:
                         mid = (y_lo + y_hi) / 2
                         gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                        vertical_door_gaps.setdefault(round(rb.x + rb.width, 3), []).append(gap)
+                        vertical_door_gaps.setdefault(
+                            round(rb.x + rb.width, 3), []
+                        ).append(gap)
             if abs(ra.y + ra.depth - rb.y) < 0.15:
                 if ra.type in habitable_door or rb.type in habitable_door:
                     x_lo = max(ra.x, rb.x)
@@ -441,7 +513,9 @@ def _draw_approval_floor_plan(
                     if x_hi - x_lo > door_w_m + 0.1:
                         mid = (x_lo + x_hi) / 2
                         gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                        horizontal_door_gaps.setdefault(round(ra.y + ra.depth, 3), []).append(gap)
+                        horizontal_door_gaps.setdefault(
+                            round(ra.y + ra.depth, 3), []
+                        ).append(gap)
             elif abs(rb.y + rb.depth - ra.y) < 0.15:
                 if ra.type in habitable_door or rb.type in habitable_door:
                     x_lo = max(ra.x, rb.x)
@@ -449,11 +523,20 @@ def _draw_approval_floor_plan(
                     if x_hi - x_lo > door_w_m + 0.1:
                         mid = (x_lo + x_hi) / 2
                         gap = (mid - door_w_m / 2, mid + door_w_m / 2)
-                        horizontal_door_gaps.setdefault(round(rb.y + rb.depth, 3), []).append(gap)
+                        horizontal_door_gaps.setdefault(
+                            round(rb.y + rb.depth, 3), []
+                        ).append(gap)
 
     # ── Window gaps (external walls of habitable rooms) ────────────────────────
     win_w_m = 1.2
-    habitable_win = {"living", "bedroom", "master_bedroom", "kitchen", "study", "dining"}
+    habitable_win = {
+        "living",
+        "bedroom",
+        "master_bedroom",
+        "kitchen",
+        "study",
+        "dining",
+    }
     external_h_win_gaps: dict[float, list[tuple[float, float]]] = {}
     external_v_win_gaps: dict[float, list[tuple[float, float]]] = {}
 
@@ -467,22 +550,30 @@ def _draw_approval_floor_plan(
         tol = 0.05
         if abs(room.y - min_y) < tol:
             external_h_win_gaps.setdefault(round(min_y, 3), []).append(
-                (rcx - ww_h / 2, rcx + ww_h / 2))
+                (rcx - ww_h / 2, rcx + ww_h / 2)
+            )
         if abs(room.y + room.depth - max_y) < tol:
             external_h_win_gaps.setdefault(round(max_y, 3), []).append(
-                (rcx - ww_h / 2, rcx + ww_h / 2))
+                (rcx - ww_h / 2, rcx + ww_h / 2)
+            )
         if abs(room.x - min_x) < tol:
             external_v_win_gaps.setdefault(round(min_x, 3), []).append(
-                (rcy - ww_v / 2, rcy + ww_v / 2))
+                (rcy - ww_v / 2, rcy + ww_v / 2)
+            )
         if abs(room.x + room.width - max_x) < tol:
             external_v_win_gaps.setdefault(round(max_x, 3), []).append(
-                (rcy - ww_v / 2, rcy + ww_v / 2))
+                (rcy - ww_v / 2, rcy + ww_v / 2)
+            )
 
     # ── Double-line walls (IS code: external EXT_LW, internal INT_LW) ─────────
     iwt = 0.115
     ewt = 0.23
-    xs = _dedup_wall_coords(sorted({r.x for r in rooms} | {r.x + r.width for r in rooms}))
-    ys = _dedup_wall_coords(sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms}))
+    xs = _dedup_wall_coords(
+        sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
+    )
+    ys = _dedup_wall_coords(
+        sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
+    )
 
     bx = ox + min_x * scale
     by = oy + min_y * scale
@@ -531,7 +622,9 @@ def _draw_approval_floor_plan(
         c.rect(cx_c - ch, cy_c - ch, ewt_px, ewt_px, fill=1, stroke=0)
 
     # Setback dimension lines FROM plot boundary (mandatory for approval)
-    _draw_setback_dims_on_plan(c, cfg, scale, ox, oy, plot_px, plot_py, bx, by, bw, bh, authority)
+    _draw_setback_dims_on_plan(
+        c, cfg, scale, ox, oy, plot_px, plot_py, bx, by, bw, bh, authority
+    )
 
     # FAR: compute and draw table ABOVE the plot boundary (not on drawing)
     gf_area = sum(r.area for r in layout.ground_floor.rooms)
@@ -541,8 +634,15 @@ def _draw_approval_floor_plan(
     far_allowed = _FAR_LIMITS.get(authority, 2.0)
     # Place FAR table above the plot top-right corner — ~144 pts available there
     _draw_far_table(
-        c, ox + plot_px, oy + plot_py + 8,
-        plot_area, gf_area, ff_area, far, far_allowed, authority,
+        c,
+        ox + plot_px,
+        oy + plot_py + 8,
+        plot_area,
+        gf_area,
+        ff_area,
+        far,
+        far_allowed,
+        authority,
     )
 
     # Room labels with dimensions in METRES (approval requirement)
@@ -569,10 +669,7 @@ def _draw_approval_floor_plan(
                 c.drawCentredString(cx_pt, cy_pt - fs * 0.9, sqft_str)
             else:
                 c.setFont("Helvetica", fs)
-                c.drawCentredString(
-                    cx_pt, cy_pt - fs * 0.3,
-                    f"{room.name} {ftin_str}"
-                )
+                c.drawCentredString(cx_pt, cy_pt - fs * 0.3, f"{room.name} {ftin_str}")
 
     # Staircase treads
     _draw_staircase_treads(c, rooms, scale, ox, oy)
@@ -581,7 +678,9 @@ def _draw_approval_floor_plan(
     _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y)
 
     # Door symbols
-    _draw_doors_in_gaps(c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps)
+    _draw_doors_in_gaps(
+        c, rooms, scale, ox, oy, vertical_door_gaps, horizontal_door_gaps
+    )
 
     # Column markers: sized to wall thickness, outer corners at wall centreline
     c.setFillColor(HexColor("#000000"))
@@ -595,13 +694,25 @@ def _draw_approval_floor_plan(
         if key in seen_cols:
             continue
         seen_cols.add(key)
-        col_cx = (col.x - ewt_half if abs(col.x - min_x) < col_tol else
-                  col.x + ewt_half if abs(col.x - max_x) < col_tol else col.x)
-        col_cy = (col.y - ewt_half if abs(col.y - min_y) < col_tol else
-                  col.y + ewt_half if abs(col.y - max_y) < col_tol else col.y)
+        col_cx = (
+            col.x - ewt_half
+            if abs(col.x - min_x) < col_tol
+            else col.x + ewt_half
+            if abs(col.x - max_x) < col_tol
+            else col.x
+        )
+        col_cy = (
+            col.y - ewt_half
+            if abs(col.y - min_y) < col_tol
+            else col.y + ewt_half
+            if abs(col.y - max_y) < col_tol
+            else col.y
+        )
         cx = ox + col_cx * scale
         cy_c = oy + col_cy * scale
-        c.rect(cx - col_half, cy_c - col_half, col_half * 2, col_half * 2, fill=1, stroke=0)
+        c.rect(
+            cx - col_half, cy_c - col_half, col_half * 2, col_half * 2, fill=1, stroke=0
+        )
 
     # Prominent NORTH arrow
     _draw_large_north_arrow(c, ox + plot_px - 24, oy + plot_py - 24, 18, cfg.road_side)
@@ -610,16 +721,23 @@ def _draw_approval_floor_plan(
     _draw_scale_bar(c, ox + 4, oy + 18, scale)
 
     # Approval title block
-    _draw_approval_title_block(c, layout, cfg, owner, floor_label, authority, page_w, far)
+    _draw_approval_title_block(
+        c, layout, cfg, owner, floor_label, authority, page_w, far
+    )
 
 
 def _draw_setback_dims_on_plan(
     c: canvas.Canvas,
     cfg: PlotConfig,
     scale: float,
-    ox: float, oy: float,
-    plot_px: float, plot_py: float,
-    bx: float, by: float, bw: float, bh: float,
+    ox: float,
+    oy: float,
+    plot_px: float,
+    plot_py: float,
+    bx: float,
+    by: float,
+    bw: float,
+    bh: float,
     authority: str,
 ) -> None:
     """Draw dimension lines showing setbacks from plot boundary to building face."""
@@ -627,8 +745,6 @@ def _draw_setback_dims_on_plan(
     c.setFillColor(HexColor("#333333"))
     c.setLineWidth(0.5)
     c.setFont("Helvetica", 6)
-
-    dim_ext = 8  # pt extension outside building for dim line
 
     # Front setback (bottom)
     sb_front = cfg.setback_front
@@ -639,8 +755,9 @@ def _draw_setback_dims_on_plan(
         c.setDash(3, 2)
         c.line(mid_x, y_plot, mid_x, y_bldg)
         c.setDash()
-        c.drawCentredString(mid_x + 22, (y_plot + y_bldg) / 2,
-                            f"F.S. {sb_front:.1f}m ({authority})")
+        c.drawCentredString(
+            mid_x + 22, (y_plot + y_bldg) / 2, f"F.S. {sb_front:.1f}m ({authority})"
+        )
 
     # Rear setback (top)
     sb_rear = cfg.setback_rear
@@ -651,8 +768,7 @@ def _draw_setback_dims_on_plan(
         c.setDash(3, 2)
         c.line(mid_x, y_bldg_top, mid_x, y_plot_top)
         c.setDash()
-        c.drawString(ox + 4, (y_bldg_top + y_plot_top) / 2,
-                     f"R.S. {sb_rear:.1f}m")
+        c.drawString(ox + 4, (y_bldg_top + y_plot_top) / 2, f"R.S. {sb_rear:.1f}m")
 
     # Left setback
     sb_left = cfg.setback_left
@@ -687,7 +803,8 @@ def _draw_setback_dims_on_plan(
 
 def _draw_far_table(
     c: canvas.Canvas,
-    right_x: float, bottom_y: float,
+    right_x: float,
+    bottom_y: float,
     plot_area: float,
     gf_area: float,
     ff_area: float,
@@ -739,6 +856,7 @@ def _draw_far_table(
 
 # ── Page 4: Section View + Professional Title Block ───────────────────────────
 
+
 def _draw_section_and_title_block(
     c: canvas.Canvas,
     layout: Layout,
@@ -746,11 +864,12 @@ def _draw_section_and_title_block(
     owner: OwnerInfo,
 ) -> None:
     page_w, page_h = A4
-    authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper()[:6])
+    authority = _MUNICIPALITY_LABELS.get(
+        owner.municipality, owner.municipality.upper()[:6]
+    )
 
     # Title block occupies bottom quarter of the page
     tb_h = page_h * 0.27
-    tb_y = 0
     section_h = page_h - tb_h - 20
 
     # Background
@@ -780,10 +899,10 @@ def _draw_section_view(
 ) -> None:
     """Parametric building section (GF + FF + slab + parapet)."""
     bldg_w_m = cfg.plot_width - cfg.setback_left - cfg.setback_right
-    floor_h_m = 3.0      # floor-to-floor height (m)
-    slab_t_m = 0.15      # slab thickness (m)
+    floor_h_m = 3.0  # floor-to-floor height (m)
+    slab_t_m = 0.15  # slab thickness (m)
     parapet_h_m = 1.0
-    found_d_m = 0.6      # foundation depth below GL
+    found_d_m = 0.6  # foundation depth below GL
     ewt_m = 0.23
 
     num_floors = getattr(cfg, "num_floors", 2)
@@ -813,10 +932,14 @@ def _draw_section_view(
     c.setLineWidth(0.5)
     found_w_px = bldg_w_m * scale + ewt_m * 2 * scale + 0.3 * scale
     found_h_px = found_d_m * scale
-    c.rect(sx - ewt_m * scale, gl_y - found_h_px, found_w_px, found_h_px, fill=1, stroke=1)
+    c.rect(
+        sx - ewt_m * scale, gl_y - found_h_px, found_w_px, found_h_px, fill=1, stroke=1
+    )
     c.setFillColor(HexColor("#333333"))
     c.setFont("Helvetica", 6)
-    c.drawCentredString(sx + bldg_w_m * scale / 2, gl_y - found_h_px / 2 - 3, "FOUNDATION")
+    c.drawCentredString(
+        sx + bldg_w_m * scale / 2, gl_y - found_h_px / 2 - 3, "FOUNDATION"
+    )
 
     # Floors
     floor_colors = ["#E8E8E8", "#EEEEEE"]
@@ -841,10 +964,15 @@ def _draw_section_view(
         label = "GROUND FLOOR" if floor_idx == 0 else "FIRST FLOOR"
         c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(sx + bldg_w_m * scale / 2, floor_y + floor_py / 2 - 3, label)
+        c.drawCentredString(
+            sx + bldg_w_m * scale / 2, floor_y + floor_py / 2 - 3, label
+        )
         c.setFont("Helvetica", 6)
-        c.drawCentredString(sx + bldg_w_m * scale / 2, floor_y + floor_py / 2 - 12,
-                            f"Ht: {floor_h_m:.1f}m")
+        c.drawCentredString(
+            sx + bldg_w_m * scale / 2,
+            floor_y + floor_py / 2 - 12,
+            f"Ht: {floor_h_m:.1f}m",
+        )
 
         # Height dimension line (right side)
         dim_x = sx + bldg_w_m * scale + 20
@@ -865,12 +993,21 @@ def _draw_section_view(
     # Left parapet wall
     c.rect(sx, parapet_y, ewt_m * scale * 1.5, parapet_h_m * scale, fill=1, stroke=1)
     # Right parapet wall
-    c.rect(sx + bldg_w_m * scale - ewt_m * scale * 1.5, parapet_y,
-           ewt_m * scale * 1.5, parapet_h_m * scale, fill=1, stroke=1)
+    c.rect(
+        sx + bldg_w_m * scale - ewt_m * scale * 1.5,
+        parapet_y,
+        ewt_m * scale * 1.5,
+        parapet_h_m * scale,
+        fill=1,
+        stroke=1,
+    )
     c.setFillColor(HexColor("#555555"))
     c.setFont("Helvetica", 6)
-    c.drawCentredString(sx + bldg_w_m * scale / 2, parapet_y + parapet_h_m * scale / 2,
-                        f"PARAPET {parapet_h_m:.1f}m")
+    c.drawCentredString(
+        sx + bldg_w_m * scale / 2,
+        parapet_y + parapet_h_m * scale / 2,
+        f"PARAPET {parapet_h_m:.1f}m",
+    )
 
     # Building width dimension at top
     top_y = parapet_y + parapet_h_m * scale + 8
@@ -902,8 +1039,11 @@ def _draw_section_view(
     # Slab label
     c.setFillColor(HexColor("#444444"))
     c.setFont("Helvetica", 6)
-    c.drawString(sx + bldg_w_m * scale + 5, gl_y + num_floors * floor_h_m * scale - slab_t_m * scale / 2 - 3,
-                 "150mm slab")
+    c.drawString(
+        sx + bldg_w_m * scale + 5,
+        gl_y + num_floors * floor_h_m * scale - slab_t_m * scale / 2 - 3,
+        "150mm slab",
+    )
 
     # Section cut symbol header
     c.setFillColor(HexColor("#555555"))
@@ -946,8 +1086,14 @@ def _draw_professional_title_block(
         ("Municipality / ULB", f"{owner.municipality} ({authority})"),
         # Row 2
         ("Site Area", f"{cfg.plot_width * cfg.plot_length:.1f} sqm"),
-        ("Built-up Area (GF)", f"{sum(r.area for r in layout.ground_floor.rooms):.1f} sqm"),
-        ("Built-up Area (FF)", f"{sum(r.area for r in layout.first_floor.rooms):.1f} sqm"),
+        (
+            "Built-up Area (GF)",
+            f"{sum(r.area for r in layout.ground_floor.rooms):.1f} sqm",
+        ),
+        (
+            "Built-up Area (FF)",
+            f"{sum(r.area for r in layout.first_floor.rooms):.1f} sqm",
+        ),
         # Row 3
         ("Architect / Engineer", owner.engineer_name),
         ("License No.", owner.license_number),
@@ -1024,11 +1170,15 @@ def _draw_professional_title_block(
     # Footer
     c.setFillColor(HexColor("#808080"))
     c.setFont("Helvetica", 5)
-    c.drawCentredString(page_w / 2, 2,
-                        "Generated by PlanForge · NBC 2016 Compliant · For Municipality Submission Only")
+    c.drawCentredString(
+        page_w / 2,
+        2,
+        "Generated by PlanForge · NBC 2016 Compliant · For Municipality Submission Only",
+    )
 
 
 # ── Shared drawing helpers ────────────────────────────────────────────────────
+
 
 def _draw_scale_bar(c: canvas.Canvas, x: float, y: float, scale: float) -> None:
     bar_pt = 3.0 * scale
@@ -1110,8 +1260,9 @@ def _draw_approval_title_block(
     c.drawCentredString(page_w / 2, 26, owner_line)
     c.setFont("Helvetica-Oblique", 6.5)
     c.drawCentredString(
-        page_w / 2, 13,
-        f"Prepared by: {owner.engineer_name}  |  Lic. No.: {owner.license_number}  |  {authority} Submission"
+        page_w / 2,
+        13,
+        f"Prepared by: {owner.engineer_name}  |  Lic. No.: {owner.license_number}  |  {authority} Submission",
     )
     c.setFillColor(HexColor("#808080"))
     c.setFont("Helvetica", 5)

@@ -1,8 +1,8 @@
 import { CheckCircle, Package, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { JsonLd } from "@/components/json-ld";
 import { CreditPackButton } from "@/components/credit-pack-button";
+import { JsonLd } from "@/components/json-ld";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 import { PricingCheckoutButton } from "@/components/pricing-checkout-button";

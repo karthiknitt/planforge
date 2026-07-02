@@ -49,8 +49,14 @@ def _floor_plan_out(fp) -> FloorPlanOut:
         needs_mech_ventilation=getattr(fp, "needs_mech_ventilation", False),
         rooms=[
             RoomOut(
-                id=r.id, name=r.name, type=r.type,
-                x=r.x, y=r.y, width=r.width, depth=r.depth, area=r.area,
+                id=r.id,
+                name=r.name,
+                type=r.type,
+                x=r.x,
+                y=r.y,
+                width=r.width,
+                depth=r.depth,
+                area=r.area,
             )
             for r in fp.rooms
         ],
@@ -121,8 +127,12 @@ def _build_generate_response(project_id: str, project: Project) -> GenerateRespo
                 ),
                 ground_floor=_floor_plan_out(lay.ground_floor),
                 first_floor=_floor_plan_out(lay.first_floor),
-                second_floor=_floor_plan_out(lay.second_floor) if lay.second_floor else None,
-                basement_floor=_floor_plan_out(lay.basement_floor) if lay.basement_floor else None,
+                second_floor=_floor_plan_out(lay.second_floor)
+                if lay.second_floor
+                else None,
+                basement_floor=_floor_plan_out(lay.basement_floor)
+                if lay.basement_floor
+                else None,
                 score=LayoutScoreOut(
                     total=lay.score.total,
                     natural_light=lay.score.natural_light,
@@ -130,7 +140,9 @@ def _build_generate_response(project_id: str, project: Project) -> GenerateRespo
                     aspect_ratio=lay.score.aspect_ratio,
                     circulation=lay.score.circulation,
                     vastu=lay.score.vastu,
-                ) if lay.score else None,
+                )
+                if lay.score
+                else None,
                 space_notes=getattr(lay, "space_notes", []),
                 auto_added_rooms=getattr(lay, "space_notes", []),
             )
@@ -140,6 +152,7 @@ def _build_generate_response(project_id: str, project: Project) -> GenerateRespo
 
 
 # ── Public response schema ─────────────────────────────────────────────────────
+
 
 class ShareProjectInfo(BaseModel):
     id: str
@@ -186,6 +199,7 @@ class ApprovalStatusResponse(BaseModel):
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
+
 @router.post(
     "/projects/{project_id}/share",
     response_model=ShareTokenResponse,
@@ -200,9 +214,13 @@ async def create_share_link(
     project = result.scalar_one_or_none()
 
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     if project.user_id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
 
     if not project.share_token:
         project.share_token = str(uuid.uuid4())
@@ -224,7 +242,9 @@ async def get_shared_project(
     project = result.scalar_one_or_none()
 
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found"
+        )
 
     project_info = ShareProjectInfo(
         id=project.id,
@@ -264,11 +284,15 @@ async def approve_shared_project(
     project = result.scalar_one_or_none()
 
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found"
+        )
 
     project.approval_status = "approved"
     project.approval_note = None
-    project.approval_selected_layouts = json.dumps(body.selected_layout_ids) if body.selected_layout_ids else None
+    project.approval_selected_layouts = (
+        json.dumps(body.selected_layout_ids) if body.selected_layout_ids else None
+    )
     project.approval_updated_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -285,7 +309,9 @@ async def request_changes_shared_project(
     project = result.scalar_one_or_none()
 
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found"
+        )
 
     project.approval_status = "changes_requested"
     project.approval_note = body.note or None
@@ -308,9 +334,13 @@ async def get_approval_status(
     project = result.scalar_one_or_none()
 
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     if project.user_id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
 
     raw_sel = getattr(project, "approval_selected_layouts", None)
     return ApprovalStatusResponse(

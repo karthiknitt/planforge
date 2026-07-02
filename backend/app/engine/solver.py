@@ -13,7 +13,6 @@ Falls back gracefully — caller should catch all exceptions.
 from __future__ import annotations
 
 import json
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,9 +20,9 @@ from ortools.sat.python import cp_model
 
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
 
-SCALE = 1000          # 1 metre = 1000 mm units
-SOLVE_TIME_S = 5.0    # per-run wall-clock budget
-MAX_DIM_MM = 50_000   # safety cap: 50 m per dimension
+SCALE = 1000  # 1 metre = 1000 mm units
+SOLVE_TIME_S = 5.0  # per-run wall-clock budget
+MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 
 _SPECS_PATH = Path(__file__).parent.parent / "config" / "room_specs.json"
 
@@ -46,6 +45,7 @@ _ADJACENCY_PAIRS: list[tuple[str, str, int]] = [
 @dataclass
 class _RoomVar:
     """All CP-SAT variables for one room on one floor."""
+
     room_id: str
     room_type: str
     room_name: str
@@ -73,7 +73,9 @@ def _quad_plate_and_planes(
     from shapely.geometry import Polygon
 
     poly = Polygon(cfg.plot_corners)
-    avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+    avg_sb = (
+        cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+    ) / 4
     inset = poly.buffer(-(avg_sb + ewt), join_style="mitre")
     if inset.is_empty:
         return 0, 0, 0, 0, []
@@ -89,7 +91,8 @@ def _quad_plate_and_planes(
     # Signed area via shoelace: positive → CCW, negative → CW
     n_c = len(coords)
     area2 = sum(
-        coords[i][0] * coords[(i + 1) % n_c][1] - coords[(i + 1) % n_c][0] * coords[i][1]
+        coords[i][0] * coords[(i + 1) % n_c][1]
+        - coords[(i + 1) % n_c][0] * coords[i][1]
         for i in range(n_c)
     )
     if area2 < 0:  # CW — reverse to CCW
@@ -118,7 +121,9 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
     rooms = []
 
     # Living room (always)
-    rooms.append({"id": "living_0", "type": "living", "name": "Living Room", "floor": 0})
+    rooms.append(
+        {"id": "living_0", "type": "living", "name": "Living Room", "floor": 0}
+    )
 
     # Kitchen (always, GF)
     rooms.append({"id": "kitchen_0", "type": "kitchen", "name": "Kitchen", "floor": 0})
@@ -126,36 +131,52 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
     # Bedrooms — distribute across GF and FF
     for i in range(cfg.num_bedrooms):
         floor = 0 if i == 0 else 1
-        rooms.append({
-            "id": f"bedroom_{i}",
-            "type": "bedroom",
-            "name": f"Bedroom {i + 1}",
-            "floor": floor,
-        })
+        rooms.append(
+            {
+                "id": f"bedroom_{i}",
+                "type": "bedroom",
+                "name": f"Bedroom {i + 1}",
+                "floor": floor,
+            }
+        )
 
     # Toilets — distribute across floors
     for i in range(cfg.toilets):
         floor = 0 if i < max(1, cfg.num_bedrooms // 2) else 1
-        rooms.append({
-            "id": f"toilet_{i}",
-            "type": "toilet",
-            "name": f"Toilet {i + 1}",
-            "floor": floor,
-        })
+        rooms.append(
+            {
+                "id": f"toilet_{i}",
+                "type": "toilet",
+                "name": f"Toilet {i + 1}",
+                "floor": floor,
+            }
+        )
 
     # Staircase on both floors
-    rooms.append({"id": "stair_0", "type": "staircase", "name": "Staircase", "floor": 0})
-    rooms.append({"id": "stair_1", "type": "staircase", "name": "Staircase", "floor": 1})
+    rooms.append(
+        {"id": "stair_0", "type": "staircase", "name": "Staircase", "floor": 0}
+    )
+    rooms.append(
+        {"id": "stair_1", "type": "staircase", "name": "Staircase", "floor": 1}
+    )
 
     # Optional rooms
     if cfg.has_pooja:
-        rooms.append({"id": "pooja_0", "type": "pooja", "name": "Pooja Room", "floor": 0})
+        rooms.append(
+            {"id": "pooja_0", "type": "pooja", "name": "Pooja Room", "floor": 0}
+        )
     if cfg.has_study:
-        rooms.append({"id": "study_0", "type": "study", "name": "Study Room", "floor": 1})
+        rooms.append(
+            {"id": "study_0", "type": "study", "name": "Study Room", "floor": 1}
+        )
     if cfg.has_balcony:
-        rooms.append({"id": "balcony_0", "type": "balcony", "name": "Balcony", "floor": 1})
+        rooms.append(
+            {"id": "balcony_0", "type": "balcony", "name": "Balcony", "floor": 1}
+        )
     if cfg.parking:
-        rooms.append({"id": "parking_0", "type": "parking", "name": "Parking", "floor": 0})
+        rooms.append(
+            {"id": "parking_0", "type": "parking", "name": "Parking", "floor": 0}
+        )
 
     # Custom rooms from Phase C
     if cfg.custom_room_config:
@@ -163,13 +184,15 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
             rtype = custom.get("type", "utility")
             pref = custom.get("floor_preference", "either")
             floor = 1 if pref == "ff" else 0
-            rooms.append({
-                "id": f"custom_{idx}",
-                "type": rtype,
-                "name": custom.get("name") or rtype.replace("_", " ").title(),
-                "floor": floor,
-                "custom_min_area": custom.get("min_area_sqm"),
-            })
+            rooms.append(
+                {
+                    "id": f"custom_{idx}",
+                    "type": rtype,
+                    "name": custom.get("name") or rtype.replace("_", " ").title(),
+                    "floor": floor,
+                    "custom_min_area": custom.get("min_area_sqm"),
+                }
+            )
 
     return rooms
 
@@ -194,10 +217,11 @@ def _solve_one(
         # plus half-plane constraints derived from the inset polygon's edges (same approach
         # as quadrilateral). This keeps rooms inside the actual L-shape.
         from app.engine.generator import compute_l_shaped_polygon
-        from shapely.geometry import Polygon as _Poly
 
         l_poly = compute_l_shaped_polygon(cfg)
-        avg_sb = (cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right) / 4
+        avg_sb = (
+            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
+        ) / 4
         inset = l_poly.buffer(-(avg_sb + ewt), join_style=2)
         if inset.is_empty:
             return None
@@ -211,7 +235,8 @@ def _solve_one(
         coords = list(inset.exterior.coords)[:-1]
         n_c = len(coords)
         area2 = sum(
-            coords[i][0] * coords[(i + 1) % n_c][1] - coords[(i + 1) % n_c][0] * coords[i][1]
+            coords[i][0] * coords[(i + 1) % n_c][1]
+            - coords[(i + 1) % n_c][0] * coords[i][1]
             for i in range(n_c)
         )
         if area2 < 0:
@@ -250,12 +275,11 @@ def _solve_one(
         max_w = min(_mm(spec["max_width_m"]), bw)
         custom_min_area = rd.get("custom_min_area")
         raw_min_area = custom_min_area if custom_min_area else spec["min_area_sqm"]
-        min_area = _mm(raw_min_area) * SCALE   # mm² = m² × 10^6, but we work in mm units
-        # Actually: 1 sqm = SCALE*SCALE mm² = 1_000_000 mm²
+        # 1 sqm = SCALE*SCALE mm² = 1_000_000 mm²
         min_area_mm2 = int(raw_min_area * SCALE * SCALE)
         max_area_mm2 = int(spec["max_area_sqm"] * SCALE * SCALE)
 
-        min_d = _mm(spec["min_width_m"])   # use min_width as min depth too
+        min_d = _mm(spec["min_width_m"])  # use min_width as min depth too
         max_d = min(_mm(spec.get("max_width_m", 8.0)), bd)
 
         if max_w < min_w or max_d < min_d:
@@ -288,8 +312,16 @@ def _solve_one(
         model.add(d * 3 >= w)
 
         rv = _RoomVar(
-            room_id=rd["id"], room_type=rtype, room_name=rd["name"],
-            floor=floor, x=x, y=y, w=w, d=d, ix=ix, iy=iy,
+            room_id=rd["id"],
+            room_type=rtype,
+            room_name=rd["name"],
+            floor=floor,
+            x=x,
+            y=y,
+            w=w,
+            d=d,
+            ix=ix,
+            iy=iy,
         )
         room_vars.append(rv)
         (gf_vars if floor == 0 else ff_vars).append(rv)
@@ -350,16 +382,16 @@ def _solve_one(
                     continue
                 # Two rooms are adjacent if they share a wall (no gap on one axis)
                 adj = model.new_bool_var(f"adj_{a.room_id}_{b.room_id}")
-                # a right-edge touches b left-edge OR b right-edge touches a left-edge
-                touch_x = model.new_bool_var(f"tx_{a.room_id}_{b.room_id}")
-                touch_y = model.new_bool_var(f"ty_{a.room_id}_{b.room_id}")
                 # overlap on y axis (for x-adjacency)
                 ov_y = model.new_int_var(0, bd, f"ovy_{a.room_id}_{b.room_id}")
-                model.add_max_equality(ov_y, [
-                    model.new_constant(0),
-                    # actually just use a simpler adjacency heuristic
-                    model.new_constant(0),
-                ])
+                model.add_max_equality(
+                    ov_y,
+                    [
+                        model.new_constant(0),
+                        # actually just use a simpler adjacency heuristic
+                        model.new_constant(0),
+                    ],
+                )
                 # Simplified: reward if same floor — exact adjacency is hard to model cleanly
                 # Use a proxy: shared floor bonus only
                 score_var = model.new_int_var(0, pts, f"score_{a.room_id}_{b.room_id}")
@@ -405,8 +437,12 @@ def _solve_one(
         cols = []
         seen: set[tuple[float, float]] = set()
         for r in rooms:
-            for cx, cy in [(r.x, r.y), (r.x + r.width, r.y),
-                           (r.x, r.y + r.depth), (r.x + r.width, r.y + r.depth)]:
+            for cx, cy in [
+                (r.x, r.y),
+                (r.x + r.width, r.y),
+                (r.x, r.y + r.depth),
+                (r.x + r.width, r.y + r.depth),
+            ]:
                 k = (round(cx, 2), round(cy, 2))
                 if k not in seen:
                     seen.add(k)
@@ -416,10 +452,15 @@ def _solve_one(
     from .compliance import check, load_rules
     from .vastu import check_vastu
 
-    gf = FloorPlan(floor=0, floor_type="ground", rooms=gf_rooms, columns=_corner_cols(gf_rooms))
-    ff = FloorPlan(floor=1, floor_type="first", rooms=ff_rooms, columns=_corner_cols(ff_rooms))
+    gf = FloorPlan(
+        floor=0, floor_type="ground", rooms=gf_rooms, columns=_corner_cols(gf_rooms)
+    )
+    ff = FloorPlan(
+        floor=1, floor_type="first", rooms=ff_rooms, columns=_corner_cols(ff_rooms)
+    )
 
     from .models import ComplianceResult
+
     layout = Layout(
         id=layout_id,
         name=layout_name,
@@ -445,9 +486,11 @@ def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:
     specs = _load_specs()
     room_defs = _build_room_list(cfg, specs)
 
-    zones = [("front", "S1", "Layout S1 — Front Staircase"),
-             ("mid",   "S2", "Layout S2 — Centre Staircase"),
-             ("rear",  "S3", "Layout S3 — Rear Staircase")]
+    zones = [
+        ("front", "S1", "Layout S1 — Front Staircase"),
+        ("mid", "S2", "Layout S2 — Centre Staircase"),
+        ("rear", "S3", "Layout S3 — Rear Staircase"),
+    ]
 
     results: list[Layout] = []
     for zone, lid, lname in zones:

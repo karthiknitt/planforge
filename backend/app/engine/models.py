@@ -4,16 +4,28 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 RoomType = Literal[
-    "living", "bedroom", "master_bedroom", "kitchen",
-    "toilet",           # combined WC + wash basin + shower
-    "wc_only",          # WC + wash basin only (no shower/bath)
+    "living",
+    "bedroom",
+    "master_bedroom",
+    "kitchen",
+    "toilet",  # combined WC + wash basin + shower
+    "wc_only",  # WC + wash basin only (no shower/bath)
     "bathroom_master",  # master en-suite: WC + basin + shower (+ optional tub)
     "staircase",
-    "parking",          # generic — prefer parking_4w / parking_2w for new layouts
-    "parking_4w",       # car parking (min 2.5 m × 5.0 m per NBC)
-    "parking_2w",       # 2-wheeler bay (1.0 m × 2.5 m per bike)
-    "utility", "pooja", "study", "balcony", "dining",
-    "servant_quarter", "gym", "home_office", "store_room", "garage", "passage",
+    "parking",  # generic — prefer parking_4w / parking_2w for new layouts
+    "parking_4w",  # car parking (min 2.5 m × 5.0 m per NBC)
+    "parking_2w",  # 2-wheeler bay (1.0 m × 2.5 m per bike)
+    "utility",
+    "pooja",
+    "study",
+    "balcony",
+    "dining",
+    "servant_quarter",
+    "gym",
+    "home_office",
+    "store_room",
+    "garage",
+    "passage",
 ]
 
 
@@ -22,8 +34,8 @@ class Room:
     id: str
     name: str
     type: RoomType
-    x: float    # left edge in plot coordinates (metres from plot left)
-    y: float    # front edge in plot coordinates (metres from road/front)
+    x: float  # left edge in plot coordinates (metres from plot left)
+    y: float  # front edge in plot coordinates (metres from road/front)
     width: float  # metres (x direction)
     depth: float  # metres (y direction, away from road)
 
@@ -41,7 +53,7 @@ class Column:
 @dataclass
 class FloorPlan:
     floor: int  # -1=basement, 0=stilt/ground, 1=first, 2=second
-    floor_type: str = "ground"   # "basement"|"stilt"|"ground"|"first"|"second"
+    floor_type: str = "ground"  # "basement"|"stilt"|"ground"|"first"|"second"
     rooms: list[Room] = field(default_factory=list)
     columns: list[Column] = field(default_factory=list)
     needs_mech_ventilation: bool = False
@@ -56,7 +68,7 @@ class ComplianceResult:
 
 @dataclass
 class Layout:
-    id: str          # "A", "B", "C", "D", "E", "F" or solver-generated
+    id: str  # "A", "B", "C", "D", "E", "F" or solver-generated
     name: str
     ground_floor: FloorPlan
     first_floor: FloorPlan
@@ -75,7 +87,7 @@ class PlotConfig:
     setback_rear: float
     setback_left: float
     setback_right: float
-    num_bedrooms: int   # 1–4
+    num_bedrooms: int  # 1–4
     toilets: int
     parking: bool
     city: str = "other"
@@ -85,19 +97,23 @@ class PlotConfig:
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
-    plot_shape: str = "rectangular"       # "rectangular" | "trapezoid" | "quadrilateral" | "l_shaped"
-    plot_front_width: float = 0.0         # front edge width (m), trapezoid only
-    plot_rear_width: float = 0.0          # rear edge width (m), trapezoid only
-    plot_side_offset: float = 0.0         # rear offset from front left (m)
-    plot_corners: list[tuple[float, float]] | None = None  # 4 pts CCW: FL, FR, RR, RL (metres)
+    plot_shape: str = (
+        "rectangular"  # "rectangular" | "trapezoid" | "quadrilateral" | "l_shaped"
+    )
+    plot_front_width: float = 0.0  # front edge width (m), trapezoid only
+    plot_rear_width: float = 0.0  # rear edge width (m), trapezoid only
+    plot_side_offset: float = 0.0  # rear offset from front left (m)
+    plot_corners: list[tuple[float, float]] | None = (
+        None  # 4 pts CCW: FL, FR, RR, RL (metres)
+    )
     # L-shaped plot cutout (rectangular corner removed)
-    cutout_corner: str = "NE"             # "NE" | "NW" | "SE" | "SW"
-    cutout_width: float = 0.0             # metres — width of cutout
-    cutout_height: float = 0.0            # metres — height of cutout
+    cutout_corner: str = "NE"  # "NE" | "NW" | "SE" | "SW"
+    cutout_width: float = 0.0  # metres — width of cutout
+    cutout_height: float = 0.0  # metres — height of cutout
     # Multi-floor
-    num_floors: int = 1                   # 1=G, 2=G+1, 3=G+2
-    has_stilt: bool = False               # floor 0 is stilt (parking only)
-    has_basement: bool = False            # add basement floor (-1)
+    num_floors: int = 1  # 1=G, 2=G+1, 3=G+2
+    has_stilt: bool = False  # floor 0 is stilt (parking only)
+    has_basement: bool = False  # add basement floor (-1)
     # Municipality / building authority (e.g. "Chennai (CMDA)") — for per-city rule loading
     municipality: str | None = None
     # Custom room config (arbitrary rooms, Phase C)
@@ -112,6 +128,7 @@ class PlotConfig:
 @dataclass
 class RoomSpec:
     """Specification for a single room used by the CP-SAT solver."""
+
     id: str
     name: str
     type: str
@@ -119,7 +136,7 @@ class RoomSpec:
     max_area_sqm: float
     min_width_m: float
     max_width_m: float
-    floor_preference: str   # "basement"|"stilt"|"gf"|"ff"|"sf"|"either"|"all"
+    floor_preference: str  # "basement"|"stilt"|"gf"|"ff"|"sf"|"either"|"all"
     mandatory: bool
     fixed_position: tuple[float, float] | None = None
 
@@ -127,6 +144,7 @@ class RoomSpec:
 @dataclass
 class LayoutScore:
     """Scoring breakdown for a generated layout (0–100)."""
+
     total: float
     natural_light: float
     adjacency: float
@@ -138,7 +156,8 @@ class LayoutScore:
 @dataclass
 class FloorPlate:
     """Usable internal floor plate after setbacks + external wall thickness."""
-    ox: float    # left edge of internal space (in plot coordinates)
-    oy: float    # front edge of internal space (in plot coordinates)
+
+    ox: float  # left edge of internal space (in plot coordinates)
+    oy: float  # front edge of internal space (in plot coordinates)
     width: float  # internal usable width
     depth: float  # internal usable depth

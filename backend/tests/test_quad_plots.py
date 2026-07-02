@@ -111,7 +111,7 @@ def test_quad_far_area_uses_shapely():
     # Verify compliance checker uses Shapely area by checking FAR violation absence
     # Generate a layout for the irregular quad — if compliance uses Shapely area,
     # it will correctly compute FAR for the non-rectangular footprint.
-    layouts = generate(IRREGULAR_CFG)
+    generate(IRREGULAR_CFG)  # must not raise for a non-rectangular footprint
     # Whether or not layouts are generated, the key assertion is above (area math)
 
 

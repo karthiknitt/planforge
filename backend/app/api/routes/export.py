@@ -58,7 +58,9 @@ def _cfg_from_project(project: Project) -> PlotConfig:
         plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
         plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
         plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
-        plot_corners=_json.loads(project.plot_corners) if getattr(project, "plot_corners", None) else None,
+        plot_corners=_json.loads(project.plot_corners)
+        if getattr(project, "plot_corners", None)
+        else None,
         cutout_corner=getattr(project, "cutout_corner", None),
         cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
         cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
@@ -71,11 +73,14 @@ async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Proje
     )
     project = result.scalar_one_or_none()
     if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
     return project
 
 
 # ── PDF export ────────────────────────────────────────────────────────────────
+
 
 @router.get("/projects/{project_id}/export/pdf")
 async def export_pdf(
@@ -90,23 +95,27 @@ async def export_pdf(
     layouts = generate(cfg)
     layout = next((lay for lay in layouts if lay.id == layout_id), None)
     if layout is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Layout {layout_id!r} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Layout {layout_id!r} not found",
+        )
 
     annotations = getattr(project, "annotations", None) or {}
-    pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms, annotations=annotations or None)
+    pdf_bytes = render_pdf(
+        project.name, layout, cfg, project.num_bedrooms, annotations=annotations or None
+    )
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition":
-                f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
+            "Content-Disposition": f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
         },
     )
 
 
 # ── Approval PDF export ───────────────────────────────────────────────────────
+
 
 class ApprovalPdfRequest(BaseModel):
     owner_name: str
@@ -161,6 +170,7 @@ async def export_approval_pdf(
 
 # ── DXF export ────────────────────────────────────────────────────────────────
 
+
 @router.get("/projects/{project_id}/export/dxf")
 async def export_dxf(
     project_id: str,
@@ -170,13 +180,17 @@ async def export_dxf(
 ) -> Response:
     plan = await _get_plan_tier(user_id, db)
     if plan not in ("basic", "pro"):
-        raise HTTPException(status_code=402, detail="DXF export requires Basic or Pro plan.")
+        raise HTTPException(
+            status_code=402, detail="DXF export requires Basic or Pro plan."
+        )
 
     try:
         import ezdxf  # noqa: F401
     except ImportError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                            detail="ezdxf not installed. Run: uv add ezdxf")
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="ezdxf not installed. Run: uv add ezdxf",
+        )
 
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
@@ -184,8 +198,10 @@ async def export_dxf(
     layouts = generate(cfg)
     layout = next((lay for lay in layouts if lay.id == layout_id), None)
     if layout is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Layout {layout_id!r} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Layout {layout_id!r} not found",
+        )
 
     dxf_bytes = _render_dxf(project.name, layout, cfg)
 
@@ -193,8 +209,7 @@ async def export_dxf(
         content=dxf_bytes,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition":
-                f'attachment; filename="planforge-{project_id}-layout-{layout_id}.dxf"'
+            "Content-Disposition": f'attachment; filename="planforge-{project_id}-layout-{layout_id}.dxf"'
         },
     )
 
@@ -226,31 +241,31 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         metres_to_ftin,
     )
 
-    doc = ezdxf.new("R2010", setup=True)       # setup=True loads standard linetypes
-    doc.header["$INSUNITS"]    = 6             # metres (geometry stored in metres)
-    doc.header["$MEASUREMENT"] = 1             # metric hatch/linetype scaling
-    doc.header["$LWDISPLAY"]   = 1             # show lineweights in DXF viewers
+    doc = ezdxf.new("R2010", setup=True)  # setup=True loads standard linetypes
+    doc.header["$INSUNITS"] = 6  # metres (geometry stored in metres)
+    doc.header["$MEASUREMENT"] = 1  # metric hatch/linetype scaling
+    doc.header["$LWDISPLAY"] = 1  # show lineweights in DXF viewers
 
     layer_defs = [
-        ("PLOT-BOUNDARY",   colors.GREEN,   0.25),
-        ("A-WALL-BRICK",    colors.RED,     0.50),
-        ("A-WALL-INT",      colors.YELLOW,  0.35),
-        ("A-DOOR",          colors.CYAN,    0.25),
-        ("A-WINDOW",        colors.BLUE,    0.25),
-        ("A-STAIR",         colors.WHITE,   0.25),
-        ("A-VENTILATOR",    colors.MAGENTA, 0.18),
-        ("A-TITLE",         colors.WHITE,   0.50),
-        ("S-COLUMN",        colors.WHITE,   0.35),
-        ("S-BEAM",          colors.WHITE,   0.35),
-        ("S-GRID",          colors.GRAY,    0.18),
-        ("DIM-LINE",        colors.GRAY,    0.18),
-        ("TEXT",            colors.WHITE,   0.18),
+        ("PLOT-BOUNDARY", colors.GREEN, 0.25),
+        ("A-WALL-BRICK", colors.RED, 0.50),
+        ("A-WALL-INT", colors.YELLOW, 0.35),
+        ("A-DOOR", colors.CYAN, 0.25),
+        ("A-WINDOW", colors.BLUE, 0.25),
+        ("A-STAIR", colors.WHITE, 0.25),
+        ("A-VENTILATOR", colors.MAGENTA, 0.18),
+        ("A-TITLE", colors.WHITE, 0.50),
+        ("S-COLUMN", colors.WHITE, 0.35),
+        ("S-BEAM", colors.WHITE, 0.35),
+        ("S-GRID", colors.GRAY, 0.18),
+        ("DIM-LINE", colors.GRAY, 0.18),
+        ("TEXT", colors.WHITE, 0.18),
         # Advanced CAD layers
-        ("A-FOOTPRINT",     colors.WHITE,   0.70),
-        ("A-COMPOUND-WALL", colors.GREEN,   0.35),
-        ("A-TERRACE",       colors.CYAN,    0.18),
-        ("A-FURNITURE",     colors.BLUE,    0.18),
-        ("DIM-SETBACK",     colors.GRAY,    0.18),
+        ("A-FOOTPRINT", colors.WHITE, 0.70),
+        ("A-COMPOUND-WALL", colors.GREEN, 0.35),
+        ("A-TERRACE", colors.CYAN, 0.18),
+        ("A-FURNITURE", colors.BLUE, 0.18),
+        ("DIM-SETBACK", colors.GRAY, 0.18),
     ]
     # Structural layers are frozen by default so architectural drawing stays clean
     structural_layers = {"S-COLUMN", "S-BEAM", "S-GRID"}
@@ -270,13 +285,13 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     # Architectural dimension style — created once per document
     # ezdxf is imported at the top of this function; use it directly
     _ds = doc.dimstyles.new("ARCH_MM")
-    _ds.dxf.dimtxt  = 0.25   # text height (m) → 2.5mm on paper at 1:100
-    _ds.dxf.dimasz  = 0.15   # arrow size
-    _ds.dxf.dimtad  = 1      # text above dim line
-    _ds.dxf.dimexo  = 0.10   # extension line offset
-    _ds.dxf.dimexe  = 0.15   # extension line overshoot
-    _ds.dxf.dimgap  = 0.08   # gap between text and dim line
-    _ds.dxf.dimdec  = 0      # no decimal places (text overridden by set_text to ft-in)
+    _ds.dxf.dimtxt = 0.25  # text height (m) → 2.5mm on paper at 1:100
+    _ds.dxf.dimasz = 0.15  # arrow size
+    _ds.dxf.dimtad = 1  # text above dim line
+    _ds.dxf.dimexo = 0.10  # extension line offset
+    _ds.dxf.dimexe = 0.15  # extension line overshoot
+    _ds.dxf.dimgap = 0.08  # gap between text and dim line
+    _ds.dxf.dimdec = 0  # no decimal places (text overridden by set_text to ft-in)
     try:
         _ds.set_arrows(blk=ezdxf.ARROWS.architectural_tick)
     except Exception as exc:
@@ -289,7 +304,11 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     msp = doc.modelspace()
 
     # ── Plot boundary ─────────────────────────────────────────────────────────
-    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners and len(cfg.plot_corners) == 4:
+    if (
+        cfg.plot_shape == "quadrilateral"
+        and cfg.plot_corners
+        and len(cfg.plot_corners) == 4
+    ):
         boundary_pts = [(float(x), float(y)) for x, y in cfg.plot_corners]
     else:
         boundary_pts = [
@@ -311,8 +330,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if layout.basement_floor:
         floor_plans.append(layout.basement_floor)
 
-    ewt_m = 0.23    # external wall thickness (m)
-    iwt_m = 0.115   # internal (half-brick) wall thickness
+    ewt_m = 0.23  # external wall thickness (m)
+    iwt_m = 0.115  # internal (half-brick) wall thickness
 
     global_min_x = global_min_y = float("inf")
     global_max_x = global_max_y = float("-inf")
@@ -345,8 +364,12 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         # 2. Draw walls with clean gaps at openings
         walls = build_walls_from_rooms(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
         for wall in walls:
-            wall_key = (round(wall.x1, 2), round(wall.y1, 2),
-                        round(wall.x2, 2), round(wall.y2, 2))
+            wall_key = (
+                round(wall.x1, 2),
+                round(wall.y1, 2),
+                round(wall.x2, 2),
+                round(wall.y2, 2),
+            )
             lyr_name = "A-WALL-BRICK" if wall.thickness >= ewt_m else "A-WALL-INT"
             draw_wall_with_breaks(
                 msp, wall, openings_map.get(wall_key, []), lyr_name, z_offset
@@ -356,17 +379,36 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         for wall_openings in openings_map.values():
             for op in wall_openings:
                 if op.kind == "door":
-                    draw_door(msp, op.cx, op.cy, op.width,
-                              op.is_vertical_wall, swing_left=True,
-                              layer="A-DOOR", z=z_offset)
+                    draw_door(
+                        msp,
+                        op.cx,
+                        op.cy,
+                        op.width,
+                        op.is_vertical_wall,
+                        swing_left=True,
+                        layer="A-DOOR",
+                        z=z_offset,
+                    )
                 elif op.kind == "window":
-                    draw_window(msp, op.cx, op.cy, op.width,
-                                not op.is_vertical_wall, ewt_m,
-                                layer="A-WINDOW", z=z_offset)
+                    draw_window(
+                        msp,
+                        op.cx,
+                        op.cy,
+                        op.width,
+                        not op.is_vertical_wall,
+                        ewt_m,
+                        layer="A-WINDOW",
+                        z=z_offset,
+                    )
                 elif op.kind == "ventilator":
-                    draw_ventilator(msp, op.cx, op.cy,
-                                    not op.is_vertical_wall,
-                                    layer="A-VENTILATOR", z=z_offset)
+                    draw_ventilator(
+                        msp,
+                        op.cx,
+                        op.cy,
+                        not op.is_vertical_wall,
+                        layer="A-VENTILATOR",
+                        z=z_offset,
+                    )
 
         # 4. Staircase treads + cut line + UP arrow
         for room in rooms:
@@ -377,8 +419,10 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         for room in rooms:
             cx = room.x + room.width / 2
             cy = room.y + room.depth / 2
-            label = (f"{room.name}\\P"
-                     f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}")
+            label = (
+                f"{room.name}\\P"
+                f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}"
+            )
             msp.add_mtext(
                 label,
                 dxfattribs={
@@ -404,7 +448,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 (col.x - half, col.y + half),
             ]
             msp.add_lwpolyline(
-                pts_col, close=True,
+                pts_col,
+                close=True,
                 dxfattribs={"layer": "S-COLUMN", "elevation": z_offset},
             )
 
@@ -413,8 +458,9 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
 
         # 6b. Structural grid (ground floor only)
         if floor_plan.floor == 0:
-            draw_structural_grid(msp, rooms, bld_x, bld_y, bld_w, bld_d,
-                                 layer="S-GRID", z=z_offset)
+            draw_structural_grid(
+                msp, rooms, bld_x, bld_y, bld_w, bld_d, layer="S-GRID", z=z_offset
+            )
 
         # 6c. Furniture per room
         for room in rooms:
@@ -424,6 +470,7 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         if floor_plan.floor == 0 and footprint is not None:
             from shapely.geometry import Polygon as _SPoly
             from shapely.geometry import box as _sbox
+
             plot_poly = (
                 _SPoly([(float(x), float(y)) for x, y in cfg.plot_corners])
                 if cfg.plot_shape == "quadrilateral" and cfg.plot_corners
@@ -432,24 +479,50 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
             draw_open_terrace(msp, plot_poly, footprint, layer="A-TERRACE", z=z_offset)
 
         # 7. Feet-inches dimension chains
-        xs = sorted({round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms})
-        ys = sorted({round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms})
-        draw_dimension_chain(msp, xs, fixed_coord=bld_y, offset=-1.5,
-                             is_horizontal=True, layer="DIM-LINE", z=z_offset)
-        draw_dimension_chain(msp, ys, fixed_coord=bld_x + bld_w, offset=1.5,
-                             is_horizontal=False, layer="DIM-LINE", z=z_offset)
+        xs = sorted(
+            {round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms}
+        )
+        ys = sorted(
+            {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
+        )
+        draw_dimension_chain(
+            msp,
+            xs,
+            fixed_coord=bld_y,
+            offset=-1.5,
+            is_horizontal=True,
+            layer="DIM-LINE",
+            z=z_offset,
+        )
+        draw_dimension_chain(
+            msp,
+            ys,
+            fixed_coord=bld_x + bld_w,
+            offset=1.5,
+            is_horizontal=False,
+            layer="DIM-LINE",
+            z=z_offset,
+        )
 
     # ── North arrow (top-right, drawn once outside floor loop) ───────────────
     if global_max_x < float("inf"):
         north_dir = getattr(cfg, "road_side", "S") or "S"
-        draw_north_arrow(msp, cx=global_max_x + 2.5, cy=global_max_y - 1.5,
-                         north_dir=north_dir, size=0.8, layer="TEXT")
-        draw_scale_bar(msp, x=global_max_x + 2.0, y=global_max_y - 3.5,
-                       layer="TEXT", z=0.0)
+        draw_north_arrow(
+            msp,
+            cx=global_max_x + 2.5,
+            cy=global_max_y - 1.5,
+            north_dir=north_dir,
+            size=0.8,
+            layer="TEXT",
+        )
+        draw_scale_bar(
+            msp, x=global_max_x + 2.0, y=global_max_y - 3.5, layer="TEXT", z=0.0
+        )
 
         # ── Setback dimension callouts (ground floor extents) ─────────────────
-        draw_setback_zones(msp, cfg, gf_bld_x, gf_bld_y, gf_bld_w, gf_bld_d,
-                           layer="DIM-SETBACK", z=0.0)
+        draw_setback_zones(
+            msp, cfg, gf_bld_x, gf_bld_y, gf_bld_w, gf_bld_d, layer="DIM-SETBACK", z=0.0
+        )
 
         # ── Compound boundary wall with gate ─────────────────────────────────
         draw_compound_wall(msp, cfg, layer="A-COMPOUND-WALL", z=0.0)
@@ -477,6 +550,7 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
 
 # ── BOQ export ────────────────────────────────────────────────────────────────
 
+
 @router.get("/projects/{project_id}/boq")
 async def export_boq(
     project_id: str,
@@ -492,8 +566,10 @@ async def export_boq(
     layouts = generate(cfg)
     layout = next((lay for lay in layouts if lay.id == layout_id), None)
     if layout is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Layout {layout_id!r} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Layout {layout_id!r} not found",
+        )
 
     engine = QuantityEngine()
     boq = engine.calculate(layout, cfg, project_name=project.name, city=city)
@@ -501,10 +577,13 @@ async def export_boq(
     if fmt == "excel":
         plan = await _get_plan_tier(user_id, db)
         if plan != "pro":
-            raise HTTPException(status_code=402, detail="BOQ Excel export requires Pro plan.")
+            raise HTTPException(
+                status_code=402, detail="BOQ Excel export requires Pro plan."
+            )
         return _boq_excel_response(boq, project_id, layout_id)
 
     import json
+
     return Response(
         content=json.dumps(boq.to_dict(), indent=2),
         media_type="application/json",
@@ -515,8 +594,10 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     try:
         import openpyxl  # noqa: F401
     except ImportError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                            detail="openpyxl not installed. Run: uv add openpyxl")
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="openpyxl not installed. Run: uv add openpyxl",
+        )
 
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -564,8 +645,11 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     # City comparison row
     if boq.city != "Generic" and boq.cost_difference is not None:
         diff = boq.cost_difference
-        diff_label = (f"vs Generic: +₹{diff:,.0f} more" if diff > 0
-                      else f"vs Generic: ₹{abs(diff):,.0f} less")
+        diff_label = (
+            f"vs Generic: +₹{diff:,.0f} more"
+            if diff > 0
+            else f"vs Generic: ₹{abs(diff):,.0f} less"
+        )
         compare_row = total_row + 1
         ws.cell(row=compare_row, column=2, value=diff_label)
         ws.cell(row=compare_row, column=2).font = Font(
@@ -579,8 +663,12 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
 
     # Footer note
     note_row = len(boq.line_items) + 9
-    ws.cell(row=note_row, column=1, value="Note: Quantities are approximate. "
-            "Verify with site measurements before procurement.")
+    ws.cell(
+        row=note_row,
+        column=1,
+        value="Note: Quantities are approximate. "
+        "Verify with site measurements before procurement.",
+    )
     ws.cell(row=note_row, column=1).font = Font(italic=True, color="888888")
     ws.cell(row=note_row + 1, column=1, value="Generated by PlanForge")
 
@@ -592,7 +680,6 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition":
-                f'attachment; filename="planforge-boq-{project_id}-{layout_id}.xlsx"'
+            "Content-Disposition": f'attachment; filename="planforge-boq-{project_id}-{layout_id}.xlsx"'
         },
     )

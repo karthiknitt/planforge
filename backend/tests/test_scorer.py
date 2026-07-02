@@ -1,12 +1,15 @@
 """Tests for the layout quality scorer."""
 
-import pytest
-from app.engine.models import Column, ComplianceResult, FloorPlan, Layout, PlotConfig, Room
+from app.engine.models import (
+    ComplianceResult,
+    FloorPlan,
+    Layout,
+    PlotConfig,
+    Room,
+)
 from app.engine.scorer import (
     _score_adjacency,
     _score_aspect_ratio,
-    _score_circulation,
-    _score_natural_light,
     _shares_wall,
     rank_and_select,
     score_layout,
@@ -20,15 +23,26 @@ def _make_room(id, type, x, y, w, d, name=None):
 def _make_layout(gf_rooms, ff_rooms=None, id="X"):
     gf = FloorPlan(floor=0, floor_type="ground", rooms=gf_rooms)
     ff = FloorPlan(floor=1, floor_type="first", rooms=ff_rooms or [])
-    return Layout(id=id, name=f"Layout {id}", ground_floor=gf, first_floor=ff,
-                  compliance=ComplianceResult(passed=True))
+    return Layout(
+        id=id,
+        name=f"Layout {id}",
+        ground_floor=gf,
+        first_floor=ff,
+        compliance=ComplianceResult(passed=True),
+    )
 
 
 def _basic_cfg():
     return PlotConfig(
-        plot_length=12.0, plot_width=9.0,
-        setback_front=1.5, setback_rear=1.0, setback_left=0.9, setback_right=0.9,
-        num_bedrooms=2, toilets=2, parking=False,
+        plot_length=12.0,
+        plot_width=9.0,
+        setback_front=1.5,
+        setback_rear=1.0,
+        setback_left=0.9,
+        setback_right=0.9,
+        num_bedrooms=2,
+        toilets=2,
+        parking=False,
     )
 
 
@@ -93,8 +107,8 @@ def test_rank_and_select_top_n():
     ranked = rank_and_select(layouts, cfg, top_n=3)
     assert len(ranked) == 3
     # Verify descending score order
-    scores = [l.score.total for l in ranked]
+    scores = [lay.score.total for lay in ranked]
     assert scores == sorted(scores, reverse=True)
     # Verify scores attached
-    for l in ranked:
-        assert l.score is not None
+    for lay in ranked:
+        assert lay.score is not None

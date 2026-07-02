@@ -1,4 +1,5 @@
 """Tests for DXF ARCH_MM dimstyle: exists at doc level, uses architectural tick arrow."""
+
 import io
 import pytest
 import ezdxf
@@ -38,6 +39,4 @@ def test_arch_mm_uses_archtick(dxf_doc):
     ds = dxf_doc.dimstyles.get("ARCH_MM")
     # ezdxf stores set_arrows(blk=ARCHTICK) in the 'dimblk' attribute
     dimblk = ds.dxf.dimblk.upper()
-    assert "ARCHTICK" in dimblk, (
-        f"Expected ARCHTICK in dimblk, got {dimblk!r}"
-    )
+    assert "ARCHTICK" in dimblk, f"Expected ARCHTICK in dimblk, got {dimblk!r}"
