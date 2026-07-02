@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { project as projectTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { fetchBackend } from "@/lib/backend-fetch";
 import type { GenerateResponse } from "@/lib/layout-types";
 import { LayoutViewer } from "./layout-viewer";
 
@@ -30,9 +31,9 @@ function metresToFeet(metres: string | number): string {
   return (Math.round((parseFloat(String(metres)) / 0.3048) * 10) / 10).toFixed(1);
 }
 
-async function fetchLayouts(projectId: string): Promise<GenerateResponse | null> {
+async function fetchLayouts(projectId: string, userId: string): Promise<GenerateResponse | null> {
   try {
-    const res = await fetch(`/api/backend/projects/${projectId}/generate`, {
+    const res = await fetchBackend(userId, `projects/${projectId}/generate`, {
       next: { revalidate: 300, tags: [`project-${projectId}`] },
     });
     if (!res.ok) return null;
@@ -46,6 +47,7 @@ async function fetchLayouts(projectId: string): Promise<GenerateResponse | null>
 
 interface LayoutSectionProps {
   projectId: string;
+  userId: string;
   projectName: string;
   plotWidth: number;
   plotLength: number;
@@ -69,6 +71,7 @@ interface LayoutSectionProps {
 
 async function LayoutSection({
   projectId,
+  userId,
   projectName,
   plotWidth,
   plotLength,
@@ -89,7 +92,7 @@ async function LayoutSection({
   approvalNote,
   approvalUpdatedAt,
 }: LayoutSectionProps) {
-  const generateData = await fetchLayouts(projectId);
+  const generateData = await fetchLayouts(projectId, userId);
   return (
     <LayoutViewer
       generateData={generateData}
@@ -306,6 +309,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <Suspense fallback={<GeneratingFallback />}>
         <LayoutSection
           projectId={id}
+          userId={session.user.id}
           projectName={project.name}
           plotWidth={parseFloat(project.plotWidth)}
           plotLength={parseFloat(project.plotLength)}
