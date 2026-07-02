@@ -13,7 +13,7 @@ Covers:
 
 USER_ID = "user-share-001"
 OTHER_USER = "user-share-002"
-HEADERS = {"X-User-Id": USER_ID}
+HEADERS = {"X-Test-User-Id": USER_ID}
 
 BASE_PAYLOAD = {
     "name": "Share Test Plot",
@@ -61,7 +61,7 @@ async def test_create_share_token_idempotent(client):
 async def test_create_share_token_wrong_user_returns_403(client):
     pid = await _create_project(client)
     r = await client.post(
-        f"/api/projects/{pid}/share", headers={"X-User-Id": OTHER_USER}
+        f"/api/projects/{pid}/share", headers={"X-Test-User-Id": OTHER_USER}
     )
     assert r.status_code == 403
 
@@ -171,6 +171,6 @@ async def test_approval_status_wrong_user_returns_403(client):
     pid = await _create_project(client)
     r = await client.get(
         f"/api/projects/{pid}/approval-status",
-        headers={"X-User-Id": OTHER_USER},
+        headers={"X-Test-User-Id": OTHER_USER},
     )
     assert r.status_code == 403

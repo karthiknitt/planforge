@@ -15,11 +15,11 @@ Covers:
 """
 
 USER_ID = "user-cc-001"
-HEADERS = {"X-User-Id": USER_ID}
+HEADERS = {"X-Test-User-Id": USER_ID}
 
 
 def PROJECT_HEADERS(pid):
-    return {"X-User-Id": USER_ID, "X-Project-Id": pid}
+    return {"X-Test-User-Id": USER_ID, "X-Project-Id": pid}
 
 
 BASE_PROJECT = {
@@ -346,7 +346,7 @@ async def test_compliance_check_unknown_project_returns_404(client):
     r = await client.post(
         "/api/layouts/test-layout/compliance-check",
         json={"rooms": []},
-        headers={"X-User-Id": USER_ID, "X-Project-Id": "nonexistent-project-id"},
+        headers={"X-Test-User-Id": USER_ID, "X-Project-Id": "nonexistent-project-id"},
     )
     assert r.status_code == 404
 

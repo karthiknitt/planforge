@@ -7,7 +7,7 @@ Covers the complete user journey against an in-memory SQLite database:
 """
 
 USER_ID = "user-e2e-001"
-HEADERS = {"X-User-Id": USER_ID}
+HEADERS = {"X-Test-User-Id": USER_ID}
 
 # A valid 9 m × 12 m residential plot
 BASE_PAYLOAD = {
@@ -140,7 +140,7 @@ async def test_full_workflow(client):
     assert r.content[:4] == b"%PDF"
 
     # 4. Auth isolation
-    other = {"X-User-Id": "someone-else"}
+    other = {"X-Test-User-Id": "someone-else"}
     assert (
         await client.get(f"/api/projects/{project_id}/generate", headers=other)
     ).status_code == 404

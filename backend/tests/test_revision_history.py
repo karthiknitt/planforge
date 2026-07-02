@@ -11,7 +11,7 @@ Covers:
 
 USER_ID = "user-rev-001"
 OTHER_USER = "user-rev-002"
-HEADERS = {"X-User-Id": USER_ID}
+HEADERS = {"X-Test-User-Id": USER_ID}
 
 BASE_PAYLOAD = {
     "name": "Revision Test Plot",
@@ -78,7 +78,7 @@ async def test_create_revision_wrong_user_returns_404(client):
     r = await client.post(
         f"/api/projects/{pid}/revisions",
         json={},
-        headers={"X-User-Id": OTHER_USER},
+        headers={"X-Test-User-Id": OTHER_USER},
     )
     assert r.status_code == 404
 

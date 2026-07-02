@@ -5,13 +5,19 @@ import os
 os.environ.setdefault("INTERNAL_AUTH_SECRET", "test-secret-for-ci")
 
 import pytest
+from fastapi import Header
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base, get_db
+from app.dependencies.auth import get_current_user_id
 from app.main import app
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+
+def _test_user_id_override(x_test_user_id: str = Header(..., alias="X-Test-User-Id")) -> str:
+    return x_test_user_id
 
 
 @pytest.fixture
@@ -29,6 +35,7 @@ async def client():
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_id] = _test_user_id_override
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
