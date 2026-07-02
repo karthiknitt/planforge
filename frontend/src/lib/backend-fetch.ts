@@ -15,6 +15,7 @@ export async function fetchBackend(
   return fetch(`${BACKEND_URL}/api/${path.replace(/^\//, "")}`, {
     ...init,
     headers: {
+      "Content-Type": "application/json",
       ...(init?.headers as Record<string, string> | undefined),
       "X-Internal-Auth": token,
     },
