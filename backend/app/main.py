@@ -41,7 +41,7 @@ default_origins = ["http://localhost:3001", "http://localhost:3000"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=default_origins + parse_allowed_origins(settings.allowed_origins),
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"^https://planforge-[a-zA-Z0-9-]+\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
