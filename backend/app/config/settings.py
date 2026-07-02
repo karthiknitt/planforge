@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     )
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
+    allowed_origins: str = ""
 
 
 settings = Settings()

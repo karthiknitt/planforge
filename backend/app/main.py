@@ -15,6 +15,8 @@ from app.api.routes import (
     share,
     teams,
 )
+from app.config.cors import parse_allowed_origins
+from app.config.settings import settings
 from app.db import Base, engine
 from app.auto_migrate import auto_migrate_missing_columns
 
@@ -35,9 +37,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="PlanForge API", version="0.1.0", lifespan=lifespan)
 
+default_origins = ["http://localhost:3001", "http://localhost:3000"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001", "http://localhost:3000"],
+    allow_origins=default_origins + parse_allowed_origins(settings.allowed_origins),
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
