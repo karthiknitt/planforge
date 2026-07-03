@@ -1,0 +1,11 @@
+{
+  "_comment": "Preferred room adjacencies used by BOTH the CP-SAT solver objective and the layout scorer. Single source of truth - the two modules previously kept separate hardcoded tables that had drifted apart.",
+  "pairs": [
+    { "a": "kitchen", "b": "dining", "points": 15 },
+    { "a": "bedroom", "b": "toilet", "points": 12 },
+    { "a": "master_bedroom", "b": "toilet", "points": 12 },
+    { "a": "living", "b": "staircase", "points": 8 },
+    { "a": "living", "b": "dining", "points": 10 },
+    { "a": "kitchen", "b": "utility", "points": 6 }
+  ]
+}

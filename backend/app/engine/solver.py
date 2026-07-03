@@ -19,6 +19,7 @@ from pathlib import Path
 from ortools.sat.python import cp_model
 
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
+from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
 SOLVE_TIME_S = 5.0  # per-run wall-clock budget
@@ -32,13 +33,9 @@ def _load_specs() -> dict:
 
 
 # ── Adjacency preference pairs ────────────────────────────────────────────────
+
 _ADJACENCY_PAIRS: list[tuple[str, str, int]] = [
-    ("kitchen", "dining", 15),
-    ("bedroom", "toilet", 12),
-    ("master_bedroom", "toilet", 12),
-    ("living", "staircase", 8),
-    ("living", "dining", 10),
-    ("kitchen", "utility", 6),
+    (a, b, int(pts)) for a, b, pts in load_adjacency_pairs()
 ]
 
 

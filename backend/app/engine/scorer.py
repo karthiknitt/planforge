@@ -11,6 +11,7 @@ Scores each Layout on 5 components (weighted sum → 0–100):
 from __future__ import annotations
 
 from .models import Layout, LayoutScore, PlotConfig, Room
+from app.engine.adjacency import load_adjacency_pairs
 
 
 # ── Habitable room types (rooms that benefit from natural light) ──────────────
@@ -29,13 +30,8 @@ _HABITABLE = frozenset(
 )
 
 # ── Adjacency preference table ────────────────────────────────────────────────
-_ADJACENCY_PAIRS: list[tuple[str, str, float]] = [
-    ("kitchen", "dining", 15.0),
-    ("bedroom", "toilet", 12.0),
-    ("master_bedroom", "toilet", 12.0),
-    ("living", "staircase", 8.0),
-    ("living", "dining", 10.0),
-]
+
+_ADJACENCY_PAIRS: list[tuple[str, str, float]] = list(load_adjacency_pairs())
 _MAX_ADJACENCY = sum(pts for _, _, pts in _ADJACENCY_PAIRS)
 
 
