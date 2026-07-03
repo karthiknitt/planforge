@@ -11,12 +11,12 @@ from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
 from app.engine.boq import QuantityEngine
-from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.models.project import Project
 from app.services.access import get_accessible_project
 from app.services.plans import get_effective_plan_tier
+from app.services import layout_store
 from app.services.plot_config import plot_config_from_project
 
 logger = logging.getLogger(__name__)
@@ -52,13 +52,14 @@ async def export_pdf(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     annotations = getattr(project, "annotations", None) or {}
     pdf_bytes = render_pdf(
@@ -97,13 +98,14 @@ async def export_approval_pdf(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     municipality = body.municipality or getattr(project, "municipality", None) or ""
     owner = OwnerInfo(
@@ -155,13 +157,14 @@ async def export_dxf(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     dxf_bytes = _render_dxf(project.name, layout, cfg)
 
@@ -523,13 +526,14 @@ async def export_boq(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     engine = QuantityEngine()
     boq = engine.calculate(layout, cfg, project_name=project.name, city=city)

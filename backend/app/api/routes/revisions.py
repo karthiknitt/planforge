@@ -20,20 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
-from app.engine.generator import generate
 from app.models.project import Project
 from app.models.revision import ProjectRevision
+from app.services import layout_store
 from app.services.access import get_accessible_project
-from app.services.plot_config import plot_config_from_project
-from app.schemas.layout import (
-    ColumnOut,
-    ComplianceOut,
-    FloorPlanOut,
-    GenerateResponse,
-    LayoutOut,
-    LayoutScoreOut,
-    RoomOut,
-)
 from app.schemas.revision import (
     RevisionCreate,
     RevisionCreateResponse,
@@ -62,65 +52,6 @@ def _to_float(v: Any) -> float:
     return float(v) if isinstance(v, Decimal) else v
 
 
-def _floor_plan_out(fp: Any) -> FloorPlanOut:
-    return FloorPlanOut(
-        floor=fp.floor,
-        floor_type=getattr(fp, "floor_type", "ground"),
-        needs_mech_ventilation=getattr(fp, "needs_mech_ventilation", False),
-        rooms=[
-            RoomOut(
-                id=r.id,
-                name=r.name,
-                type=r.type,
-                x=r.x,
-                y=r.y,
-                width=r.width,
-                depth=r.depth,
-                area=r.area,
-            )
-            for r in fp.rooms
-        ],
-        columns=[ColumnOut(x=c.x, y=c.y) for c in fp.columns],
-    )
-
-
-def _build_snapshot(project_id: str, layouts: list[Any]) -> dict[str, Any]:
-    """Build the GenerateResponse-shaped dict to store as snapshot JSON."""
-    layout_dicts = []
-    for lay in layouts:
-        lo = LayoutOut(
-            id=lay.id,
-            name=lay.name,
-            compliance=ComplianceOut(
-                passed=lay.compliance.passed,
-                violations=lay.compliance.violations,
-                warnings=lay.compliance.warnings,
-            ),
-            ground_floor=_floor_plan_out(lay.ground_floor),
-            first_floor=_floor_plan_out(lay.first_floor),
-            second_floor=_floor_plan_out(lay.second_floor)
-            if lay.second_floor
-            else None,
-            basement_floor=_floor_plan_out(lay.basement_floor)
-            if lay.basement_floor
-            else None,
-            score=LayoutScoreOut(
-                total=lay.score.total,
-                natural_light=lay.score.natural_light,
-                adjacency=lay.score.adjacency,
-                aspect_ratio=lay.score.aspect_ratio,
-                circulation=lay.score.circulation,
-                vastu=lay.score.vastu,
-            )
-            if lay.score
-            else None,
-            space_notes=getattr(lay, "space_notes", []),
-            auto_added_rooms=getattr(lay, "space_notes", []),
-        )
-        layout_dicts.append(lo.model_dump())
-    return GenerateResponse(project_id=project_id, layouts=layout_dicts).model_dump()  # type: ignore[arg-type]
-
-
 async def save_auto_revision(
     db: AsyncSession,
     project: Project,
@@ -132,10 +63,8 @@ async def save_auto_revision(
     Called internally before destructive operations (e.g. re-generate).
     """
     try:
-        cfg = plot_config_from_project(project)
-
-        layouts = generate(cfg)
-        snapshot = _build_snapshot(project.id, layouts)
+        stored = await layout_store.get_or_generate_layouts(project, db)
+        snapshot = layout_store.to_generate_response(project.id, stored).model_dump()
     except Exception:
         return None
 
@@ -193,9 +122,8 @@ async def create_revision(
     project = await _require_project(project_id, user_id, db)
 
     try:
-        cfg = plot_config_from_project(project)
-        layouts = generate(cfg)
-        snapshot = _build_snapshot(project_id, layouts)
+        stored = await layout_store.get_or_generate_layouts(project, db)
+        snapshot = layout_store.to_generate_response(project_id, stored).model_dump()
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

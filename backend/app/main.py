@@ -24,6 +24,7 @@ from app.db import Base, engine
 from app.auto_migrate import auto_migrate_missing_columns
 
 # Import all models so SQLAlchemy knows about them before create_all
+import app.models.layout  # noqa: F401
 import app.models.payment  # noqa: F401
 import app.models.project  # noqa: F401
 import app.models.revision  # noqa: F401
