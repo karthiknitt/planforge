@@ -99,8 +99,8 @@ def test_staircase_width():
         stairs = [r for r in all_rooms if r.type == "staircase"]
         assert len(stairs) >= 1, f"Layout {lay.id}: no staircase found"
         for stair in stairs:
-            assert stair.width >= min_w or stair.depth >= min_w, (
-                f"Layout {lay.id} staircase too narrow: w={stair.width}"
+            assert min(stair.width, stair.depth) >= min_w, (
+                f"Layout {lay.id} staircase too narrow: w={stair.width}, d={stair.depth}"
             )
 
 

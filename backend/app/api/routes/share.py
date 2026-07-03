@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.engine.generator import generate
-from app.engine.models import PlotConfig
 from app.models.project import Project
+from app.services.plot_config import plot_config_from_project
 from app.schemas.layout import (
     ColumnOut,
     ComplianceOut,
@@ -62,52 +62,7 @@ def _floor_plan_out(fp) -> FloorPlanOut:
 
 
 def _build_generate_response(project_id: str, project: Project) -> GenerateResponse:
-    custom_room_config = None
-    raw_crc = getattr(project, "custom_room_config", None)
-    if raw_crc:
-        try:
-            custom_room_config = json.loads(raw_crc)
-        except Exception:
-            custom_room_config = None
-
-    plot_corners = None
-    raw_corners = getattr(project, "plot_corners", None)
-    if raw_corners:
-        try:
-            plot_corners = [tuple(pt) for pt in json.loads(raw_corners)]
-        except Exception:
-            plot_corners = None
-
-    cfg = PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
-        road_side=getattr(project, "road_side", "S") or "S",
-        has_pooja=getattr(project, "has_pooja", False) or False,
-        has_study=getattr(project, "has_study", False) or False,
-        has_balcony=getattr(project, "has_balcony", False) or False,
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
-        plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
-        plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
-        plot_corners=plot_corners,
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-        num_floors=getattr(project, "num_floors", 1) or 1,
-        has_stilt=getattr(project, "has_stilt", False) or False,
-        has_basement=getattr(project, "has_basement", False) or False,
-        custom_room_config=custom_room_config,
-    )
+    cfg = plot_config_from_project(project)
 
     layouts = generate(cfg)
 

@@ -348,17 +348,21 @@ def check(
     # --- Staircase width ---
     for room in all_rooms:
         if room.type == "staircase":
-            if room.width < min_stair_w and room.depth < min_stair_w:
+            # Clear width is the narrower dimension of the stair well
+            clear_w = min(room.width, room.depth)
+            if clear_w < min_stair_w:
                 violations.append(
-                    f"Staircase clear width {room.width:.2f} m < {min_stair_w} m minimum (NBC)"
+                    f"Staircase clear width {clear_w:.2f} m < {min_stair_w} m minimum (NBC)"
                 )
 
     # --- Beam span (ground floor) ---
     max_span = rules["max_beam_span_m"]
     for room in layout.ground_floor.rooms:
-        if room.width > max_span:
+        # A beam must clear the room's longer dimension, not just its width
+        span = max(room.width, room.depth)
+        if span > max_span:
             warnings.append(
-                f"{room.name}: span {room.width:.1f} m > {max_span} m — add intermediate beam"
+                f"{room.name}: span {span:.1f} m > {max_span} m — add intermediate beam"
             )
 
     # --- Floor coverage ---

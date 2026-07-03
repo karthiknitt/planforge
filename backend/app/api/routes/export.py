@@ -1,4 +1,3 @@
-import json as _json
 import logging
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -18,6 +17,7 @@ from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.models.project import Project
 from app.models.user import User
+from app.services.plot_config import plot_config_from_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -34,34 +34,7 @@ def _to_float(v) -> float:
 
 
 def _cfg_from_project(project: Project) -> PlotConfig:
-    return PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
-        road_side=getattr(project, "road_side", "S") or "S",
-        has_pooja=getattr(project, "has_pooja", False) or False,
-        has_study=getattr(project, "has_study", False) or False,
-        has_balcony=getattr(project, "has_balcony", False) or False,
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
-        plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
-        plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
-        plot_corners=_json.loads(project.plot_corners)
-        if getattr(project, "plot_corners", None)
-        else None,
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-    )
+    return plot_config_from_project(project)
 
 
 async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Project:

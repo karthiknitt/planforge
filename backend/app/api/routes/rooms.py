@@ -25,6 +25,7 @@ from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.models.project import Project
 from app.models.user import User
+from app.services.plot_config import plot_config_from_project
 
 router = APIRouter()
 
@@ -181,27 +182,8 @@ async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) ->
         # Generate fresh and cache first layout
         project = await _get_project(project_id, user_id, db)
         from app.engine.generator import generate
-        from app.engine.models import PlotConfig
 
-        cfg = PlotConfig(
-            plot_length=_to_float(project.plot_length),
-            plot_width=_to_float(project.plot_width),
-            setback_front=_to_float(project.setback_front),
-            setback_rear=_to_float(project.setback_rear),
-            setback_left=_to_float(project.setback_left),
-            setback_right=_to_float(project.setback_right),
-            num_bedrooms=project.num_bedrooms,
-            toilets=project.toilets,
-            parking=project.parking,
-            city=getattr(project, "city", "other") or "other",
-            vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-            road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
-            road_side=getattr(project, "road_side", "S") or "S",
-            plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-            cutout_corner=getattr(project, "cutout_corner", None),
-            cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-            cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-        )
+        cfg = plot_config_from_project(project)
         layouts = generate(cfg)
         if not layouts:
             raise HTTPException(
@@ -530,7 +512,6 @@ async def check_compliance(
         ComplianceResult,
         FloorPlan,
         Layout,
-        PlotConfig,
         Room,
     )
 
@@ -557,24 +538,7 @@ async def check_compliance(
             columns=[Column(x=c["x"], y=c["y"]) for c in state_dict.get("columns", [])],
         )
 
-    cfg = PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_side=getattr(project, "road_side", "S") or "S",
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-    )
+    cfg = plot_config_from_project(project)
     layout = Layout(
         id="live",
         name="Live",
@@ -614,7 +578,6 @@ async def compliance_check_rooms(
         ComplianceResult,
         FloorPlan,
         Layout,
-        PlotConfig,
         Room,
     )
 
@@ -662,25 +625,7 @@ async def compliance_check_rooms(
         else None
     )
 
-    cfg = PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_side=getattr(project, "road_side", "S") or "S",
-        municipality=getattr(project, "municipality", None),
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-    )
+    cfg = plot_config_from_project(project)
 
     layout = Layout(
         id=layout_id,
