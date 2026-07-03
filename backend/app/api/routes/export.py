@@ -3,13 +3,14 @@ import logging
 from decimal import Decimal
 from io import BytesIO, StringIO
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
 from app.engine.boq import QuantityEngine
 from app.engine.generator import generate
@@ -30,10 +31,6 @@ async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
 
 def _to_float(v) -> float:
     return float(v) if isinstance(v, Decimal) else v
-
-
-def _user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
 
 
 def _cfg_from_project(project: Project) -> PlotConfig:
@@ -86,7 +83,7 @@ async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Proje
 async def export_pdf(
     project_id: str,
     layout_id: str = "A",
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     project = await _get_project(project_id, user_id, db)
@@ -131,7 +128,7 @@ async def export_approval_pdf(
     project_id: str,
     body: ApprovalPdfRequest,
     layout_id: str = "A",
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     project = await _get_project(project_id, user_id, db)
@@ -175,7 +172,7 @@ async def export_approval_pdf(
 async def export_dxf(
     project_id: str,
     layout_id: str = "A",
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     plan = await _get_plan_tier(user_id, db)
@@ -557,7 +554,7 @@ async def export_boq(
     layout_id: str = "A",
     fmt: str = "json",
     city: str = "Generic",
-    user_id: str = Depends(_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     project = await _get_project(project_id, user_id, db)

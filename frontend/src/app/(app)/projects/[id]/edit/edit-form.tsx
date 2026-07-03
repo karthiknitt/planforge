@@ -243,11 +243,10 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${project.id}`, {
+      const res = await fetch(`/api/backend/projects/${project.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": session!.user.id,
         },
         body: JSON.stringify(
           (() => {

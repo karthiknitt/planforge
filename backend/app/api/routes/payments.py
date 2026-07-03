@@ -2,13 +2,14 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.models.user import User
 
 router = APIRouter()
@@ -20,10 +21,6 @@ CREDIT_PACKS: dict[str, dict[str, int]] = {
     "pack_3": {"credits": 3, "price_paise": 24900},
     "pack_7": {"credits": 7, "price_paise": 49900},
 }
-
-
-def _get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
 
 
 class OrderRequest(BaseModel):
@@ -51,7 +48,7 @@ class CreditVerifyRequest(BaseModel):
 @router.post("/payments/order")
 async def create_order(
     body: OrderRequest,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
 ) -> dict:
     if body.plan not in PLAN_AMOUNTS:
         raise HTTPException(400, "Invalid plan. Choose 'basic', 'pro', or 'firm'.")
@@ -89,7 +86,7 @@ async def create_order(
 @router.post("/payments/verify")
 async def verify_payment(
     body: VerifyRequest,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     if body.plan not in PLAN_AMOUNTS:
@@ -121,7 +118,7 @@ async def verify_payment(
 @router.post("/payments/credits/order")
 async def create_credits_order(
     body: CreditOrderRequest,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
 ) -> dict:
     if body.pack_id not in CREDIT_PACKS:
         raise HTTPException(
@@ -167,7 +164,7 @@ async def create_credits_order(
 @router.post("/payments/credits/verify")
 async def verify_credits_payment(
     body: CreditVerifyRequest,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     if body.pack_id not in CREDIT_PACKS:

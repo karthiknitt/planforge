@@ -381,10 +381,7 @@ export function LayoutViewer({
     if (!session) return;
     setApprovalFetching(true);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/approval-status`,
-        { headers: { "X-User-Id": session.user.id } }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/approval-status`);
       if (!res.ok) return;
       const data = await res.json();
       setApproval({
@@ -407,9 +404,9 @@ export function LayoutViewer({
       if (annDebounceRef.current) clearTimeout(annDebounceRef.current);
       annDebounceRef.current = setTimeout(async () => {
         try {
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/annotations`, {
+          await fetch(`/api/backend/projects/${projectId}/annotations`, {
             method: "PUT",
-            headers: { "X-User-Id": session.user.id, "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(updated),
           });
         } catch {
@@ -423,9 +420,7 @@ export function LayoutViewer({
   useEffect(() => {
     if (!session || annotationsLoaded) return;
     setAnnotationsLoaded(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/annotations`, {
-      headers: { "X-User-Id": session.user.id },
-    })
+    fetch(`/api/backend/projects/${projectId}/annotations`)
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, Annotation>) => setAnnotations(data))
       .catch(() => {});
@@ -518,18 +513,14 @@ export function LayoutViewer({
           floor: floorCode,
         })),
       };
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/layouts/${selectedId}/compliance-check`,
-        {
-          method: "POST",
-          headers: {
-            "X-User-Id": session.user.id,
-            "X-Project-Id": projectId,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        }
-      );
+      const res = await fetch(`/api/backend/layouts/${selectedId}/compliance-check`, {
+        method: "POST",
+        headers: {
+          "X-Project-Id": projectId,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
       if (!res.ok) return;
       const data = (await res.json()) as {
         passed: boolean;
@@ -559,17 +550,13 @@ export function LayoutViewer({
     try {
       // Persist each modified room via the existing resize endpoint
       for (const room of rooms) {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/rooms/${room.id}/resize`,
-          {
-            method: "POST",
-            headers: {
-              "X-User-Id": session.user.id,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ new_width: room.width, new_depth: room.depth }),
-          }
-        );
+        const res = await fetch(`/api/backend/projects/${projectId}/rooms/${room.id}/resize`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ new_width: room.width, new_depth: room.depth }),
+        });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { detail?: string };
           throw new Error(data?.detail ?? `Save failed (${res.status})`);
@@ -590,10 +577,7 @@ export function LayoutViewer({
     setApprovalShareLoading(true);
     setApprovalShareError("");
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/share`,
-        { method: "POST", headers: { "X-User-Id": session.user.id } }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/share`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { detail?: string })?.detail ?? `Failed (${res.status})`);
@@ -656,10 +640,7 @@ export function LayoutViewer({
     setRevisionsLoading(true);
     setRevisionsError("");
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions`,
-        { headers: { "X-User-Id": session.user.id } }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/revisions`);
       if (!res.ok) throw new Error(`Failed to load revisions (${res.status})`);
       const data = (await res.json()) as RevisionListItem[];
       setRevisions(data);
@@ -681,17 +662,13 @@ export function LayoutViewer({
     if (!session) return;
     setSavingSnapshot(true);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions`,
-        {
-          method: "POST",
-          headers: {
-            "X-User-Id": session.user.id,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ label: snapshotLabel.trim() || null }),
-        }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/revisions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ label: snapshotLabel.trim() || null }),
+      });
       if (!res.ok) throw new Error(`Failed to save snapshot (${res.status})`);
       setSnapshotLabel("");
       setShowSnapshotInput(false);
@@ -707,10 +684,7 @@ export function LayoutViewer({
     if (!session) return;
     setRestoringVersion(version);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions/${version}`,
-        { headers: { "X-User-Id": session.user.id } }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/revisions/${version}`);
       if (!res.ok) throw new Error(`Failed to load revision v${version} (${res.status})`);
       const detail = (await res.json()) as { snapshot: GenerateResponse };
       setRestoredData(detail.snapshot);
@@ -734,10 +708,9 @@ export function LayoutViewer({
   async function handleDeleteRevision(version: number) {
     if (!session) return;
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/revisions/${version}`,
-        { method: "DELETE", headers: { "X-User-Id": session.user.id } }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/revisions/${version}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error(`Failed to delete revision (${res.status})`);
       await fetchRevisions();
     } catch (err) {
@@ -750,10 +723,7 @@ export function LayoutViewer({
     setShareLoading(true);
     setShareError("");
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/share`,
-        { method: "POST", headers: { "X-User-Id": session.user.id } }
-      );
+      const res = await fetch(`/api/backend/projects/${projectId}/share`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.detail ?? `Failed to generate share link (${res.status})`);
@@ -785,11 +755,10 @@ export function LayoutViewer({
     setApprovalPdfError("");
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
+        `/api/backend/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
         {
           method: "POST",
           headers: {
-            "X-User-Id": session.user.id,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(approvalForm),
@@ -823,8 +792,7 @@ export function LayoutViewer({
     setDownloadError("");
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/export/${format}?layout_id=${selectedId}`,
-        { headers: { "X-User-Id": session.user.id } }
+        `/api/backend/projects/${projectId}/export/${format}?layout_id=${selectedId}`
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

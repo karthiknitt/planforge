@@ -57,7 +57,7 @@ export default async function TeamPage() {
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-4">
               Create Your Firm
             </h2>
-            <CreateTeamForm userId={userId} />
+            <CreateTeamForm />
           </section>
         </FadeIn>
         <FadeIn delay={0.2}>

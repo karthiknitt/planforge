@@ -2,12 +2,13 @@ import json
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.models.project import Project
 from app.models.team import TeamMember
 from app.models.user import User
@@ -44,11 +45,6 @@ async def _can_access_project(project: Project, user_id: str, db: AsyncSession) 
     return False
 
 
-def get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    """Extract authenticated user ID from request header set by the frontend."""
-    return x_user_id
-
-
 def _serialize_project_data(data: dict) -> dict:
     """Serialize list fields (custom_room_config, plot_corners) to JSON strings for DB storage."""
     crc = data.get("custom_room_config")
@@ -75,7 +71,7 @@ def _serialize_project_data(data: dict) -> dict:
 )
 async def create_project(
     body: ProjectCreate,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Project:
     user = await _get_user(user_id, db)
@@ -123,7 +119,7 @@ async def create_project(
 async def update_project(
     project_id: str,
     body: ProjectUpdate,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Project:
     result = await db.execute(select(Project).where(Project.id == project_id))
@@ -160,7 +156,7 @@ async def update_project(
 
 @router.get("/projects", response_model=list[ProjectRead])
 async def list_projects(
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[Project]:
     team_ids = await _get_user_team_ids(user_id, db)
@@ -199,7 +195,7 @@ class AnnotationItem(BaseModel):
 @router.get("/projects/{project_id}/annotations", response_model=dict[str, Any])
 async def get_annotations(
     project_id: str,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     result = await db.execute(select(Project).where(Project.id == project_id))
@@ -219,7 +215,7 @@ async def get_annotations(
 async def put_annotations(
     project_id: str,
     body: dict[str, Any],
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     result = await db.execute(select(Project).where(Project.id == project_id))

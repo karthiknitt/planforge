@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { fetchBackend } from "@/lib/backend-fetch";
 
 interface DeleteBody {
   teamId: number;
@@ -14,12 +15,12 @@ export async function DELETE(req: Request): Promise<NextResponse> {
   }
 
   const body = (await req.json()) as DeleteBody;
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
 
-  const res = await fetch(`${backendUrl}/api/teams/${body.teamId}/members/${body.targetUserId}`, {
-    method: "DELETE",
-    headers: { "X-User-Id": session.user.id },
-  });
+  const res = await fetchBackend(
+    session.user.id,
+    `teams/${body.teamId}/members/${body.targetUserId}`,
+    { method: "DELETE" }
+  );
 
   if (!res.ok) {
     const data = (await res.json()) as { detail?: string };

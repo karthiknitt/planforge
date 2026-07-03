@@ -22,6 +22,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://planforge:planforge@db:5432/planforge
       PORT: "8000"
+      INTERNAL_AUTH_SECRET: local-dev-secret-change-me
     depends_on:
       db:
         condition: service_healthy
@@ -37,6 +38,8 @@ services:
       BETTER_AUTH_URL: http://localhost:3000
       DATABASE_URL: postgresql://planforge:planforge@db:5432/planforge
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      INTERNAL_AUTH_SECRET: local-dev-secret-change-me
+      BACKEND_URL: http://backend:8000
     depends_on:
       - backend
 

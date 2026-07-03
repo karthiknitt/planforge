@@ -1,18 +1,58 @@
 """Shared pytest fixtures for API integration tests."""
 
+import os
+
+os.environ.setdefault("INTERNAL_AUTH_SECRET", "test-secret-for-ci")
+
 import pytest
+from fastapi import Header
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base, get_db
+from app.dependencies.auth import get_current_user_id
 from app.main import app
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
+def _test_user_id_override(
+    x_test_user_id: str = Header(..., alias="X-Test-User-Id"),
+) -> str:
+    return x_test_user_id
+
+
 @pytest.fixture
 async def client():
     """AsyncClient wired to an isolated in-memory SQLite database."""
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_get_db() -> AsyncSession:
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_id] = _test_user_id_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        yield c
+
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+
+@pytest.fixture
+async def client_real_auth():
+    """AsyncClient wired to an isolated DB, WITHOUT overriding get_current_user_id —
+    requests go through the real X-Internal-Auth JWT verification path, unlike
+    the `client` fixture above (which every other test uses for convenience)."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
 
     async with engine.begin() as conn:

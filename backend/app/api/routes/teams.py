@@ -1,20 +1,17 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.dependencies.auth import get_current_user_id
 from app.models.project import Project
 from app.models.team import Team, TeamMember
 from app.schemas.project import ProjectRead
 
 router = APIRouter()
-
-
-def _get_user_id(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
-    return x_user_id
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
@@ -91,7 +88,7 @@ async def _require_admin(team_id: int, user_id: str, db: AsyncSession) -> None:
 @router.post("/teams", response_model=TeamRead, status_code=status.HTTP_201_CREATED)
 async def create_team(
     body: TeamCreate,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Team:
     # One team per user (as owner) — soft guard
@@ -115,7 +112,7 @@ async def create_team(
 
 @router.get("/teams/mine", response_model=TeamRead | None)
 async def get_my_team(
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Team | None:
     """Return the team the current user belongs to (as any role)."""
@@ -131,7 +128,7 @@ async def get_my_team(
 @router.get("/teams/{team_id}/members", response_model=list[TeamMemberRead])
 async def list_members(
     team_id: int,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[TeamMember]:
     await _get_team_or_404(team_id, db)
@@ -153,7 +150,7 @@ async def list_members(
 async def invite_member(
     team_id: int,
     body: InviteMemberRequest,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> TeamMember:
     """Invite a member by email. No email is sent — share the invite link manually."""
@@ -193,7 +190,7 @@ async def invite_member(
 async def remove_member(
     team_id: int,
     target_user_id: str,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await _get_team_or_404(team_id, db)
@@ -218,7 +215,7 @@ async def remove_member(
 @router.get("/teams/{team_id}/projects", response_model=list[ProjectRead])
 async def list_team_projects(
     team_id: int,
-    user_id: str = Depends(_get_user_id),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[Project]:
     await _get_team_or_404(team_id, db)

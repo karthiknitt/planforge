@@ -28,11 +28,10 @@ export function PricingCheckoutButton({ plan, label, highlight }: PricingCheckou
     setError("");
 
     try {
-      const orderRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/order`, {
+      const orderRes = await fetch(`/api/backend/payments/order`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": session.user.id,
         },
         body: JSON.stringify({ plan }),
       });
@@ -58,11 +57,10 @@ export function PricingCheckoutButton({ plan, label, highlight }: PricingCheckou
           email: session.user.email,
         },
         handler: async (response: { razorpay_payment_id: string; razorpay_signature: string }) => {
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/verify`, {
+          await fetch(`/api/backend/payments/verify`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "X-User-Id": session.user.id,
             },
             body: JSON.stringify({
               order_id,

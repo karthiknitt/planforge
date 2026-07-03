@@ -443,9 +443,9 @@ export default function NewProjectPage() {
         payload.has_balcony = form.has_balcony;
       }
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects`, {
+      const res = await fetch(`/api/backend/projects`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-Id": session!.user.id },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 

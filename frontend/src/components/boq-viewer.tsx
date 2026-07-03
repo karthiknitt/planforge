@@ -51,8 +51,7 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
     setError("");
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/boq?layout_id=${layoutId}&fmt=json&city=${encodeURIComponent(selectedCity)}`,
-        { headers: { "X-User-Id": session.user.id } }
+        `/api/backend/projects/${projectId}/boq?layout_id=${layoutId}&fmt=json&city=${encodeURIComponent(selectedCity)}`
       );
       if (!res.ok) throw new Error("Failed to load BOQ");
       setBOQ(await res.json());
@@ -77,8 +76,7 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
     setDownloading(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/boq?layout_id=${layoutId}&fmt=excel&city=${encodeURIComponent(city)}`,
-        { headers: { "X-User-Id": session.user.id } }
+        `/api/backend/projects/${projectId}/boq?layout_id=${layoutId}&fmt=excel&city=${encodeURIComponent(city)}`
       );
       if (res.ok) {
         const blob = await res.blob();

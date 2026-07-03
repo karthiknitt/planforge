@@ -33,8 +33,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — explicit entries, not a wildcard, so .env.example stays tracked
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
 
 # vercel
 .vercel
