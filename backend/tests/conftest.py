@@ -46,3 +46,30 @@ async def client():
 
     app.dependency_overrides.clear()
     await engine.dispose()
+
+
+@pytest.fixture
+async def client_real_auth():
+    """AsyncClient wired to an isolated DB, WITHOUT overriding get_current_user_id —
+    requests go through the real X-Internal-Auth JWT verification path, unlike
+    the `client` fixture above (which every other test uses for convenience)."""
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_get_db() -> AsyncSession:
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        yield c
+
+    app.dependency_overrides.clear()
+    await engine.dispose()
