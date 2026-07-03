@@ -18,13 +18,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from shapely.geometry import box
 from shapely.ops import unary_union
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.models.project import Project
-from app.models.user import User
+from app.services.access import get_accessible_project
+from app.services.plans import get_effective_plan_tier
 from app.services.plot_config import plot_config_from_project
 
 router = APIRouter()
@@ -57,19 +57,11 @@ def _pop_undo(key: str) -> dict | None:
 
 
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
-    result = await db.execute(select(User).where(User.id == user_id))
-    u = result.scalar_one_or_none()
-    return u.plan_tier if u else "free"
+    return await get_effective_plan_tier(user_id, db)
 
 
 async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
-    result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return await get_accessible_project(project_id, user_id, db)
 
 
 def _to_float(v: Any) -> float:

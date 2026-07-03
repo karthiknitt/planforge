@@ -23,6 +23,7 @@ from app.dependencies.auth import get_current_user_id
 from app.engine.generator import generate
 from app.models.project import Project
 from app.models.revision import ProjectRevision
+from app.services.access import get_accessible_project
 from app.services.plot_config import plot_config_from_project
 from app.schemas.layout import (
     ColumnOut,
@@ -44,15 +45,7 @@ router = APIRouter()
 
 
 async def _require_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
-    result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user_id)
-    )
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-    return project
+    return await get_accessible_project(project_id, user_id, db)
 
 
 async def _next_version(project_id: str, db: AsyncSession) -> int:

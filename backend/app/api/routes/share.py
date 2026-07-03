@@ -21,6 +21,7 @@ from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.engine.generator import generate
 from app.models.project import Project
+from app.services.access import get_accessible_project
 from app.services.plot_config import plot_config_from_project
 from app.schemas.layout import (
     ColumnOut,
@@ -162,17 +163,7 @@ async def create_share_link(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ShareTokenResponse:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-    if project.user_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    project = await get_accessible_project(project_id, user_id, db)
 
     if not project.share_token:
         project.share_token = str(uuid.uuid4())
@@ -282,17 +273,7 @@ async def get_approval_status(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalStatusResponse:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-    if project.user_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    project = await get_accessible_project(project_id, user_id, db)
 
     raw_sel = getattr(project, "approval_selected_layouts", None)
     return ApprovalStatusResponse(

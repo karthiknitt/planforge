@@ -5,7 +5,7 @@ Covers:
   - Authenticated engineer generates a share token for their project
   - GET /api/share/{token} returns project info + layouts (public, no auth)
   - Invalid / unknown token returns 404
-  - Another user cannot generate a token for someone else's project (403)
+  - Another user cannot generate a token for someone else's project (404 — hides existence)
   - Idempotency: repeated POST returns the same token
   - Approve and request-changes via public endpoints
   - Authenticated approval status poll
@@ -58,12 +58,12 @@ async def test_create_share_token_idempotent(client):
     assert r1.json()["token"] == r2.json()["token"]
 
 
-async def test_create_share_token_wrong_user_returns_403(client):
+async def test_create_share_token_wrong_user_returns_404(client):
     pid = await _create_project(client)
     r = await client.post(
         f"/api/projects/{pid}/share", headers={"X-Test-User-Id": OTHER_USER}
     )
-    assert r.status_code == 403
+    assert r.status_code == 404  # 404, not 403: do not reveal the project exists
 
 
 async def test_create_share_token_unknown_project_returns_404(client):
@@ -167,10 +167,10 @@ async def test_approval_status_endpoint(client):
     assert data["approval_selected_layouts"] == ["B"]
 
 
-async def test_approval_status_wrong_user_returns_403(client):
+async def test_approval_status_wrong_user_returns_404(client):
     pid = await _create_project(client)
     r = await client.get(
         f"/api/projects/{pid}/approval-status",
         headers={"X-Test-User-Id": OTHER_USER},
     )
-    assert r.status_code == 403
+    assert r.status_code == 404  # 404, not 403: do not reveal the project exists

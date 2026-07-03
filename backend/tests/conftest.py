@@ -2,7 +2,7 @@
 
 import os
 
-os.environ.setdefault("INTERNAL_AUTH_SECRET", "test-secret-for-ci")
+os.environ.setdefault("INTERNAL_AUTH_SECRET", "test-secret-for-ci-0123456789abcdefgh")
 
 import pytest
 from fastapi import Header
@@ -70,6 +70,33 @@ async def client_real_auth():
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         yield c
+
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+
+@pytest.fixture
+async def client_db():
+    """Like `client`, but also exposes the session factory so tests can seed
+    rows (teams, users, projects) directly."""
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_get_db() -> AsyncSession:
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_id] = _test_user_id_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        yield c, SessionLocal
 
     app.dependency_overrides.clear()
     await engine.dispose()
