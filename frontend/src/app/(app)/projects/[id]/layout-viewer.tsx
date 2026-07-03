@@ -337,6 +337,7 @@ export function LayoutViewer({
   const [editSaving, setEditSaving] = useState(false);
   const [editSaveError, setEditSaveError] = useState("");
   const complianceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editedFloorRef = useRef<string | null>(null);
 
   // ── Annotation state ───────────────────────────────────────────────────────
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -536,6 +537,7 @@ export function LayoutViewer({
 
   function handleRoomsChange(rooms: RoomData[], floorCode: string) {
     setEditedRooms(rooms);
+    editedFloorRef.current = floorCode;
     // Debounced compliance check: runs 800ms after last drag
     if (complianceDebounceRef.current) clearTimeout(complianceDebounceRef.current);
     complianceDebounceRef.current = setTimeout(() => {
@@ -548,20 +550,40 @@ export function LayoutViewer({
     setEditSaving(true);
     setEditSaveError("");
     try {
-      // Persist each modified room via the existing resize endpoint
-      for (const room of rooms) {
-        const res = await fetch(`/api/backend/projects/${projectId}/rooms/${room.id}/resize`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ new_width: room.width, new_depth: room.depth }),
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { detail?: string };
-          throw new Error(data?.detail ?? `Save failed (${res.status})`);
-        }
+      // One PATCH with the full room list — positions AND sizes. The old
+      // per-room resize loop silently dropped x/y (wall-drag moves were
+      // never persisted).
+      const floorCode = editedFloorRef.current ?? "gf";
+      const res = await fetch(`/api/backend/projects/${projectId}/layouts/${selectedId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rooms: rooms.map((r) => ({
+            id: r.id,
+            type: r.type,
+            name: r.name,
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.depth,
+            floor: floorCode,
+          })),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        detail?: string;
+        layout?: LayoutData;
+      };
+      if (!res.ok) {
+        throw new Error(data?.detail ?? `Save failed (${res.status})`);
       }
+      // Show the persisted geometry immediately instead of reverting to the
+      // stale pre-edit prop, and bust the server-side layout cache so a
+      // reload agrees with what was just saved.
+      if (data.layout) setLiveLayout(data.layout);
+      void fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).catch(() => {});
       setEditMode(false);
       setEditedRooms(null);
       setComplianceIssues({});
