@@ -20,8 +20,16 @@ export async function fetchBackend(
     headers.set("Content-Type", "application/json");
   }
   headers.set("X-Internal-Auth", token);
-  return fetch(`${BACKEND_URL}/api/${path.replace(/^\//, "")}`, {
-    ...init,
-    headers,
-  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await fetch(`${BACKEND_URL}/api/${path.replace(/^\//, "")}`, {
+      ...init,
+      headers,
+      signal: init?.signal ?? controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

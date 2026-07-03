@@ -121,4 +121,30 @@ describe("fetchBackend", () => {
     expect(capturedMethod).toBe("POST");
     expect(capturedBody).toBe(JSON.stringify({ name: "Test" }));
   });
+
+  test("wires an AbortSignal so a hung backend fails fast instead of blocking forever", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Response("{}");
+    }) as typeof fetch;
+
+    await fetchBackend("user-1", "projects");
+
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal?.aborted).toBe(false);
+  });
+
+  test("a caller-supplied signal takes precedence over the default timeout signal", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Response("{}");
+    }) as typeof fetch;
+
+    const callerController = new AbortController();
+    await fetchBackend("user-1", "projects", { signal: callerController.signal });
+
+    expect(capturedSignal).toBe(callerController.signal);
+  });
 });
