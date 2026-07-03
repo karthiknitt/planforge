@@ -257,3 +257,52 @@ class TestLayoutPatch:
             headers=HDRS,
         )
         assert res.status_code == 404
+
+
+async def test_project_update_invalidates_stored_layouts(client_db):
+    """Changing geometry inputs must clear persisted layouts so the next
+    generate re-solves — stale plans for the old dimensions are worse than
+    a re-solve."""
+    client, sf = client_db
+    pid = await _make_project(client)
+    await client.get(f"/api/projects/{pid}/generate", headers=HDRS)
+
+    res = await client.patch(
+        f"/api/projects/{pid}", json={"plot_length": 20.0}, headers=HDRS
+    )
+    assert res.status_code == 200, res.text
+
+    async with sf() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(StoredLayout).where(StoredLayout.project_id == pid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert rows == []
+
+
+async def test_rename_keeps_stored_layouts(client_db):
+    client, sf = client_db
+    pid = await _make_project(client)
+    await client.get(f"/api/projects/{pid}/generate", headers=HDRS)
+
+    res = await client.patch(
+        f"/api/projects/{pid}", json={"name": "Renamed"}, headers=HDRS
+    )
+    assert res.status_code == 200, res.text
+
+    async with sf() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(StoredLayout).where(StoredLayout.project_id == pid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(rows) > 0

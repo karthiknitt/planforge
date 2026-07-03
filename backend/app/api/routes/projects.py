@@ -149,6 +149,18 @@ async def update_project(
     for field, value in data.items():
         setattr(project, field, value)
 
+    # Any geometry-affecting change invalidates the persisted layouts so the
+    # next generate re-solves — otherwise stale plans would be served forever
+    _NON_GEOMETRY_FIELDS = {"name", "team_id"}
+    if set(data) - _NON_GEOMETRY_FIELDS:
+        from sqlalchemy import delete as _delete
+
+        from app.models.layout import StoredLayout
+
+        await db.execute(
+            _delete(StoredLayout).where(StoredLayout.project_id == project_id)
+        )
+
     await db.commit()
     await db.refresh(project)
     return project
