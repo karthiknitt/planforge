@@ -62,9 +62,7 @@ async def _tamper_first_layout(sf, project_id: str, new_room_name: str) -> str:
         rooms = [dict(r) for r in gf["rooms"]]
         # Rename the living room — staircases are drawn as symbols in the
         # PDF, not name labels, so rooms[0] would be invisible there
-        target = next(
-            (i for i, r in enumerate(rooms) if r["type"] == "living"), 0
-        )
+        target = next((i for i, r in enumerate(rooms) if r["type"] == "living"), 0)
         rooms[target]["name"] = new_room_name
         gf["rooms"] = rooms
         geometry["ground_floor"] = gf

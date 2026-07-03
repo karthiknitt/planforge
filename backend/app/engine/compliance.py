@@ -365,35 +365,13 @@ def check(
                 f"{room.name}: span {span:.1f} m > {max_span} m — add intermediate beam"
             )
 
-    # --- Floor coverage ---
-    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
-        from shapely.geometry import Polygon as _Polygon
+    # --- Floor coverage: actual GF built footprint vs plot area (B4) ---
+    from app.engine.geometry import buildable_polygon as _buildable_polygon
+    from app.engine.geometry import plot_polygon as _plot_polygon
 
-        plot_poly = _Polygon(cfg.plot_corners)
-        plot_area = plot_poly.area
-        avg_sb = (
-            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-        ) / 4
-        inset = plot_poly.buffer(-avg_sb, join_style=2)
-        footprint = inset.area if not inset.is_empty else 0.0
-    elif (
-        cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0
-    ):
-        from app.engine.generator import compute_l_shaped_polygon
-
-        l_poly = compute_l_shaped_polygon(cfg)
-        plot_area = l_poly.area
-        avg_sb = (
-            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-        ) / 4
-        inset = l_poly.buffer(-avg_sb, join_style=2)
-        footprint = inset.area if not inset.is_empty else 0.0
-    else:
-        buildable_w = cfg.plot_width - cfg.setback_left - cfg.setback_right
-        buildable_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
-        footprint = buildable_w * buildable_d
-        plot_area = cfg.plot_width * cfg.plot_length
-    coverage_pct = (footprint / plot_area) * 100
+    plot_area = _plot_polygon(cfg).area
+    footprint = sum(r.area for r in layout.ground_floor.rooms)
+    coverage_pct = (footprint / plot_area) * 100 if plot_area > 0 else 0.0
 
     max_cov = muni_rules.get("max_ground_coverage_pct", rules["max_floor_coverage_pct"])
     muni_label = muni_rules.get("authority", "NBC")
@@ -403,15 +381,15 @@ def check(
         )
 
     # --- FAR check (municipality-aware, falls back to city_rules table) ---
-    # Count habitable floors (basement excluded per most Indian bylaws)
-    habitable_floors = sum(
-        [
-            1,  # GF or stilt
-            1,  # FF (always)
-            1 if layout.second_floor is not None else 0,
-        ]
-    )
-    total_built = footprint * habitable_floors
+    # Built-up area summed over habitable floors only: stilt (parking) and
+    # basement are excluded per most Indian bylaws (B3 — previously always
+    # counted GF+FF regardless of num_floors/stilt).
+    habitable_plans = [
+        fp
+        for fp in (layout.ground_floor, layout.first_floor, layout.second_floor)
+        if fp is not None and fp.floor_type not in ("stilt", "basement")
+    ]
+    total_built = sum(r.area for fp in habitable_plans for r in fp.rooms)
     # Municipality-specific FAR takes priority; city_rules road-width table is secondary
     muni_far = muni_rules.get("max_far")
     city_far = get_city_far(cfg.city, cfg.road_width_m, city_data)
@@ -422,7 +400,7 @@ def check(
         far_limit = city_far
     else:
         far_limit = rules.get("default_far", 1.5)
-    actual_far = total_built / plot_area
+    actual_far = total_built / plot_area if plot_area > 0 else 0.0
     far_source = muni_rules.get("authority", cfg.city.title())
     if actual_far > far_limit + 0.01:
         warnings.append(
@@ -430,50 +408,27 @@ def check(
         )
 
     # --- Room boundary vs. setback lines (above-ground floors only) ---
+    # Per-edge setbacks via the canonical buildable polygon: the old code
+    # averaged setbacks for quads and ignored the L-shape cutout entirely.
     ewt = rules["external_wall_thickness_mm"] / 1000
-    _l_inset_poly = None
-    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
-        # Derive boundary from the same Shapely inset used by _quad_floor_plate
-        from shapely.geometry import Polygon as _Polygon
+    boundary = _buildable_polygon(cfg, wall_clearance=ewt)
+    if boundary.is_empty:
+        violations.append("Plot too small after setbacks — no buildable area")
+        return ComplianceResult(passed=False, violations=violations, warnings=warnings)
 
-        _poly = _Polygon(cfg.plot_corners)
-        _avg_sb = (
-            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-        ) / 4
-        _inset = _poly.buffer(-(_avg_sb + ewt), join_style="mitre")
-        if _inset.is_empty:
-            violations.append("Plot too small after setbacks — no buildable area")
-            return ComplianceResult(
-                passed=False, violations=violations, warnings=warnings
-            )
-        min_x, min_y, max_x, max_y = _inset.bounds
-    elif (
-        cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0
-    ):
-        # L-shaped uses the same rectangular setback boundary as the floor plate.
-        # The cutout zone is handled by _remove_cutout_overlap in generator.py.
-        min_x = cfg.setback_left + ewt
-        max_x = cfg.plot_width - cfg.setback_right - ewt
-        min_y = cfg.setback_front + ewt
-        max_y = cfg.plot_length - cfg.setback_rear - ewt
-    else:
-        min_x = cfg.setback_left + ewt
-        max_x = cfg.plot_width - cfg.setback_right - ewt
-        min_y = cfg.setback_front + ewt
-        max_y = cfg.plot_length - cfg.setback_rear - ewt
+    from shapely.geometry import box as _box
+
     tol = 0.005  # 5 mm floating-point tolerance
+    boundary_tol = boundary.buffer(tol, join_style=2)
     basement_rooms = set(
         r.id for r in (layout.basement_floor.rooms if layout.basement_floor else [])
     )
     for room in all_rooms:
         if room.id in basement_rooms:
             continue  # basement has no surface setbacks
-        if room.x < min_x - tol or room.x + room.width > max_x + tol:
-            violations.append(
-                f"{room.name} extends outside horizontal setback boundary"
-            )
-        if room.y < min_y - tol or room.y + room.depth > max_y + tol:
-            violations.append(f"{room.name} extends outside vertical setback boundary")
+        room_poly = _box(room.x, room.y, room.x + room.width, room.y + room.depth)
+        if not boundary_tol.contains(room_poly):
+            violations.append(f"{room.name} extends outside the setback boundary")
 
     # --- Study/dining ventilation warnings ---
     for room in all_rooms:

@@ -62,33 +62,22 @@ def _mm(metres: float) -> int:
     return int(round(metres * SCALE))
 
 
-def _quad_plate_and_planes(
-    cfg: PlotConfig, ewt: float
+def _plate_and_planes_from_polygon(
+    inset,
 ) -> tuple[int, int, int, int, list[tuple[int, int, int]]]:
-    """For a quadrilateral plot: return (bw, bd, ox, oy, half_planes).
+    """Solver plate bounds + half-plane constraints from a buildable polygon.
 
-    half_planes is a list of (dx, dy, rhs) where for every room corner (rx, ry)
-    in solver coords (mm, relative to plate origin):  dx*ry - dy*rx >= rhs
+    half_planes is a list of (dx, dy, rhs) where for every room corner
+    (rx, ry) in solver coords (mm, relative to plate origin):
+    dx*ry - dy*rx >= rhs.  Interior must be left of each CCW edge.
     """
-    from shapely.geometry import Polygon
-
-    poly = Polygon(cfg.plot_corners)
-    avg_sb = (
-        cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-    ) / 4
-    inset = poly.buffer(-(avg_sb + ewt), join_style="mitre")
-    if inset.is_empty:
-        return 0, 0, 0, 0, []
-
     minx, miny, maxx, maxy = inset.bounds
     bw = _mm(maxx - minx)
     bd = _mm(maxy - miny)
     ox = _mm(minx)
     oy = _mm(miny)
 
-    coords = list(inset.exterior.coords)[:-1]  # drop closing duplicate
-    # Ensure CCW winding (interior = left of each directed edge)
-    # Signed area via shoelace: positive → CCW, negative → CW
+    coords = list(inset.exterior.coords)[:-1]
     n_c = len(coords)
     area2 = sum(
         coords[i][0] * coords[(i + 1) % n_c][1]
@@ -107,9 +96,6 @@ def _quad_plate_and_planes(
         dy = round((p2[1] - p1[1]) * SCALE)
         cx = round(p1[0] * SCALE)
         cy = round(p1[1] * SCALE)
-        # Translate to solver coords: plot_mm = ox + solver_mm
-        # dx*(oy+ry) - dy*(ox+rx) >= dx*cy - dy*cx
-        # => dx*ry - dy*rx >= dx*cy - dy*cx - dx*oy + dy*ox
         rhs = dx * cy - dy * cx - dx * oy + dy * ox
         planes.append((dx, dy, rhs))
 
@@ -210,49 +196,13 @@ def _solve_one(
 
     # Buildable plate dimensions in mm
     quad_planes: list[tuple[int, int, int]] = []
-    if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
-        bw, bd, ox, oy, quad_planes = _quad_plate_and_planes(cfg, ewt)
-    elif cfg.plot_shape == "l_shaped":
-        # For L-shaped plots use the bounding box of the inset polygon as solver bounds,
-        # plus half-plane constraints derived from the inset polygon's edges (same approach
-        # as quadrilateral). This keeps rooms inside the actual L-shape.
-        from app.engine.generator import compute_l_shaped_polygon
+    if cfg.plot_shape != "rectangular":
+        from app.engine.geometry import buildable_polygon
 
-        l_poly = compute_l_shaped_polygon(cfg)
-        avg_sb = (
-            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-        ) / 4
-        inset = l_poly.buffer(-(avg_sb + ewt), join_style=2)
+        inset = buildable_polygon(cfg, wall_clearance=ewt)
         if inset.is_empty:
             return None
-        minx, miny, maxx, maxy = inset.bounds
-        bw = _mm(maxx - minx)
-        bd = _mm(maxy - miny)
-        ox = _mm(minx)
-        oy = _mm(miny)
-
-        # Build half-plane constraints from L-shape inset edges (same as quad)
-        coords = list(inset.exterior.coords)[:-1]
-        n_c = len(coords)
-        area2 = sum(
-            coords[i][0] * coords[(i + 1) % n_c][1]
-            - coords[(i + 1) % n_c][0] * coords[i][1]
-            for i in range(n_c)
-        )
-        if area2 < 0:
-            coords = coords[::-1]
-        planes: list[tuple[int, int, int]] = []
-        n = len(coords)
-        for i in range(n):
-            p1 = coords[i]
-            p2 = coords[(i + 1) % n]
-            dx = round((p2[0] - p1[0]) * SCALE)
-            dy = round((p2[1] - p1[1]) * SCALE)
-            cx = round(p1[0] * SCALE)
-            cy = round(p1[1] * SCALE)
-            rhs = dx * cy - dy * cx - dx * oy + dy * ox
-            planes.append((dx, dy, rhs))
-        quad_planes = planes
+        bw, bd, ox, oy, quad_planes = _plate_and_planes_from_polygon(inset)
     else:
         bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
         bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
@@ -366,42 +316,33 @@ def _solve_one(
             model.add(stair.y >= third)
             model.add(stair.y + stair.d <= 2 * third)
 
-    # ── Objective: adjacency satisfaction ────────────────────────────────────
-    obj_terms: list[cp_model.IntVar] = []
+    # ── Objective: pull preferred-adjacency pairs together ───────────────────
+    # The previous "objective" forced adj==1 and maximized a constant — the
+    # solver returned the first feasible packing with zero optimization
+    # pressure. Minimize the points-weighted Manhattan distance between the
+    # centres of preferred pairs instead (a linear, solver-friendly proxy
+    # for shared-wall adjacency).
+    dist_terms = []
 
     type_to_var: dict[str, list[_RoomVar]] = {}
     for rv in room_vars:
         type_to_var.setdefault(rv.room_type, []).append(rv)
 
     for t1, t2, pts in _ADJACENCY_PAIRS:
-        vars1 = type_to_var.get(t1, [])
-        vars2 = type_to_var.get(t2, [])
-        for a in vars1:
-            for b in vars2:
+        for a in type_to_var.get(t1, []):
+            for b in type_to_var.get(t2, []):
                 if a.floor != b.floor:
                     continue
-                # Two rooms are adjacent if they share a wall (no gap on one axis)
-                adj = model.new_bool_var(f"adj_{a.room_id}_{b.room_id}")
-                # overlap on y axis (for x-adjacency)
-                ov_y = model.new_int_var(0, bd, f"ovy_{a.room_id}_{b.room_id}")
-                model.add_max_equality(
-                    ov_y,
-                    [
-                        model.new_constant(0),
-                        # actually just use a simpler adjacency heuristic
-                        model.new_constant(0),
-                    ],
-                )
-                # Simplified: reward if same floor — exact adjacency is hard to model cleanly
-                # Use a proxy: shared floor bonus only
-                score_var = model.new_int_var(0, pts, f"score_{a.room_id}_{b.room_id}")
-                model.add(score_var == pts).only_enforce_if(adj)
-                model.add(score_var == 0).only_enforce_if(adj.negated())
-                model.add(adj == 1)  # assume adjacent (floor-based heuristic)
-                obj_terms.append(score_var)
+                pair = f"{a.room_id}_{b.room_id}"
+                # doubled centres keep everything integral: 2*cx = 2x + w
+                dxv = model.new_int_var(0, 2 * bw, f"dx_{pair}")
+                dyv = model.new_int_var(0, 2 * bd, f"dy_{pair}")
+                model.add_abs_equality(dxv, 2 * a.x + a.w - 2 * b.x - b.w)
+                model.add_abs_equality(dyv, 2 * a.y + a.d - 2 * b.y - b.d)
+                dist_terms.append(pts * (dxv + dyv))
 
-    if obj_terms:
-        model.maximize(sum(obj_terms))
+    if dist_terms:
+        model.minimize(sum(dist_terms))
 
     # ── Solve ─────────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()

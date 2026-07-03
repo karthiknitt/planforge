@@ -71,12 +71,15 @@ def _to_float(v: Any) -> float:
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 def _buildable_box(project: Project):
-    ewt = 0.23
-    sx = _to_float(project.setback_left) + ewt
-    sy = _to_float(project.setback_front) + ewt
-    ex = _to_float(project.plot_width) - _to_float(project.setback_right) - ewt
-    ey = _to_float(project.plot_length) - _to_float(project.setback_rear) - ewt
-    return box(sx, sy, ex, ey)
+    """Canonical buildable polygon — honours plot shape (L-cutouts, quads,
+    trapezoids) and per-edge setbacks; the old version was a plain rectangle
+    with a hardcoded wall thickness."""
+    from app.engine.compliance import load_rules
+    from app.engine.geometry import buildable_polygon
+    from app.services.plot_config import plot_config_from_project
+
+    ewt = load_rules()["external_wall_thickness_mm"] / 1000
+    return buildable_polygon(plot_config_from_project(project), wall_clearance=ewt)
 
 
 def _check_placement(
