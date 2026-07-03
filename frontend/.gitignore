@@ -43,6 +43,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# archived, unused files kept locally for reference only (never tracked)
+/archive/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

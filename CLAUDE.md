@@ -43,13 +43,17 @@ PlanForge/
 - **Language:** Python 3.12+
 
 ### Database
-- **PostgreSQL** — stores user accounts, projects, and generated layouts
+- **PostgreSQL via Neon** (cloud, pooled connection) — stores user accounts, projects, and generated layouts
 - **Frontend:** Drizzle ORM manages schema + migrations for auth tables (Better Auth Drizzle adapter)
-- **Backend:** SQLAlchemy (async) manages project/layout tables
+- **Backend:** SQLAlchemy (async) manages project/layout tables — no Alembic; schema is created/patched automatically at startup (`Base.metadata.create_all` + `auto_migrate_missing_columns` in `app/main.py`)
 
-### Deployment
-- **Local dev only** for now
-- Docker Compose for local orchestration (frontend + backend + postgres)
+### Deployment & Testing Workflow
+- **No local dev servers, no local Playwright/preview testing.** Frontend is tested via Vercel (preview + production deploys); backend is tested via Google Cloud Run. There is no `docker compose up` workflow — `docker-compose.yml` was removed for this reason.
+- **What still runs locally (and in CI):** unit tests (`uv run pytest`, `bun test`), linting/formatting (`ruff`, `biome`), type-checking (`tsc --noEmit`), and `docker build ./backend` to validate the Dockerfile. None of these need real Neon/Vercel/Cloud Run credentials — backend tests run against an in-memory SQLite DB (`backend/tests/conftest.py`), frontend tests set their own env vars inline per-test.
+- **CI:** GitHub Actions (`.github/workflows/`) runs the same local checks (tests, lint, build) on every push/PR.
+- **Backend runtime:** Google Cloud Run, `$0`-tier (`min-instances=0`, `max-instances=3`), deployed via `.github/workflows/deploy-backend.yml` on push to `main` (path-filtered to `backend/**`). WIF-based auth (no service account keys). Setup automated by `scripts/gcp-cloud-run-setup.sh`.
+- **Frontend runtime:** Vercel, deployed on push (preview per-branch, production on `main`).
+- **Real secrets** live in GitHub Actions secrets (backend/Cloud Run) and Vercel's env store (frontend) — never in a committed or local file. `.env.example` files are reference-only.
 
 ---
 
@@ -129,22 +133,28 @@ PlanForge/
 - Compliance rules loaded from `backend/config/compliance_rules.json`
 
 ### Python environment
+No local dev server / manual testing — see Deployment & Testing Workflow above.
 ```bash
 # Install deps
 uv sync
 
-# Run dev server
-uv run uvicorn app.main:app --reload
+# Run tests
+uv run pytest
+
+# Lint + format
+uv run ruff check .
+uv run ruff format .
+
+# Validate the Dockerfile builds (the only supported local Docker action)
+docker build -t planforge-backend ./backend
 
 # Add a package
 uv add shapely
 ```
 
 ### Next.js dev
-```bash
-cd frontend
-bun dev
-```
+No local dev server / manual testing — see Deployment & Testing Workflow above.
+Push to a branch for a Vercel preview deploy, or use `bun run build`/`bun test` locally for build/test checks.
 
 ### Frontend tooling
 ```bash
@@ -213,6 +223,10 @@ cd frontend && bunx drizzle-kit migrate
 7. **Section view hatching** — SVG `<defs>` with `wall-hatch` (45° diagonal) and `slab-hatch` (crosshatch) patterns applied to wall/slab rects.
 8. **OR-Tools solver API (OR-Tools 9.x)** — `new_interval_var(x, w, x+w, name)` broke because `x+w` is a two-IntVar sum (not affine). Fixed by introducing explicit end IntVars: `model.add(ex == x + w)`. Solver now produces 3 layouts.
 9. **Pydantic ConfigDict** — Already fixed (uses `model_config = ConfigDict(env_file=".env")`). CLAUDE.md was stale.
+
+### Fixed (session 10, 2026-07-03)
+
+10. **Cloud Run deployment live** — Backend deployed to Google Cloud Run ($0-tier: min-instances=0, max=3): `https://planforge-backend-hoiaqu2xbq-uc.a.run.app`. GCP project `thermal-well-451906-b0` (region `us-central1`), Neon Postgres project `planforge` (id `plain-brook-17631682`), Artifact Registry `planforge-backend`, WIF-based GitHub Actions deploy (`.github/workflows/deploy-backend.yml`, triggers on `backend/**` push to `main`). Frontend redeployed to `https://planforge-mauve.vercel.app` with `BACKEND_URL`/`NEXT_PUBLIC_API_URL` pointed at the Cloud Run URL. Setup automated via `scripts/gcp-cloud-run-setup.sh`.
 
 ### Open / Deferred
 

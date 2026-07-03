@@ -93,17 +93,19 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 | AI | Vercel AI SDK (Claude Sonnet/Opus), OpenAI Whisper |
 | Database | PostgreSQL 16 |
 | Payments | Razorpay |
-| Tooling | Bun (package manager + runtime + test runner), Biome, Drizzle ORM, uv, Docker Compose |
+| Tooling | Bun (package manager + runtime + test runner), Biome, Drizzle ORM, uv, Docker (build-only) |
 
 ---
 
 ## Quick Start
 
+This project has **no local dev server / preview testing workflow** — frontend is tested via Vercel (preview + production deploys), backend via Google Cloud Run, database is Neon (cloud, always-on). Locally you only run unit tests, lint, type-checks, and a Dockerfile build sanity check.
+
 ### Prerequisites
 
 | Tool | Version |
 |------|---------|
-| Docker | 24+ |
+| Docker | 24+ (build-only — no `docker compose`) |
 | Bun | 1.3+ — `curl -fsSL https://bun.sh/install \| bash` |
 | Python | 3.12+ |
 | uv | latest — `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
@@ -111,36 +113,21 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 ### Setup
 
 ```bash
-# 1. Configure environment
-cp frontend/.env.local.example frontend/.env.local
-# Fill in: BETTER_AUTH_SECRET, DATABASE_URL, NEXT_PUBLIC_API_URL
-
-# 2. Install dependencies
+# 1. Install dependencies
 cd frontend && bun install
 cd backend && uv sync
 
-# 3. Start dev stack (PostgreSQL → backend → frontend)
-./dev-start.sh
+# 2. Run local checks
+cd backend && uv run pytest && uv run ruff check .
+cd frontend && bun test && bun run lint
+
+# 3. Validate the backend Dockerfile builds
+docker build -t planforge-backend ./backend
 ```
 
-App → `http://localhost:3001`
-API docs → `http://localhost:8002/docs`
+Real environment values live in Vercel's env store (frontend) and GitHub Actions secrets (backend/Cloud Run) — see `frontend/.env.example` and `backend/.env.example` for reference only, and `scripts/gcp-cloud-run-setup.sh` for how the backend's secrets are provisioned.
 
-**First run only** — push the Better Auth schema:
-
-```bash
-cd frontend
-DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
-  bunx drizzle-kit push
-```
-
-### Manual start (without the script)
-
-```bash
-docker compose up db -d
-cd backend && uv run uvicorn app.main:app --reload --port 8002
-cd frontend && bun dev
-```
+To actually see a change working, push to a branch: Vercel builds a preview deploy automatically, and pushing to `main` under `backend/**` triggers `.github/workflows/deploy-backend.yml` against Cloud Run.
 
 ---
 
@@ -150,24 +137,33 @@ cd frontend && bun dev
 
 | Variable | Required | Example |
 |----------|----------|---------|
-| `DATABASE_URL` | ✓ | `postgresql://planforge:planforge@localhost:5432/planforge` |
+| `DATABASE_URL` | ✓ | Neon Postgres connection string (Better Auth tables) |
 | `BETTER_AUTH_SECRET` | ✓ | 32+ char random string |
-| `BETTER_AUTH_URL` | ✓ | `http://localhost:3001` |
-| `NEXT_PUBLIC_BETTER_AUTH_URL` | ✓ | `http://localhost:3001` |
-| `NEXT_PUBLIC_API_URL` | ✓ | `http://localhost:8002` |
+| `BETTER_AUTH_URL` | ✓ | `https://planforge-mauve.vercel.app` |
+| `NEXT_PUBLIC_BETTER_AUTH_URL` | ✓ | `https://planforge-mauve.vercel.app` |
+| `NEXT_PUBLIC_API_URL` | ✓ | Cloud Run backend URL |
+| `BACKEND_URL` | ✓ | Cloud Run backend URL (server-side only) |
+| `INTERNAL_AUTH_SECRET` | ✓ | Must match the backend's value exactly |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | optional | Razorpay test key |
 | `OPENAI_API_KEY` | optional | Voice transcription (Whisper) |
 | `ANTHROPIC_API_KEY` | optional | Agentic chat (Claude) |
 | `OPENROUTER_API_KEY` | optional | Agentic chat via OpenRouter (any model) |
 | `OPENROUTER_MODEL` | optional | e.g. `deepseek/deepseek-chat-v3-0324` |
 
+Set via `vercel env add <NAME> production|preview` — not a local `.env.local` in practice, since there's no local dev server. See `frontend/.env.example` for the full reference list.
+
 ### `backend/.env`
 
 | Variable | Required | Example |
 |----------|----------|---------|
-| `DATABASE_URL` | ✓ | `postgresql+asyncpg://planforge:planforge@localhost:5432/planforge` |
+| `DATABASE_URL` | ✓ | `postgresql+asyncpg://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?ssl=require` |
+| `DB_USE_NULLPOOL` | ✓ | `true` (required for Neon's pooled endpoint) |
+| `ALLOWED_ORIGINS` | ✓ | `https://planforge-mauve.vercel.app` |
+| `INTERNAL_AUTH_SECRET` | ✓ | Must match the frontend's value exactly |
 | `RAZORPAY_KEY_ID` | optional | Razorpay test key |
 | `RAZORPAY_KEY_SECRET` | optional | Razorpay secret |
+
+Set via `gh secret set <NAME> --repo karthiknitt/planforge` — injected into Cloud Run at deploy time. See `scripts/gcp-cloud-run-setup.sh` and `backend/.env.example`.
 
 ---
 
@@ -197,8 +193,8 @@ PlanForge/
 │       └── lib/               # auth config, layout types, utils
 ├── docs/
 │   └── developer-reference.md # Full technical reference
-├── docker-compose.yml
-├── dev-start.sh / dev-stop.sh
+├── scripts/
+│   └── gcp-cloud-run-setup.sh # One-time GCP + Neon setup for the Cloud Run backend
 └── CLAUDE.md
 ```
 
@@ -211,24 +207,24 @@ PlanForge/
 ```bash
 # Backend
 cd backend
-uv run pytest tests/ -v          # run 159 tests
-uv run uvicorn app.main:app --reload --port 8002
+uv run pytest tests/ -v          # run 159 tests (in-memory SQLite, no Neon needed)
+uv run ruff check . && uv run ruff format .
+docker build -t planforge-backend .   # validate the Dockerfile only
 
 # Frontend
 cd frontend
-bun dev                           # dev server on :3001
 bun run build                     # production build
 bun run lint                      # lint + format check (Biome)
 bun run format                    # auto-format (Biome)
 bun test                          # unit tests (Bun test runner)
-bun run test:e2e                  # Playwright e2e (headless)
-bun run test:e2e:ui               # Playwright interactive
-bun run seed                      # seed 3 test users (free/basic/pro)
+bun run seed                      # seed 3 test users (free/basic/pro) — targets Neon via DATABASE_URL
 ```
+
+No local dev server and no Playwright/e2e locally — real end-to-end checks happen against a Vercel preview deploy (frontend) and Cloud Run (backend).
 
 ### Test users (dev/QA only)
 
-After running `bun run seed`, three accounts are available:
+After running `bun run seed` (pointed at the Neon database via `DATABASE_URL`), three accounts are available:
 
 | Email | Password | Plan |
 |-------|----------|------|

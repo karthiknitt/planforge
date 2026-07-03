@@ -7,7 +7,7 @@
  * Or directly:
  *   cd frontend && bun scripts/seed-test-users.mjs
  *
- * Requires PostgreSQL to be running (docker compose up db -d).
+ * Requires DATABASE_URL to point at the Neon database (cloud, always-on).
  * The script is idempotent — safe to run multiple times.
  *
  * Password hash format matches better-auth @noble/hashes/scrypt:

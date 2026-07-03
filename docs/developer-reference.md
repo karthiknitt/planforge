@@ -136,8 +136,8 @@ PlanForge/
 │       └── proxy.ts                   # Session-based middleware redirect
 │
 ├── docs/                        # This file lives here
-├── docker-compose.yml
-├── dev-start.sh / dev-stop.sh
+├── scripts/
+│   └── gcp-cloud-run-setup.sh   # One-time GCP + Neon setup for the Cloud Run backend
 └── CLAUDE.md
 ```
 
@@ -145,11 +145,13 @@ PlanForge/
 
 ## Getting Started
 
+**No local dev server, no local Playwright/preview testing.** Frontend is tested via Vercel (preview + production deploys); backend is tested via Google Cloud Run; the database is Neon (cloud, always-on — nothing to start locally). Locally you run unit tests, lint/format, type-checks, and a Dockerfile build sanity check only.
+
 ### Prerequisites
 
 | Tool | Version |
 |------|---------|
-| Docker | 24+ |
+| Docker | 24+ (build-only — no `docker compose`) |
 | Bun | 1.3+ — `curl -fsSL https://bun.sh/install \| bash` |
 | Python | 3.12+ |
 | uv | latest — `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
@@ -157,32 +159,21 @@ PlanForge/
 ### Steps
 
 ```bash
-# 1. Copy env files
-cp frontend/.env.local.example frontend/.env.local
-# Fill in BETTER_AUTH_SECRET, API keys (see Environment Variables section)
-
-# 2. Install dependencies
+# 1. Install dependencies
 cd frontend && bun install
 cd backend && uv sync
 
-# 3. Start (all-in-one)
-./dev-start.sh
+# 2. Run local checks
+cd backend && uv run pytest && uv run ruff check .
+cd frontend && bun test && bun run lint
 
-# 4. First run: push Better Auth schema
-cd frontend
-DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
-  bunx drizzle-kit push
+# 3. Validate the backend Dockerfile builds
+docker build -t planforge-backend ./backend
 ```
 
-Access the app at `http://localhost:3001`. API docs at `http://localhost:8002/docs`.
+Real values live in Vercel's env store (frontend) and GitHub Actions secrets (backend/Cloud Run) — `frontend/.env.example` / `backend/.env.example` are reference only (see Environment Variables section below).
 
-### Manual start
-
-```bash
-docker compose up db -d
-cd backend && uv run uvicorn app.main:app --reload --port 8002
-cd frontend && bun dev
-```
+To exercise a change for real: push a branch for a Vercel preview deploy (frontend), or push to `main` under `backend/**` to trigger `.github/workflows/deploy-backend.yml` against Cloud Run (backend).
 
 ---
 
@@ -192,22 +183,31 @@ cd frontend && bun dev
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | ✓ | PostgreSQL for Drizzle — `postgresql://planforge:planforge@localhost:5432/planforge` |
+| `DATABASE_URL` | ✓ | Neon Postgres for Drizzle (Better Auth tables) |
 | `BETTER_AUTH_SECRET` | ✓ | ≥32-char random secret — run `bunx @better-auth/cli secret` |
-| `BETTER_AUTH_URL` | ✓ | Canonical frontend URL — `http://localhost:3001` |
+| `BETTER_AUTH_URL` | ✓ | Canonical frontend URL — `https://planforge-mauve.vercel.app` |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | ✓ | Same, exposed to browser |
-| `NEXT_PUBLIC_API_URL` | ✓ | Backend base URL — `http://localhost:8002` |
+| `NEXT_PUBLIC_API_URL` | ✓ | Cloud Run backend base URL |
+| `BACKEND_URL` | ✓ | Cloud Run backend base URL (server-side only, proxy/fetchBackend) |
+| `INTERNAL_AUTH_SECRET` | ✓ | Must match the backend's value exactly |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | optional | Razorpay test key |
 | `OPENAI_API_KEY` | optional | Whisper voice transcription |
 | `ANTHROPIC_API_KEY` | optional | Agentic chat (Claude Sonnet/Opus) |
+
+Set via `vercel env add <NAME> production|preview`, not a local file — there's no local dev server to read `frontend/.env.local`.
 
 ### `backend/.env`
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | ✓ | Async PostgreSQL — `postgresql+asyncpg://planforge:planforge@localhost:5432/planforge` |
+| `DATABASE_URL` | ✓ | Neon pooled connection — `postgresql+asyncpg://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?ssl=require` (asyncpg needs `ssl=require`, not `sslmode`/`channel_binding` — see `scripts/gcp-cloud-run-setup.sh`) |
+| `DB_USE_NULLPOOL` | ✓ | `true` — required for Neon's pooled endpoint |
+| `ALLOWED_ORIGINS` | ✓ | `https://planforge-mauve.vercel.app` |
+| `INTERNAL_AUTH_SECRET` | ✓ | Must match the frontend's value exactly |
 | `RAZORPAY_KEY_ID` | optional | Required to create payment orders |
 | `RAZORPAY_KEY_SECRET` | optional | Required for HMAC verification |
+
+Set via `gh secret set <NAME> --repo karthiknitt/planforge`, injected into Cloud Run at deploy time by `.github/workflows/deploy-backend.yml`.
 
 ---
 
@@ -675,6 +675,7 @@ bunx tsc --noEmit             # type check
 ## Test Seed Users
 
 > **Dev/QA only.** These are dummy accounts for testing feature-gated functionality. Never commit real credentials.
+> **Status (2026-07-03): live and verified.** Seeded against the production Neon DB and confirmed working via a real `POST /api/auth/sign-in/email` against `https://planforge-mauve.vercel.app` (200, session token returned). Use these to test the live frontend/backend — see the Cloud Run session log entry above for what had to be fixed first (`DATABASE_URL` was never configured on Vercel until then).
 
 Three test users are pre-seeded into the database with different plan tiers so you can verify all gated features without going through the Razorpay payment flow.
 
@@ -690,17 +691,16 @@ The `basic` and `pro` accounts have `plan_expires_at` set to 2099-12-31 so they 
 
 ### Running the seed
 
-Requires the database to be running first.
+Requires `DATABASE_URL` to point at the Neon database (cloud, always-on — nothing to start).
 
 ```bash
-docker compose up db -d
 cd frontend && bun run seed
 ```
 
 Output:
 ```
 PlanForge — Seeding test users
-DB: postgresql://<creds>@localhost:5432/planforge
+DB: postgresql://<creds>@ep-xxx-pooler.region.aws.neon.tech/planforge
 
   ✓  free@planforge.dev  (free) — created
   ✓  basic@planforge.dev  (basic) — created
@@ -729,7 +729,7 @@ Total length: 88 (base64) + 1 (colon) + 16 (salt) = **105 characters**.
 
 ### Data persistence
 
-The PostgreSQL data is stored in `./data/postgres/` (bind-mount, not a named volume). This directory survives `docker compose down -v` and container restarts. The seed users persist as long as this directory exists.
+Data lives in Neon (cloud-hosted Postgres) — there is no local database or bind-mount to manage. Seed users persist in Neon until explicitly removed.
 
 ---
 
@@ -792,18 +792,23 @@ ShadCN `<Checkbox>` renders as `<button>`. Biome's `noLabelWithoutControl` rule 
 
 ### User model + Better Auth
 
-`backend/app/models/user.py` uses `extend_existing=True` because the `"user"` table is owned by Better Auth (Drizzle). SQLAlchemy extends it with `plan_tier` and `plan_expires_at` columns without owning the table.
+`backend/app/models/user.py` uses `extend_existing=True` because the `"user"` table is owned by Better Auth (Drizzle). SQLAlchemy extends it with `plan_tier`, `plan_expires_at`, and `project_credits` columns without owning the table.
+
+**Gotcha (found 2026-07-03, live):** SQLAlchemy's `default="free"` / `default=0` on these extension columns are Python-side ORM defaults only — they are never pushed to the actual Postgres column as a `DEFAULT`. Since Better Auth (not SQLAlchemy) is what actually `INSERT`s new `user` rows on sign-up, any real sign-up would violate the `NOT NULL` constraint on `project_credits` unless the DB column itself has a `DEFAULT`. Fixed live via `ALTER TABLE "user" ALTER COLUMN "plan_tier" SET DEFAULT 'free'` / `... "project_credits" SET DEFAULT 0`. Any *new* extension column added to this model in the future needs the same explicit DB-level default, or `server_default=` in the SQLAlchemy column definition — an ORM-level `default=` is not enough on a table another system inserts into.
 
 ### Frontend → Backend proxy
 
-The frontend proxies `/api/*` requests to the backend via `NEXT_PUBLIC_API_URL`. The `X-User-Id` header is added by server actions / API route handlers after extracting the session from Better Auth.
+As of the backend-auth-verification fix (PR #10), the frontend does **not** send an `X-User-Id` header — that was a client-spoofable trust bypass, removed entirely. Two paths now exist:
+- **Browser-originated calls** go through `/api/backend/[...path]` (`frontend/src/app/api/backend/[...path]/route.ts`), which validates the Better Auth session server-side via cookie and mints a short-lived HS256 JWT (signed with `INTERNAL_AUTH_SECRET`, shared between frontend and backend) forwarded as `X-Internal-Auth`.
+- **Server-side callers that already have a verified session** (team routes, agent chat) use `frontend/src/lib/backend-fetch.ts`'s `fetchBackend(userId, path, init)`, calling FastAPI directly — bypassing the proxy, since an outbound server-side `fetch()` never forwards the original request's cookies.
+- Backend verifies the JWT in `backend/app/dependencies/auth.py`'s `get_current_user_id` against `settings.internal_auth_secret`.
 
 ### drizzle-kit env loading
 
 `drizzle-kit` does **not** auto-load `.env.local`. Always pass `DATABASE_URL` inline:
 
 ```bash
-DATABASE_URL="postgresql://planforge:planforge@localhost:5432/planforge" \
+DATABASE_URL="<neon-postgres-connection-string>" \
   bunx drizzle-kit push
 ```
 
@@ -1062,3 +1067,32 @@ Full SEO hardening and conversion-rate optimisation pass on the marketing site.
 - **FAQ SEO pattern**: `<details>/<summary>` renders open content in HTML — Googlebot indexes it without JavaScript. Combined with `FAQPage` JSON-LD this targets FAQ rich results in SERPs.
 - **`lang="en-IN"`**: tells Google India the content is Indian English; affects language-specific ranking signals and local SERP placement.
 - **Image generation via OpenRouter**: endpoint `/api/v1/chat/completions`, model `google/gemini-3-pro-image-preview`, response at `choices[0].message.images[0].image_url.url` as `data:image/png;base64,...`. Free-tier Gemini keys hit quota — OpenRouter is the reliable fallback at $0.000002/image.
+
+### 2026-07-03 — Cloud Run Deployment Live, Local Testing Retired, Live DB Wired Up
+
+**What was built:**
+
+Backend deployed to Google Cloud Run for the first time; local dev-server workflow retired in favor of Vercel (frontend) + Cloud Run (backend) as the only real testing surfaces; the frontend's database connection — never previously configured for any live environment — was discovered missing and wired up.
+
+**Cloud Run deployment (Phase 2/3 of `docs/plans/2026-07-02-cloud-run-deployment-implementation-plan.md`):**
+- GCP project `thermal-well-451906-b0`, region `us-central1`; Neon project `planforge` (id `plain-brook-17631682`)
+- Backend live at `https://planforge-backend-hoiaqu2xbq-uc.a.run.app` ($0-tier: `min-instances=0`, `max-instances=3`)
+- WIF-based GitHub Actions deploy (`.github/workflows/deploy-backend.yml`), no service account keys
+- Setup automated via `scripts/gcp-cloud-run-setup.sh` (idempotent — GCP auth/project, APIs, Artifact Registry, Neon project + connection string via `neonctl`, WIF trust, budget alert, GitHub secrets, Vercel `INTERNAL_AUTH_SECRET` sync)
+- Frontend redeployed with `BACKEND_URL` / `NEXT_PUBLIC_API_URL` pointed at the Cloud Run URL
+
+**Real bugs found and fixed live (not caught by any prior review):**
+1. WIF authentication needs **two distinct IAM roles** on the same principal, not one: `roles/iam.workloadIdentityUser` (lets the WIF principal exchange its GitHub OIDC token for federated credentials — enough for `google-github-actions/auth@v3` itself) and separately `roles/iam.serviceAccountTokenCreator` (lets it actually impersonate the service account to mint a real access token — needed specifically by Docker's credential helper for `docker push`). Missing the second role fails with `iam.serviceAccounts.getAccessToken denied`, one step *after* auth already succeeded.
+2. Neon's connection string (`sslmode=require&channel_binding=require`) is **libpq syntax that asyncpg doesn't understand**. SQLAlchemy's asyncpg dialect passes every URL query param straight through as a kwarg (`opts.update(url.query)` in `sqlalchemy/dialects/postgresql/asyncpg.py`), and asyncpg's `ssl` kwarg — when given as a string — is validated against `SSLMode` (`disable|allow|prefer|require|verify-ca|verify-full`) only. Fix: strip `sslmode`/`channel_binding`, append `?ssl=require` (not `ssl=true` — that fails the same enum check).
+3. **`DATABASE_URL` was never set on Vercel production, for any environment, ever.** `neonctl projects list` confirmed `plain-brook-17631682` (created today) is the *only* Neon project this app has ever had — the "test users" documented below were pure aspiration, never actually seeded against a live database. Confirmed via a real sign-in attempt against production: `ECONNREFUSED 127.0.0.1:5432` (the `postgres` npm package silently defaults to localhost when given `undefined`, rather than throwing at import time).
+4. Once `DATABASE_URL` was set, Better Auth's own tables didn't fully exist: the backend's `Base.metadata.create_all()` had already run against the fresh Neon DB (during the Cloud Run deploy) and created a **partial** `"user"` table — only `id`/`plan_tier`/`plan_expires_at`/`project_credits` (its own `extend_existing=True` model, see the gotcha below) — before Drizzle ever defined the full Better Auth columns. `session`/`account`/`verification` didn't exist at all. `drizzle-kit push`'s interactive rename-detection prompt (`is "account" a rename from "project_revisions"?`) isn't scriptable via piped stdin (it's a TUI select, not line-based) and hung under `yes ""`. Fixed by applying the exact DDL from `frontend/src/db/schema.ts` directly via `asyncpg` — safe since the table was still empty (0 rows).
+5. **`plan_tier`/`project_credits` had no database-level default** — SQLAlchemy's `default="free"` / `default=0` on `backend/app/models/user.py` are Python-side-only and were never pushed to the actual column. This meant *any* real Better Auth sign-up (not just the seed script) would have hit `null value in column "project_credits" violates not-null constraint` the moment it tried to write a real user row. Fixed with `ALTER TABLE "user" ALTER COLUMN ... SET DEFAULT`.
+6. `frontend/scripts/seed-test-users.mjs` then ran successfully against the live DB — the 3 test accounts below are now real and confirmed working via a live `POST /api/auth/sign-in/email` (200, session token returned).
+
+**Local testing workflow retired:**
+- Removed `docker-compose.yml`, `dev-start.sh`, `dev-stop.sh` — their only purpose (local multi-service orchestration for manual testing) no longer applies
+- `frontend/Dockerfile` moved to `frontend/archive/Dockerfile` and untracked (`frontend/.gitignore`) — unused by the actual deploy path (Vercel builds Next.js natively)
+- What still runs locally/in CI: `uv run pytest` (in-memory SQLite, no Neon needed), `ruff`, `bun test`, `biome`, `docker build ./backend` (Dockerfile sanity check only)
+- No local dev server, no local Playwright/e2e — real end-to-end checks happen against a Vercel preview deploy (frontend) or Cloud Run (backend)
+
+**Key files changed:** `scripts/gcp-cloud-run-setup.sh` (new), `backend/.env.example`, `frontend/.env.example`, `frontend/.env.local.example`, `CLAUDE.md`, `README.md`, this file.
