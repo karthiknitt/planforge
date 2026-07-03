@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -135,11 +135,11 @@ class ShareTokenResponse(BaseModel):
 
 
 class ApproveBody(BaseModel):
-    selected_layout_ids: list[str] = []
+    selected_layout_ids: list[str] = Field(default_factory=list, max_length=10)
 
 
 class RequestChangesBody(BaseModel):
-    note: str = ""
+    note: str = Field(default="", max_length=2000)
 
 
 class ApprovalStatusResponse(BaseModel):
@@ -174,6 +174,22 @@ async def create_share_link(
         share_url=f"/share/{project.share_token}",
         token=project.share_token,
     )
+
+
+@router.delete("/projects/{project_id}/share", status_code=status.HTTP_200_OK)
+async def revoke_share_link(
+    project_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Revoke the share link — the old token stops resolving immediately.
+
+    A new POST /share afterwards mints a fresh token.
+    """
+    project = await get_accessible_project(project_id, user_id, db)
+    project.share_token = None
+    await db.commit()
+    return {"status": "revoked"}
 
 
 @router.get("/share/{token}", response_model=ShareResponse)
