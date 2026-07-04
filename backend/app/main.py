@@ -13,6 +13,7 @@ from app.api.routes import (
     health,
     payments,
     projects,
+    render,
     revisions,
     rooms,
     share,
@@ -27,6 +28,7 @@ from app.auto_migrate import auto_migrate_missing_columns
 import app.models.layout  # noqa: F401
 import app.models.payment  # noqa: F401
 import app.models.project  # noqa: F401
+import app.models.render  # noqa: F401
 import app.models.revision  # noqa: F401
 import app.models.team  # noqa: F401
 import app.models.user  # noqa: F401
@@ -85,3 +87,4 @@ app.include_router(rooms.router, prefix="/api")
 app.include_router(share.router, prefix="/api")
 app.include_router(revisions.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
+app.include_router(render.router, prefix="/api")

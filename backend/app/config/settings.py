@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = ""
     allowed_origins: str = ""
 
+    # AI render layer (Phase 2) — all optional; provider picked at bake-off
+    render_provider: str = ""
+    render_model: str = ""
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
+    openrouter_api_key: str = ""
+
     @field_validator("internal_auth_secret")
     @classmethod
     def _secret_min_length(cls, v: str) -> str:

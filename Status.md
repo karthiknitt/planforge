@@ -33,3 +33,41 @@
 - Archetype fallback for skewed quads still uses inset bounds (solver path is exact; archetypes are fallback-only)
 - Team members' dashboards show team projects via backend list API only; Drizzle dashboard query is owner-only (pre-existing)
 - Vision-judged CCQS component stays dev-time until Anthropic billing (locked decision)
+---
+
+# Stage 1 Phase 2: Enhanced Outputs (CCQS + AI Render Layer)
+
+**Branch:** `worktree-stage1-phase2-outputs` (stacked on phase-1 branch; PR #11 still open)
+**Plan:** `docs/superpowers/plans/2026-07-04-stage1-phase2-enhanced-outputs.md`
+**State:** ALL 12 TASKS COMPLETE. Checkpoint resolved: RENDER_PROVIDER=openrouter, RENDER_MODEL=openai/gpt-image-1 (BYOK; OpenAI key fixed in OpenRouter integrations), tier gate pro+. Remaining: final whole-branch review + finish-feature PR (stacked on phase-1 branch).
+
+## Commits on this branch (phase 2)
+
+| Commit | What |
+|---|---|
+| `6c40452` | CCQS deterministic scorer (0–80) on PDF bytes; pymupdf → main dep |
+| `c502fdb` | Frozen CCQS fixture geometry + committed baseline (80.0/80) |
+| `8a93f05` | CCQS regression gate in CI pytest (mutation-checked) |
+| `359f1b4`+`92c4285` | Layout quality endpoint (scores the annotated PDF) |
+| `fac6c21` | Phase 2 implementation plan doc |
+| `a4eb6b1` | Frontend CAD-quality badge on layout cards |
+| `ee0cbcc` | pdf_page_png helper (PDF → PNG reference images) |
+| `d150a55` | Spatial render-prompt builder from persisted geometry |
+| `37c01ec` | Provider adapters (gemini/openai/openrouter), doc-verified shapes |
+| `8d4b3a8` | Bake-off harness + script sys.path fixes |
+| `d976aa5` | OpenRouter input_references object shape + multi-model bake-off |
+
+## Test state (phase 2)
+- Backend: 274 passing (was 263) incl. the CCQS CI gate; frontend: 37 bun tests passing (was 35).
+- Every task passed an independent spec+quality review; Task 9 reviewed inline (session limits), covered by final whole-branch review before PR.
+
+## Bake-off outcome (Task 10 checkpoint — resolved 2026-07-04)
+gpt-image-1 (via OpenRouter BYOK) rendered all 3 test layouts to production quality; picked as default. Gemini comparison deferred — OpenRouter needs a credit balance to route Google AI Studio BYOK calls (402). Renders in `experiments/renders/`; per-image cost billed to the OpenAI account (~$0.03–0.07).
+
+## Follow-up bugs found during review (NOT fixed in this phase)
+- **Firm-tier users are denied DXF/BOQ**: `export.py` gates use `plan not in ("basic","pro")` / `plan != "pro"` — non-transitive, rejects the top tier. Frontend `layout-viewer.tsx` has matching `planTier === "pro"`-only checks. The new render endpoints use the correct `("pro","firm")` tuple.
+- No unique index on layout_renders (layout_id, layout_hash, provider, model) — concurrent cache-miss POSTs can insert duplicate rows (harmless, dead rows).
+
+## Deployment notes (when this merges)
+- Production env for renders: RENDER_PROVIDER=openrouter, RENDER_MODEL=openai/gpt-image-1, OPENROUTER_API_KEY (BYOK covers OpenAI billing). All render vars optional: RENDER_PROVIDER, RENDER_MODEL, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY (all default empty; render layer inert without them).
+- CI gains no new jobs — the CCQS gate runs inside the existing pytest step.

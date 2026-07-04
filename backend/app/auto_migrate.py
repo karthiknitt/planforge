@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def _pg_type(col: Any) -> str:
-    from sqlalchemy import Boolean, Float, Integer, Numeric, String, Text
+    from sqlalchemy import Boolean, Float, Integer, LargeBinary, Numeric, String, Text
     from sqlalchemy.types import JSON, DateTime
 
     t = col.type
+    if isinstance(t, LargeBinary):
+        return "BYTEA"
     if isinstance(t, (String, Text)):
         return "TEXT"
     if isinstance(t, Integer):
