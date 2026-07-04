@@ -6,6 +6,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "ezdxf>=1.4.3",
     "fastapi>=0.129.0",
+    "httpx>=0.28",
     "openpyxl>=3.1.5",
     "ortools>=9.15.6755",
     "pydantic-settings>=2.13.0",
