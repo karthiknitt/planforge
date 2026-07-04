@@ -30,7 +30,7 @@ from app.services.render_providers import (
 
 router = APIRouter()
 
-RENDER_MIN_TIER = "pro"
+# Tier gate: "pro" and above (checkpoint decision 2026-07-04)
 _TIER_ALLOWED = ("pro", "firm")
 
 _PROVIDER_KEYS = {
