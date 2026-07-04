@@ -45,6 +45,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
+import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
 import type {
   ComplianceData,
   FloorPlanData,
@@ -114,6 +115,42 @@ function ScoreBadge({ score }: { score: number }) {
   return (
     <span className={`ml-1.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold ${color}`}>
       {score.toFixed(0)}
+    </span>
+  );
+}
+
+// ── CAD drawing-quality badge — lazily fetched per layout, progressive enhancement ──
+function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKey: string }) {
+  const [quality, setQuality] = useState<CadQuality | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/backend/projects/${projectId}/layouts/${layoutKey}/quality`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((q) => {
+        if (!cancelled && q) setQuality(q);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, layoutKey]);
+
+  if (!quality) return null;
+
+  const tone = cadQualityTone(quality);
+  const color =
+    tone === "good"
+      ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/40"
+      : tone === "ok"
+        ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40"
+        : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/40";
+  return (
+    <span
+      className={`ml-1.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold ${color}`}
+      title="Deterministic CAD drawing quality (monochrome, dimensions, labels, completeness)"
+    >
+      {cadQualityLabel(quality)}
     </span>
   );
 }
@@ -904,6 +941,7 @@ export function LayoutViewer({
             >
               Layout {l.id} — {l.name}
               {l.score && <ScoreBadge score={l.score.total} />}
+              <CadQualityBadge layoutKey={l.id} projectId={projectId} />
               {vastuEnabled && (
                 <span
                   className={[
