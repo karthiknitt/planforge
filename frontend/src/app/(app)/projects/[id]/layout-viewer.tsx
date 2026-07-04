@@ -54,6 +54,7 @@ import type {
   RoomData,
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
+import { buildRenderImageUrl, classifyRenderStatus } from "@/lib/render-tab";
 
 interface RevisionListItem {
   id: number;
@@ -152,6 +153,171 @@ function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKe
     >
       {cadQualityLabel(quality)}
     </span>
+  );
+}
+
+// ── Render tab — generate + view an AI render of the active layout, Pro-gated ──
+// "checking" probes the GET endpoint (via a hidden <img>) to see if a render
+// already exists from a previous session; "busy" tracks an in-flight POST
+// separately so a regenerate can keep showing the last successful image.
+type RenderPhase = "checking" | "none" | "ready" | "upsell" | "unavailable" | "error";
+
+function RenderTab({
+  projectId,
+  layoutKey,
+  planTier,
+}: {
+  projectId: string;
+  layoutKey: string;
+  planTier: string;
+}) {
+  const [phase, setPhase] = useState<RenderPhase>("checking");
+  const [busy, setBusy] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [meta, setMeta] = useState<{ provider: string; model: string; cached: boolean } | null>(
+    null
+  );
+  const [error, setError] = useState("");
+
+  // Reset and re-check whenever the viewed layout changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: projectId/layoutKey are intentional re-check triggers, not read in the body
+  useEffect(() => {
+    setPhase("checking");
+    setMeta(null);
+    setError("");
+  }, [projectId, layoutKey]);
+
+  const isPro = planTier === "pro" || planTier === "firm";
+
+  async function handleGenerate() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/backend/projects/${projectId}/layouts/${layoutKey}/render`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      const outcome = classifyRenderStatus(res.status);
+      if (outcome === "ready") {
+        setMeta({
+          provider: data.provider ?? "",
+          model: data.model ?? "",
+          cached: Boolean(data.cached),
+        });
+        setVersion((v) => v + 1);
+        setPhase("ready");
+      } else if (outcome === "upsell") {
+        setPhase("upsell");
+      } else if (outcome === "unavailable") {
+        setPhase("unavailable");
+      } else {
+        setError((data as { detail?: string })?.detail ?? `Render failed (${res.status})`);
+        setPhase("error");
+      }
+    } catch {
+      setError("Render failed — is the backend running?");
+      setPhase("error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!isPro) {
+    return (
+      <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
+        <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
+        <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
+        <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
+        <Button asChild className="mt-4" size="sm" variant="outline">
+          <Link href="/pricing">Upgrade to Pro</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {phase === "checking" && (
+        <>
+          <div className="h-64 w-full max-w-xl animate-pulse rounded-xl bg-muted" />
+          {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
+          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
+          <img
+            src={buildRenderImageUrl(projectId, layoutKey, version)}
+            alt=""
+            className="hidden"
+            onLoad={() => setPhase("ready")}
+            onError={() => setPhase("none")}
+          />
+        </>
+      )}
+
+      {phase === "ready" && (
+        <>
+          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
+          <img
+            src={buildRenderImageUrl(projectId, layoutKey, version)}
+            alt="AI render of the active layout"
+            className="w-full max-w-xl rounded-xl border"
+          />
+          {meta && (
+            <p className="text-xs text-muted-foreground">
+              Rendered with {meta.provider} · {meta.model}
+              {meta.cached ? " (cached — geometry unchanged since last render)" : ""}
+            </p>
+          )}
+        </>
+      )}
+
+      {phase === "none" && (
+        <p className="text-sm text-muted-foreground">
+          No render yet for this layout. Generate an AI-rendered visualisation from the current
+          floor plan.
+        </p>
+      )}
+
+      {phase === "unavailable" && (
+        <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
+          <p className="font-medium">Rendering isn't configured on this server yet.</p>
+        </div>
+      )}
+
+      {phase === "upsell" && (
+        <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
+          <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
+          <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
+          <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
+          <Button asChild className="mt-4" size="sm" variant="outline">
+            <Link href="/pricing">Upgrade to Pro</Link>
+          </Button>
+        </div>
+      )}
+
+      {error && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      {(phase === "none" || phase === "ready" || phase === "error") && (
+        <Button
+          size="sm"
+          variant={phase === "ready" ? "outline" : "default"}
+          className="w-fit gap-1.5"
+          onClick={() => void handleGenerate()}
+          disabled={busy}
+        >
+          <RefreshCw className="h-3 w-3" />
+          {busy
+            ? "Generating…"
+            : phase === "ready"
+              ? "Regenerate"
+              : phase === "error"
+                ? "Retry"
+                : "Generate render"}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -359,9 +525,9 @@ export function LayoutViewer({
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
   const [floor, setFloor] = useState(0);
-  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat" | "compare">(
-    "plan"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "plan" | "section" | "boq" | "chat" | "compare" | "render"
+  >("plan");
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -1445,10 +1611,10 @@ export function LayoutViewer({
         </details>
       )}
 
-      {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat */}
+      {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
       <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 overflow-x-auto scrollbar-none w-full md:w-fit">
-        {(["plan", "section", "boq", "compare", "chat"] as const).map((tab) => (
+        {(["plan", "section", "boq", "compare", "chat", "render"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -1468,7 +1634,9 @@ export function LayoutViewer({
                   ? "BOQ"
                   : tab === "compare"
                     ? "Compare"
-                    : "Chat"}
+                    : tab === "chat"
+                      ? "Chat"
+                      : "Render"}
           </button>
         ))}
       </div>
@@ -1930,6 +2098,10 @@ export function LayoutViewer({
             </Button>
           </div>
         ))}
+
+      {activeTab === "render" && (
+        <RenderTab projectId={projectId} layoutKey={selectedId} planTier={planTier} />
+      )}
 
       {/* ── Restored revision banner ─────────────────────────────────────── */}
       {restoredData && (
