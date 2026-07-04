@@ -13,16 +13,18 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("INTERNAL_AUTH_SECRET", "test-secret-for-ci-0123456789abcdefgh")
 
-from app.engine.generator import generate
-from app.engine.models import PlotConfig
-from app.engine.pdf import render_pdf
-from app.quality.ccqs import compute_ccqs_deterministic
-from app.services.layout_store import layout_out_from_engine
+from app.engine.generator import generate  # noqa: E402
+from app.engine.models import PlotConfig  # noqa: E402
+from app.engine.pdf import render_pdf  # noqa: E402
+from app.quality.ccqs import compute_ccqs_deterministic  # noqa: E402
+from app.services.layout_store import layout_out_from_engine  # noqa: E402
 
 FIXTURE_CFG = PlotConfig(
     plot_length=15.0,
