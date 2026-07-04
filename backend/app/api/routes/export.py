@@ -97,7 +97,11 @@ async def layout_quality(
             detail=f"Layout {layout_id!r} not found",
         )
     layout = layout_store.engine_layout_from_geometry(row.geometry)
-    pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
+
+    annotations = getattr(project, "annotations", None) or {}
+    pdf_bytes = render_pdf(
+        project.name, layout, cfg, project.num_bedrooms, annotations=annotations or None
+    )
     return compute_ccqs_deterministic(pdf_bytes).as_dict()
 
 
