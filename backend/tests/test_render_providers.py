@@ -82,7 +82,9 @@ async def test_openrouter_happy_path(monkeypatch):
         assert request.headers["Authorization"] == "Bearer k"
         body = json.loads(request.content)
         assert body["prompt"] == "prompt"
-        assert body["input_references"][0].startswith("data:image/png;base64,")
+        ref = body["input_references"][0]
+        assert ref["type"] == "image_url"
+        assert ref["image_url"]["url"].startswith("data:image/png;base64,")
         return httpx.Response(
             200,
             json={

@@ -86,14 +86,32 @@ CONFIGS = {
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--providers", default="gemini,openai,openrouter")
+    parser.add_argument(
+        "--openrouter-models",
+        default="",
+        help="Comma list of OpenRouter model ids; each gets its own render "
+        "per config (lets one OpenRouter key stand in for several vendors).",
+    )
     args = parser.parse_args()
     wanted = [p.strip() for p in args.providers.split(",") if p.strip()]
+    or_models = [m.strip() for m in args.openrouter_models.split(",") if m.strip()]
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     runs: list[dict] = []
     skipped = [p for p in wanted if not os.environ.get(KEY_ENV.get(p, ""), "")]
     active = [p for p in wanted if p not in skipped]
-    print(f"providers: {active} (skipped, no key: {skipped})")
+    # (provider, model-or-None, output label)
+    jobs: list[tuple[str, str | None, str]] = []
+    for provider in active:
+        if provider == "openrouter" and or_models:
+            for m in or_models:
+                jobs.append((provider, m, f"openrouter_{m.replace('/', '_')}"))
+        else:
+            jobs.append((provider, None, provider))
+    print(
+        f"providers: {active} (skipped, no key: {skipped}); jobs per config: "
+        f"{[j[2] for j in jobs]}"
+    )
 
     for cfg_name, cfg in CONFIGS.items():
         layouts = generate(cfg)
@@ -111,13 +129,13 @@ async def main() -> None:
             plot_width_m=cfg.plot_width,
         )
 
-        for provider in active:
+        for provider, model, label in jobs:
             key = os.environ[KEY_ENV[provider]]
             try:
                 result = await render_image(
-                    prompt, reference_png, provider, api_key=key
+                    prompt, reference_png, provider, api_key=key, model=model
                 )
-                out = OUT_DIR / f"{cfg_name}_{provider}.png"
+                out = OUT_DIR / f"{cfg_name}_{label}.png"
                 out.write_bytes(result.image_png)
                 runs.append(
                     {
@@ -129,19 +147,19 @@ async def main() -> None:
                         "error": None,
                     }
                 )
-                print(f"OK   {cfg_name} x {provider} -> {out.name}")
+                print(f"OK   {cfg_name} x {label} -> {out.name}")
             except RenderProviderError as e:
                 runs.append(
                     {
                         "config": cfg_name,
                         "provider": provider,
-                        "model": None,
+                        "model": model,
                         "cost_usd": None,
                         "output": None,
                         "error": str(e),
                     }
                 )
-                print(f"FAIL {cfg_name} x {provider}: {e}")
+                print(f"FAIL {cfg_name} x {label}: {e}")
 
     total_cost = sum(r["cost_usd"] or 0 for r in runs if r.get("cost_usd"))
     results = {

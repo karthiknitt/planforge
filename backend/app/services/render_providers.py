@@ -126,7 +126,13 @@ async def _render_openrouter(
         "model": model,
         "prompt": prompt,
         "input_references": [
-            "data:image/png;base64," + base64.b64encode(reference_png).decode()
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/png;base64,"
+                    + base64.b64encode(reference_png).decode()
+                },
+            }
         ],
     }
     async with _client(timeout) as client:
