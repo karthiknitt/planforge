@@ -33,3 +33,38 @@
 - Archetype fallback for skewed quads still uses inset bounds (solver path is exact; archetypes are fallback-only)
 - Team members' dashboards show team projects via backend list API only; Drizzle dashboard query is owner-only (pre-existing)
 - Vision-judged CCQS component stays dev-time until Anthropic billing (locked decision)
+---
+
+# Stage 1 Phase 2: Enhanced Outputs (CCQS + AI Render Layer)
+
+**Branch:** `worktree-stage1-phase2-outputs` (stacked on phase-1 branch; PR #11 still open)
+**Plan:** `docs/superpowers/plans/2026-07-04-stage1-phase2-enhanced-outputs.md`
+**State:** Parts A+B complete (Tasks 1–9); Task 10 checkpoint BLOCKED on API keys; Part C (render productization) waits on the bake-off decision.
+
+## Commits on this branch (phase 2)
+
+| Commit | What |
+|---|---|
+| `6c40452` | CCQS deterministic scorer (0–80) on PDF bytes; pymupdf → main dep |
+| `c502fdb` | Frozen CCQS fixture geometry + committed baseline (80.0/80) |
+| `8a93f05` | CCQS regression gate in CI pytest (mutation-checked) |
+| `359f1b4`+`92c4285` | Layout quality endpoint (scores the annotated PDF) |
+| `fac6c21` | Phase 2 implementation plan doc |
+| `a4eb6b1` | Frontend CAD-quality badge on layout cards |
+| `ee0cbcc` | pdf_page_png helper (PDF → PNG reference images) |
+| `d150a55` | Spatial render-prompt builder from persisted geometry |
+| `37c01ec` | Provider adapters (gemini/openai/openrouter), doc-verified shapes |
+| `8d4b3a8` | Bake-off harness + script sys.path fixes |
+| `d976aa5` | OpenRouter input_references object shape + multi-model bake-off |
+
+## Test state (phase 2)
+- Backend: 274 passing (was 263) incl. the CCQS CI gate; frontend: 37 bun tests passing (was 35).
+- Every task passed an independent spec+quality review; Task 9 reviewed inline (session limits), covered by final whole-branch review before PR.
+
+## BLOCKED — render bake-off (Task 10 checkpoint)
+All 3 local provider keys fail live: GEMINI_API_KEY invalid, OPENAI_API_KEY invalid (revoked sk-proj-…N8EA), and the OpenRouter account has BYOK integrations configured with those same dead Google/OpenAI keys — every image model on OpenRouter routes upstream through them (no non-Google/OpenAI image models available). Zero spend so far. Fix = either update/remove the OpenRouter BYOK integrations (use credits) or supply fresh keys, then re-run:
+`cd backend && uv run python scripts/render_bakeoff.py --providers openrouter --openrouter-models "google/gemini-2.5-flash-image,openai/gpt-image-1"`
+
+## Deployment notes (when this merges)
+- New optional env vars for Cloud Run: RENDER_PROVIDER, RENDER_MODEL, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY (all default empty; render layer inert without them).
+- CI gains no new jobs — the CCQS gate runs inside the existing pytest step.
