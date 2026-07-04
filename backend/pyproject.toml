@@ -10,6 +10,7 @@ dependencies = [
     "ortools>=9.15.6755",
     "pydantic-settings>=2.13.0",
     "pyjwt>=2.13.0",
+    "pymupdf>=1.27",
     "python-dotenv>=1.2.1",
     "razorpay>=2.0.0",
     "reportlab>=4.4.10",
