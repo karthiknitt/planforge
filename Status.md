@@ -39,7 +39,7 @@
 
 **Branch:** `worktree-stage1-phase2-outputs` (stacked on phase-1 branch; PR #11 still open)
 **Plan:** `docs/superpowers/plans/2026-07-04-stage1-phase2-enhanced-outputs.md`
-**State:** Parts A+B complete (Tasks 1–9); Task 10 checkpoint BLOCKED on API keys; Part C (render productization) waits on the bake-off decision.
+**State:** ALL 12 TASKS COMPLETE. Checkpoint resolved: RENDER_PROVIDER=openrouter, RENDER_MODEL=openai/gpt-image-1 (BYOK; OpenAI key fixed in OpenRouter integrations), tier gate pro+. Remaining: final whole-branch review + finish-feature PR (stacked on phase-1 branch).
 
 ## Commits on this branch (phase 2)
 
@@ -61,10 +61,13 @@
 - Backend: 274 passing (was 263) incl. the CCQS CI gate; frontend: 37 bun tests passing (was 35).
 - Every task passed an independent spec+quality review; Task 9 reviewed inline (session limits), covered by final whole-branch review before PR.
 
-## BLOCKED — render bake-off (Task 10 checkpoint)
-All 3 local provider keys fail live: GEMINI_API_KEY invalid, OPENAI_API_KEY invalid (revoked sk-proj-…N8EA), and the OpenRouter account has BYOK integrations configured with those same dead Google/OpenAI keys — every image model on OpenRouter routes upstream through them (no non-Google/OpenAI image models available). Zero spend so far. Fix = either update/remove the OpenRouter BYOK integrations (use credits) or supply fresh keys, then re-run:
-`cd backend && uv run python scripts/render_bakeoff.py --providers openrouter --openrouter-models "google/gemini-2.5-flash-image,openai/gpt-image-1"`
+## Bake-off outcome (Task 10 checkpoint — resolved 2026-07-04)
+gpt-image-1 (via OpenRouter BYOK) rendered all 3 test layouts to production quality; picked as default. Gemini comparison deferred — OpenRouter needs a credit balance to route Google AI Studio BYOK calls (402). Renders in `experiments/renders/`; per-image cost billed to the OpenAI account (~$0.03–0.07).
+
+## Follow-up bugs found during review (NOT fixed in this phase)
+- **Firm-tier users are denied DXF/BOQ**: `export.py` gates use `plan not in ("basic","pro")` / `plan != "pro"` — non-transitive, rejects the top tier. Frontend `layout-viewer.tsx` has matching `planTier === "pro"`-only checks. The new render endpoints use the correct `("pro","firm")` tuple.
+- No unique index on layout_renders (layout_id, layout_hash, provider, model) — concurrent cache-miss POSTs can insert duplicate rows (harmless, dead rows).
 
 ## Deployment notes (when this merges)
-- New optional env vars for Cloud Run: RENDER_PROVIDER, RENDER_MODEL, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY (all default empty; render layer inert without them).
+- Production env for renders: RENDER_PROVIDER=openrouter, RENDER_MODEL=openai/gpt-image-1, OPENROUTER_API_KEY (BYOK covers OpenAI billing). All render vars optional: RENDER_PROVIDER, RENDER_MODEL, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY (all default empty; render layer inert without them).
 - CI gains no new jobs — the CCQS gate runs inside the existing pytest step.
