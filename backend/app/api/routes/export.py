@@ -14,6 +14,7 @@ from app.engine.boq import QuantityEngine
 from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.models.project import Project
+from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
 from app.services.plans import get_effective_plan_tier
 from app.services import layout_store
@@ -73,6 +74,31 @@ async def export_pdf(
             "Content-Disposition": f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
         },
     )
+
+
+# ── Layout quality ────────────────────────────────────────────────────────────
+
+
+@router.get("/projects/{project_id}/layouts/{layout_id}/quality")
+async def layout_quality(
+    project_id: str,
+    layout_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    project = await _get_project(project_id, user_id, db)
+    cfg = _cfg_from_project(project)
+
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Layout {layout_id!r} not found",
+        )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
+    pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
+    return compute_ccqs_deterministic(pdf_bytes).as_dict()
 
 
 # ── Approval PDF export ───────────────────────────────────────────────────────
