@@ -1,4 +1,3 @@
-import json as _json
 import logging
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -6,27 +5,26 @@ from io import BytesIO, StringIO
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
 from app.engine.boq import QuantityEngine
-from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.models.project import Project
-from app.models.user import User
+from app.services.access import get_accessible_project
+from app.services.plans import get_effective_plan_tier
+from app.services import layout_store
+from app.services.plot_config import plot_config_from_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
-    result = await db.execute(select(User).where(User.id == user_id))
-    u = result.scalar_one_or_none()
-    return u.plan_tier if u else "free"
+    return await get_effective_plan_tier(user_id, db)
 
 
 def _to_float(v) -> float:
@@ -34,46 +32,11 @@ def _to_float(v) -> float:
 
 
 def _cfg_from_project(project: Project) -> PlotConfig:
-    return PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
-        road_side=getattr(project, "road_side", "S") or "S",
-        has_pooja=getattr(project, "has_pooja", False) or False,
-        has_study=getattr(project, "has_study", False) or False,
-        has_balcony=getattr(project, "has_balcony", False) or False,
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
-        plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
-        plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
-        plot_corners=_json.loads(project.plot_corners)
-        if getattr(project, "plot_corners", None)
-        else None,
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-    )
+    return plot_config_from_project(project)
 
 
 async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
-    result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user_id)
-    )
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-    return project
+    return await get_accessible_project(project_id, user_id, db)
 
 
 # ── PDF export ────────────────────────────────────────────────────────────────
@@ -89,13 +52,14 @@ async def export_pdf(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     annotations = getattr(project, "annotations", None) or {}
     pdf_bytes = render_pdf(
@@ -134,13 +98,14 @@ async def export_approval_pdf(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     municipality = body.municipality or getattr(project, "municipality", None) or ""
     owner = OwnerInfo(
@@ -192,13 +157,14 @@ async def export_dxf(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     dxf_bytes = _render_dxf(project.name, layout, cfg)
 
@@ -560,13 +526,14 @@ async def export_boq(
     project = await _get_project(project_id, user_id, db)
     cfg = _cfg_from_project(project)
 
-    layouts = generate(cfg)
-    layout = next((lay for lay in layouts if lay.id == layout_id), None)
-    if layout is None:
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Layout {layout_id!r} not found",
         )
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
 
     engine = QuantityEngine()
     boq = engine.calculate(layout, cfg, project_name=project.name, city=city)

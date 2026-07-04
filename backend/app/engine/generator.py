@@ -3,62 +3,12 @@ from __future__ import annotations
 from shapely.geometry import Polygon
 
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
+from .geometry import compute_l_shaped_polygon  # noqa: F401  (re-export; historical import site)
 from .compliance import check, load_rules
 from .models import FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
 from .solver import solve_layouts
 from .vastu import check_vastu
-
-
-def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
-    """Return a Shapely Polygon for the L-shaped plot boundary.
-
-    The L-shape is the full bounding rectangle with one rectangular corner cut out.
-    Supports NE, NW, SE, SW cutout corners.
-    """
-    W = cfg.plot_width
-    H = cfg.plot_length
-    cw = cfg.cutout_width
-    ch = cfg.cutout_height
-
-    if cfg.cutout_corner == "NE":
-        vertices = [
-            (0, 0),
-            (W, 0),
-            (W, H - ch),
-            (W - cw, H - ch),
-            (W - cw, H),
-            (0, H),
-        ]
-    elif cfg.cutout_corner == "NW":
-        vertices = [
-            (0, 0),
-            (W, 0),
-            (W, H),
-            (cw, H),
-            (cw, H - ch),
-            (0, H - ch),
-        ]
-    elif cfg.cutout_corner == "SE":
-        vertices = [
-            (0, 0),
-            (W - cw, 0),
-            (W - cw, ch),
-            (W, ch),
-            (W, H),
-            (0, H),
-        ]
-    else:  # SW
-        vertices = [
-            (cw, 0),
-            (W, 0),
-            (W, H),
-            (0, H),
-            (0, ch),
-            (cw, ch),
-        ]
-
-    return Polygon(vertices)
 
 
 def _remove_cutout_overlap(

@@ -1,162 +1,42 @@
-from decimal import Decimal
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.revisions import save_auto_revision
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
-from app.engine.generator import generate
-from app.engine.models import PlotConfig
-from app.models.project import Project
-from app.schemas.layout import (
-    ColumnOut,
-    ComplianceOut,
-    FloorPlanOut,
-    GenerateResponse,
-    LayoutOut,
-    LayoutScoreOut,
-    RoomOut,
-)
-from app.api.routes.revisions import save_auto_revision
+from app.schemas.layout import GenerateResponse
+from app.services import layout_store
+from app.services.access import get_accessible_project
 
 router = APIRouter()
-
-
-def _to_float(v) -> float:
-    return float(v) if isinstance(v, Decimal) else v
-
-
-def _floor_plan_out(fp) -> FloorPlanOut:
-    return FloorPlanOut(
-        floor=fp.floor,
-        floor_type=getattr(fp, "floor_type", "ground"),
-        needs_mech_ventilation=getattr(fp, "needs_mech_ventilation", False),
-        rooms=[
-            RoomOut(
-                id=r.id,
-                name=r.name,
-                type=r.type,
-                x=r.x,
-                y=r.y,
-                width=r.width,
-                depth=r.depth,
-                area=r.area,
-            )
-            for r in fp.rooms
-        ],
-        columns=[ColumnOut(x=c.x, y=c.y) for c in fp.columns],
-    )
 
 
 @router.get("/projects/{project_id}/generate", response_model=GenerateResponse)
 async def generate_layouts(
     project_id: str,
+    refresh: bool = False,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenerateResponse:
-    result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user_id)
-    )
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
+    """Return the project's layouts.
 
-    import json
+    Layouts are solved once and persisted; subsequent calls read the store so
+    the viewer, share view and exports all see the same geometry. Pass
+    ?refresh=true to explicitly re-run the solver (a revision snapshot of the
+    current state is taken first).
+    """
+    project = await get_accessible_project(project_id, user_id, db)
 
-    custom_room_config = None
-    raw_crc = getattr(project, "custom_room_config", None)
-    if raw_crc:
+    if refresh:
+        # Fire-and-forget snapshot: failure must not block regeneration
         try:
-            custom_room_config = json.loads(raw_crc)
-        except Exception:
-            custom_room_config = None
-
-    plot_corners = None
-    raw_corners = getattr(project, "plot_corners", None)
-    if raw_corners:
-        try:
-            plot_corners = [tuple(pt) for pt in json.loads(raw_corners)]
-        except Exception:
-            plot_corners = None
-
-    cfg = PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
-        road_side=getattr(project, "road_side", "S") or "S",
-        has_pooja=getattr(project, "has_pooja", False) or False,
-        has_study=getattr(project, "has_study", False) or False,
-        has_balcony=getattr(project, "has_balcony", False) or False,
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        plot_front_width=_to_float(getattr(project, "plot_front_width", 0.0) or 0.0),
-        plot_rear_width=_to_float(getattr(project, "plot_rear_width", 0.0) or 0.0),
-        plot_side_offset=_to_float(getattr(project, "plot_side_offset", 0.0) or 0.0),
-        plot_corners=plot_corners,
-        cutout_corner=getattr(project, "cutout_corner", "NE") or "NE",
-        cutout_width=_to_float(getattr(project, "cutout_width", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height", 0.0) or 0.0),
-        num_floors=getattr(project, "num_floors", 1) or 1,
-        has_stilt=getattr(project, "has_stilt", False) or False,
-        has_basement=getattr(project, "has_basement", False) or False,
-        municipality=getattr(project, "municipality", None),
-        custom_room_config=custom_room_config,
-    )
-
-    layouts = generate(cfg)
-
-    # Auto-snapshot the current state before delivering new results.
-    # Fire-and-forget: failure must not block the response.
-    try:
-        await save_auto_revision(
-            db, project, label_prefix="Auto-save before generation"
-        )
-    except Exception:
-        pass
-
-    return GenerateResponse(
-        project_id=project_id,
-        layouts=[
-            LayoutOut(
-                id=lay.id,
-                name=lay.name,
-                compliance=ComplianceOut(
-                    passed=lay.compliance.passed,
-                    violations=lay.compliance.violations,
-                    warnings=lay.compliance.warnings,
-                ),
-                ground_floor=_floor_plan_out(lay.ground_floor),
-                first_floor=_floor_plan_out(lay.first_floor),
-                second_floor=_floor_plan_out(lay.second_floor)
-                if lay.second_floor
-                else None,
-                basement_floor=_floor_plan_out(lay.basement_floor)
-                if lay.basement_floor
-                else None,
-                score=LayoutScoreOut(
-                    total=lay.score.total,
-                    natural_light=lay.score.natural_light,
-                    adjacency=lay.score.adjacency,
-                    aspect_ratio=lay.score.aspect_ratio,
-                    circulation=lay.score.circulation,
-                    vastu=lay.score.vastu,
-                )
-                if lay.score
-                else None,
-                space_notes=getattr(lay, "space_notes", []),
-                auto_added_rooms=getattr(lay, "space_notes", []),
+            await save_auto_revision(
+                db, project, label_prefix="Auto-save before regeneration"
             )
-            for lay in layouts
-        ],
-    )
+        except Exception:
+            pass
+        stored = await layout_store.regenerate_and_store(project, db)
+    else:
+        stored = await layout_store.get_or_generate_layouts(project, db)
+
+    return layout_store.to_generate_response(project_id, stored)

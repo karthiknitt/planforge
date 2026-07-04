@@ -810,7 +810,7 @@ function getMinSide(type: string): number {
 }
 
 // ── Shared wall detection ─────────────────────────────────────────────────────
-interface SharedWall {
+export interface SharedWall {
   orientation: "vertical" | "horizontal";
   wallPos: number;
   roomA: RoomData;
@@ -821,7 +821,7 @@ interface SharedWall {
 
 const WALL_TOL = 0.01;
 
-function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
+export function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
   const walls: SharedWall[] = [];
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
