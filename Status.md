@@ -65,6 +65,7 @@
 gpt-image-1 (via OpenRouter BYOK) rendered all 3 test layouts to production quality; picked as default. Gemini comparison deferred — OpenRouter needs a credit balance to route Google AI Studio BYOK calls (402). Renders in `experiments/renders/`; per-image cost billed to the OpenAI account (~$0.03–0.07).
 
 ## Follow-up bugs found during review (NOT fixed in this phase)
+- **First-generate cold-start timeout (seen live on v2, 2026-07-05)**: fresh project + cold Cloud Run + CP-SAT solve exceeds fetchBackend's 15s timeout → "Layout engine offline"; retry works because the solve persisted. Fix planned as Phase 3 item 3e: Inngest async generation + realtime progress (docs/plans/2026-07-03-fable-stage1-phase0-plan.md §4).
 - **Firm-tier users are denied DXF/BOQ**: `export.py` gates use `plan not in ("basic","pro")` / `plan != "pro"` — non-transitive, rejects the top tier. Frontend `layout-viewer.tsx` has matching `planTier === "pro"`-only checks. The new render endpoints use the correct `("pro","firm")` tuple.
 - No unique index on layout_renders (layout_id, layout_hash, provider, model) — concurrent cache-miss POSTs can insert duplicate rows (harmless, dead rows).
 
