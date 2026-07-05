@@ -227,6 +227,71 @@ def _fill_blank_areas(
     return notes
 
 
+_NO_ABSORB_TYPES = {
+    "toilet",
+    "wc_only",
+    "bathroom_master",
+    "utility",
+    "staircase",
+    "pooja",
+}
+_WET_SPLIT_TYPES = {"toilet", "wc_only", "bathroom_master"}
+_WET_CAP_SQM = 6.0
+_WET_MAX_ASPECT = 3.5
+_IWT_GAP = 0.115
+
+
+def _split_oversized_wet_rooms(floor_plan: FloorPlan) -> list[str]:
+    """Carve absurdly large/stretched wet rooms into a compliant wet room
+    plus a passage, preserving toilet count (a bare relabel would break
+    compliance) and the iwt gap convention between rooms."""
+    notes: list[str] = []
+    for room in list(floor_plan.rooms):
+        if room.type not in _WET_SPLIT_TYPES:
+            continue
+        aspect = max(room.width, room.depth) / max(min(room.width, room.depth), 1e-6)
+        if room.area <= _WET_CAP_SQM and aspect <= _WET_MAX_ASPECT:
+            continue
+        along_width = room.width >= room.depth  # split along the long axis
+        short_side = room.depth if along_width else room.width
+        # wet room keeps a compliant slice at the low end of the long axis
+        wet_len = max(1.2, min(_WET_CAP_SQM / short_side, 2.2))
+        long_len = room.width if along_width else room.depth
+        rem_len = long_len - wet_len - _IWT_GAP
+        if rem_len < 0.9:  # nothing meaningful to carve off
+            continue
+        old_area = room.area
+        if along_width:
+            passage = Room(
+                id=f"{room.id}_passage",
+                name="Passage",
+                type="passage",
+                x=round(room.x + wet_len + _IWT_GAP, 3),
+                y=room.y,
+                width=round(rem_len, 3),
+                depth=room.depth,
+            )
+            room.width = round(wet_len, 3)
+        else:
+            passage = Room(
+                id=f"{room.id}_passage",
+                name="Passage",
+                type="passage",
+                x=room.x,
+                y=round(room.y + wet_len + _IWT_GAP, 3),
+                width=room.width,
+                depth=round(rem_len, 3),
+            )
+            room.depth = round(wet_len, 3)
+        floor_plan.rooms.append(passage)
+        notes.append(
+            f"{room.name} ({old_area:.1f} m²) was implausibly large for a wet "
+            f"room — split into {room.name} ({room.area:.1f} m²) + Passage "
+            f"({passage.area:.1f} m²) on floor {floor_plan.floor}."
+        )
+    return notes
+
+
 def _absorb_into_adjacent(
     floor_plan: FloorPlan,
     region,
@@ -263,6 +328,13 @@ def _absorb_into_adjacent(
 
     if not candidates:
         return
+
+    # Wet rooms and stairs must not swallow leftover space — a toilet that
+    # absorbs a 2 m band stays labelled "Toilet" at an absurd size (the
+    # "TOILET 2 — 275 SQFT" bug). Prefer any non-capped neighbour.
+    preferred = [rc for rc in candidates if rc[0].type not in _NO_ABSORB_TYPES]
+    if preferred:
+        candidates = preferred
 
     # Pick the candidate with the largest area
     best_room, direction = max(candidates, key=lambda rc: rc[0].area)
@@ -389,6 +461,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             is_top = fp.floor == topmost_floor
             notes = _fill_blank_areas(fp, cfg, ewt, is_topmost=is_top)
             space_notes.extend(notes)
+            space_notes.extend(_split_oversized_wet_rooms(fp))
 
         layout.space_notes = list(layout.space_notes) + space_notes
 
