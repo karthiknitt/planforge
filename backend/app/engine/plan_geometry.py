@@ -17,15 +17,23 @@ All outputs are axis-aligned centreline segments, normalized so
 
 from __future__ import annotations
 
+import math
+
 from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
 
 from app.engine.cad_elements import (
     ColumnMarker,
+    DimChain,
+    DimChainEntry,
+    FloorDrawing,
+    LabelBox,
     Opening,
+    StairGeometry,
     WallJunction,
     WallSegment,
 )
+from app.engine.cad_primitives import metres_to_ftin
 from app.engine.standards import OpeningStandards
 
 EWT = 0.23
@@ -606,3 +614,208 @@ def opening_boxes(openings: list[Opening]) -> list[Polygon]:
         else:
             boxes.append(box(o.cx - across, o.cy - along, o.cx + across, o.cy + along))
     return boxes
+
+
+# ---------------------------------------------------------------------------
+# Dimensions, labels, stair, assembly (S4.3)
+# ---------------------------------------------------------------------------
+
+_LANES = (0.6, 1.2, 1.8)  # cross-axis offsets for levels 0/1/2
+_PT_TO_MODEL_M = 0.000352778 * 100  # 1 pt on paper at 1:100 -> metres in model
+_LABEL_MARGIN = 0.2
+_LABEL_FONT = "Helvetica-Bold"
+
+
+def derive_dim_chains(rooms, walls: list[WallSegment], cfg) -> list[DimChain]:
+    from app.engine.geometry import buildable_polygon
+
+    bx1, by1, bx2, by2 = buildable_polygon(cfg).bounds
+    chains: list[DimChain] = []
+
+    def entries_for(coords: list[float]) -> list[DimChainEntry]:
+        out = []
+        for a, b in zip(coords, coords[1:]):
+            if b - a < 1e-6:
+                continue
+            out.append(DimChainEntry(start=a, end=b, text=metres_to_ftin(b - a)))
+        return out
+
+    # Level 0 — room chains (bottom: vertical wall xs; left: horizontal ys)
+    v_xs = sorted(
+        {round(w.x1, 6) for w in walls if w.kind == "internal" and _is_vertical(w)}
+        | {bx1, bx2}
+    )
+    h_ys = sorted(
+        {round(w.y1, 6) for w in walls if w.kind == "internal" and not _is_vertical(w)}
+        | {by1, by2}
+    )
+    chains.append(
+        DimChain(
+            side="bottom", level=0, coord=by1 - _LANES[0], entries=entries_for(v_xs)
+        )
+    )
+    chains.append(
+        DimChain(side="left", level=0, coord=bx1 - _LANES[0], entries=entries_for(h_ys))
+    )
+
+    # Level 1 — overall buildable extent on all four sides
+    for side, coord, coords in (
+        ("bottom", by1 - _LANES[1], [bx1, bx2]),
+        ("top", by2 + _LANES[1], [bx1, bx2]),
+        ("left", bx1 - _LANES[1], [by1, by2]),
+        ("right", bx2 + _LANES[1], [by1, by2]),
+    ):
+        chains.append(
+            DimChain(side=side, level=1, coord=coord, entries=entries_for(coords))
+        )
+
+    # Level 2 — plot chain incl. setbacks
+    for side, coord, coords in (
+        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_width]),
+        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_width]),
+        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_length]),
+        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_length]),
+    ):
+        chains.append(
+            DimChain(side=side, level=2, coord=coord, entries=entries_for(coords))
+        )
+    return chains
+
+
+def _text_width_m(text: str, font_pt: float) -> float:
+    from reportlab.pdfbase import pdfmetrics
+
+    return pdfmetrics.stringWidth(text, _LABEL_FONT, font_pt) * _PT_TO_MODEL_M
+
+
+def _lines_fit(
+    lines: list[str], font_pt: float, avail_w: float, avail_h: float
+) -> bool:
+    if any(_text_width_m(t, font_pt) > avail_w for t in lines):
+        return False
+    return len(lines) * font_pt * 1.3 * _PT_TO_MODEL_M <= avail_h
+
+
+def _room_label_lines(room) -> list[str]:
+    area_sqft = round(room.width * room.depth * 10.7639)
+    return [
+        room.name.upper(),
+        f"{metres_to_ftin(room.width)} × {metres_to_ftin(room.depth)}",
+        f"{area_sqft} SQFT",
+    ]
+
+
+def derive_labels(rooms) -> list[LabelBox]:
+    labels: list[LabelBox] = []
+    for room in sorted(rooms, key=lambda r: r.id):
+        lines = _room_label_lines(room)
+        avail_w = room.width - _LABEL_MARGIN
+        avail_h = room.depth - _LABEL_MARGIN
+        cx = room.x + room.width / 2
+        cy = (
+            room.y + room.depth * 2 / 3
+            if room.type == "staircase"
+            else room.y + room.depth / 2
+        )
+        chosen: tuple[list[str], float] | None = None
+        for cand, fonts in (
+            (lines, (12.0, 11.0, 10.0, 9.0, 8.0)),
+            (lines[:2], (8.0, 7.0, 6.0)),
+            ([lines[0]], (7.0, 6.0)),
+        ):
+            for f in fonts:
+                if _lines_fit(cand, f, avail_w, avail_h):
+                    chosen = (cand, f)
+                    break
+            if chosen:
+                break
+        if chosen:
+            labels.append(
+                LabelBox(
+                    room_id=room.id, cx=cx, cy=cy, lines=chosen[0], font_pt=chosen[1]
+                )
+            )
+        else:
+            labels.append(
+                LabelBox(
+                    room_id=room.id,
+                    cx=room.x + room.width + 0.6,
+                    cy=room.y + room.depth / 2,
+                    lines=lines,
+                    font_pt=8.0,
+                    leader=(cx, room.y + room.depth / 2),
+                )
+            )
+    return labels
+
+
+def derive_stair(rooms, floor_height: float = 3.0) -> StairGeometry | None:
+    room = next((r for r in rooms if r.type == "staircase"), None)
+    if room is None:
+        return None
+    vertical_run = room.depth >= room.width
+    riser = 0.175
+    needed = math.ceil((floor_height / 2) / riser)
+    run_len = room.depth if vertical_run else room.width
+    max_treads = int((run_len - 1.0) / 0.25)
+    count = max(0, min(needed, max_treads))
+
+    treads: list[tuple[float, float, float, float]] = []
+    for i in range(1, count + 1):
+        if vertical_run:
+            y = room.y + i * 0.25
+            treads.append((room.x, y, room.x + room.width, y))
+        else:
+            x = room.x + i * 0.25
+            treads.append((x, room.y, x, room.y + room.depth))
+
+    flight = count * 0.25
+    if vertical_run:
+        b = room.y + flight * 0.6
+        break_line = (room.x, b - 0.15, room.x + room.width, b + 0.15)
+        cx = room.x + room.width / 2
+        arrow = (cx, room.y + 0.15, cx, room.y + max(flight - 0.1, 0.3))
+        up_xy = (cx, room.y + 0.3)
+    else:
+        b = room.x + flight * 0.6
+        break_line = (b - 0.15, room.y, b + 0.15, room.y + room.depth)
+        cy = room.y + room.depth / 2
+        arrow = (room.x + 0.15, cy, room.x + max(flight - 0.1, 0.3), cy)
+        up_xy = (room.x + 0.3, cy)
+    return StairGeometry(
+        room_id=room.id,
+        treads=treads,
+        break_line=break_line,
+        arrow=arrow,
+        up_label_xy=up_xy,
+        tread_count=count,
+    )
+
+
+def build_floor_drawing(floorplan, cfg) -> FloorDrawing:
+    from app.engine.geometry import buildable_polygon
+    from app.engine.standards import get_opening_standards
+
+    buildable = buildable_polygon(cfg)
+    rooms = floorplan.rooms
+    walls = derive_walls(rooms, buildable)
+    junctions = derive_junctions(walls)
+    columns = derive_columns(walls)
+    openings = derive_openings(
+        rooms, walls, columns, get_opening_standards(), buildable
+    )
+    walls.sort(key=lambda w: (w.kind, w.x1, w.y1, w.x2, w.y2))
+    openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
+    columns.sort(key=lambda c: (c.cx, c.cy))
+    junctions.sort(key=lambda j: (j.x, j.y))
+    return FloorDrawing(
+        floor=floorplan.floor,
+        walls=walls,
+        openings=openings,
+        columns=columns,
+        junctions=junctions,
+        dim_chains=derive_dim_chains(rooms, walls, cfg),
+        labels=derive_labels(rooms),
+        stair=derive_stair(rooms),
+        bounds=buildable.bounds,
+    )

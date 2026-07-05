@@ -64,6 +64,77 @@ class Opening:
 
 
 @dataclass
+class LabelBox:
+    """Room label with pre-fitted text lines (never truncated — a label that
+    cannot fit inside its room moves outside with a leader)."""
+
+    room_id: str
+    cx: float
+    cy: float
+    lines: list[str]
+    font_pt: float
+    leader: tuple[float, float] | None = None  # target point when outside
+
+
+@dataclass
+class DimChainEntry:
+    start: float  # along-axis position (m)
+    end: float
+    text: str  # formatted ft-in
+
+
+@dataclass
+class DimChain:
+    side: str  # "bottom" | "top" | "left" | "right"
+    level: int  # 0=room chain, 1=overall, 2=plot/setback chain
+    coord: float  # cross-axis lane position (m, plot coords)
+    entries: list[DimChainEntry] = field(default_factory=list)
+
+
+@dataclass
+class StairGeometry:
+    room_id: str
+    treads: list[tuple[float, float, float, float]]
+    break_line: tuple[float, float, float, float]
+    arrow: tuple[float, float, float, float]  # tail -> head
+    up_label_xy: tuple[float, float]
+    tread_count: int
+
+
+def _rounded(node):
+    if isinstance(node, float):
+        return round(node, 4)
+    if isinstance(node, (list, tuple)):
+        return [_rounded(v) for v in node]
+    if isinstance(node, dict):
+        return {k: _rounded(v) for k, v in node.items()}
+    return node
+
+
+@dataclass
+class FloorDrawing:
+    """Complete canonical drawing for one floor — the single source every
+    renderer (PDF/DXF/SVG) projects."""
+
+    floor: int
+    walls: list[WallSegment]
+    openings: list[Opening]
+    columns: list[ColumnMarker]
+    junctions: list[WallJunction]
+    dim_chains: list[DimChain]
+    labels: list[LabelBox]
+    stair: StairGeometry | None
+    bounds: tuple[float, float, float, float]  # buildable bbox
+
+    def to_dict(self) -> dict:
+        from dataclasses import asdict
+
+        payload = _rounded(asdict(self))
+        payload["version"] = 1
+        return payload
+
+
+@dataclass
 class DoorSymbol:
     """Door defined by hinge point, width, wall side, and swing direction."""
 
