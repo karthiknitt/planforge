@@ -54,6 +54,7 @@ import type {
   RoomData,
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
+import { tierAtLeast } from "@/lib/plan";
 import { buildRenderImageUrl, classifyRenderStatus } from "@/lib/render-tab";
 
 interface RevisionListItem {
@@ -187,7 +188,7 @@ function RenderTab({
     setError("");
   }, [projectId, layoutKey]);
 
-  const isPro = planTier === "pro" || planTier === "firm";
+  const isPro = tierAtLeast(planTier, "pro");
 
   async function handleGenerate() {
     setBusy(true);
@@ -1758,7 +1759,7 @@ export function LayoutViewer({
                       </span>
                     )}
                   </button>
-                  {planTier === "pro" ? (
+                  {tierAtLeast(planTier, "pro") ? (
                     <button
                       type="button"
                       onClick={handleToggleEditMode}
@@ -1861,7 +1862,7 @@ export function LayoutViewer({
                 </span>
               )}
             </button>
-            {planTier === "pro" ? (
+            {tierAtLeast(planTier, "pro") ? (
               <button
                 type="button"
                 onClick={handleToggleEditMode}
@@ -2049,7 +2050,7 @@ export function LayoutViewer({
       )}
 
       {activeTab === "chat" &&
-        (planTier === "pro" ? (
+        (tierAtLeast(planTier, "pro") ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Left: live floor plan preview — hidden on mobile to save screen space */}
             <div className="hidden md:flex flex-col gap-2">
