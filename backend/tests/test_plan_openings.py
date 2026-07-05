@@ -33,18 +33,43 @@ def _two_bedrooms():
     ]
 
 
-def test_each_room_gets_a_door_no_overlaps():
+def test_adjacent_rooms_share_one_door():
     openings, _walls = _openings_for(_two_bedrooms(), _cfg_9x15())
     doors = [o for o in openings if o.kind == "door"]
-    assert {d.swing_into_room_id for d in doors} == {"a", "b"}
-    # both doors share the partition at x=4.0575 and must not overlap
+    # ONE shared door in the partition serves both rooms (no door-doubling)
     partition = [d for d in doors if abs(d.cx - 4.0575) < 1e-6]
-    assert len(partition) == 2
-    partition.sort(key=lambda d: d.cy)
-    assert (
-        partition[0].cy + partition[0].width / 2
-        <= partition[1].cy - partition[1].width / 2 + 1e-9
-    )
+    assert len(partition) == 1
+    assert partition[0].swing_into_room_id == "a"
+
+
+def test_door_swing_direction_is_room_aware():
+    openings, _walls = _openings_for(_two_bedrooms(), _cfg_9x15())
+    d = next(o for o in openings if o.kind == "door")
+    # hinge at the low jamb, leaf along +y, swinging into room "a" (-x side)
+    # => counter-clockwise
+    assert d.swing_into_room_id == "a"
+    assert d.swing_cw is False
+
+
+def test_wet_room_door_does_not_serve_neighbour():
+    rooms = [
+        _room("bed", 1.23, 1.73, 2.77, 12.04),
+        _room("wc", 4.115, 1.73, 3.655, 12.04, rtype="toilet"),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    # bed must have its own door even though the wc doored the shared gap
+    assert {d.swing_into_room_id for d in doors} >= {"bed"}
+
+
+def test_fit_along_shifts_clear_of_obstacle():
+    from app.engine.plan_geometry import _fit_along
+
+    c = _fit_along(2.0, 1.0, 6.0, 0.9, [(2.0, 0.16)])
+    assert c is not None
+    assert abs(c - 2.0) >= 0.16 + 0.45 - 1e-9
+    # no room to shift -> None
+    assert _fit_along(2.0, 1.7, 2.3, 0.9, [(2.0, 0.16)]) is None
 
 
 def test_door_hinge_near_jamb_not_midpoint():
@@ -102,11 +127,26 @@ def test_no_opening_overlaps_column_or_other_opening_on_fixture():
         columns = derive_columns(walls)
         openings = derive_openings(floor.rooms, walls, columns, STD, buildable)
         doors = [o for o in openings if o.kind == "door"]
-        served = {d.swing_into_room_id for d in doors}
+
+        def _door_on_room_wall(room, d, tol=0.13):
+            if d.is_horizontal:
+                on_edge = (
+                    abs(d.cy - room.y) < tol or abs(d.cy - (room.y + room.depth)) < tol
+                )
+                inside = room.x - tol <= d.cx <= room.x + room.width + tol
+            else:
+                on_edge = (
+                    abs(d.cx - room.x) < tol or abs(d.cx - (room.x + room.width)) < tol
+                )
+                inside = room.y - tol <= d.cy <= room.y + room.depth + tol
+            return on_edge and inside
+
         for r in floor.rooms:
             if r.type == "passage":
                 continue
-            assert r.id in served, f"room {r.id} has no door"
+            assert any(_door_on_room_wall(r, d) for d in doors), (
+                f"room {r.id} has no door on any of its walls"
+            )
         # opening vs column clearance along the shared wall
         for o in openings:
             for c in columns:

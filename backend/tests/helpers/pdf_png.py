@@ -1,7 +1,6 @@
 """PDF inspection helpers for drawing-quality tests (pymupdf-based)."""
 
 import colorsys
-import io
 
 import fitz
 
@@ -24,7 +23,7 @@ def render_page_png(pdf_bytes: bytes, page: int, zoom: float = 1.5) -> bytes:
 
 def mean_saturation(png_bytes: bytes) -> float:
     # Decode via pymupdf to avoid a PIL dependency; sample every 8th pixel.
-    pix = fitz.Pixmap(io.BytesIO(png_bytes).getvalue())
+    pix = fitz.Pixmap(png_bytes)
     if pix.alpha:
         pix = fitz.Pixmap(fitz.csRGB, pix)
     stride, n = pix.stride, pix.n

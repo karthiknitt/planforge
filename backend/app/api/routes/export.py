@@ -16,7 +16,7 @@ from app.engine.pdf import render_pdf
 from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
-from app.services.plans import get_effective_plan_tier
+from app.services.plans import get_effective_plan_tier, tier_at_least
 from app.services import layout_store
 from app.services.plot_config import plot_config_from_project
 
@@ -171,7 +171,7 @@ async def export_dxf(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     plan = await _get_plan_tier(user_id, db)
-    if plan not in ("basic", "pro"):
+    if not tier_at_least(plan, "basic"):
         raise HTTPException(
             status_code=402, detail="DXF export requires Basic or Pro plan."
         )
@@ -570,7 +570,7 @@ async def export_boq(
 
     if fmt == "excel":
         plan = await _get_plan_tier(user_id, db)
-        if plan != "pro":
+        if not tier_at_least(plan, "pro"):
             raise HTTPException(
                 status_code=402, detail="BOQ Excel export requires Pro plan."
             )

@@ -17,7 +17,9 @@ All outputs are axis-aligned centreline segments, normalized so
 
 from __future__ import annotations
 
+import logging
 import math
+from typing import TYPE_CHECKING
 
 from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
@@ -35,6 +37,11 @@ from app.engine.cad_elements import (
 )
 from app.engine.cad_primitives import metres_to_ftin
 from app.engine.standards import OpeningStandards
+
+if TYPE_CHECKING:
+    from app.engine.models import FloorPlan, PlotConfig, Room
+
+logger = logging.getLogger(__name__)
 
 EWT = 0.23
 IWT = 0.115
@@ -102,7 +109,7 @@ class _Edge:
         self.covered: list[tuple[float, float]] = []
 
 
-def _room_edges(rooms) -> tuple[list[_Edge], list[_Edge]]:
+def _room_edges(rooms: list[Room]) -> tuple[list[_Edge], list[_Edge]]:
     vert: list[_Edge] = []
     hor: list[_Edge] = []
     for r in rooms:
@@ -137,13 +144,18 @@ def _pair_edges(
 
 
 def derive_walls(
-    rooms,
+    rooms: list[Room],
     buildable: Polygon,
     ewt: float = EWT,
     iwt: float = IWT,
     tol: float = 0.01,
 ) -> list[WallSegment]:
     bx1, by1, bx2, by2 = buildable.bounds
+    if abs(buildable.area - (bx2 - bx1) * (by2 - by1)) > 1e-6:
+        logger.warning(
+            "non-rectangular buildable polygon: external ring approximated "
+            "by its bounding box (trapezoid/L/quad support pending)"
+        )
     cxl, cxr = bx1 + ewt / 2, bx2 - ewt / 2
     cyb, cyt = by1 + ewt / 2, by2 - ewt / 2
     px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt  # plate
@@ -273,8 +285,14 @@ def derive_junctions(walls: list[WallSegment], tol: float = 0.01) -> list[WallJu
     return junctions
 
 
-def derive_columns(walls: list[WallSegment], tol: float = 0.01) -> list[ColumnMarker]:
-    return [ColumnMarker(cx=j.x, cy=j.y) for j in derive_junctions(walls, tol=tol)]
+def derive_columns(
+    walls: list[WallSegment],
+    tol: float = 0.01,
+    junctions: list[WallJunction] | None = None,
+) -> list[ColumnMarker]:
+    if junctions is None:
+        junctions = derive_junctions(walls, tol=tol)
+    return [ColumnMarker(cx=j.x, cy=j.y) for j in junctions]
 
 
 def wall_polygons(
@@ -324,7 +342,7 @@ class _Adjacency:
         self.hi = hi
 
 
-def _adjacencies(rooms, iwt: float, tol: float) -> list[_Adjacency]:
+def _adjacencies(rooms: list[Room], iwt: float, tol: float) -> list[_Adjacency]:
     out: list[_Adjacency] = []
     for i, ra in enumerate(rooms):
         for j, rb in enumerate(rooms):
@@ -465,7 +483,7 @@ def _make_door(
 
 
 def derive_openings(
-    rooms,
+    rooms: list[Room],
     walls: list[WallSegment],
     columns: list[ColumnMarker],
     std: OpeningStandards,
@@ -477,6 +495,7 @@ def derive_openings(
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
     openings: list[Opening] = []
+    doored_gaps: set[tuple[int, int]] = set()  # room-index pairs already connected
 
     def place(opening: Opening | None) -> bool:
         if opening is None:
@@ -485,20 +504,30 @@ def derive_openings(
         openings.append(opening)
         return True
 
-    # ── Doors: one per non-passage room ──────────────────────────────────
+    # ── Doors: one per non-passage room; a door in a shared wall serves
+    # BOTH rooms, so a room whose gap already carries a door is done ──────
     for idx, room in sorted(enumerate(rooms), key=lambda t: t[1].id):
         if room.type == "passage":
             continue
         width = _WET_DOOR if room.type in _WET_TYPES else std.door_width_m
         cands = []
+        already_served = False
         for adj in adjs:
             if idx not in (adj.a, adj.b):
                 continue
+            other = rooms[adj.b if adj.a == idx else adj.a]
+            gap_key = (min(adj.a, adj.b), max(adj.a, adj.b))
+            # a shared door serves this room too — unless it leads through
+            # a wet room (a bedroom must not be reachable only via a toilet)
+            if gap_key in doored_gaps and other.type not in _WET_TYPES:
+                already_served = True
+                break
             if adj.hi - adj.lo < width + 2 * _JAMB:
                 continue
-            other = rooms[adj.b if adj.a == idx else adj.a]
             prio = _DOOR_NEIGHBOUR_PRIORITY.get(other.type, 4)
             cands.append((prio, other.id, adj))
+        if already_served:
+            continue
         placed = False
         for _prio, _oid, adj in sorted(cands, key=lambda t: (t[0], t[1])):
             desired = adj.lo + _JAMB + width / 2  # hinge near the jamb, not centred
@@ -516,6 +545,7 @@ def derive_openings(
                 _make_door(room, adj.vertical, adj.coord, centre, width, iwt, prefer_lo)
             )
             if placed:
+                doored_gaps.add((min(adj.a, adj.b), max(adj.a, adj.b)))
                 break
         if not placed:
             # entrance door on an exterior edge (e.g. parking, or isolated room)
@@ -626,7 +656,9 @@ _LABEL_MARGIN = 0.2
 _LABEL_FONT = "Helvetica-Bold"
 
 
-def derive_dim_chains(rooms, walls: list[WallSegment], cfg) -> list[DimChain]:
+def derive_dim_chains(
+    rooms: list[Room], walls: list[WallSegment], cfg: PlotConfig
+) -> list[DimChain]:
     from app.engine.geometry import buildable_polygon
 
     bx1, by1, bx2, by2 = buildable_polygon(cfg).bounds
@@ -705,7 +737,7 @@ def _room_label_lines(room) -> list[str]:
     ]
 
 
-def derive_labels(rooms) -> list[LabelBox]:
+def derive_labels(rooms: list[Room]) -> list[LabelBox]:
     labels: list[LabelBox] = []
     for room in sorted(rooms, key=lambda r: r.id):
         lines = _room_label_lines(room)
@@ -749,7 +781,7 @@ def derive_labels(rooms) -> list[LabelBox]:
     return labels
 
 
-def derive_stair(rooms, floor_height: float = 3.0) -> StairGeometry | None:
+def derive_stair(rooms: list[Room], floor_height: float = 3.0) -> StairGeometry | None:
     room = next((r for r in rooms if r.type == "staircase"), None)
     if room is None:
         return None
@@ -792,7 +824,7 @@ def derive_stair(rooms, floor_height: float = 3.0) -> StairGeometry | None:
     )
 
 
-def build_floor_drawing(floorplan, cfg) -> FloorDrawing:
+def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     from app.engine.geometry import buildable_polygon
     from app.engine.standards import get_opening_standards
 
@@ -800,7 +832,7 @@ def build_floor_drawing(floorplan, cfg) -> FloorDrawing:
     rooms = floorplan.rooms
     walls = derive_walls(rooms, buildable)
     junctions = derive_junctions(walls)
-    columns = derive_columns(walls)
+    columns = derive_columns(walls, junctions=junctions)
     openings = derive_openings(
         rooms, walls, columns, get_opening_standards(), buildable
     )
