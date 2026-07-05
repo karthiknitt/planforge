@@ -44,7 +44,7 @@ async function fetchLayouts(projectId: string, userId: string): Promise<Generate
   const getCached = unstable_cache(
     async (): Promise<GenerateResponse | null> => {
       try {
-        const res = await fetchBackend(userId, `projects/${projectId}/generate`);
+        const res = await fetchBackend(userId, `projects/${projectId}/layouts`);
         if (!res.ok) return null;
         return res.json();
       } catch {

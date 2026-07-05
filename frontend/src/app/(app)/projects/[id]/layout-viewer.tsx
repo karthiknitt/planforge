@@ -1052,11 +1052,8 @@ export function LayoutViewer({
   if (generateData.layouts.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-        <p className="font-medium">No compliant layouts could be generated</p>
-        <p className="mt-1 text-sm">
-          The plot configuration does not produce any layouts that satisfy the building compliance
-          rules. Try increasing the plot size or reducing the setbacks.
-        </p>
+        <p className="font-medium">No layouts generated yet</p>
+        <p className="mt-1 text-sm">Generation starts automatically — Task 5 wires this panel.</p>
       </div>
     );
   }
