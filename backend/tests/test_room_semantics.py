@@ -76,7 +76,25 @@ def test_golden_fixture_after_split_has_no_absurd_wet_rooms():
     for fp in (layout.ground_floor, layout.first_floor):
         _split_oversized_wet_rooms(fp)
         for r in fp.rooms:
-            if r.type in {"toilet", "wc_only", "bathroom_master"}:
+            if r.type not in {"toilet", "wc_only", "bathroom_master"}:
+                continue
+            # narrow slivers (<~0.94 m) cannot be split into a min-area
+            # toilet — they stay whole; every splittable room must be sane
+            if min(r.width, r.depth) >= 0.94:
                 assert r.area <= WET_CAP_SQM + 0.01, (r.id, r.area)
                 aspect = max(r.width, r.depth) / min(r.width, r.depth)
                 assert aspect <= 3.5, (r.id, aspect)
+            # split or not, a wet room never falls below the 2.8 sqm minimum
+            assert r.area >= 2.8, (r.id, r.area)
+
+
+def test_split_never_produces_sub_minimum_toilet():
+    # 0.75 m band: too narrow to split — must stay whole and compliant
+    fp = FloorPlan(
+        floor=0,
+        rooms=[_room("gf_toilet_1", "toilet", 7.019, 6.059, 0.751, 7.711)],
+    )
+    _split_oversized_wet_rooms(fp)
+    toilet = next(r for r in fp.rooms if r.type == "toilet")
+    assert toilet.area >= 2.8
+    assert len(fp.rooms) == 1  # no split happened

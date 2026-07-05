@@ -256,6 +256,10 @@ def _split_oversized_wet_rooms(floor_plan: FloorPlan) -> list[str]:
         short_side = room.depth if along_width else room.width
         # wet room keeps a compliant slice at the low end of the long axis
         wet_len = max(1.2, min(_WET_CAP_SQM / short_side, 2.2))
+        if wet_len * short_side < 3.0:
+            # band too narrow to yield a min-area toilet — leave it whole
+            # (still compliance-valid at its original size)
+            continue
         long_len = room.width if along_width else room.depth
         rem_len = long_len - wet_len - _IWT_GAP
         if rem_len < 0.9:  # nothing meaningful to carve off
