@@ -20,12 +20,34 @@ from __future__ import annotations
 from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
 
-from app.engine.cad_elements import ColumnMarker, WallJunction, WallSegment
+from app.engine.cad_elements import (
+    ColumnMarker,
+    Opening,
+    WallJunction,
+    WallSegment,
+)
+from app.engine.standards import OpeningStandards
 
 EWT = 0.23
 IWT = 0.115
 _SNAP = 0.25  # max end-extension to meet a perpendicular centreline
 _MIN_WALL_LEN = 0.10
+_JAMB = 0.115  # min clearance between an opening and a wall end
+_COL_CLEAR = 0.16  # column half-size (0.15) + clearance, along the wall
+_WET_DOOR = 0.75
+_WET_TYPES = {"toilet", "wc_only", "bathroom_master", "utility"}
+_WINDOW_TYPES = {
+    "living",
+    "bedroom",
+    "master_bedroom",
+    "kitchen",
+    "study",
+    "dining",
+    "home_office",
+    "gym",
+    "servant_quarter",
+}
+_DOOR_NEIGHBOUR_PRIORITY = {"passage": 0, "living": 1, "dining": 2, "staircase": 3}
 
 
 def _merge_intervals(
@@ -273,3 +295,314 @@ def wall_polygons(
             union = union.difference(opening)
         result[kind] = union
     return result
+
+
+# ---------------------------------------------------------------------------
+# Openings (S4.2)
+# ---------------------------------------------------------------------------
+
+
+class _Adjacency:
+    __slots__ = ("a", "b", "vertical", "coord", "lo", "hi")
+
+    def __init__(
+        self, a: int, b: int, vertical: bool, coord: float, lo: float, hi: float
+    ) -> None:
+        self.a = a  # room index on the -axis side of the wall
+        self.b = b  # room index on the +axis side
+        self.vertical = vertical
+        self.coord = coord
+        self.lo = lo
+        self.hi = hi
+
+
+def _adjacencies(rooms, iwt: float, tol: float) -> list[_Adjacency]:
+    out: list[_Adjacency] = []
+    for i, ra in enumerate(rooms):
+        for j, rb in enumerate(rooms):
+            if i == j:
+                continue
+            # ra's right edge facing rb's left edge
+            gap = rb.x - (ra.x + ra.width)
+            if -tol <= gap <= iwt + tol:
+                lo = max(ra.y, rb.y)
+                hi = min(ra.y + ra.depth, rb.y + rb.depth)
+                if hi - lo >= 0.05:
+                    out.append(
+                        _Adjacency(i, j, True, (ra.x + ra.width + rb.x) / 2, lo, hi)
+                    )
+            # ra's top edge facing rb's bottom edge
+            gap = rb.y - (ra.y + ra.depth)
+            if -tol <= gap <= iwt + tol:
+                lo = max(ra.x, rb.x)
+                hi = min(ra.x + ra.width, rb.x + rb.width)
+                if hi - lo >= 0.05:
+                    out.append(
+                        _Adjacency(i, j, False, (ra.y + ra.depth + rb.y) / 2, lo, hi)
+                    )
+    return out
+
+
+def _fit_along(
+    desired: float,
+    lo: float,
+    hi: float,
+    width: float,
+    obstacles: list[tuple[float, float]],
+) -> float | None:
+    """Find a centre position in [lo+width/2, hi-width/2] clear of obstacles.
+
+    Obstacles are (along_position, half_forbidden_extent) pairs; the opening
+    centre must satisfy |centre - pos| >= half + width/2.
+    """
+    span_lo = lo + width / 2
+    span_hi = hi - width / 2
+    if span_hi < span_lo:
+        return None
+
+    def clear(c: float) -> bool:
+        return all(abs(c - p) >= h + width / 2 - 1e-9 for p, h in obstacles)
+
+    c = min(max(desired, span_lo), span_hi)
+    if clear(c):
+        return c
+    candidates: list[float] = []
+    for p, h in obstacles:
+        candidates.append(p + h + width / 2 + 1e-6)
+        candidates.append(p - h - width / 2 - 1e-6)
+    candidates += [span_lo, span_hi]
+    valid = [
+        c for c in candidates if span_lo - 1e-9 <= c <= span_hi + 1e-9 and clear(c)
+    ]
+    if not valid:
+        return None
+    return min(valid, key=lambda c: abs(c - desired))
+
+
+def _exterior_edges(room, buildable: Polygon, ewt: float, tol: float):
+    """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the plate boundary."""
+    bx1, by1, bx2, by2 = buildable.bounds
+    px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
+    if abs(room.x - px1) <= 2 * tol:
+        yield (False, bx1 + ewt / 2, room.y, room.y + room.depth)
+    if abs(room.x + room.width - px2) <= 2 * tol:
+        yield (False, bx2 - ewt / 2, room.y, room.y + room.depth)
+    if abs(room.y - py1) <= 2 * tol:
+        yield (True, by1 + ewt / 2, room.x, room.x + room.width)
+    if abs(room.y + room.depth - py2) <= 2 * tol:
+        yield (True, by2 - ewt / 2, room.x, room.x + room.width)
+
+
+class _ObstacleIndex:
+    """Along-wall obstacles (columns + placed openings) per wall line."""
+
+    def __init__(self, columns: list[ColumnMarker]) -> None:
+        self._columns = columns
+        self._placed: list[Opening] = []
+
+    def for_wall(self, is_horizontal: bool, coord: float) -> list[tuple[float, float]]:
+        obs: list[tuple[float, float]] = []
+        for c in self._columns:
+            cross = c.cy if is_horizontal else c.cx
+            if abs(cross - coord) <= _COL_CLEAR:
+                obs.append((c.cx if is_horizontal else c.cy, _COL_CLEAR))
+        for o in self._placed:
+            if o.is_horizontal != is_horizontal:
+                continue
+            cross = o.cy if o.is_horizontal else o.cx
+            if abs(cross - coord) > 1e-6:
+                continue
+            obs.append((o.cx if o.is_horizontal else o.cy, o.width / 2))
+        return obs
+
+    def add(self, opening: Opening) -> None:
+        self._placed.append(opening)
+
+
+def _make_door(
+    room,
+    vertical_wall: bool,
+    coord: float,
+    centre: float,
+    width: float,
+    thickness: float,
+    prefer_lo_hinge: bool,
+) -> Opening:
+    if vertical_wall:
+        cx, cy = coord, centre
+        hinge = (cx, cy - width / 2) if prefer_lo_hinge else (cx, cy + width / 2)
+        leaf = 1.0 if prefer_lo_hinge else -1.0  # leaf direction along +/-y
+        into = 1.0 if room.x >= cx else -1.0  # served room side along x
+        swing_cw = (-leaf * into) < 0
+        is_horizontal = False
+    else:
+        cx, cy = centre, coord
+        hinge = (cx - width / 2, cy) if prefer_lo_hinge else (cx + width / 2, cy)
+        leaf = 1.0 if prefer_lo_hinge else -1.0  # along +/-x
+        into = 1.0 if room.y >= cy else -1.0  # along y
+        swing_cw = (leaf * into) < 0
+        is_horizontal = True
+    return Opening(
+        kind="door",
+        cx=cx,
+        cy=cy,
+        width=width,
+        is_horizontal=is_horizontal,
+        wall_thickness=thickness,
+        hinge_x=hinge[0],
+        hinge_y=hinge[1],
+        swing_into_room_id=room.id,
+        swing_cw=swing_cw,
+    )
+
+
+def derive_openings(
+    rooms,
+    walls: list[WallSegment],
+    columns: list[ColumnMarker],
+    std: OpeningStandards,
+    buildable: Polygon,
+    ewt: float = EWT,
+    iwt: float = IWT,
+    tol: float = 0.01,
+) -> list[Opening]:
+    adjs = _adjacencies(rooms, iwt, tol)
+    obstacles = _ObstacleIndex(columns)
+    openings: list[Opening] = []
+
+    def place(opening: Opening | None) -> bool:
+        if opening is None:
+            return False
+        obstacles.add(opening)
+        openings.append(opening)
+        return True
+
+    # ── Doors: one per non-passage room ──────────────────────────────────
+    for idx, room in sorted(enumerate(rooms), key=lambda t: t[1].id):
+        if room.type == "passage":
+            continue
+        width = _WET_DOOR if room.type in _WET_TYPES else std.door_width_m
+        cands = []
+        for adj in adjs:
+            if idx not in (adj.a, adj.b):
+                continue
+            if adj.hi - adj.lo < width + 2 * _JAMB:
+                continue
+            other = rooms[adj.b if adj.a == idx else adj.a]
+            prio = _DOOR_NEIGHBOUR_PRIORITY.get(other.type, 4)
+            cands.append((prio, other.id, adj))
+        placed = False
+        for _prio, _oid, adj in sorted(cands, key=lambda t: (t[0], t[1])):
+            desired = adj.lo + _JAMB + width / 2  # hinge near the jamb, not centred
+            centre = _fit_along(
+                desired,
+                adj.lo + _JAMB,
+                adj.hi - _JAMB,
+                width,
+                obstacles.for_wall(not adj.vertical, adj.coord),
+            )
+            if centre is None:
+                continue
+            prefer_lo = centre <= (adj.lo + adj.hi) / 2
+            placed = place(
+                _make_door(room, adj.vertical, adj.coord, centre, width, iwt, prefer_lo)
+            )
+            if placed:
+                break
+        if not placed:
+            # entrance door on an exterior edge (e.g. parking, or isolated room)
+            for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+                if hi - lo < width + 2 * _JAMB:
+                    continue
+                centre = _fit_along(
+                    (lo + hi) / 2,
+                    lo + _JAMB,
+                    hi - _JAMB,
+                    width,
+                    obstacles.for_wall(is_h, coord),
+                )
+                if centre is None:
+                    continue
+                placed = place(
+                    _make_door(room, not is_h, coord, centre, width, ewt, True)
+                )
+                if placed:
+                    break
+
+    # ── Windows: habitable rooms, up to 2 longest exterior edges ─────────
+    for room in sorted(rooms, key=lambda r: r.id):
+        if room.type not in _WINDOW_TYPES:
+            continue
+        edges = sorted(
+            _exterior_edges(room, buildable, ewt, tol),
+            key=lambda e: e[3] - e[2],
+            reverse=True,
+        )[:2]
+        for is_h, coord, lo, hi in edges:
+            width = min(std.window_width_m, (hi - lo) * std.window_max_room_fraction)
+            if width < 0.3:
+                continue
+            centre = _fit_along(
+                (lo + hi) / 2,
+                lo + _JAMB,
+                hi - _JAMB,
+                width,
+                obstacles.for_wall(is_h, coord),
+            )
+            if centre is None:
+                continue
+            cx, cy = (centre, coord) if is_h else (coord, centre)
+            place(
+                Opening(
+                    kind="window",
+                    cx=cx,
+                    cy=cy,
+                    width=width,
+                    is_horizontal=is_h,
+                    wall_thickness=ewt,
+                )
+            )
+
+    # ── Ventilators: wet rooms with an exterior edge ─────────────────────
+    for room in sorted(rooms, key=lambda r: r.id):
+        if room.type not in _WET_TYPES:
+            continue
+        for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+            if hi - lo < std.ventilator_width_m + 2 * _JAMB:
+                continue
+            centre = _fit_along(
+                (lo + hi) / 2,
+                lo + _JAMB,
+                hi - _JAMB,
+                std.ventilator_width_m,
+                obstacles.for_wall(is_h, coord),
+            )
+            if centre is None:
+                continue
+            cx, cy = (centre, coord) if is_h else (coord, centre)
+            place(
+                Opening(
+                    kind="ventilator",
+                    cx=cx,
+                    cy=cy,
+                    width=std.ventilator_width_m,
+                    is_horizontal=is_h,
+                    wall_thickness=ewt,
+                )
+            )
+            break  # one ventilator per wet room
+    return openings
+
+
+def opening_boxes(openings: list[Opening]) -> list[Polygon]:
+    """Shapely cut-boxes for wall_polygons(); slightly over-deep across the
+    wall so the subtraction cleanly pierces both faces."""
+    boxes: list[Polygon] = []
+    for o in openings:
+        across = o.wall_thickness / 2 + 0.01
+        along = o.width / 2
+        if o.is_horizontal:
+            boxes.append(box(o.cx - along, o.cy - across, o.cx + along, o.cy + across))
+        else:
+            boxes.append(box(o.cx - across, o.cy - along, o.cx + across, o.cy + along))
+    return boxes

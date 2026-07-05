@@ -44,6 +44,26 @@ class WallJunction:
 
 
 @dataclass
+class Opening:
+    """A door/window/ventilator cut into a wall, centred at (cx, cy).
+
+    (cx, cy) sits ON the wall centreline; `width` runs along the wall.
+    Door fields describe the hinge end and which room the leaf swings into.
+    """
+
+    kind: str  # "door" | "window" | "ventilator"
+    cx: float
+    cy: float
+    width: float
+    is_horizontal: bool  # True = on a horizontal wall (width runs along x)
+    wall_thickness: float
+    hinge_x: float = 0.0
+    hinge_y: float = 0.0
+    swing_into_room_id: str = ""
+    swing_cw: bool = True
+
+
+@dataclass
 class DoorSymbol:
     """Door defined by hinge point, width, wall side, and swing direction."""
 
