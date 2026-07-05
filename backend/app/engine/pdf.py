@@ -1396,12 +1396,15 @@ def _draw_dim_chains(
     oy: float,
     plot_px: float,
     plot_py: float,
+    bottom_lane_y: float | None = None,
 ) -> None:
     """Render chains in fixed paper-space lanes per side/level."""
     lane_step = 14.0
     road_y = TITLE_H + MARGIN
     base = {
-        "bottom": road_y - 8.0,  # below the road strip, inside the margin zone
+        "bottom": (
+            bottom_lane_y if bottom_lane_y is not None else road_y - 8.0
+        ),  # below the road strip, inside the margin zone
         "top": oy + plot_py + 12.0,
         "left": ox - 12.0,
         "right": ox + plot_px + 12.0,
