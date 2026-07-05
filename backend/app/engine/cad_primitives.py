@@ -19,6 +19,8 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.engine.standards import get_opening_standards
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -91,7 +93,7 @@ def _gap_subtract(
 
 _HABITABLE = {"living", "bedroom", "master_bedroom", "kitchen", "study", "dining"}
 _TOILET_TYPES = {"toilet", "bathroom", "utility"}
-_DOOR_WIDTH = 0.9  # metres
+_DOOR_WIDTH = get_opening_standards().door_width_m
 
 
 def collect_openings(
@@ -248,8 +250,9 @@ def collect_openings(
             continue
         rcx = room.x + room.width / 2
         rcy = room.y + room.depth / 2
-        win_w_h = min(1.2, room.width * 0.6)
-        win_w_v = min(1.2, room.depth * 0.6)
+        _std = get_opening_standards()
+        win_w_h = min(_std.window_width_m, room.width * _std.window_max_room_fraction)
+        win_w_v = min(_std.window_width_m, room.depth * _std.window_max_room_fraction)
 
         if abs(room.y - bld_y) < 0.05:  # front wall
             wk = _hwall_key(bld_y)

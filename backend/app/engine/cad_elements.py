@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from app.engine.standards import get_opening_standards
+
 
 @dataclass
 class WallSegment:
@@ -216,7 +218,8 @@ def build_windows(
             continue
         cx = room.x + room.width / 2
         cy = room.y + room.depth / 2
-        win_w = min(1.2, room.width * 0.6)
+        _std = get_opening_standards()
+        win_w = min(_std.window_width_m, room.width * _std.window_max_room_fraction)
 
         # Check each face of the room against building exterior
         if abs(room.y - buildable_y) < 0.05:  # front wall

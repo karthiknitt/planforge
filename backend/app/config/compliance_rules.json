@@ -62,5 +62,12 @@
 
   "max_beam_span_m": 4.5,
   "max_floor_coverage_pct": 70,
-  "default_far": 1.5
+  "default_far": 1.5,
+
+  "standard_openings": {
+    "door_width_mm": 900,
+    "window_width_mm": 1200,
+    "window_max_room_fraction": 0.6,
+    "ventilator_width_mm": 600
+  }
 }
