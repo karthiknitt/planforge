@@ -219,18 +219,21 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         draw_setback_zones,
         draw_structural_grid,
     )
+    from app.engine.cad_blocks import (
+        define_opening_blocks,
+        insert_door,
+        insert_ventilator,
+        insert_window,
+    )
     from app.engine.cad_elements import build_walls_from_rooms
     from app.engine.cad_primitives import (
         collect_openings,
         draw_dimension_chain,
-        draw_door,
         draw_north_arrow,
         draw_scale_bar,
         draw_staircase,
         draw_title_block,
-        draw_ventilator,
         draw_wall_with_breaks,
-        draw_window,
         metres_to_ftin,
     )
 
@@ -274,6 +277,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if "DEFPOINTS" not in doc.layers:
         _dp = doc.layers.new("DEFPOINTS")
         _dp.dxf.plot = 0  # non-printing
+
+    define_opening_blocks(doc)
 
     # Architectural dimension style — created once per document
     # ezdxf is imported at the top of this function; use it directly
@@ -368,40 +373,22 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                 msp, wall, openings_map.get(wall_key, []), lyr_name, z_offset
             )
 
-        # 3. Draw opening symbols in the gaps
+        # 3. Insert opening symbols (block refs) in the gaps.
+        # Insert base point = the opening's start point along the wall;
+        # horizontal wall segment -> rotation 0, vertical -> rotation 90.
         for wall_openings in openings_map.values():
             for op in wall_openings:
+                if op.is_vertical_wall:
+                    ins_x, ins_y, rotation = op.cx, op.cy - op.width / 2, 90.0
+                else:
+                    ins_x, ins_y, rotation = op.cx - op.width / 2, op.cy, 0.0
+
                 if op.kind == "door":
-                    draw_door(
-                        msp,
-                        op.cx,
-                        op.cy,
-                        op.width,
-                        op.is_vertical_wall,
-                        swing_left=True,
-                        layer="A-DOOR",
-                        z=z_offset,
-                    )
+                    insert_door(msp, ins_x, ins_y, rotation, z=z_offset)
                 elif op.kind == "window":
-                    draw_window(
-                        msp,
-                        op.cx,
-                        op.cy,
-                        op.width,
-                        not op.is_vertical_wall,
-                        ewt_m,
-                        layer="A-WINDOW",
-                        z=z_offset,
-                    )
+                    insert_window(msp, ins_x, ins_y, rotation, z=z_offset)
                 elif op.kind == "ventilator":
-                    draw_ventilator(
-                        msp,
-                        op.cx,
-                        op.cy,
-                        not op.is_vertical_wall,
-                        layer="A-VENTILATOR",
-                        z=z_offset,
-                    )
+                    insert_ventilator(msp, ins_x, ins_y, rotation, z=z_offset)
 
         # 4. Staircase treads + cut line + UP arrow
         for room in rooms:

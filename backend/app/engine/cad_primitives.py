@@ -134,7 +134,7 @@ def collect_openings(
                 continue
 
             # Vertical shared wall: ra right ≈ rb left
-            if abs(ra.x + ra.width - rb.x) < 0.05:
+            if -0.02 <= rb.x - (ra.x + ra.width) <= iwt + 0.02:
                 y_lo = max(ra.y, rb.y)
                 y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
                 if y_hi - y_lo > _DOOR_WIDTH + 0.1:
@@ -162,7 +162,7 @@ def collect_openings(
                         )
 
             # Vertical shared wall: rb right ≈ ra left
-            elif abs(rb.x + rb.width - ra.x) < 0.05:
+            elif -0.02 <= ra.x - (rb.x + rb.width) <= iwt + 0.02:
                 y_lo = max(ra.y, rb.y)
                 y_hi = min(ra.y + ra.depth, rb.y + rb.depth)
                 if y_hi - y_lo > _DOOR_WIDTH + 0.1:
@@ -190,7 +190,7 @@ def collect_openings(
                         )
 
             # Horizontal shared wall: ra top ≈ rb bottom
-            if abs(ra.y + ra.depth - rb.y) < 0.05:
+            if -0.02 <= rb.y - (ra.y + ra.depth) <= iwt + 0.02:
                 x_lo = max(ra.x, rb.x)
                 x_hi = min(ra.x + ra.width, rb.x + rb.width)
                 if x_hi - x_lo > _DOOR_WIDTH + 0.1:
@@ -217,7 +217,7 @@ def collect_openings(
                             )
                         )
 
-            elif abs(rb.y + rb.depth - ra.y) < 0.05:
+            elif -0.02 <= ra.y - (rb.y + rb.depth) <= iwt + 0.02:
                 x_lo = max(ra.x, rb.x)
                 x_hi = min(ra.x + ra.width, rb.x + rb.width)
                 if x_hi - x_lo > _DOOR_WIDTH + 0.1:
