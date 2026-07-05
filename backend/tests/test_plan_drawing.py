@@ -39,13 +39,18 @@ def test_room_chain_includes_internal_walls():
     walls = derive_walls(floor.rooms, buildable_polygon(cfg))
     chains = derive_dim_chains(floor.rooms, walls, cfg)
     bottom0 = next(c for c in chains if c.side == "bottom" and c.level == 0)
-    bounds = {round(e.start, 3) for e in bottom0.entries}
+    bounds = {round(e.start, 3) for e in bottom0.entries} | {
+        round(e.end, 3) for e in bottom0.entries
+    }
     internal_xs = {
         round(w.x1, 3)
         for w in walls
         if w.kind == "internal" and abs(w.x1 - w.x2) < 1e-9
     }
-    assert internal_xs <= bounds | {round(e.end, 3) for e in bottom0.entries}
+    # near-parallel walls (<0.3 m apart) are collapsed into one boundary,
+    # so each wall must be within 0.3 m of a chain boundary
+    for x in internal_xs:
+        assert any(abs(x - b) <= 0.3 for b in bounds), x
 
 
 def test_setback_chains_on_all_sides():
@@ -88,12 +93,23 @@ def test_label_fits_inside_normal_room():
     assert 6.0 <= lb.font_pt <= 12.0
 
 
-def test_sliver_room_label_goes_outside_with_leader_untruncated():
+def test_slim_vertical_room_label_rotates_inside():
     labels = derive_labels(
         [_room("very long utility name", 2.0, 2.0, 0.5, 6.0, rtype="utility")]
     )
     lb = labels[0]
+    assert lb.rotated is True and lb.leader is None
+    assert lb.lines[0] == "VERY LONG UTILITY NAME"  # never truncated
+
+
+def test_tiny_room_label_goes_outside_with_leader_untruncated():
+    labels = derive_labels(
+        [_room("very long utility name", 2.0, 2.0, 0.5, 1.0, rtype="utility")],
+        bounds=(1.0, 1.5, 8.0, 14.0),
+    )
+    lb = labels[0]
     assert lb.leader is not None
+    assert lb.cy > 14.0  # stacked above the building, clear of dim lanes
     assert lb.lines[0] == "VERY LONG UTILITY NAME"  # never truncated
     assert "…" not in "".join(lb.lines)
 

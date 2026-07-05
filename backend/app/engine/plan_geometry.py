@@ -664,9 +664,16 @@ def derive_dim_chains(
     bx1, by1, bx2, by2 = buildable_polygon(cfg).bounds
     chains: list[DimChain] = []
 
-    def entries_for(coords: list[float]) -> list[DimChainEntry]:
+    def entries_for(coords: list[float], min_seg: float = 0.0) -> list[DimChainEntry]:
+        kept: list[float] = []
+        for cvalue in coords:
+            if kept and cvalue - kept[-1] < min_seg:
+                continue
+            kept.append(cvalue)
+        if kept and kept[-1] != coords[-1]:
+            kept[-1] = coords[-1]
         out = []
-        for a, b in zip(coords, coords[1:]):
+        for a, b in zip(kept, kept[1:]):
             if b - a < 1e-6:
                 continue
             out.append(DimChainEntry(start=a, end=b, text=metres_to_ftin(b - a)))
@@ -683,25 +690,23 @@ def derive_dim_chains(
     )
     chains.append(
         DimChain(
-            side="bottom", level=0, coord=by1 - _LANES[0], entries=entries_for(v_xs)
+            side="bottom",
+            level=0,
+            coord=by1 - _LANES[0],
+            entries=entries_for(v_xs, min_seg=0.3),
         )
     )
     chains.append(
-        DimChain(side="left", level=0, coord=bx1 - _LANES[0], entries=entries_for(h_ys))
+        DimChain(
+            side="left",
+            level=0,
+            coord=bx1 - _LANES[0],
+            entries=entries_for(h_ys, min_seg=0.3),
+        )
     )
 
-    # Level 1 — overall buildable extent on all four sides
-    for side, coord, coords in (
-        ("bottom", by1 - _LANES[1], [bx1, bx2]),
-        ("top", by2 + _LANES[1], [bx1, bx2]),
-        ("left", bx1 - _LANES[1], [by1, by2]),
-        ("right", bx2 + _LANES[1], [by1, by2]),
-    ):
-        chains.append(
-            DimChain(side=side, level=1, coord=coord, entries=entries_for(coords))
-        )
-
-    # Level 2 — plot chain incl. setbacks
+    # Level 2 — plot chain incl. setbacks (also carries the overall extent,
+    # so a separate level-1 overall chain would be redundant clutter)
     for side, coord, coords in (
         ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_width]),
         ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_width]),
@@ -737,8 +742,11 @@ def _room_label_lines(room) -> list[str]:
     ]
 
 
-def derive_labels(rooms: list[Room]) -> list[LabelBox]:
+def derive_labels(
+    rooms: list[Room], bounds: tuple[float, float, float, float] | None = None
+) -> list[LabelBox]:
     labels: list[LabelBox] = []
+    outside_count = 0
     for room in sorted(rooms, key=lambda r: r.id):
         lines = _room_label_lines(room)
         avail_w = room.width - _LABEL_MARGIN
@@ -761,6 +769,31 @@ def derive_labels(rooms: list[Room]) -> list[LabelBox]:
                     break
             if chosen:
                 break
+        if chosen is None and room.depth > room.width:
+            # slim vertical room: retry the ladder rotated 90 degrees
+            for cand, fonts in (
+                (lines, (9.0, 8.0)),
+                (lines[:2], (8.0, 7.0, 6.0)),
+                ([lines[0]], (7.0, 6.0)),
+            ):
+                for f in fonts:
+                    if _lines_fit(cand, f, avail_h, avail_w):
+                        chosen = (cand, f)
+                        break
+                if chosen:
+                    break
+            if chosen:
+                labels.append(
+                    LabelBox(
+                        room_id=room.id,
+                        cx=cx,
+                        cy=cy,
+                        lines=chosen[0],
+                        font_pt=chosen[1],
+                        rotated=True,
+                    )
+                )
+                continue
         if chosen:
             labels.append(
                 LabelBox(
@@ -768,13 +801,22 @@ def derive_labels(rooms: list[Room]) -> list[LabelBox]:
                 )
             )
         else:
+            # stacked slots above the building, clear of the dim lanes
+            if bounds is not None:
+                bx1, _by1, _bx2, by2 = bounds
+                slot_x = bx1 + 1.2 + 3.0 * (outside_count % 2)
+                slot_y = by2 + 2.6 + 0.7 * (outside_count // 2)
+            else:
+                slot_x = room.x + room.width + 0.6
+                slot_y = room.y + room.depth / 2
+            outside_count += 1
             labels.append(
                 LabelBox(
                     room_id=room.id,
-                    cx=room.x + room.width + 0.6,
-                    cy=room.y + room.depth / 2,
+                    cx=slot_x,
+                    cy=slot_y,
                     lines=lines,
-                    font_pt=8.0,
+                    font_pt=7.0,
                     leader=(cx, room.y + room.depth / 2),
                 )
             )
@@ -847,7 +889,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         columns=columns,
         junctions=junctions,
         dim_chains=derive_dim_chains(rooms, walls, cfg),
-        labels=derive_labels(rooms),
+        labels=derive_labels(rooms, bounds=buildable.bounds),
         stair=derive_stair(rooms),
         bounds=buildable.bounds,
     )

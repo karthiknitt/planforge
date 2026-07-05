@@ -74,6 +74,7 @@ class LabelBox:
     lines: list[str]
     font_pt: float
     leader: tuple[float, float] | None = None  # target point when outside
+    rotated: bool = False  # render at 90 deg (slim vertical rooms)
 
 
 @dataclass
