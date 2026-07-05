@@ -15,17 +15,32 @@ from app.engine.standards import get_opening_standards
 
 @dataclass
 class WallSegment:
-    """A wall segment defined by two endpoints and its thickness."""
+    """A wall segment defined by two endpoints and its thickness.
+
+    In `plan_geometry`-derived drawings the coordinates are the wall
+    CENTRELINE; legacy renderers still construct these at room-edge
+    coordinates (5 positional args, kind defaulting to "internal").
+    """
 
     x1: float
     y1: float
     x2: float
     y2: float
     thickness: float  # metres
+    kind: str = "internal"  # "external" | "internal"
 
     @property
     def length(self) -> float:
         return math.hypot(self.x2 - self.x1, self.y2 - self.y1)
+
+
+@dataclass
+class WallJunction:
+    """Point where two or more non-collinear wall centrelines meet."""
+
+    x: float
+    y: float
+    degree: int  # distinct incident arm directions (2=corner, 3=T, 4=cross)
 
 
 @dataclass
