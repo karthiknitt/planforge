@@ -107,6 +107,8 @@ def _draw_site_location_plan(
     cfg: PlotConfig,
     owner: OwnerInfo,
 ) -> None:
+    from shapely.geometry import box as shapely_box
+
     page_w, page_h = A4
     authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper())
 
@@ -123,29 +125,30 @@ def _draw_site_location_plan(
     c.setFont("Helvetica", 9)
     c.drawCentredString(page_w / 2, page_h - 44, f"{owner.municipality} — {authority}")
 
-    # Drawing area bounds
-    draw_top = page_h - 60
-    draw_bot = 100
+    # Drawing area bounds. SIDE_PAD reserves room on both sides for the
+    # rotated Left/Right setback labels (and, when the road is E/W, the
+    # road strip on that side) so neither ever clips at the page edge.
+    SIDE_PAD = 46
+    draw_top = page_h - 56
+    draw_bot = 150  # room for road strip (worst case S) + caption + info bar
     draw_h = draw_top - draw_bot
-    draw_w = page_w - 2 * MARGIN
+    draw_w = page_w - 2 * MARGIN - 2 * SIDE_PAD
 
     # Scale to fit plot with setbacks
     total_w = cfg.plot_width + cfg.setback_left + cfg.setback_right + 4
     total_l = cfg.plot_length + cfg.setback_front + cfg.setback_rear + 4
 
-    scale = (
-        min(draw_w / total_w, draw_h / total_l) * 0.75
-    )  # 75% of available for margins
+    scale = min(draw_w / total_w, draw_h / total_l) * 0.94  # near-full fill
     plot_px = cfg.plot_width * scale
     plot_py = cfg.plot_length * scale
 
     # Centre the compound in the drawing area
     compound_px = total_w * scale
     compound_py = total_l * scale
-    ox = MARGIN + (draw_w - compound_px) / 2 + (cfg.setback_left + 2) * scale
+    ox = MARGIN + SIDE_PAD + (draw_w - compound_px) / 2 + (cfg.setback_left + 2) * scale
     oy = draw_bot + (draw_h - compound_py) / 2 + (cfg.setback_front + 2) * scale
 
-    # Compound boundary (site limit) — dashed green
+    # Compound boundary (site limit) — dashed
     comp_x = ox - cfg.setback_left * scale
     comp_y = oy - cfg.setback_front * scale
     comp_w = (cfg.plot_width + cfg.setback_left + cfg.setback_right) * scale
@@ -157,113 +160,100 @@ def _draw_site_location_plan(
     c.rect(comp_x, comp_y, comp_w, comp_h, fill=0, stroke=1)
     c.setDash()
 
-    # Plot boundary — solid dark blue, thick
+    # Plot boundary — solid black, thick
     c.setStrokeColor(HexColor("#000000"))
     c.setFillColor(HexColor("#FFFFFF"))
     c.setLineWidth(2.0)
     c.rect(ox, oy, plot_px, plot_py, fill=1, stroke=1)
 
-    # Road strip — depends on road_side
-    road_side = cfg.road_side.upper()
-    c.setFillColor(HexColor("#CCCCCC"))
-    if road_side == "S":
-        c.rect(
-            ox,
-            oy - cfg.setback_front * scale - ROAD_H,
-            plot_px,
-            ROAD_H,
-            fill=1,
-            stroke=0,
-        )
-        c.setFillColor(HexColor("#444444"))
-        c.setFont("Helvetica", 7)
-        c.drawCentredString(
-            ox + plot_px / 2, oy - cfg.setback_front * scale - ROAD_H / 2 - 3, "ROAD"
-        )
-    elif road_side == "N":
-        road_top = oy + plot_py + cfg.setback_rear * scale
-        c.rect(ox, road_top, plot_px, ROAD_H, fill=1, stroke=0)
-        c.setFillColor(HexColor("#444444"))
-        c.setFont("Helvetica", 7)
-        c.drawCentredString(ox + plot_px / 2, road_top + ROAD_H / 2 - 3, "ROAD")
+    # Road strip — on whichever side the road actually is (S/N/E/W),
+    # anchored to the compound (site-limit padding), not the bare plot.
+    _draw_road_strip_for_side(c, cfg.road_side, comp_x, comp_y, comp_w, comp_h)
 
-    # Building footprint (setbacks applied)
+    # Building footprint (setbacks applied) — white + 45deg hatch, matching
+    # the floor-plan pages' strict-B/W convention (no solid colour fills)
     bldg_x = ox + cfg.setback_left * scale
     bldg_y = oy + cfg.setback_front * scale
     bldg_w = (cfg.plot_width - cfg.setback_left - cfg.setback_right) * scale
     bldg_h = (cfg.plot_length - cfg.setback_front - cfg.setback_rear) * scale
 
-    c.setFillColor(HexColor("#E8E8E8"))
-    c.setStrokeColor(HexColor("#000000"))
-    c.setLineWidth(1.5)
     if bldg_w > 4 and bldg_h > 4:
+        c.setFillColor(HexColor("#FFFFFF"))
+        c.setStrokeColor(HexColor("#000000"))
+        c.setLineWidth(1.5)
         c.rect(bldg_x, bldg_y, bldg_w, bldg_h, fill=1, stroke=1)
+        model_box = shapely_box(
+            cfg.setback_left,
+            cfg.setback_front,
+            cfg.plot_width - cfg.setback_right,
+            cfg.plot_length - cfg.setback_rear,
+        )
+        _hatch_polygons(c, model_box, scale, ox, oy, spacing=4.0)
         c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", max(7, min(10, bldg_w / 6)))
         c.drawCentredString(bldg_x + bldg_w / 2, bldg_y + bldg_h / 2 - 4, "BUILDING")
 
     # Setback dimension callouts
-    c.setFillColor(HexColor("#555555"))
-    c.setStrokeColor(HexColor("#555555"))
+    c.setFillColor(HexColor("#333333"))
+    c.setStrokeColor(HexColor("#333333"))
     c.setLineWidth(DIM_LW)
-    c.setFont("Helvetica", 7)
+    c.setFont("Helvetica", 6)
 
-    # Front setback
+    # Front setback (vertical dim line inside the plot; label offset right)
     if cfg.setback_front > 0:
         sb_mid_x = ox + plot_px / 2
-        sb_y_bot = oy
-        sb_y_top = bldg_y
         _draw_setback_dim(
             c,
             sb_mid_x,
-            sb_y_bot,
+            oy,
             sb_mid_x,
-            sb_y_top,
+            bldg_y,
             f"Front: {cfg.setback_front:.1f}m",
             vertical=True,
         )
 
     # Rear setback
     if cfg.setback_rear > 0:
-        sb_top_y = oy + plot_py
-        sb_bld_top = bldg_y + bldg_h
         _draw_setback_dim(
             c,
             ox + plot_px / 2,
-            sb_bld_top,
+            bldg_y + bldg_h,
             ox + plot_px / 2,
-            sb_top_y,
+            oy + plot_py,
             f"Rear: {cfg.setback_rear:.1f}m",
             vertical=True,
         )
 
-    # Left setback
+    # Left/Right setbacks: short dashed tick inside the plot showing the
+    # gap, label rotated 90 deg OUTSIDE the compound — a narrow footprint
+    # that can never clip regardless of how tight the setback strip is.
+    road_upper = cfg.road_side.upper()
+    left_clear = 8 + (ROAD_GAP + ROAD_H if road_upper == "W" else 0)
+    right_clear = 8 + (ROAD_GAP + ROAD_H if road_upper == "E" else 0)
+
     if cfg.setback_left > 0:
-        _draw_setback_dim(
-            c,
-            ox,
-            oy + plot_py / 2,
-            bldg_x,
-            oy + plot_py / 2,
-            f"Left: {cfg.setback_left:.1f}m",
-            vertical=False,
-        )
+        c.setDash(3, 2)
+        c.line(ox, oy + plot_py / 2, bldg_x, oy + plot_py / 2)
+        c.setDash()
+        c.saveState()
+        c.translate(comp_x - left_clear, comp_y + comp_h / 2)
+        c.rotate(90)
+        c.drawCentredString(0, 0, f"Left: {cfg.setback_left:.1f}m")
+        c.restoreState()
 
-    # Right setback
     if cfg.setback_right > 0:
-        _draw_setback_dim(
-            c,
-            bldg_x + bldg_w,
-            oy + plot_py / 2,
-            ox + plot_px,
-            oy + plot_py / 2,
-            f"Right: {cfg.setback_right:.1f}m",
-            vertical=False,
-        )
+        c.setDash(3, 2)
+        c.line(bldg_x + bldg_w, oy + plot_py / 2, ox + plot_px, oy + plot_py / 2)
+        c.setDash()
+        c.saveState()
+        c.translate(comp_x + comp_w + right_clear, comp_y + comp_h / 2)
+        c.rotate(90)
+        c.drawCentredString(0, 0, f"Right: {cfg.setback_right:.1f}m")
+        c.restoreState()
 
-    # North arrow — prominent, upper-right
+    # North arrow — prominent, upper-right, fully inside the page margin
     _draw_large_north_arrow(
-        c, ox + compound_px + 24, oy + compound_py - 10, 22, cfg.road_side
+        c, page_w - MARGIN - 24, page_h - 56 - 24, 20, cfg.road_side
     )
 
     # Plot dimensions
@@ -275,17 +265,20 @@ def _draw_site_location_plan(
         f"{cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m",
     )
 
-    # Survey number label inside plot
+    # Caption line below the compound (+ road strip, if on the south side):
+    # survey no. + locality. Kept off the plot entirely — it used to sit
+    # inside the plot and collide with the Front setback label.
+    road_extra = ROAD_GAP + ROAD_H if cfg.road_side.upper() == "S" else 0
     c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica", 7)
-    c.drawCentredString(ox + plot_px / 2, oy + 8, f"S.No: {owner.survey_number}")
-
-    # Locality + city label
+    c.drawCentredString(
+        page_w / 2, comp_y - road_extra - 14, f"S.No: {owner.survey_number}"
+    )
     c.setFillColor(HexColor("#444444"))
     c.setFont("Helvetica-Oblique", 8)
     c.drawCentredString(
-        ox + plot_px / 2,
-        oy - cfg.setback_front * scale - ROAD_H - 14,
+        page_w / 2,
+        comp_y - road_extra - 26,
         f"{owner.locality}, {owner.municipality}",
     )
 
