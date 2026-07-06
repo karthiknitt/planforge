@@ -40,3 +40,16 @@ async def generate_layouts(
         stored = await layout_store.get_or_generate_layouts(project, db)
 
     return layout_store.to_generate_response(project, stored)
+
+
+@router.get("/projects/{project_id}/layouts", response_model=GenerateResponse)
+async def read_layouts(
+    project_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> GenerateResponse:
+    """Read stored layouts. Never solves — generation is an explicit job
+    (POST /projects/{id}/generate-jobs). Empty list means nothing generated yet."""
+    project = await get_accessible_project(project_id, user_id, db)
+    stored = await layout_store.get_stored_layouts(project.id, db)
+    return layout_store.to_generate_response(project, stored)

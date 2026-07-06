@@ -4,6 +4,7 @@ import { Minus, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PlotPreview } from "@/components/plot-preview";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -812,6 +813,25 @@ export default function NewProjectPage() {
               ))}
             </div>
           </div>
+
+          {(form.plot_shape === "rectangular" || form.plot_shape === "l_shaped") && (
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
+                Plot Preview
+              </p>
+              <PlotPreview
+                input={{
+                  plotLengthFt: form.plot_length,
+                  plotWidthFt: form.plot_width,
+                  setbackFrontFt: form.setback_front,
+                  setbackRearFt: form.setback_rear,
+                  setbackLeftFt: form.setback_left,
+                  setbackRightFt: form.setback_right,
+                  roadSide: form.road_side,
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── 4. Floor configuration (Phase E) ──────────────────────── */}

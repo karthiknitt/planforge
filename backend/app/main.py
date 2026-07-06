@@ -11,6 +11,7 @@ from app.api.routes import (
     gallery,
     generate,
     health,
+    jobs,
     payments,
     projects,
     render,
@@ -25,12 +26,14 @@ from app.db import Base, engine
 from app.auto_migrate import auto_migrate_missing_columns
 
 # Import all models so SQLAlchemy knows about them before create_all
+import app.models.job  # noqa: F401
 import app.models.layout  # noqa: F401
 import app.models.payment  # noqa: F401
 import app.models.project  # noqa: F401
 import app.models.render  # noqa: F401
 import app.models.revision  # noqa: F401
 import app.models.team  # noqa: F401
+import app.models.undo  # noqa: F401
 import app.models.user  # noqa: F401
 
 
@@ -88,3 +91,10 @@ app.include_router(share.router, prefix="/api")
 app.include_router(revisions.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
 app.include_router(render.router, prefix="/api")
+app.include_router(jobs.router, prefix="/api")
+
+import inngest.fast_api  # noqa: E402
+
+from app.inngest_app import inngest_client, layout_generate, render_generate  # noqa: E402
+
+inngest.fast_api.serve(app, inngest_client, [layout_generate, render_generate])

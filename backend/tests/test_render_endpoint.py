@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.routes import render as render_route
 from app.config.settings import settings
 from app.models.user import User
+from app.services import render_runner
 from app.services.render_providers import RenderProviderError, RenderResult
 
 HDRS = {"X-Test-User-Id": "render-owner"}
@@ -74,7 +74,7 @@ def _configure_provider(monkeypatch, mock_render_image=None):
     settings.render_model = "test-model"
     settings.gemini_api_key = "test-key"
     if mock_render_image is not None:
-        monkeypatch.setattr(render_route, "render_image", mock_render_image)
+        monkeypatch.setattr(render_runner, "render_image", mock_render_image)
 
 
 def _mock_render_image(model="test-model", provider="gemini"):
