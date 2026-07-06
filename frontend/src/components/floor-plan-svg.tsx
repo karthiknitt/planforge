@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
 import { PlumbingOverlay } from "@/components/plumbing-overlay";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { snapRect } from "@/lib/canvas-snap";
 import type {
   DimChain,
   FloorPlanData,
@@ -1158,6 +1159,30 @@ export function FloorPlanSVG({
     depthB: number;
   } | null>(null);
 
+  // ── Edit mode: room selection + move-drag state ─────────────────────────────
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const moveRef = useRef<{
+    roomId: string;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const svgElRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    if (!editMode) setSelectedRoomId(null);
+  }, [editMode]);
+
+  // client-pixel delta → metres in model space (y flipped: SVG y grows down,
+  // model y grows away from the road at the bottom)
+  const clientDeltaToMetres = (dxPx: number, dyPx: number): [number, number] => {
+    const el = svgElRef.current;
+    if (!el) return [0, 0];
+    const pxPerUnit = el.getBoundingClientRect().width / VP_W;
+    return [dxPx / pxPerUnit / scale, -dyPx / pxPerUnit / scale];
+  };
+
   // The rooms to render — use editRooms if in edit mode and user has dragged, else floorPlan.rooms
   const displayRooms: RoomData[] = editMode && editRooms !== null ? editRooms : floorPlan.rooms;
 
@@ -1209,7 +1234,44 @@ export function FloorPlanSVG({
     };
   }
 
+  function handleRoomMouseDown(e: React.MouseEvent, room: RoomData): void {
+    if (!editMode) return;
+    e.stopPropagation(); // don't let the svg background deselect
+    setSelectedRoomId(room.id);
+    moveRef.current = {
+      roomId: room.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      origX: room.x,
+      origY: room.y,
+    };
+  }
+
   function handleSVGMouseMove(e: React.MouseEvent<SVGSVGElement>): void {
+    if (editMode && moveRef.current) {
+      const m = moveRef.current;
+      const [dxM, dyM] = clientDeltaToMetres(
+        e.clientX - m.startClientX,
+        e.clientY - m.startClientY
+      );
+      const base = editRooms ?? floorPlan.rooms;
+      const moving = base.find((r) => r.id === m.roomId);
+      if (!moving) return;
+      const snapped = snapRect(
+        {
+          id: moving.id,
+          x: m.origX + dxM,
+          y: m.origY + dyM,
+          width: moving.width,
+          depth: moving.depth,
+        },
+        base,
+        plotWidth,
+        plotLength
+      );
+      setEditRooms(base.map((r) => (r.id === m.roomId ? { ...r, x: snapped.x, y: snapped.y } : r)));
+      return;
+    }
     if (!editMode || !dragRef.current) return;
     const drag = dragRef.current;
 
@@ -1305,6 +1367,13 @@ export function FloorPlanSVG({
   }
 
   function handleSVGMouseUp(): void {
+    if (editMode && moveRef.current) {
+      moveRef.current = null;
+      if (editRooms !== null && onRoomsChange) {
+        onRoomsChange(editRooms);
+      }
+      return;
+    }
     if (!editMode || !dragRef.current) return;
     dragRef.current = null;
     setDragTooltip(null);
@@ -1314,14 +1383,19 @@ export function FloorPlanSVG({
   }
 
   function handleSVGMouseLeave(): void {
-    if (dragRef.current) {
+    if (dragRef.current || moveRef.current) {
       handleSVGMouseUp();
     }
+  }
+
+  function handleSVGBackgroundMouseDown(): void {
+    if (editMode && !moveRef.current) setSelectedRoomId(null);
   }
 
   return (
     <TooltipProvider>
       <svg
+        ref={svgElRef}
         viewBox={`0 0 ${VP_W} ${VP_H}`}
         className={["floor-plan-svg", className].filter(Boolean).join(" ")}
         style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
@@ -1329,6 +1403,7 @@ export function FloorPlanSVG({
         onMouseMove={editMode ? handleSVGMouseMove : undefined}
         onMouseUp={editMode ? handleSVGMouseUp : undefined}
         onMouseLeave={editMode ? handleSVGMouseLeave : undefined}
+        onMouseDown={editMode ? handleSVGBackgroundMouseDown : undefined}
       >
         <defs>
           {/* Masonry wall hatch — 45° diagonal, for external walls */}
@@ -1491,6 +1566,13 @@ export function FloorPlanSVG({
           const roomCy = py(room.y + room.depth / 2);
           const hasIssue =
             editMode && complianceIssues[room.id] && complianceIssues[room.id].length > 0;
+          const isSelected = editMode && selectedRoomId === room.id;
+          const roomMouseDownProps = editMode
+            ? {
+                onMouseDown: (e: React.MouseEvent) => handleRoomMouseDown(e, room),
+                style: { cursor: "move" },
+              }
+            : {};
 
           if (annotationMode && onAnnotationClick) {
             const handleAnnotClick = () => onAnnotationClick(room.id, room.name, roomCx, roomCy);
@@ -1521,22 +1603,39 @@ export function FloorPlanSVG({
           if (hasIssue) {
             return (
               <g key={room.id}>
-                <rect x={rx} y={ry} width={rw} height={rh} fill="rgba(239,68,68,0.1)" />
+                <rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  fill="rgba(239,68,68,0.1)"
+                  {...roomMouseDownProps}
+                />
                 <rect
                   x={rx}
                   y={ry}
                   width={rw}
                   height={rh}
                   fill="none"
-                  stroke="#ef4444"
-                  strokeWidth={1.5}
+                  stroke={isSelected ? "#1d4ed8" : "#ef4444"}
+                  strokeWidth={isSelected ? 2.5 : 1.5}
                   strokeDasharray="4 2"
                 />
               </g>
             );
           }
           return (
-            <rect key={room.id} x={rx} y={ry} width={rw} height={rh} fill={color(room.type).fill} />
+            <rect
+              key={room.id}
+              x={rx}
+              y={ry}
+              width={rw}
+              height={rh}
+              fill={color(room.type).fill}
+              stroke={isSelected ? "#1d4ed8" : undefined}
+              strokeWidth={isSelected ? 2.5 : undefined}
+              {...roomMouseDownProps}
+            />
           );
         })}
 
