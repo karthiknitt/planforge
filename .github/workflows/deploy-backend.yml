@@ -67,3 +67,5 @@ jobs:
             INTERNAL_AUTH_SECRET=${{ secrets.INTERNAL_AUTH_SECRET }}
             RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}
             RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}
+            INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
+            INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}

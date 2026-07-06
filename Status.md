@@ -72,3 +72,45 @@ gpt-image-1 (via OpenRouter BYOK) rendered all 3 test layouts to production qual
 ## Deployment notes (when this merges)
 - Production env for renders: RENDER_PROVIDER=openrouter, RENDER_MODEL=openai/gpt-image-1, OPENROUTER_API_KEY (BYOK covers OpenAI billing). All render vars optional: RENDER_PROVIDER, RENDER_MODEL, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY (all default empty; render layer inert without them).
 - CI gains no new jobs — the CCQS gate runs inside the existing pytest step.
+---
+
+# Stage 1 Phase 3: Canvas Editing + Async Generation (Inngest)
+
+**Branch:** `worktree-stage1-phase3` (worktree off `v2`; PR into `v2`)
+**Plan:** `docs/superpowers/plans/2026-07-05-stage1-phase3-canvas-async.md`
+**State:** ALL 12 TASKS COMPLETE (Tasks 13/14 inherited from the Lane A CAD-quality-overhaul merge, `b753196` — opening sizes + DXF block inserts already exist on `v2`). Ready for `finish-feature` handoff.
+
+## Commits on this branch (phase 3)
+
+| Commit | What |
+|---|---|
+| `0ed8d6b` | Task 1 — ranked tier gate (`free<basic<pro<firm`); fixed the firm-tier lockout on edit/DXF/BOQ |
+| `4c0b319` | Task 2 — `GET /projects/{id}/layouts` read-only endpoint; page loads never solve |
+| `7e671e8` | Task 3 — `generation_jobs` table + jobs service + status endpoint |
+| `153f734` | Task 4 — Inngest `layout_generate` function + `POST /generate-jobs` (inline fallback without keys) |
+| `2f20047` | Task 5 — `GenerationPanel`: job-status polling, replaces the placeholder empty state |
+| `bcfe251` | Task 6 — async render jobs (`render_generate` fn, `RenderTab` polling) |
+| `6e5459b` | Task 7 — `canvas-snap.ts` (grid + neighbor-edge snapping, pure module) |
+| `8134166` | Task 8 — room selection + snap-aware move-drag in edit mode |
+| `54da6e6` | Task 9 — corner resize handles (min-size, edge snapping) |
+| `423f3cd` | Task 10 — client-side undo/redo, Ctrl/Cmd+Z shortcuts |
+| `bb24459` | Task 11 — agent undo stacks persisted (`undo_stacks` table); chat tab behind `NEXT_PUBLIC_AGENT_CHAT=1` |
+| `ca247c3` | Task 12 — live plot/setback preview on the new-project form |
+
+Tasks 13–14 (opening sizes in `compliance_rules.json`, DXF door/window/vent block inserts) shipped on Lane A (`feature/cad-quality-v3`, commits `cd9e875`/`e9fc628`) and are already present on this branch via the `v2` rebase — no additional work needed here.
+
+## Test state
+- Backend: 363/363 passing, ruff clean.
+- Frontend: 86/86 bun tests passing, biome clean, `next build` green (22 routes).
+- `db-migration-safe` gate: run before both schema tasks (3, 11); both clean (Task 11's one flagged "risk" was a false positive against the terse args description — the FK was already present in the actual model).
+
+## Deployment (BEFORE merge to main)
+1. Create the Inngest app (inngest.com, free tier) → copy EVENT KEY + SIGNING KEY.
+2. GitHub Actions secrets: `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` → wired into Cloud Run env by `deploy-backend.yml`. WITHOUT them the backend falls back to inline synchronous generation (works, but first generate can still hit the 15s proxy ceiling on cold start).
+3. After the first deploy, sync the app in the Inngest dashboard against `https://<cloud-run-url>/api/inngest`.
+4. Cloud Run request timeout must stay ≥ 300s (already the deployed value — confirm it wasn't lowered).
+5. Vercel: leave `NEXT_PUBLIC_AGENT_CHAT` unset (chat hidden) until Anthropic billing is topped up.
+
+## Known deferred items
+- Inngest Realtime replaced by 2s job polling for day one (no realtime dep in frontend, Python SDK's realtime story immature) — revisit post-launch.
+- Plot preview (Task 12) only covers `rectangular`/`l_shaped` plot shapes; trapezoid/quadrilateral use separate field sets not modeled by the preview.
