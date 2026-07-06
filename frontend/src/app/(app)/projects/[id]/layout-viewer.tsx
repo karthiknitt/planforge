@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
@@ -46,6 +47,13 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
+import {
+  type JobStatus,
+  jobPhase,
+  MAX_POLLS,
+  POLL_INTERVAL_MS,
+  stageLabel,
+} from "@/lib/generation-job";
 import type {
   ComplianceData,
   FloorPlanData,
@@ -499,6 +507,98 @@ function _VastuBadge({ compliance }: { compliance: ComplianceData }) {
   );
 }
 
+// ── Generation panel — polls a generate-job to completion, then refreshes ──
+function GenerationPanel({
+  projectId,
+  autoStart,
+  onDone,
+}: {
+  projectId: string;
+  autoStart: boolean;
+  onDone?: () => void;
+}) {
+  const router = useRouter();
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const [error, setError] = useState("");
+  const startedRef = useRef(false);
+  const pollCountRef = useRef(0);
+
+  const start = useCallback(async () => {
+    setError("");
+    setJob(null);
+    pollCountRef.current = 0;
+    try {
+      const res = await fetch(`/api/backend/projects/${projectId}/generate-jobs`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        setError(`Could not start generation (HTTP ${res.status}).`);
+        return;
+      }
+      setJob(await res.json());
+    } catch {
+      setError("Could not reach the layout engine.");
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (autoStart && !startedRef.current) {
+      startedRef.current = true;
+      start();
+    }
+  }, [autoStart, start]);
+
+  const phase = jobPhase(job);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  useEffect(() => {
+    if (!job || phase === "done" || phase === "failed") return;
+    const t = setInterval(async () => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current > MAX_POLLS) {
+        setError("Generation is taking unusually long — try refreshing the page.");
+        clearInterval(t);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+        if (res.ok) setJob(await res.json());
+      } catch {
+        /* transient poll failure — keep polling */
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [job?.id, phase, projectId]);
+
+  useEffect(() => {
+    if (phase !== "done") return;
+    fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).finally(() => {
+      onDone?.();
+      router.refresh();
+    });
+  }, [phase, projectId, router, onDone]);
+
+  if (error || phase === "failed") {
+    return (
+      <div className="rounded-lg border border-destructive/40 p-6 text-center">
+        <p className="text-sm text-destructive">{error || job?.error || "Generation failed."}</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={start}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-dashed p-10 text-center">
+      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <p className="mt-3 font-medium">Generating your 3 layouts</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {job ? stageLabel(job.stage) : "Starting…"}
+      </p>
+    </div>
+  );
+}
+
 export function LayoutViewer({
   generateData,
   plotWidth,
@@ -522,6 +622,7 @@ export function LayoutViewer({
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const { locale } = useLocale();
+  const [regenerating, setRegenerating] = useState(false);
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
@@ -1050,12 +1151,7 @@ export function LayoutViewer({
   }
 
   if (generateData.layouts.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-        <p className="font-medium">No layouts generated yet</p>
-        <p className="mt-1 text-sm">Generation starts automatically — Task 5 wires this panel.</p>
-      </div>
-    );
+    return <GenerationPanel projectId={projectId} autoStart />;
   }
 
   // Use restoredData for display when a revision is active, else live data
@@ -1208,8 +1304,23 @@ export function LayoutViewer({
           >
             {approvalFetching ? "…" : "↻"}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+            onClick={() => setRegenerating(true)}
+            disabled={regenerating}
+            title="Re-run the layout engine for this project"
+          >
+            <RefreshCw className="h-3 w-3 mr-1.5" />
+            Regenerate layouts
+          </Button>
         </div>
       </div>
+
+      {regenerating && (
+        <GenerationPanel projectId={projectId} autoStart onDone={() => setRegenerating(false)} />
+      )}
 
       {/* Share error */}
       {shareError && (
