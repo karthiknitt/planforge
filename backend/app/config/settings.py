@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openrouter_api_key: str = ""
 
+    # Async job pipeline (Phase 3) — both empty => inline synchronous fallback
+    inngest_event_key: str = ""
+    inngest_signing_key: str = ""
+
     @field_validator("internal_auth_secret")
     @classmethod
     def _secret_min_length(cls, v: str) -> str:

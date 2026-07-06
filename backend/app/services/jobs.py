@@ -55,12 +55,35 @@ async def mark(
     await db.commit()
 
 
+async def execute_layout_job(db: AsyncSession, job: GenerationJob) -> None:
+    """Solve and store layouts for `job` using the given session.
+
+    Shared core for both entry points below: `run_layout_job` (own session,
+    for the Inngest callback which has no request-scoped session to reuse)
+    and the generate-jobs endpoint's inline fallback (reuses the request's
+    own session directly instead of opening a second one).
+    """
+    if job.status == "done":
+        return
+    project = await db.get(Project, job.project_id)
+    if project is None:
+        await mark(db, job, status="failed", stage="failed", error="project missing")
+        return
+    try:
+        await mark(db, job, status="running", stage="solving")
+        await layout_store.regenerate_and_store(project, db)
+        await mark(db, job, status="done", stage="stored")
+    except Exception as exc:
+        logger.exception("layout job %s failed", job.id)
+        await mark(db, job, status="failed", stage="failed", error=str(exc))
+        raise
+
+
 async def run_layout_job(job_id: str, session_factory=None) -> None:
     """Execute a layout-generation job in its own DB session.
 
-    Called from the Inngest function (durable path) and from the inline
-    fallback when Inngest is not configured. Marks the job failed and
-    re-raises so Inngest's retry machinery sees the failure.
+    Called from the Inngest function (durable path), which only has a
+    job_id and no request-scoped session to reuse.
 
     `session_factory` defaults to the app's real SessionLocal; tests pass
     the isolated in-memory `client_db` factory instead so this never opens
@@ -71,19 +94,6 @@ async def run_layout_job(job_id: str, session_factory=None) -> None:
 
     async with session_factory() as db:
         job = await db.get(GenerationJob, job_id)
-        if job is None or job.status == "done":
+        if job is None:
             return
-        project = await db.get(Project, job.project_id)
-        if project is None:
-            await mark(
-                db, job, status="failed", stage="failed", error="project missing"
-            )
-            return
-        try:
-            await mark(db, job, status="running", stage="solving")
-            await layout_store.regenerate_and_store(project, db)
-            await mark(db, job, status="done", stage="stored")
-        except Exception as exc:
-            logger.exception("layout job %s failed", job_id)
-            await mark(db, job, status="failed", stage="failed", error=str(exc))
-            raise
+        await execute_layout_job(db, job)

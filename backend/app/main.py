@@ -91,3 +91,9 @@ app.include_router(revisions.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
 app.include_router(render.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
+
+import inngest.fast_api  # noqa: E402
+
+from app.inngest_app import inngest_client, layout_generate  # noqa: E402
+
+inngest.fast_api.serve(app, inngest_client, [layout_generate])
