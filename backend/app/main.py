@@ -94,6 +94,6 @@ app.include_router(jobs.router, prefix="/api")
 
 import inngest.fast_api  # noqa: E402
 
-from app.inngest_app import inngest_client, layout_generate  # noqa: E402
+from app.inngest_app import inngest_client, layout_generate, render_generate  # noqa: E402
 
-inngest.fast_api.serve(app, inngest_client, [layout_generate])
+inngest.fast_api.serve(app, inngest_client, [layout_generate, render_generate])

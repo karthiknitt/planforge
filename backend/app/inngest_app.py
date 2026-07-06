@@ -9,7 +9,7 @@ inside a normal Cloud Run request lifecycle (full CPU) — no
 import inngest
 
 from app.config.settings import settings
-from app.services import jobs
+from app.services import jobs, render_runner
 
 inngest_client = inngest.Inngest(
     app_id="planforge",
@@ -31,4 +31,15 @@ def inngest_enabled() -> bool:
 async def layout_generate(ctx: inngest.Context) -> str:
     job_id = ctx.event.data["job_id"]
     await ctx.step.run("solve-and-store", jobs.run_layout_job, job_id)
+    return job_id
+
+
+@inngest_client.create_function(
+    fn_id="render-generate",
+    trigger=inngest.TriggerEvent(event="render/requested"),
+    retries=1,
+)
+async def render_generate(ctx: inngest.Context) -> str:
+    job_id = ctx.event.data["job_id"]
+    await ctx.step.run("render-and-store", render_runner.run_render_job, job_id)
     return job_id

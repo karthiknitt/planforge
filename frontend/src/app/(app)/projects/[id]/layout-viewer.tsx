@@ -183,17 +183,16 @@ function RenderTab({
   const [phase, setPhase] = useState<RenderPhase>("checking");
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
-  const [meta, setMeta] = useState<{ provider: string; model: string; cached: boolean } | null>(
-    null
-  );
   const [error, setError] = useState("");
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const pollCountRef = useRef(0);
 
   // Reset and re-check whenever the viewed layout changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: projectId/layoutKey are intentional re-check triggers, not read in the body
   useEffect(() => {
     setPhase("checking");
-    setMeta(null);
     setError("");
+    setJob(null);
   }, [projectId, layoutKey]);
 
   const isPro = tierAtLeast(planTier, "pro");
@@ -201,35 +200,77 @@ function RenderTab({
   async function handleGenerate() {
     setBusy(true);
     setError("");
+    setJob(null);
+    pollCountRef.current = 0;
     try {
-      const res = await fetch(`/api/backend/projects/${projectId}/layouts/${layoutKey}/render`, {
-        method: "POST",
-      });
-      const data = await res.json().catch(() => ({}));
+      const res = await fetch(
+        `/api/backend/projects/${projectId}/layouts/${layoutKey}/render-jobs`,
+        { method: "POST" }
+      );
       const outcome = classifyRenderStatus(res.status);
-      if (outcome === "ready") {
-        setMeta({
-          provider: data.provider ?? "",
-          model: data.model ?? "",
-          cached: Boolean(data.cached),
-        });
-        setVersion((v) => v + 1);
-        setPhase("ready");
-      } else if (outcome === "upsell") {
+      if (outcome === "upsell") {
         setPhase("upsell");
-      } else if (outcome === "unavailable") {
+        setBusy(false);
+        return;
+      }
+      if (outcome === "unavailable") {
         setPhase("unavailable");
-      } else {
+        setBusy(false);
+        return;
+      }
+      if (outcome !== "ready") {
+        const data = await res.json().catch(() => ({}));
         setError((data as { detail?: string })?.detail ?? `Render failed (${res.status})`);
         setPhase("error");
+        setBusy(false);
+        return;
       }
+      // 200 (inline fallback, already resolved) or 202 (queued) — either way
+      // the job-status poll below drives phase from here; busy stays true
+      // until the job resolves.
+      setJob(await res.json());
     } catch {
       setError("Render failed — is the backend running?");
       setPhase("error");
-    } finally {
       setBusy(false);
     }
   }
+
+  const renderJobPhase = jobPhase(job);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  useEffect(() => {
+    if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
+    const t = setInterval(async () => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current > MAX_POLLS) {
+        setError("Render is taking unusually long — try again.");
+        setPhase("error");
+        setBusy(false);
+        clearInterval(t);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+        if (res.ok) setJob(await res.json());
+      } catch {
+        /* transient poll failure — keep polling */
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [job?.id, renderJobPhase, projectId]);
+
+  useEffect(() => {
+    if (renderJobPhase === "done") {
+      setVersion((v) => v + 1);
+      setPhase("ready");
+      setBusy(false);
+    } else if (renderJobPhase === "failed") {
+      setError(job?.error ?? "Render failed.");
+      setPhase("error");
+      setBusy(false);
+    }
+  }, [renderJobPhase, job?.error]);
 
   if (!isPro) {
     return (
@@ -269,12 +310,6 @@ function RenderTab({
             alt="AI render of the active layout"
             className="w-full max-w-xl rounded-xl border"
           />
-          {meta && (
-            <p className="text-xs text-muted-foreground">
-              Rendered with {meta.provider} · {meta.model}
-              {meta.cached ? " (cached — geometry unchanged since last render)" : ""}
-            </p>
-          )}
         </>
       )}
 
