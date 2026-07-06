@@ -70,3 +70,5 @@ jobs:
             RENDER_PROVIDER=openrouter
             RENDER_MODEL=openai/gpt-image-1
             OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+            INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
+            INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
