@@ -64,7 +64,7 @@ async def save_auto_revision(
     """
     try:
         stored = await layout_store.get_or_generate_layouts(project, db)
-        snapshot = layout_store.to_generate_response(project.id, stored).model_dump()
+        snapshot = layout_store.to_generate_response(project, stored).model_dump()
     except Exception:
         return None
 
@@ -123,7 +123,7 @@ async def create_revision(
 
     try:
         stored = await layout_store.get_or_generate_layouts(project, db)
-        snapshot = layout_store.to_generate_response(project_id, stored).model_dump()
+        snapshot = layout_store.to_generate_response(project, stored).model_dump()
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

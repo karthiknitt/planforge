@@ -35,7 +35,7 @@ async def _build_generate_response(
     project: Project, db: AsyncSession
 ) -> GenerateResponse:
     stored = await layout_store.get_or_generate_layouts(project, db)
-    return layout_store.to_generate_response(project.id, stored)
+    return layout_store.to_generate_response(project, stored)
 
 
 # ── Public response schema ─────────────────────────────────────────────────────

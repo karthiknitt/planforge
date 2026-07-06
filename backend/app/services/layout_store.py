@@ -21,6 +21,7 @@ from app.engine.models import (
     LayoutScore,
     Room,
 )
+from app.engine.plan_geometry import build_floor_drawing
 from app.models.layout import StoredLayout
 from app.models.project import Project
 from app.schemas.layout import (
@@ -157,12 +158,30 @@ async def save_edited_geometry(
 
 
 def to_generate_response(
-    project_id: str, stored: list[StoredLayout]
+    project: Project, stored: list[StoredLayout]
 ) -> GenerateResponse:
-    return GenerateResponse(
-        project_id=project_id,
-        layouts=[LayoutOut(**row.geometry) for row in stored],
-    )
+    """Build the API response, attaching each floor's canonical drawing.
+
+    `drawing` is recomputed here (not read from the stored geometry) so an
+    edited layout's drawing always matches its current room positions —
+    the same engine_layout_from_geometry() reconstruction render.py/export.py
+    already use, never a stale snapshot from generation time.
+    """
+    cfg = plot_config_from_project(project)
+    layouts = []
+    for row in stored:
+        layout_out = LayoutOut(**row.geometry)
+        engine_layout = engine_layout_from_geometry(row.geometry)
+        for floor_out, engine_fp in (
+            (layout_out.ground_floor, engine_layout.ground_floor),
+            (layout_out.first_floor, engine_layout.first_floor),
+            (layout_out.second_floor, engine_layout.second_floor),
+            (layout_out.basement_floor, engine_layout.basement_floor),
+        ):
+            if floor_out is not None and engine_fp is not None and engine_fp.rooms:
+                floor_out.drawing = build_floor_drawing(engine_fp, cfg).to_dict()
+        layouts.append(layout_out)
+    return GenerateResponse(project_id=project.id, layouts=layouts)
 
 
 def _floor_from_dict(

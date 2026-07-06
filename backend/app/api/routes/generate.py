@@ -39,4 +39,4 @@ async def generate_layouts(
     else:
         stored = await layout_store.get_or_generate_layouts(project, db)
 
-    return layout_store.to_generate_response(project_id, stored)
+    return layout_store.to_generate_response(project, stored)
