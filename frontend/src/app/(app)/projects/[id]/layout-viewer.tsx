@@ -75,6 +75,7 @@ import type {
 import { useLocale } from "@/lib/locale-context";
 import { tierAtLeast } from "@/lib/plan";
 import { buildRenderImageUrl, classifyRenderStatus } from "@/lib/render-tab";
+import { type TabId, visibleTabs } from "@/lib/tabs";
 
 interface RevisionListItem {
   id: number;
@@ -673,9 +674,9 @@ export function LayoutViewer({
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
   const [floor, setFloor] = useState(0);
-  const [activeTab, setActiveTab] = useState<
-    "plan" | "section" | "boq" | "chat" | "compare" | "render"
-  >("plan");
+  const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
+  const tabs = visibleTabs(agentChatEnabled);
+  const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -1815,7 +1816,7 @@ export function LayoutViewer({
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
       <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 overflow-x-auto scrollbar-none w-full md:w-fit">
-        {(["plan", "section", "boq", "compare", "chat", "render"] as const).map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab}
             type="button"
@@ -2274,6 +2275,7 @@ export function LayoutViewer({
       )}
 
       {activeTab === "chat" &&
+        agentChatEnabled &&
         (tierAtLeast(planTier, "pro") ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Left: live floor plan preview — hidden on mobile to save screen space */}

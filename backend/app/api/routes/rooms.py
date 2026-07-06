@@ -6,13 +6,14 @@ in-memory layout state was lost on cold start and inconsistent across
 instances. Every mutation writes back to the stored layout so the viewer,
 share view and exports all see the same geometry.
 
-The undo stack remains in-memory (best-effort convenience, capped at 10).
+The undo stack persists in the `undo_stacks` table (capped at 10 entries),
+not process memory — Cloud Run scales to zero and runs multiple instances,
+so an in-memory stack was lost on cold start and inconsistent across them.
 """
 
 from __future__ import annotations
 
 import json
-from collections import deque
 from decimal import Decimal
 from typing import Any
 
@@ -21,37 +22,46 @@ from pydantic import BaseModel, Field
 from shapely.geometry import box
 from shapely.ops import unary_union
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.models.layout import StoredLayout
 from app.models.project import Project
+from app.models.undo import UndoStack
 from app.services import layout_store
 from app.services.access import get_accessible_project
 from app.services.plans import get_effective_plan_tier, tier_at_least
 
 router = APIRouter()
 
-# ── In-memory undo stack (best-effort; layout state itself is persisted) ─────
-_undo_stacks: dict[str, deque[str]] = {}
 MAX_UNDO = 10
 
 
-def _session_key(project_id: str, user_id: str) -> str:
-    return f"{project_id}:{user_id}"
+async def _push_undo(
+    db: AsyncSession, project_id: str, user_id: str, state: dict
+) -> None:
+    row = await db.get(UndoStack, (project_id, user_id))
+    if row is None:
+        row = UndoStack(project_id=project_id, user_id=user_id, stack=[])
+        db.add(row)
+    stack = list(row.stack)
+    stack.append(json.dumps(state))
+    row.stack = stack[-MAX_UNDO:]
+    flag_modified(row, "stack")
+    await db.commit()
 
 
-def _push_undo(key: str, state: dict) -> None:
-    if key not in _undo_stacks:
-        _undo_stacks[key] = deque(maxlen=MAX_UNDO)
-    _undo_stacks[key].append(json.dumps(state))
-
-
-def _pop_undo(key: str) -> dict | None:
-    stack = _undo_stacks.get(key)
-    if not stack:
+async def _pop_undo(db: AsyncSession, project_id: str, user_id: str) -> dict | None:
+    row = await db.get(UndoStack, (project_id, user_id))
+    if row is None or not row.stack:
         return None
-    return json.loads(stack.pop())
+    stack = list(row.stack)
+    state = json.loads(stack.pop())
+    row.stack = stack
+    flag_modified(row, "stack")
+    await db.commit()
+    return state
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -342,7 +352,6 @@ async def move_room(
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     project, row, state = await _load_layout_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
 
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
@@ -355,7 +364,7 @@ async def move_room(
     if not ok:
         return {"success": False, "error": err}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     room["x"] = body.x
     room["y"] = body.y
     await layout_store.save_edited_geometry(row, state, db)
@@ -375,7 +384,6 @@ async def resize_room(
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     project, row, state = await _load_layout_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
 
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
@@ -390,7 +398,7 @@ async def resize_room(
     if not ok:
         return {"success": False, "error": err, "adjusted": False}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     room["width"] = new_w
     room["depth"] = new_d
     room["area"] = round(new_w * new_d, 2)
@@ -410,7 +418,6 @@ async def swap_rooms(
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, row, state = await _load_layout_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
 
     room_a, fk_a = _find_room_and_floor(state, body.room_id_a)
     room_b, fk_b = _find_room_and_floor(state, body.room_id_b)
@@ -419,7 +426,7 @@ async def swap_rooms(
     if fk_a != fk_b:
         return {"success": False, "error": "Rooms must be on the same floor to swap"}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     ax, ay, aw, ad = room_a["x"], room_a["y"], room_a["width"], room_a["depth"]
     room_a["x"], room_a["y"], room_a["width"], room_a["depth"] = (
         room_b["x"],
@@ -455,7 +462,6 @@ async def add_room(
     spec = specs.get(body.type, specs.get("utility"))
 
     project, row, state = await _load_layout_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
 
     floor_map = {
         "gf": "ground_floor",
@@ -480,7 +486,7 @@ async def add_room(
     if not ok:
         return {"success": False, "error": err}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     new_room = {
         "id": f"custom_{_uuid.uuid4().hex[:8]}",
         "name": body.name or body.type.replace("_", " ").title(),
@@ -508,12 +514,11 @@ async def delete_room(
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, row, state = await _load_layout_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
         raise HTTPException(404, "Room not found")
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     state[floor_key]["rooms"] = [
         r for r in state[floor_key]["rooms"] if r["id"] != room_id
     ]
@@ -739,8 +744,7 @@ async def undo_last(
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, row, _state = await _load_layout_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
-    prev = _pop_undo(key)
+    prev = await _pop_undo(db, project_id, user_id)
     if prev is None:
         return {"success": False, "error": "Nothing to undo"}
     await layout_store.save_edited_geometry(row, prev, db)
