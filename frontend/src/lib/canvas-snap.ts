@@ -82,3 +82,52 @@ export function snapRect(
   y = Math.min(Math.max(0, y), Math.max(0, plotD - rect.depth));
   return { ...rect, x, y };
 }
+
+// Corners named in MODEL space: n = high-y edge (y+depth), s = low-y edge (y),
+// w = low-x edge (x), e = high-x edge (x+width). Model y grows away from the
+// road; the SVG layer flips it when converting client-pixel deltas to metres.
+export type Corner = "nw" | "ne" | "sw" | "se";
+
+export function applyResize(
+  rect: RectMM,
+  corner: Corner,
+  dxM: number,
+  dyM: number,
+  minSide: number,
+  others: readonly RectMM[],
+  plotW: number,
+  plotD: number
+): RectMM {
+  const xEdges = edgeCandidates(others, rect.id, "x");
+  const yEdges = edgeCandidates(others, rect.id, "y");
+
+  let { x, y, width, depth } = rect;
+
+  if (corner.includes("e")) {
+    let right = snapScalar(x + width + dxM, xEdges);
+    right = Math.min(right, plotW);
+    width = Math.max(minSide, right - x);
+  } else {
+    let left = snapScalar(x + dxM, xEdges);
+    left = Math.max(0, left);
+    const right = x + width;
+    left = Math.min(left, right - minSide);
+    width = right - left;
+    x = left;
+  }
+
+  if (corner.includes("n")) {
+    let top = snapScalar(y + depth + dyM, yEdges);
+    top = Math.min(top, plotD);
+    depth = Math.max(minSide, top - y);
+  } else {
+    let bottom = snapScalar(y + dyM, yEdges);
+    bottom = Math.max(0, bottom);
+    const top = y + depth;
+    bottom = Math.min(bottom, top - minSide);
+    depth = top - bottom;
+    y = bottom;
+  }
+
+  return { ...rect, x, y, width, depth };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { edgeCandidates, snapRect, snapScalar, snapToGrid } from "./canvas-snap";
+import { applyResize, edgeCandidates, snapRect, snapScalar, snapToGrid } from "./canvas-snap";
 
 const room = (id: string, x: number, y: number, w: number, d: number) => ({
   id,
@@ -66,5 +66,31 @@ describe("snapRect", () => {
     const snapped = snapRect(room("m", 11, 14, 3, 3), [], 12, 15);
     expect(snapped.x).toBeCloseTo(9, 6);
     expect(snapped.y).toBeCloseTo(12, 6);
+  });
+});
+
+describe("applyResize", () => {
+  const base = room("m", 2, 2, 4, 3);
+  test("se corner grows width; negative dyM extends the bottom edge toward the road", () => {
+    // se = east (high-x) + south (low-y) edges move. dyM=-1 → bottom edge
+    // 2-1=1 → y=1, depth = top(5) - bottom(1) = 4.
+    const r = applyResize(base, "se", 1, -1, 2, [], 20, 20);
+    expect(r.width).toBeCloseTo(5, 6);
+    expect(r.y).toBeCloseTo(1, 6);
+    expect(r.depth).toBeCloseTo(4, 6);
+  });
+  test("nw corner moves origin x and adjusts width", () => {
+    const r = applyResize(base, "nw", 1, 0, 2, [], 20, 20);
+    expect(r.x).toBeCloseTo(3, 6);
+    expect(r.width).toBeCloseTo(3, 6);
+  });
+  test("never shrinks below minSide", () => {
+    const r = applyResize(base, "se", -10, 0, 2.5, [], 20, 20);
+    expect(r.width).toBeCloseTo(2.5, 6);
+  });
+  test("snaps the moving edge to a neighbor edge", () => {
+    const others = [room("n", 7.05, 2, 2, 2)]; // neighbor left edge at 7.05
+    const r = applyResize(base, "se", 1, 0, 2, others, 20, 20); // new right edge 7.0 → snap 7.05
+    expect(r.x + r.width).toBeCloseTo(7.05, 6);
   });
 });

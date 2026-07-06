@@ -5,7 +5,7 @@ import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
 import { PlumbingOverlay } from "@/components/plumbing-overlay";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { snapRect } from "@/lib/canvas-snap";
+import { applyResize, type Corner, type RectMM, snapRect } from "@/lib/canvas-snap";
 import type {
   DimChain,
   FloorPlanData,
@@ -1168,6 +1168,13 @@ export function FloorPlanSVG({
     origX: number;
     origY: number;
   } | null>(null);
+  const resizeRef = useRef<{
+    roomId: string;
+    corner: Corner;
+    startClientX: number;
+    startClientY: number;
+    orig: RectMM;
+  } | null>(null);
   const svgElRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
@@ -1247,7 +1254,41 @@ export function FloorPlanSVG({
     };
   }
 
+  function handleResizeMouseDown(e: React.MouseEvent, room: RoomData, corner: Corner): void {
+    if (!editMode) return;
+    e.stopPropagation();
+    resizeRef.current = {
+      roomId: room.id,
+      corner,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      orig: { id: room.id, x: room.x, y: room.y, width: room.width, depth: room.depth },
+    };
+  }
+
   function handleSVGMouseMove(e: React.MouseEvent<SVGSVGElement>): void {
+    if (editMode && resizeRef.current) {
+      const rz = resizeRef.current;
+      const [dxM, dyM] = clientDeltaToMetres(
+        e.clientX - rz.startClientX,
+        e.clientY - rz.startClientY
+      );
+      const base = editRooms ?? floorPlan.rooms;
+      const target = base.find((r) => r.id === rz.roomId);
+      if (!target) return;
+      const resized = applyResize(
+        rz.orig,
+        rz.corner,
+        dxM,
+        dyM,
+        getMinSide(target.type),
+        base,
+        plotWidth,
+        plotLength
+      );
+      setEditRooms(base.map((r) => (r.id === rz.roomId ? { ...r, ...resized } : r)));
+      return;
+    }
     if (editMode && moveRef.current) {
       const m = moveRef.current;
       const [dxM, dyM] = clientDeltaToMetres(
@@ -1367,6 +1408,13 @@ export function FloorPlanSVG({
   }
 
   function handleSVGMouseUp(): void {
+    if (editMode && resizeRef.current) {
+      resizeRef.current = null;
+      if (editRooms !== null && onRoomsChange) {
+        onRoomsChange(editRooms);
+      }
+      return;
+    }
     if (editMode && moveRef.current) {
       moveRef.current = null;
       if (editRooms !== null && onRoomsChange) {
@@ -1383,7 +1431,7 @@ export function FloorPlanSVG({
   }
 
   function handleSVGMouseLeave(): void {
-    if (dragRef.current || moveRef.current) {
+    if (dragRef.current || moveRef.current || resizeRef.current) {
       handleSVGMouseUp();
     }
   }
@@ -1925,6 +1973,32 @@ export function FloorPlanSVG({
               );
             }
           })}
+
+        {/* ── Edit mode: resize handles on the selected room ──────────────── */}
+        {editMode &&
+          rooms
+            .filter((room) => selectedRoomId === room.id)
+            .flatMap((room) =>
+              (["nw", "ne", "sw", "se"] as const).map((corner) => {
+                const cx = px(corner.includes("w") ? room.x : room.x + room.width);
+                const cy = py(corner.includes("s") ? room.y : room.y + room.depth);
+                return (
+                  <rect
+                    key={`handle-${room.id}-${corner}`}
+                    x={cx - 4}
+                    y={cy - 4}
+                    width={8}
+                    height={8}
+                    className="fill-background stroke-primary"
+                    strokeWidth={1.5}
+                    style={{
+                      cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                    }}
+                    onMouseDown={(e) => handleResizeMouseDown(e, room, corner)}
+                  />
+                );
+              })
+            )}
 
         {/* ── Edit mode: drag tooltip ────────────────────────────────────── */}
         {editMode &&
