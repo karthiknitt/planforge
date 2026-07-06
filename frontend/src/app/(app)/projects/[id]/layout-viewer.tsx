@@ -14,10 +14,12 @@ import {
   Lock,
   MessageSquare,
   Pencil,
+  Redo2,
   RefreshCw,
   RotateCcw,
   Save,
   Settings2,
+  Undo2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -47,6 +49,15 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
+import {
+  canRedo,
+  canUndo,
+  type History as EditHistory,
+  initHistory,
+  pushHistory,
+  redoHistory,
+  undoHistory,
+} from "@/lib/edit-history";
 import {
   type JobStatus,
   jobPhase,
@@ -673,6 +684,7 @@ export function LayoutViewer({
   // ── Edit mode state ────────────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false);
   const [editedRooms, setEditedRooms] = useState<RoomData[] | null>(null);
+  const [editHistory, setEditHistory] = useState<EditHistory<RoomData[]> | null>(null);
   const [complianceIssues, setComplianceIssues] = useState<Record<string, string[]>>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editSaveError, setEditSaveError] = useState("");
@@ -817,66 +829,73 @@ export function LayoutViewer({
       // Exit edit mode — discard unsaved changes
       setEditMode(false);
       setEditedRooms(null);
+      setEditHistory(null);
       setComplianceIssues({});
       setEditSaveError("");
     } else {
       setEditMode(true);
       setEditedRooms(null);
+      setEditHistory(initHistory(floorPlan.rooms));
       setComplianceIssues({});
     }
   }
 
   function handleResetRooms() {
     setEditedRooms(null);
+    setEditHistory(initHistory(floorPlan.rooms));
     setComplianceIssues({});
   }
 
-  async function runComplianceCheck(rooms: RoomData[], floorLabel: string): Promise<void> {
-    if (!session) return;
-    const floorCode =
-      floorLabel === "ff"
-        ? "ff"
-        : floorLabel === "sf"
-          ? "sf"
-          : floorLabel === "basement"
-            ? "basement"
-            : "gf";
-    try {
-      const body = {
-        rooms: rooms.map((r) => ({
-          id: r.id,
-          type: r.type,
-          name: r.name,
-          x: r.x,
-          y: r.y,
-          width: r.width,
-          height: r.depth,
-          floor: floorCode,
-        })),
-      };
-      const res = await fetch(`/api/backend/layouts/${selectedId}/compliance-check`, {
-        method: "POST",
-        headers: {
-          "X-Project-Id": projectId,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        passed: boolean;
-        violations: string[];
-        warnings: string[];
-        room_issues: Record<string, string[]>;
-      };
-      setComplianceIssues(data.room_issues);
-    } catch {
-      // silent — compliance check is non-critical
-    }
-  }
+  const runComplianceCheck = useCallback(
+    async (rooms: RoomData[], floorLabel: string): Promise<void> => {
+      if (!session) return;
+      const floorCode =
+        floorLabel === "ff"
+          ? "ff"
+          : floorLabel === "sf"
+            ? "sf"
+            : floorLabel === "basement"
+              ? "basement"
+              : "gf";
+      try {
+        const body = {
+          rooms: rooms.map((r) => ({
+            id: r.id,
+            type: r.type,
+            name: r.name,
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.depth,
+            floor: floorCode,
+          })),
+        };
+        const res = await fetch(`/api/backend/layouts/${selectedId}/compliance-check`, {
+          method: "POST",
+          headers: {
+            "X-Project-Id": projectId,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          passed: boolean;
+          violations: string[];
+          warnings: string[];
+          room_issues: Record<string, string[]>;
+        };
+        setComplianceIssues(data.room_issues);
+      } catch {
+        // silent — compliance check is non-critical
+      }
+    },
+    [session, selectedId, projectId]
+  );
 
   function handleRoomsChange(rooms: RoomData[], floorCode: string) {
     setEditedRooms(rooms);
+    setEditHistory((h) => (h ? pushHistory(h, rooms) : h));
     editedFloorRef.current = floorCode;
     // Debounced compliance check: runs 800ms after last drag
     if (complianceDebounceRef.current) clearTimeout(complianceDebounceRef.current);
@@ -884,6 +903,44 @@ export function LayoutViewer({
       void runComplianceCheck(rooms, floorCode);
     }, 800);
   }
+
+  const handleUndo = useCallback(() => {
+    setEditHistory((h) => {
+      if (!h || !canUndo(h)) return h;
+      const next = undoHistory(h);
+      setEditedRooms(next.present);
+      const floorCode =
+        editedFloorRef.current ??
+        (floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf");
+      void runComplianceCheck(next.present, floorCode);
+      return next;
+    });
+  }, [floor, runComplianceCheck]);
+
+  const handleRedo = useCallback(() => {
+    setEditHistory((h) => {
+      if (!h || !canRedo(h)) return h;
+      const next = redoHistory(h);
+      setEditedRooms(next.present);
+      const floorCode =
+        editedFloorRef.current ??
+        (floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf");
+      void runComplianceCheck(next.present, floorCode);
+      return next;
+    });
+  }, [floor, runComplianceCheck]);
+
+  useEffect(() => {
+    if (!editMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) handleRedo();
+      else handleUndo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editMode, handleUndo, handleRedo]);
 
   async function handleSaveEditedRooms(rooms: RoomData[]) {
     if (!session) return;
@@ -2052,6 +2109,28 @@ export function LayoutViewer({
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  onClick={handleUndo}
+                  disabled={!editHistory || !canUndo(editHistory)}
+                  title="Undo (Ctrl/Cmd+Z)"
+                >
+                  <Undo2 className="h-3 w-3" />
+                  Undo
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  onClick={handleRedo}
+                  disabled={!editHistory || !canRedo(editHistory)}
+                  title="Redo (Ctrl/Cmd+Shift+Z)"
+                >
+                  <Redo2 className="h-3 w-3" />
+                  Redo
+                </Button>
+                <Button
+                  size="sm"
                   variant="outline"
                   className="gap-1.5 text-xs h-7 px-2.5"
                   onClick={() => {
@@ -2107,7 +2186,9 @@ export function LayoutViewer({
           )}
 
           <FloorPlanSVG
-            floorPlan={floorPlan}
+            floorPlan={
+              editMode ? { ...floorPlan, rooms: editedRooms ?? floorPlan.rooms } : floorPlan
+            }
             plotWidth={plotWidth}
             plotLength={plotLength}
             roadSide={roadSide}

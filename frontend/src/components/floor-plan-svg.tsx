@@ -1181,6 +1181,15 @@ export function FloorPlanSVG({
     if (!editMode) setSelectedRoomId(null);
   }, [editMode]);
 
+  // Undo/redo (Task 10) lands as a new floorPlan.rooms identity from the
+  // parent. Drop our own drag-local override so displayRooms falls back to
+  // the incoming prop — otherwise the canvas would keep showing whatever
+  // was mid-drag before undo/redo fired instead of the reverted positions.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: floorPlan.rooms is a deliberate re-trigger on identity change, not read inside the effect
+  useEffect(() => {
+    if (editMode) setEditRooms(null);
+  }, [editMode, floorPlan.rooms]);
+
   // client-pixel delta → metres in model space (y flipped: SVG y grows down,
   // model y grows away from the road at the bottom)
   const clientDeltaToMetres = (dxPx: number, dyPx: number): [number, number] => {
