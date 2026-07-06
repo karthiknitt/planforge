@@ -41,6 +41,7 @@ jobs:
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
+        id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: planforge-backend
@@ -69,3 +70,6 @@ jobs:
             RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}
             INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
             INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
+
+      - name: Print service URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
