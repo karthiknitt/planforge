@@ -208,46 +208,6 @@ class CADDrawing:
 # ---------------------------------------------------------------------------
 
 
-def build_walls_from_rooms(
-    rooms,
-    ewt: float,
-    iwt: float,
-    buildable_x: float,
-    buildable_y: float,
-    buildable_w: float,
-    buildable_d: float,
-) -> list[WallSegment]:
-    """
-    Derive wall segments from room geometry.
-    External walls follow the buildable boundary; internal walls sit between rooms.
-    """
-    walls: list[WallSegment] = []
-
-    # External boundary walls (4 sides of the building footprint)
-    bx2 = buildable_x + buildable_w
-    by2 = buildable_y + buildable_d
-    walls.append(WallSegment(buildable_x, buildable_y, bx2, buildable_y, ewt))  # front
-    walls.append(WallSegment(bx2, buildable_y, bx2, by2, ewt))  # right
-    walls.append(WallSegment(bx2, by2, buildable_x, by2, ewt))  # rear
-    walls.append(WallSegment(buildable_x, by2, buildable_x, buildable_y, ewt))  # left
-
-    # Internal walls: collect unique vertical and horizontal room boundaries
-    xs = sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
-    ys = sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
-
-    for x in xs:
-        if abs(x - buildable_x) < 0.01 or abs(x - (buildable_x + buildable_w)) < 0.01:
-            continue  # skip external boundary
-        walls.append(WallSegment(x, buildable_y, x, buildable_y + buildable_d, iwt))
-
-    for y in ys:
-        if abs(y - buildable_y) < 0.01 or abs(y - (buildable_y + buildable_d)) < 0.01:
-            continue  # skip external boundary
-        walls.append(WallSegment(buildable_x, y, buildable_x + buildable_w, y, iwt))
-
-    return walls
-
-
 def build_dimensions(
     plot_width: float,
     plot_length: float,

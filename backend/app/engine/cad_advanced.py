@@ -12,8 +12,11 @@ Produces:
 
 from __future__ import annotations
 
+import logging
 import math
 import string
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -81,6 +84,38 @@ def _hatch_polygon(msp, poly, pattern: str, scale: float, layer: str, z: float) 
             hatch.paths.add_polyline_path(int_pts, is_closed=True, flags=1)
     except Exception:
         pass
+
+
+def solid_fill_polygon(msp, poly, layer: str, z: float) -> None:
+    """Hatch a Shapely polygon solid black (IS:962/AIA wall-poché convention).
+
+    Interior rings (holes — door/window openings already subtracted from the
+    wall footprint) use ``flags=1`` so ezdxf treats them as exclusion paths.
+    ``elevation`` is set on the entity after creation, never via dxfattribs
+    at add_hatch() time — passing it there raises a TypeError in ezdxf.
+    """
+    if poly is None or poly.is_empty:
+        return
+
+    if poly.geom_type in ("MultiPolygon", "GeometryCollection"):
+        for geom in poly.geoms:
+            if geom.geom_type == "Polygon":
+                solid_fill_polygon(msp, geom, layer, z)
+        return
+
+    try:
+        hatch = msp.add_hatch(dxfattribs={"layer": layer})
+        hatch.dxf.elevation = z
+        hatch.set_solid_fill()
+
+        ext_pts = [(x, y) for x, y in poly.exterior.coords[:-1]]
+        hatch.paths.add_polyline_path(ext_pts, is_closed=True)
+
+        for interior in poly.interiors:
+            int_pts = [(x, y) for x, y in interior.coords[:-1]]
+            hatch.paths.add_polyline_path(int_pts, is_closed=True, flags=1)
+    except Exception as exc:
+        logger.warning("Wall hatch failed on layer %s: %s", layer, exc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

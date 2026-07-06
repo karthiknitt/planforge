@@ -23,6 +23,14 @@ def test_missing_config_section_falls_back_to_defaults(monkeypatch, tmp_path):
 
 
 def test_openings_use_configured_door_width():
-    from app.engine.cad_primitives import _DOOR_WIDTH
+    """Non-wet-room doors get their width from get_opening_standards(), not
+    a hardcoded value — verified end-to-end via the canonical FloorDrawing."""
+    from app.engine.plan_geometry import build_floor_drawing
+    from tests.helpers.golden import golden_config, golden_layout
 
-    assert _DOOR_WIDTH == get_opening_standards().door_width_m
+    layout = golden_layout()
+    cfg = golden_config()
+    drawing = build_floor_drawing(layout.ground_floor, cfg)
+
+    door_widths = {op.width for op in drawing.openings if op.kind == "door"}
+    assert get_opening_standards().door_width_m in door_widths

@@ -44,17 +44,31 @@ def define_opening_blocks(doc) -> None:
 
 
 def _insert(
-    msp, name: str, layer: str, x: float, y: float, rotation_deg: float, z: float
+    msp,
+    name: str,
+    layer: str,
+    x: float,
+    y: float,
+    rotation_deg: float,
+    z: float,
+    mirror: bool = False,
 ) -> None:
-    msp.add_blockref(
-        name,
-        insert=(x, y, z),
-        dxfattribs={"layer": layer, "rotation": rotation_deg},
-    )
+    dxfattribs = {"layer": layer, "rotation": rotation_deg}
+    if mirror:
+        dxfattribs["yscale"] = -1.0
+    msp.add_blockref(name, insert=(x, y, z), dxfattribs=dxfattribs)
 
 
-def insert_door(msp, x: float, y: float, rotation_deg: float, z: float = 0.0) -> None:
-    _insert(msp, DOOR_BLOCK, "A-DOOR", x, y, rotation_deg, z)
+def insert_door(
+    msp, x: float, y: float, rotation_deg: float, z: float = 0.0, mirror: bool = False
+) -> None:
+    """Insert PF_DOOR at its hinge point.
+
+    The block swings CCW from local +X (closed) to local +Y (open). Mirror
+    about local X (``yscale=-1``) to render a clockwise swing — pass
+    ``mirror=opening.swing_cw`` from the canonical FloorDrawing opening.
+    """
+    _insert(msp, DOOR_BLOCK, "A-DOOR", x, y, rotation_deg, z, mirror=mirror)
 
 
 def insert_window(msp, x: float, y: float, rotation_deg: float, z: float = 0.0) -> None:
