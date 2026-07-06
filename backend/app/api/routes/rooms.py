@@ -28,7 +28,7 @@ from app.models.layout import StoredLayout
 from app.models.project import Project
 from app.services import layout_store
 from app.services.access import get_accessible_project
-from app.services.plans import get_effective_plan_tier
+from app.services.plans import get_effective_plan_tier, tier_at_least
 
 router = APIRouter()
 
@@ -273,7 +273,7 @@ async def list_rooms(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, _row, state = await _load_layout_state(project_id, user_id, db)
@@ -304,7 +304,7 @@ async def get_layout_state(
     after room modifications.
     """
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, _row, state = await _load_layout_state(project_id, user_id, db)
@@ -319,7 +319,7 @@ async def get_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, _row, state = await _load_layout_state(project_id, user_id, db)
@@ -338,7 +338,7 @@ async def move_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     project, row, state = await _load_layout_state(project_id, user_id, db)
@@ -371,7 +371,7 @@ async def resize_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     project, row, state = await _load_layout_state(project_id, user_id, db)
@@ -406,7 +406,7 @@ async def swap_rooms(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, row, state = await _load_layout_state(project_id, user_id, db)
@@ -442,7 +442,7 @@ async def add_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     import pathlib
@@ -504,7 +504,7 @@ async def delete_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, row, state = await _load_layout_state(project_id, user_id, db)
@@ -529,7 +529,7 @@ async def available_space(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     project, _row, state = await _load_layout_state(project_id, user_id, db)
@@ -561,7 +561,7 @@ async def check_compliance(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     project, _row, state = await _load_layout_state(project_id, user_id, db)
@@ -658,7 +658,7 @@ async def update_layout_rooms(
     exports and the share view pick the edits up.
     """
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for layout editing")
 
     project = await _get_project(project_id, user_id, db)
@@ -735,7 +735,7 @@ async def undo_last(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
     _project, row, _state = await _load_layout_state(project_id, user_id, db)

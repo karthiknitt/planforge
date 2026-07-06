@@ -10,20 +10,129 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from app.engine.standards import get_opening_standards
+
 
 @dataclass
 class WallSegment:
-    """A wall segment defined by two endpoints and its thickness."""
+    """A wall segment defined by two endpoints and its thickness.
+
+    In `plan_geometry`-derived drawings the coordinates are the wall
+    CENTRELINE; legacy renderers still construct these at room-edge
+    coordinates (5 positional args, kind defaulting to "internal").
+    """
 
     x1: float
     y1: float
     x2: float
     y2: float
     thickness: float  # metres
+    kind: str = "internal"  # "external" | "internal"
 
     @property
     def length(self) -> float:
         return math.hypot(self.x2 - self.x1, self.y2 - self.y1)
+
+
+@dataclass
+class WallJunction:
+    """Point where two or more non-collinear wall centrelines meet."""
+
+    x: float
+    y: float
+    degree: int  # distinct incident arm directions (2=corner, 3=T, 4=cross)
+
+
+@dataclass
+class Opening:
+    """A door/window/ventilator cut into a wall, centred at (cx, cy).
+
+    (cx, cy) sits ON the wall centreline; `width` runs along the wall.
+    Door fields describe the hinge end and which room the leaf swings into.
+    """
+
+    kind: str  # "door" | "window" | "ventilator"
+    cx: float
+    cy: float
+    width: float
+    is_horizontal: bool  # True = on a horizontal wall (width runs along x)
+    wall_thickness: float
+    hinge_x: float = 0.0
+    hinge_y: float = 0.0
+    swing_into_room_id: str = ""
+    swing_cw: bool = True
+
+
+@dataclass
+class LabelBox:
+    """Room label with pre-fitted text lines (never truncated — a label that
+    cannot fit inside its room moves outside with a leader)."""
+
+    room_id: str
+    cx: float
+    cy: float
+    lines: list[str]
+    font_pt: float
+    leader: tuple[float, float] | None = None  # target point when outside
+    rotated: bool = False  # render at 90 deg (slim vertical rooms)
+
+
+@dataclass
+class DimChainEntry:
+    start: float  # along-axis position (m)
+    end: float
+    text: str  # formatted ft-in
+
+
+@dataclass
+class DimChain:
+    side: str  # "bottom" | "top" | "left" | "right"
+    level: int  # 0=room chain, 1=overall, 2=plot/setback chain
+    coord: float  # cross-axis lane position (m, plot coords)
+    entries: list[DimChainEntry] = field(default_factory=list)
+
+
+@dataclass
+class StairGeometry:
+    room_id: str
+    treads: list[tuple[float, float, float, float]]
+    break_line: tuple[float, float, float, float]
+    arrow: tuple[float, float, float, float]  # tail -> head
+    up_label_xy: tuple[float, float]
+    tread_count: int
+
+
+def _rounded(node):
+    if isinstance(node, float):
+        return round(node, 4)
+    if isinstance(node, (list, tuple)):
+        return [_rounded(v) for v in node]
+    if isinstance(node, dict):
+        return {k: _rounded(v) for k, v in node.items()}
+    return node
+
+
+@dataclass
+class FloorDrawing:
+    """Complete canonical drawing for one floor — the single source every
+    renderer (PDF/DXF/SVG) projects."""
+
+    floor: int
+    walls: list[WallSegment]
+    openings: list[Opening]
+    columns: list[ColumnMarker]
+    junctions: list[WallJunction]
+    dim_chains: list[DimChain]
+    labels: list[LabelBox]
+    stair: StairGeometry | None
+    bounds: tuple[float, float, float, float]  # buildable bbox
+
+    def to_dict(self) -> dict:
+        from dataclasses import asdict
+
+        payload = _rounded(asdict(self))
+        payload["version"] = 1
+        return payload
 
 
 @dataclass
@@ -97,46 +206,6 @@ class CADDrawing:
 # ---------------------------------------------------------------------------
 # Factory functions
 # ---------------------------------------------------------------------------
-
-
-def build_walls_from_rooms(
-    rooms,
-    ewt: float,
-    iwt: float,
-    buildable_x: float,
-    buildable_y: float,
-    buildable_w: float,
-    buildable_d: float,
-) -> list[WallSegment]:
-    """
-    Derive wall segments from room geometry.
-    External walls follow the buildable boundary; internal walls sit between rooms.
-    """
-    walls: list[WallSegment] = []
-
-    # External boundary walls (4 sides of the building footprint)
-    bx2 = buildable_x + buildable_w
-    by2 = buildable_y + buildable_d
-    walls.append(WallSegment(buildable_x, buildable_y, bx2, buildable_y, ewt))  # front
-    walls.append(WallSegment(bx2, buildable_y, bx2, by2, ewt))  # right
-    walls.append(WallSegment(bx2, by2, buildable_x, by2, ewt))  # rear
-    walls.append(WallSegment(buildable_x, by2, buildable_x, buildable_y, ewt))  # left
-
-    # Internal walls: collect unique vertical and horizontal room boundaries
-    xs = sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
-    ys = sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
-
-    for x in xs:
-        if abs(x - buildable_x) < 0.01 or abs(x - (buildable_x + buildable_w)) < 0.01:
-            continue  # skip external boundary
-        walls.append(WallSegment(x, buildable_y, x, buildable_y + buildable_d, iwt))
-
-    for y in ys:
-        if abs(y - buildable_y) < 0.01 or abs(y - (buildable_y + buildable_d)) < 0.01:
-            continue  # skip external boundary
-        walls.append(WallSegment(buildable_x, y, buildable_x + buildable_w, y, iwt))
-
-    return walls
 
 
 def build_dimensions(
@@ -216,7 +285,8 @@ def build_windows(
             continue
         cx = room.x + room.width / 2
         cy = room.y + room.depth / 2
-        win_w = min(1.2, room.width * 0.6)
+        _std = get_opening_standards()
+        win_w = min(_std.window_width_m, room.width * _std.window_max_room_fraction)
 
         # Check each face of the room against building exterior
         if abs(room.y - buildable_y) < 0.05:  # front wall

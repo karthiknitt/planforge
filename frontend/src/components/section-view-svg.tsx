@@ -41,9 +41,14 @@ function fmt(v: number): string {
 interface SectionViewSVGProps {
   buildingWidth: number; // metres (plot width after setbacks)
   className?: string;
+  // Real tread count from the ground floor's canonical StairGeometry
+  // (backend app.engine.plan_geometry.derive_stair) — falls back to the
+  // generic 17-riser profile when no drawing data is available (e.g. the
+  // marketing gallery's static demo data).
+  stairTreadCount?: number;
 }
 
-export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps) {
+export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: SectionViewSVGProps) {
   const drawW = VP_W - 2 * PAD_X;
   const drawH = VP_H - PAD_T - PAD_B;
 
@@ -68,8 +73,9 @@ export function SectionViewSVG({ buildingWidth, className }: SectionViewSVGProps
   const wallX_R = ox + bPx;
 
   // Stair profile: simplified stepped shape on left side
-  // ~17 risers × 175mm riser, 250mm tread
-  const nSteps = 17;
+  // ~175mm riser, 250mm tread — real tread count from the plan's stair room
+  // when available, else the generic 17-riser fallback profile.
+  const nSteps = stairTreadCount && stairTreadCount > 0 ? stairTreadCount : 17;
   const riserH = 0.175; // m
   const treadW = 0.25; // m
   const stairTotH = nSteps * riserH;

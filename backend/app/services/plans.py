@@ -30,3 +30,17 @@ async def get_effective_plan_tier(user_id: str, db: AsyncSession) -> str:
         if exp < datetime.now(timezone.utc):
             return "free"
     return tier
+
+
+TIER_ORDER = ("free", "basic", "pro", "firm")
+
+
+def _tier_rank(tier: str) -> int:
+    try:
+        return TIER_ORDER.index(tier)
+    except ValueError:
+        return 0  # unknown tiers rank as free
+
+
+def tier_at_least(tier: str, minimum: str) -> bool:
+    return _tier_rank(tier) >= _tier_rank(minimum)

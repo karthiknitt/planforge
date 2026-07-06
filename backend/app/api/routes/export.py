@@ -1,4 +1,5 @@
 import logging
+import math
 from decimal import Decimal
 from io import BytesIO, StringIO
 
@@ -16,7 +17,7 @@ from app.engine.pdf import render_pdf
 from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
-from app.services.plans import get_effective_plan_tier
+from app.services.plans import get_effective_plan_tier, tier_at_least
 from app.services import layout_store
 from app.services.plot_config import plot_config_from_project
 
@@ -171,7 +172,7 @@ async def export_dxf(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     plan = await _get_plan_tier(user_id, db)
-    if plan not in ("basic", "pro"):
+    if not tier_at_least(plan, "basic"):
         raise HTTPException(
             status_code=402, detail="DXF export requires Basic or Pro plan."
         )
@@ -207,6 +208,112 @@ async def export_dxf(
     )
 
 
+# Calibrated to the same reference print scale as plan_geometry's LabelBox
+# font_pt sizing (1 pt at 1:100) so DXF label heights match the PDF projection.
+_DXF_PT_TO_M = 0.000352778 * 100
+
+
+def _draw_stair_dxf(msp, stair, layer: str, z: float) -> None:
+    """Treads + mid-flight break line + UP arrow, from canonical StairGeometry."""
+    for x1, y1, x2, y2 in stair.treads:
+        msp.add_line(
+            (x1, y1, z), (x2, y2, z), dxfattribs={"layer": layer, "lineweight": 25}
+        )
+
+    bx1, by1, bx2, by2 = stair.break_line
+    msp.add_line(
+        (bx1, by1, z),
+        (bx2, by2, z),
+        dxfattribs={"layer": layer, "lineweight": 25, "linetype": "DASHED"},
+    )
+
+    ax1, ay1, ax2, ay2 = stair.arrow
+    msp.add_line(
+        (ax1, ay1, z), (ax2, ay2, z), dxfattribs={"layer": layer, "lineweight": 25}
+    )
+    ang = math.atan2(ay2 - ay1, ax2 - ax1)
+    for da in (2.6, -2.6):
+        msp.add_line(
+            (ax2, ay2, z),
+            (
+                ax2 - 0.15 * math.cos(ang + da * 0.5),
+                ay2 - 0.15 * math.sin(ang + da * 0.5),
+                z,
+            ),
+            dxfattribs={"layer": layer, "lineweight": 25},
+        )
+    ux, uy = stair.up_label_xy
+    msp.add_mtext(
+        "UP",
+        dxfattribs={
+            "layer": layer,
+            "char_height": 0.18,
+            "insert": (ux, uy, z),
+            "attachment_point": 5,
+        },
+    )
+
+
+def _draw_labels_dxf(msp, labels, layer: str, z: float) -> None:
+    """Room name + size labels, from canonical LabelBox — never truncated;
+    plain TEXT per line (no MTEXT \\P codes), rotated/leadered per the fit."""
+    from ezdxf.enums import TextEntityAlignment
+
+    for lb in labels:
+        if lb.leader is not None:
+            tx, ty = lb.leader
+            msp.add_line(
+                (lb.cx, lb.cy, z),
+                (tx, ty, z),
+                dxfattribs={"layer": layer, "lineweight": 18},
+            )
+            msp.add_circle((tx, ty, z), radius=0.03, dxfattribs={"layer": layer})
+
+        line_h = lb.font_pt * _DXF_PT_TO_M * 1.25
+        top = (len(lb.lines) - 1) * line_h / 2
+        rotation = 90.0 if lb.rotated else 0.0
+        for i, text in enumerate(lb.lines):
+            along = top - i * line_h
+            px, py = (lb.cx - along, lb.cy) if lb.rotated else (lb.cx, lb.cy + along)
+            height = lb.font_pt * _DXF_PT_TO_M * (1.0 if i == 0 else 0.9)
+            entity = msp.add_text(
+                text,
+                dxfattribs={"layer": layer, "height": height, "rotation": rotation},
+            )
+            entity.set_placement((px, py, z), align=TextEntityAlignment.MIDDLE_CENTER)
+
+
+def _draw_dim_chains_dxf(msp, drawing, layer: str) -> None:
+    """Multi-level dimension chains (room + plot/setback, all 4 sides) from
+    the canonical FloorDrawing — entry text is pre-formatted ft-in."""
+    for chain in drawing.dim_chains:
+        if not chain.entries:
+            continue
+        horizontal = chain.side in ("bottom", "top")
+        for entry in chain.entries:
+            if horizontal:
+                base = p1 = (entry.start, chain.coord)
+                p2 = (entry.end, chain.coord)
+                angle = 0
+            else:
+                base = p1 = (chain.coord, entry.start)
+                p2 = (chain.coord, entry.end)
+                angle = 90
+            try:
+                dim = msp.add_linear_dim(
+                    base=base,
+                    p1=p1,
+                    p2=p2,
+                    angle=angle,
+                    dimstyle="ARCH_MM",
+                    dxfattribs={"layer": layer, "lineweight": 18},
+                )
+                dim.set_text(entry.text)
+                dim.render()
+            except Exception as exc:
+                logger.warning("Dimension render failed: %s", exc)
+
+
 def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     import ezdxf
     from ezdxf import colors
@@ -218,20 +325,24 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         draw_open_terrace,
         draw_setback_zones,
         draw_structural_grid,
+        shapely_poly_to_dxf,
+        solid_fill_polygon,
     )
-    from app.engine.cad_elements import build_walls_from_rooms
+    from app.engine.cad_blocks import (
+        define_opening_blocks,
+        insert_door,
+        insert_ventilator,
+        insert_window,
+    )
     from app.engine.cad_primitives import (
-        collect_openings,
-        draw_dimension_chain,
-        draw_door,
         draw_north_arrow,
         draw_scale_bar,
-        draw_staircase,
         draw_title_block,
-        draw_ventilator,
-        draw_wall_with_breaks,
-        draw_window,
-        metres_to_ftin,
+    )
+    from app.engine.plan_geometry import (
+        build_floor_drawing,
+        opening_boxes,
+        wall_polygons,
     )
 
     doc = ezdxf.new("R2010", setup=True)  # setup=True loads standard linetypes
@@ -274,6 +385,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if "DEFPOINTS" not in doc.layers:
         _dp = doc.layers.new("DEFPOINTS")
         _dp.dxf.plot = 0  # non-printing
+
+    define_opening_blocks(doc)
 
     # Architectural dimension style — created once per document
     # ezdxf is imported at the top of this function; use it directly
@@ -323,9 +436,6 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
     if layout.basement_floor:
         floor_plans.append(layout.basement_floor)
 
-    ewt_m = 0.23  # external wall thickness (m)
-    iwt_m = 0.115  # internal (half-brick) wall thickness
-
     global_min_x = global_min_y = float("inf")
     global_max_x = global_max_y = float("-inf")
 
@@ -351,94 +461,65 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         global_max_x = max(global_max_x, bld_x + bld_w)
         global_max_y = max(global_max_y, bld_y + bld_d)
 
-        # 1. Collect all openings (doors, windows, ventilators)
-        openings_map = collect_openings(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
+        # Canonical drawing for this floor — single source of truth for
+        # walls/openings/columns/dims/labels/stair (Sprint 4/5).
+        drawing = build_floor_drawing(floor_plan, cfg)
 
-        # 2. Draw walls with clean gaps at openings
-        walls = build_walls_from_rooms(rooms, ewt_m, iwt_m, bld_x, bld_y, bld_w, bld_d)
-        for wall in walls:
-            wall_key = (
-                round(wall.x1, 2),
-                round(wall.y1, 2),
-                round(wall.x2, 2),
-                round(wall.y2, 2),
-            )
-            lyr_name = "A-WALL-BRICK" if wall.thickness >= ewt_m else "A-WALL-INT"
-            draw_wall_with_breaks(
-                msp, wall, openings_map.get(wall_key, []), lyr_name, z_offset
-            )
+        # 1-2. Walls: poché fill from the union of wall footprints with
+        # opening boxes already subtracted (IS:962/AIA convention).
+        wall_polys = wall_polygons(
+            drawing.walls, openings=opening_boxes(drawing.openings)
+        )
+        for kind, lyr_name in (
+            ("external", "A-WALL-BRICK"),
+            ("internal", "A-WALL-INT"),
+        ):
+            geom = wall_polys[kind]
+            if geom.is_empty:
+                continue
+            shapely_poly_to_dxf(msp, geom, layer=lyr_name, z=z_offset)
+            solid_fill_polygon(msp, geom, layer=lyr_name, z=z_offset)
 
-        # 3. Draw opening symbols in the gaps
-        for wall_openings in openings_map.values():
-            for op in wall_openings:
-                if op.kind == "door":
-                    draw_door(
-                        msp,
-                        op.cx,
-                        op.cy,
-                        op.width,
-                        op.is_vertical_wall,
-                        swing_left=True,
-                        layer="A-DOOR",
-                        z=z_offset,
-                    )
-                elif op.kind == "window":
-                    draw_window(
-                        msp,
-                        op.cx,
-                        op.cy,
-                        op.width,
-                        not op.is_vertical_wall,
-                        ewt_m,
-                        layer="A-WINDOW",
-                        z=z_offset,
-                    )
-                elif op.kind == "ventilator":
-                    draw_ventilator(
-                        msp,
-                        op.cx,
-                        op.cy,
-                        not op.is_vertical_wall,
-                        layer="A-VENTILATOR",
-                        z=z_offset,
-                    )
+        # 3. Opening block inserts (PF_DOOR/PF_WINDOW/PF_VENT — Task 14),
+        # positioned from the canonical Opening (hinge/swing-aware for doors).
+        for op in drawing.openings:
+            if op.kind == "door":
+                jamb_x = 2 * op.cx - op.hinge_x
+                jamb_y = 2 * op.cy - op.hinge_y
+                rotation = math.degrees(
+                    math.atan2(jamb_y - op.hinge_y, jamb_x - op.hinge_x)
+                )
+                insert_door(
+                    msp,
+                    op.hinge_x,
+                    op.hinge_y,
+                    rotation,
+                    z=z_offset,
+                    mirror=op.swing_cw,
+                )
+                continue
+            if op.is_horizontal:
+                ins_x, ins_y, rotation = op.cx - op.width / 2, op.cy, 0.0
+            else:
+                ins_x, ins_y, rotation = op.cx, op.cy - op.width / 2, 90.0
+            insert_fn = insert_window if op.kind == "window" else insert_ventilator
+            insert_fn(msp, ins_x, ins_y, rotation, z=z_offset)
 
         # 4. Staircase treads + cut line + UP arrow
-        for room in rooms:
-            if room.type == "staircase":
-                draw_staircase(msp, room, layer="A-STAIR", z=z_offset)
+        if drawing.stair is not None:
+            _draw_stair_dxf(msp, drawing.stair, layer="A-STAIR", z=z_offset)
 
-        # 5. Room labels in feet-inches
-        for room in rooms:
-            cx = room.x + room.width / 2
-            cy = room.y + room.depth / 2
-            label = (
-                f"{room.name}\\P"
-                f"{metres_to_ftin(room.width)} x {metres_to_ftin(room.depth)}"
-            )
-            msp.add_mtext(
-                label,
-                dxfattribs={
-                    "layer": "TEXT",
-                    "char_height": 0.2,
-                    "insert": (cx, cy, z_offset),
-                    "attachment_point": 5,
-                },
-            )
+        # 5. Room labels (never truncated — fit ladder from S4.3)
+        _draw_labels_dxf(msp, drawing.labels, layer="TEXT", z=z_offset)
 
-        # 6. Columns
-        half = 0.15
-        seen: set = set()
-        for col in floor_plan.columns:
-            col_key = (round(col.x, 2), round(col.y, 2))
-            if col_key in seen:
-                continue
-            seen.add(col_key)
+        # 6. Columns (already deduped by junction derivation)
+        for col in drawing.columns:
+            half = col.size / 2
             pts_col = [
-                (col.x - half, col.y - half),
-                (col.x + half, col.y - half),
-                (col.x + half, col.y + half),
-                (col.x - half, col.y + half),
+                (col.cx - half, col.cy - half),
+                (col.cx + half, col.cy - half),
+                (col.cx + half, col.cy + half),
+                (col.cx - half, col.cy + half),
             ]
             msp.add_lwpolyline(
                 pts_col,
@@ -471,31 +552,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
             )
             draw_open_terrace(msp, plot_poly, footprint, layer="A-TERRACE", z=z_offset)
 
-        # 7. Feet-inches dimension chains
-        xs = sorted(
-            {round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms}
-        )
-        ys = sorted(
-            {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
-        )
-        draw_dimension_chain(
-            msp,
-            xs,
-            fixed_coord=bld_y,
-            offset=-1.5,
-            is_horizontal=True,
-            layer="DIM-LINE",
-            z=z_offset,
-        )
-        draw_dimension_chain(
-            msp,
-            ys,
-            fixed_coord=bld_x + bld_w,
-            offset=1.5,
-            is_horizontal=False,
-            layer="DIM-LINE",
-            z=z_offset,
-        )
+        # 7. Dimension chains (room + plot/setback levels, all 4 sides)
+        _draw_dim_chains_dxf(msp, drawing, layer="DIM-LINE")
 
     # ── North arrow (top-right, drawn once outside floor loop) ───────────────
     if global_max_x < float("inf"):
@@ -570,7 +628,7 @@ async def export_boq(
 
     if fmt == "excel":
         plan = await _get_plan_tier(user_id, db)
-        if plan != "pro":
+        if not tier_at_least(plan, "pro"):
             raise HTTPException(
                 status_code=402, detail="BOQ Excel export requires Pro plan."
             )

@@ -1,80 +1,21 @@
 {
-  "standard": {
-    "total": 96.0,
+  "ccqs": {
+    "total": 80.0,
+    "max": 80,
     "monochrome": 20.0,
-    "dimension_density": 20,
-    "ft_in_labels": 20,
-    "layout_completeness": 20,
-    "visual_quality": 16,
-    "_vq_detail": {
-      "issues": [
-        "The staircase representation in the parking area could be more detailed with clearer tread lines",
-        "Some door swing arcs appear slightly inconsistent in line weight",
-        "The dimension line on the right side (38'-9\") is very close to the building outline, could have more clearance",
-        "Minor: The 'UP' arrow and staircase notation could be positioned more centrally in the parking space"
-      ],
-      "positives": [
-        "Clean wall lines with proper corners and no gaps",
-        "All room labels are clearly positioned inside their respective rooms and fully readable",
-        "Dimensions are properly placed outside the building perimeter",
-        "Title block is complete, professional, and all text is visible without overlap",
-        "Door swings are properly indicated with arc symbols",
-        "Consistent line weights for walls and partitions",
-        "North arrow is clearly indicated",
-        "Scale and measurements are properly documented",
-        "Overall professional appearance suitable for construction documentation"
-      ]
-    },
-    "_debug": {
-      "dim_count": 32,
-      "ftin_count": 28,
-      "both_floors": true,
-      "has_sqft": true,
-      "has_schedule": true,
-      "has_totals": true,
-      "has_compass": true
-    },
-    "_debug_mono": {
-      "mean_sat": 0.0
-    }
+    "dimension_density": 20.0,
+    "ft_in_labels": 20.0,
+    "layout_completeness": 20.0
   },
-  "approval": {
-    "total": 96.0,
-    "monochrome": 20.0,
-    "dimension_density": 20,
-    "ft_in_labels": 20,
-    "layout_completeness": 20,
-    "visual_quality": 16,
-    "_vq_detail": {
-      "issues": [
-        "The staircase 'UP' arrow and text placement could be more refined - appears slightly cramped in the corner",
-        "Room dimensions text in some areas (like Dining and Living/Hall) are positioned close to door swing arcs which slightly affects readability",
-        "The door swing arcs in multiple rooms overlap with dimension text, creating minor visual clutter",
-        "The scale reference '3 m' at bottom left could be better aligned with the drawing"
-      ],
-      "positives": [
-        "Clean wall lines with proper corners and no visible gaps",
-        "Title block is well-organized with all information clearly visible and readable",
-        "Room labels are properly positioned inside their respective rooms",
-        "Dimension lines (R.S. 1.0m, R.S. 1.5m CMDA) are appropriately placed outside the building perimeter",
-        "FAR calculation table is neatly presented without overlapping any drawing elements",
-        "Professional overall appearance with consistent line weights",
-        "North direction indicator is clearly visible",
-        "Door swings are properly shown with standard architectural notation",
-        "Square footage calculations are clearly labeled for each room"
-      ]
-    },
-    "_debug": {
-      "dim_count": 37,
-      "ftin_count": 14,
-      "both_floors": true,
-      "has_sqft": true,
-      "has_schedule": true,
-      "has_totals": true,
-      "has_compass": true
-    },
-    "_debug_mono": {
-      "mean_sat": 0.0
-    }
+  "gcs": {
+    "total": 100.0,
+    "max": 100,
+    "phantom_walls": 0,
+    "collisions": 0,
+    "label_overflow": 0,
+    "dimension_coverage_pct": 100.0,
+    "standard_scale": true,
+    "doors_per_room_ok": true,
+    "windows_per_habitable_ok": true
   }
 }

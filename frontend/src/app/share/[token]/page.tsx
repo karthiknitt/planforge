@@ -199,7 +199,11 @@ function ReadOnlyLayoutCard({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Section View
         </p>
-        <SectionViewSVG buildingWidth={plotWidth} className="rounded-xl border w-full max-w-xl" />
+        <SectionViewSVG
+          buildingWidth={plotWidth}
+          className="rounded-xl border w-full max-w-xl"
+          stairTreadCount={groundFloor.drawing?.stair?.tread_count}
+        />
       </div>
 
       {/* Room legend */}

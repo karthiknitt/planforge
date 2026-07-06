@@ -18,7 +18,7 @@ from app.models.render import LayoutRender
 from app.quality.pdf_image import pdf_page_png
 from app.services import layout_store
 from app.services.access import get_accessible_project
-from app.services.plans import get_effective_plan_tier
+from app.services.plans import get_effective_plan_tier, tier_at_least
 from app.services.plot_config import plot_config_from_project
 from app.services.render_providers import (
     GEMINI_MODEL,
@@ -29,9 +29,6 @@ from app.services.render_providers import (
 )
 
 router = APIRouter()
-
-# Tier gate: "pro" and above (checkpoint decision 2026-07-04)
-_TIER_ALLOWED = ("pro", "firm")
 
 _PROVIDER_KEYS = {
     "gemini": lambda: settings.gemini_api_key,
@@ -84,7 +81,7 @@ async def render_layout(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     plan = await get_effective_plan_tier(user_id, db)
-    if plan not in _TIER_ALLOWED:
+    if not tier_at_least(plan, "pro"):
         raise HTTPException(
             status_code=402, detail="AI render requires Pro plan or above."
         )

@@ -2015,6 +2015,7 @@ export function LayoutViewer({
           <SectionViewSVG
             buildingWidth={plotWidth}
             className="w-full md:max-w-xl rounded-xl border"
+            stairTreadCount={layout.ground_floor.drawing?.stair?.tread_count}
           />
           <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
             <span>Floor height: 3.0 m (each floor)</span>
