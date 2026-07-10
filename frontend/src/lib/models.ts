@@ -17,16 +17,16 @@ export interface ModelOption {
 export const MODEL_OPTIONS: ModelOption[] = [
   // ── Anthropic ────────────────────────────────────────────────────────────
   {
-    id: "claude-opus-4-6",
-    label: "Claude Opus 4.6",
+    id: "claude-opus-4-8",
+    label: "Claude Opus 4.8",
     provider: "anthropic",
     group: "Anthropic",
     logoId: "anthropic",
     description: "Most capable",
   },
   {
-    id: "claude-sonnet-4-6",
-    label: "Claude Sonnet 4.6",
+    id: "claude-sonnet-5",
+    label: "Claude Sonnet 5",
     provider: "anthropic",
     group: "Anthropic",
     logoId: "anthropic",
@@ -161,7 +161,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
   },
 ];
 
-export const DEFAULT_MODEL_ID = "claude-sonnet-4-6";
+export const DEFAULT_MODEL_ID = "claude-sonnet-5";
+
+/** OpenAI fallback used when the primary provider fails and OpenAI is the next in the chain. */
+export const FALLBACK_OPENAI_MODEL_ID = "gpt-4o";
+
+/** OpenRouter model slug used when routing a fallback request through OpenRouter. */
+export const DEFAULT_OPENROUTER_MODEL_ID = "anthropic/claude-sonnet-5";
 
 export function getModelProvider(modelId: string): ModelProvider | null {
   return MODEL_OPTIONS.find((m) => m.id === modelId)?.provider ?? null;

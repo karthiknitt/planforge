@@ -11,9 +11,15 @@ import {
 } from "ai";
 import { headers } from "next/headers";
 import { z } from "zod";
+import { describeProviderError, shouldFallback } from "@/lib/agent-errors";
 import { auth } from "@/lib/auth";
 import { fetchBackend } from "@/lib/backend-fetch";
-import { DEFAULT_MODEL_ID, getModelProvider } from "@/lib/models";
+import {
+  DEFAULT_MODEL_ID,
+  DEFAULT_OPENROUTER_MODEL_ID,
+  FALLBACK_OPENAI_MODEL_ID,
+  getModelProvider,
+} from "@/lib/models";
 
 export const maxDuration = 60;
 
@@ -200,12 +206,6 @@ function buildTools(projectId: string, userId: string) {
   };
 }
 
-/** Check if an error is a billing/auth/rate-limit issue worth retrying on a different provider */
-function isProviderError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /billing|balance|insufficient|quota|rate.limit|payment|credit|402|429/i.test(msg);
-}
-
 type Params = Promise<{ projectId: string }>;
 
 export async function POST(req: Request, { params }: { params: Params }) {
@@ -253,46 +253,81 @@ export async function POST(req: Request, { params }: { params: Params }) {
       })
     : null;
 
-  // Configurable OpenRouter fallback model (env var) — defaults to claude-3.5-sonnet
-  const openrouterFallbackModel = process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet";
+  // Configurable OpenRouter fallback model (env var) — defaults to a current Anthropic slug
+  const openrouterFallbackModel = process.env.OPENROUTER_MODEL ?? DEFAULT_OPENROUTER_MODEL_ID;
 
   const requestedId =
     typeof selectedModel === "string" && selectedModel ? selectedModel : DEFAULT_MODEL_ID;
 
   const provider = getModelProvider(requestedId);
-  const models: { model: LanguageModel; label: string }[] = [];
+  const models: { model: LanguageModel; label: string; providerName: string }[] = [];
 
   if (provider === "openrouter" && openrouterClient) {
-    models.push({ model: openrouterClient.chat(requestedId), label: requestedId });
+    models.push({
+      model: openrouterClient.chat(requestedId),
+      label: requestedId,
+      providerName: "OpenRouter",
+    });
     // Fallback chain for OpenRouter failures
     if (hasAnthropic)
-      models.push({ model: anthropic(DEFAULT_MODEL_ID), label: "claude-sonnet-fallback" });
-    else if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o-fallback" });
+      models.push({
+        model: anthropic(DEFAULT_MODEL_ID),
+        label: "claude-sonnet-fallback",
+        providerName: "Anthropic",
+      });
+    else if (hasOpenAI)
+      models.push({
+        model: openai.chat(FALLBACK_OPENAI_MODEL_ID),
+        label: "gpt-4o-fallback",
+        providerName: "OpenAI",
+      });
   } else if (provider === "anthropic" && hasAnthropic) {
-    models.push({ model: anthropic(requestedId), label: requestedId });
-    if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o-fallback" });
+    models.push({ model: anthropic(requestedId), label: requestedId, providerName: "Anthropic" });
+    if (hasOpenAI)
+      models.push({
+        model: openai.chat(FALLBACK_OPENAI_MODEL_ID),
+        label: "gpt-4o-fallback",
+        providerName: "OpenAI",
+      });
     else if (hasOpenRouter && openrouterClient)
       models.push({
         model: openrouterClient.chat(openrouterFallbackModel),
         label: `openrouter-fallback(${openrouterFallbackModel})`,
+        providerName: "OpenRouter",
       });
   } else if (provider === "openai" && hasOpenAI) {
-    models.push({ model: openai.chat(requestedId), label: requestedId });
+    models.push({ model: openai.chat(requestedId), label: requestedId, providerName: "OpenAI" });
     if (hasAnthropic)
-      models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
+      models.push({
+        model: anthropic(DEFAULT_MODEL_ID),
+        label: "claude-sonnet-fallback",
+        providerName: "Anthropic",
+      });
     else if (hasOpenRouter && openrouterClient)
       models.push({
         model: openrouterClient.chat(openrouterFallbackModel),
         label: `openrouter-fallback(${openrouterFallbackModel})`,
+        providerName: "OpenRouter",
       });
   } else {
     // No matching provider available — try all in priority order
-    if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
-    if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o" });
+    if (hasAnthropic)
+      models.push({
+        model: anthropic(DEFAULT_MODEL_ID),
+        label: DEFAULT_MODEL_ID,
+        providerName: "Anthropic",
+      });
+    if (hasOpenAI)
+      models.push({
+        model: openai.chat(FALLBACK_OPENAI_MODEL_ID),
+        label: FALLBACK_OPENAI_MODEL_ID,
+        providerName: "OpenAI",
+      });
     if (hasOpenRouter && openrouterClient)
       models.push({
         model: openrouterClient.chat(openrouterFallbackModel),
         label: `openrouter(${openrouterFallbackModel})`,
+        providerName: "OpenRouter",
       });
   }
 
@@ -326,10 +361,10 @@ export async function POST(req: Request, { params }: { params: Params }) {
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: async ({ writer }) => {
-        let lastError: unknown;
+        const failureDescriptions: string[] = [];
 
         for (let i = 0; i < models.length; i++) {
-          const { model, label } = models[i];
+          const { model, label, providerName } = models[i];
           const hasMoreModels = i < models.length - 1;
           try {
             console.log(`[agent] Trying model: ${label}`);
@@ -350,11 +385,11 @@ export async function POST(req: Request, { params }: { params: Params }) {
             console.log(`[agent] Completed with: ${label}`);
             return;
           } catch (err) {
-            lastError = err;
             const errMsg = err instanceof Error ? err.message : String(err);
             console.error(`[agent] Model ${label} failed: ${errMsg}`);
+            failureDescriptions.push(describeProviderError(err, providerName));
 
-            if (isProviderError(err) && hasMoreModels) {
+            if (shouldFallback(err) && hasMoreModels) {
               console.log(`[agent] Falling back to next model...`);
               continue;
             }
@@ -363,7 +398,10 @@ export async function POST(req: Request, { params }: { params: Params }) {
         }
 
         // All models failed
-        const errText = lastError instanceof Error ? lastError.message : "All AI providers failed";
+        const errText =
+          failureDescriptions.length > 0
+            ? `${failureDescriptions.join("; ")} — check API keys in Vercel env`
+            : "All AI providers failed";
         console.error("[agent] All models exhausted:", errText);
         writer.write({ type: "error", errorText: errText });
       },
