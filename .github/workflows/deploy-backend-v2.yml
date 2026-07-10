@@ -73,6 +73,7 @@ jobs:
             OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
             INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
             INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
+            INNGEST_APP_ID=planforge-v2
 
       - name: Print service URL
         run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

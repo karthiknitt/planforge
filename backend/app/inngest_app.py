@@ -12,7 +12,7 @@ from app.config.settings import settings
 from app.services import jobs, render_runner
 
 inngest_client = inngest.Inngest(
-    app_id="planforge",
+    app_id=settings.inngest_app_id,
     event_key=settings.inngest_event_key or None,
     signing_key=settings.inngest_signing_key or None,
     is_production=bool(settings.inngest_signing_key),

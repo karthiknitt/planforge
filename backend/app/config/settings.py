@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Async job pipeline (Phase 3) — both empty => inline synchronous fallback
     inngest_event_key: str = ""
     inngest_signing_key: str = ""
+    # Must be distinct per deployment (main vs v2) — Inngest ties function
+    # registration to this name, so two deployments sharing one app_id race
+    # for which URL actually receives invocations.
+    inngest_app_id: str = "planforge"
 
     @field_validator("internal_auth_secret")
     @classmethod
