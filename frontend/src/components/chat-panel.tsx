@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/model-selector";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useSession } from "@/lib/auth-client";
+import { friendlyChatError } from "@/lib/chat-error-message";
 import { extractToolResults, isToolPart, toolPartLabel } from "@/lib/chat-parts";
 import type { LayoutData } from "@/lib/layout-types";
 import { DEFAULT_MODEL_ID, MODEL_GROUPS, MODEL_OPTIONS } from "@/lib/models";
@@ -63,7 +64,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
     [projectId]
   );
 
-  const [agentError, setAgentError] = useState<string | null>(null);
+  const [agentError, setAgentError] = useState<unknown>(null);
 
   const {
     messages,
@@ -74,7 +75,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
     transport,
     onError: (err) => {
       console.error("[ChatPanel] useChat error:", err);
-      setAgentError(err instanceof Error ? err.message : "Agent failed to respond. Try again.");
+      setAgentError(err);
     },
     onFinish: ({ message }) => {
       setAgentError(null);
@@ -111,7 +112,14 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
   const isRecording = voiceStatus === "recording";
   const isTranscribing = voiceStatus === "transcribing";
 
-  const displayError = agentError ?? chatError?.message ?? voiceError;
+  const bannerError: { title: string; detail?: string } | null =
+    agentError !== null
+      ? friendlyChatError(agentError)
+      : chatError
+        ? friendlyChatError(chatError)
+        : voiceError
+          ? { title: "Error", detail: voiceError }
+          : null;
   const selectedModelOption = MODEL_OPTIONS.find((m) => m.id === selectedModel);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -261,10 +269,10 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
       </div>
 
       {/* Agent / voice errors */}
-      {displayError && (
+      {bannerError && (
         <div className="px-4 py-2 text-xs text-destructive border-t border-border bg-destructive/5">
-          <p className="font-medium">Error</p>
-          <p>{displayError}</p>
+          <p className="font-medium">{bannerError.title}</p>
+          {bannerError.detail && <p className="mt-0.5 opacity-80">{bannerError.detail}</p>}
         </div>
       )}
 

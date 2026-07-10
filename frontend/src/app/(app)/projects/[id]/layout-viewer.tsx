@@ -1975,13 +1975,16 @@ export function LayoutViewer({
                       {editMode ? "Exit Edit Mode" : "Edit Rooms"}
                     </button>
                   ) : (
-                    <Link
-                      href="/pricing"
-                      className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground min-h-[44px]"
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium min-h-[44px]"
                     >
-                      <Lock className="h-4 w-4" />
-                      Edit Rooms (Pro)
-                    </Link>
+                      <Link href="/pricing">
+                        <Lock className="h-4 w-4" />
+                        Edit Rooms (Pro)
+                      </Link>
+                    </Button>
                   )}
                 </div>
               </SheetContent>
@@ -2083,14 +2086,18 @@ export function LayoutViewer({
                 {editMode ? "Exit Edit" : "Edit Rooms"}
               </button>
             ) : (
-              <Link
-                href="/pricing"
-                className="flex w-fit items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-fit gap-1.5 text-xs"
                 title="Upgrade to Pro to enable manual room editing"
               >
-                <Lock className="h-3 w-3" />
-                Edit Rooms
-              </Link>
+                <Link href="/pricing">
+                  <Lock className="h-3 w-3" />
+                  Edit Rooms
+                </Link>
+              </Button>
             )}
           </div>
 
