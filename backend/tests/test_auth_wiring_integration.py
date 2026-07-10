@@ -8,7 +8,7 @@ import time
 
 import jwt
 
-SECRET = "test-secret-for-ci"  # matches conftest.py's INTERNAL_AUTH_SECRET default
+SECRET = "test-secret-for-ci-0123456789abcdefgh"  # matches conftest.py's INTERNAL_AUTH_SECRET default
 
 
 def _token(user_id: str, exp_offset_seconds: int = 60, secret: str = SECRET) -> str:

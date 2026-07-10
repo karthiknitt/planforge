@@ -23,6 +23,10 @@ class FloorPlanOut(BaseModel):
     rooms: list[RoomOut]
     columns: list[ColumnOut]
     needs_mech_ventilation: bool = False
+    # Canonical drawing (walls/openings/columns/junctions/dim_chains/labels/
+    # stair) — same FloorDrawing.to_dict() the PDF/DXF renderers project.
+    # Computed at read time in to_generate_response(), not persisted.
+    drawing: dict | None = None
 
 
 class ComplianceOut(BaseModel):

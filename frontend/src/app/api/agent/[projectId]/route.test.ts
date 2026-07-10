@@ -1,13 +1,6 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-mock.module("next/headers", () => ({
-  headers: async () => new Headers(),
-}));
-
-const getSessionMock = mock(async () => null as { user: { id: string } } | null);
-mock.module("@/lib/auth", () => ({
-  auth: { api: { getSession: getSessionMock } },
-}));
+import { getSessionMock } from "@/test/setup";
 
 const { POST } = await import("./route");
 

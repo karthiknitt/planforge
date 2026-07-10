@@ -1,74 +1,78 @@
-"""FastAPI room operation endpoints — used by the agentic chat interface.
+"""FastAPI room operation endpoints — agent chat + edit-mode write-back.
 
-Each endpoint validates geometry using Shapely, applies the change to the
-in-memory layout state, and maintains a per-session undo stack.
+State lives in the persisted layouts table (app/models/layout.py), NOT in
+process memory: Cloud Run scales to zero and runs multiple instances, so any
+in-memory layout state was lost on cold start and inconsistent across
+instances. Every mutation writes back to the stored layout so the viewer,
+share view and exports all see the same geometry.
 
-Undo stack lives in module-level memory: {"{project_id}:{user_id}": deque[state]}.
-Capped at 10 entries. TTL cleanup not yet implemented (Phase D MVP).
+The undo stack persists in the `undo_stacks` table (capped at 10 entries),
+not process memory — Cloud Run scales to zero and runs multiple instances,
+so an in-memory stack was lost on cold start and inconsistent across them.
 """
 
 from __future__ import annotations
 
 import json
-from collections import deque
 from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from shapely.geometry import box
 from shapely.ops import unary_union
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
+from app.models.layout import StoredLayout
 from app.models.project import Project
-from app.models.user import User
+from app.models.undo import UndoStack
+from app.services import layout_store
+from app.services.access import get_accessible_project
+from app.services.plans import get_effective_plan_tier, tier_at_least
 
 router = APIRouter()
 
-# ── In-memory room state + undo stack ────────────────────────────────────────
-# Key: "{project_id}:{user_id}" → deque of serialised layout snapshots
-_undo_stacks: dict[str, deque[str]] = {}
-_layout_state: dict[str, dict] = {}  # live layout per session key
 MAX_UNDO = 10
 
 
-def _session_key(project_id: str, user_id: str) -> str:
-    return f"{project_id}:{user_id}"
+async def _push_undo(
+    db: AsyncSession, project_id: str, user_id: str, state: dict
+) -> None:
+    row = await db.get(UndoStack, (project_id, user_id))
+    if row is None:
+        row = UndoStack(project_id=project_id, user_id=user_id, stack=[])
+        db.add(row)
+    stack = list(row.stack)
+    stack.append(json.dumps(state))
+    row.stack = stack[-MAX_UNDO:]
+    flag_modified(row, "stack")
+    await db.commit()
 
 
-def _push_undo(key: str, state: dict) -> None:
-    if key not in _undo_stacks:
-        _undo_stacks[key] = deque(maxlen=MAX_UNDO)
-    _undo_stacks[key].append(json.dumps(state))
-
-
-def _pop_undo(key: str) -> dict | None:
-    stack = _undo_stacks.get(key)
-    if not stack:
+async def _pop_undo(db: AsyncSession, project_id: str, user_id: str) -> dict | None:
+    row = await db.get(UndoStack, (project_id, user_id))
+    if row is None or not row.stack:
         return None
-    return json.loads(stack.pop())
+    stack = list(row.stack)
+    state = json.loads(stack.pop())
+    row.stack = stack
+    flag_modified(row, "stack")
+    await db.commit()
+    return state
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
-    result = await db.execute(select(User).where(User.id == user_id))
-    u = result.scalar_one_or_none()
-    return u.plan_tier if u else "free"
+    return await get_effective_plan_tier(user_id, db)
 
 
 async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
-    result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return await get_accessible_project(project_id, user_id, db)
 
 
 def _to_float(v: Any) -> float:
@@ -77,12 +81,15 @@ def _to_float(v: Any) -> float:
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 def _buildable_box(project: Project):
-    ewt = 0.23
-    sx = _to_float(project.setback_left) + ewt
-    sy = _to_float(project.setback_front) + ewt
-    ex = _to_float(project.plot_width) - _to_float(project.setback_right) - ewt
-    ey = _to_float(project.plot_length) - _to_float(project.setback_rear) - ewt
-    return box(sx, sy, ex, ey)
+    """Canonical buildable polygon — honours plot shape (L-cutouts, quads,
+    trapezoids) and per-edge setbacks; the old version was a plain rectangle
+    with a hardcoded wall thickness."""
+    from app.engine.compliance import load_rules
+    from app.engine.geometry import buildable_polygon
+    from app.services.plot_config import plot_config_from_project
+
+    ewt = load_rules()["external_wall_thickness_mm"] / 1000
+    return buildable_polygon(plot_config_from_project(project), wall_clearance=ewt)
 
 
 def _check_placement(
@@ -171,75 +178,100 @@ class RoomEditItem(BaseModel):
 
 
 class ComplianceCheckRequest(BaseModel):
-    rooms: list[RoomEditItem]
+    rooms: list[RoomEditItem] = Field(max_length=200)
 
 
-# ── Helper: load/init state ───────────────────────────────────────────────────
-async def _get_or_init_state(project_id: str, user_id: str, db: AsyncSession) -> dict:
-    key = _session_key(project_id, user_id)
-    if key not in _layout_state:
-        # Generate fresh and cache first layout
-        project = await _get_project(project_id, user_id, db)
-        from app.engine.generator import generate
-        from app.engine.models import PlotConfig
+class LayoutRoomsUpdate(BaseModel):
+    rooms: list[RoomEditItem] = Field(min_length=1, max_length=200)
 
-        cfg = PlotConfig(
-            plot_length=_to_float(project.plot_length),
-            plot_width=_to_float(project.plot_width),
-            setback_front=_to_float(project.setback_front),
-            setback_rear=_to_float(project.setback_rear),
-            setback_left=_to_float(project.setback_left),
-            setback_right=_to_float(project.setback_right),
-            num_bedrooms=project.num_bedrooms,
-            toilets=project.toilets,
-            parking=project.parking,
-            city=getattr(project, "city", "other") or "other",
-            vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-            road_width_m=_to_float(getattr(project, "road_width_m", 9.0) or 9.0),
-            road_side=getattr(project, "road_side", "S") or "S",
-            plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-            cutout_corner=getattr(project, "cutout_corner", None),
-            cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-            cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
+
+# ── Helper: load persisted layout state ──────────────────────────────────────
+async def _load_layout_state(
+    project_id: str, user_id: str, db: AsyncSession
+) -> tuple[Project, StoredLayout, dict]:
+    """Load the first stored layout (solving + persisting when none exists).
+
+    Agent-chat edits operate on the first layout; mutations are written back
+    to the layouts table via layout_store.save_edited_geometry.
+    """
+    project = await _get_project(project_id, user_id, db)
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    if not stored:
+        raise HTTPException(
+            status_code=422, detail="No compliant layouts could be generated"
         )
-        layouts = generate(cfg)
-        if not layouts:
-            raise HTTPException(
-                status_code=422, detail="No compliant layouts could be generated"
+    row = stored[0]
+    return project, row, row.geometry
+
+
+FLOOR_MAP_IN = {
+    "gf": ("ground_floor", 0, "ground"),
+    "ff": ("first_floor", 1, "first"),
+    "sf": ("second_floor", 2, "second"),
+    "basement": ("basement_floor", -1, "basement"),
+}
+
+
+def _compliance_for_rooms(project: Project, layout_id: str, rooms: list[RoomEditItem]):
+    """Run the compliance engine over a flat edited-rooms list.
+
+    Returns (result, room_issues) where room_issues maps room id -> issues.
+    """
+    from app.engine.compliance import check, load_rules
+    from app.engine.models import (
+        ComplianceResult,
+        FloorPlan,
+        Layout,
+        Room,
+    )
+    from app.services.plot_config import plot_config_from_project
+
+    floor_rooms: dict[str, list[Room]] = {
+        "ground_floor": [],
+        "first_floor": [],
+        "second_floor": [],
+        "basement_floor": [],
+    }
+    for item in rooms:
+        fk, _fnum, _ftype = FLOOR_MAP_IN.get(item.floor, ("ground_floor", 0, "ground"))
+        floor_rooms[fk].append(
+            Room(
+                id=item.id,
+                name=item.name,
+                type=item.type,  # type: ignore[arg-type]
+                x=item.x,
+                y=item.y,
+                width=item.width,
+                depth=item.height,  # frontend uses "height"
             )
-        layout = layouts[0]
+        )
 
-        def _fp_to_dict(fp) -> dict:
-            return {
-                "floor": fp.floor,
-                "floor_type": getattr(fp, "floor_type", "ground"),
-                "rooms": [
-                    {
-                        "id": r.id,
-                        "name": r.name,
-                        "type": r.type,
-                        "x": r.x,
-                        "y": r.y,
-                        "width": r.width,
-                        "depth": r.depth,
-                        "area": r.area,
-                    }
-                    for r in fp.rooms
-                ],
-                "columns": [{"x": c.x, "y": c.y} for c in fp.columns],
-            }
+    def _make_floor(key: str, fnum: int, ftype: str) -> FloorPlan:
+        return FloorPlan(floor=fnum, floor_type=ftype, rooms=floor_rooms[key])
 
-        _layout_state[key] = {
-            "ground_floor": _fp_to_dict(layout.ground_floor),
-            "first_floor": _fp_to_dict(layout.first_floor),
-            "second_floor": _fp_to_dict(layout.second_floor)
-            if layout.second_floor
-            else None,
-            "basement_floor": _fp_to_dict(layout.basement_floor)
-            if layout.basement_floor
-            else None,
-        }
-    return _layout_state[key]
+    layout = Layout(
+        id=layout_id,
+        name="Edit Check",
+        ground_floor=_make_floor("ground_floor", 0, "ground"),
+        first_floor=_make_floor("first_floor", 1, "first"),
+        second_floor=_make_floor("second_floor", 2, "second")
+        if floor_rooms["second_floor"]
+        else None,
+        basement_floor=_make_floor("basement_floor", -1, "basement")
+        if floor_rooms["basement_floor"]
+        else None,
+        compliance=ComplianceResult(passed=True),
+    )
+    cfg = plot_config_from_project(project)
+    result = check(layout, cfg, load_rules())
+
+    room_issues: dict[str, list[str]] = {}
+    names = {item.id: item.name for item in rooms}
+    for issue in result.violations + result.warnings:
+        for rid, rname in names.items():
+            if issue.startswith(rname + ":") or issue.startswith(rname + " "):
+                room_issues.setdefault(rid, []).append(issue)
+    return result, room_issues
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -251,10 +283,10 @@ async def list_rooms(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    state = await _get_or_init_state(project_id, user_id, db)
+    _project, _row, state = await _load_layout_state(project_id, user_id, db)
 
     if floor == "all":
         rooms = []
@@ -268,6 +300,27 @@ async def list_rooms(
     return _get_state_rooms(state, floor)
 
 
+# NOTE: must be registered BEFORE /rooms/{room_id} — otherwise FastAPI matches
+# "layout-state" as a room_id and this endpoint is unreachable (pre-existing bug).
+@router.get("/projects/{project_id}/rooms/layout-state")
+async def get_layout_state(
+    project_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current persisted layout state as a LayoutData-compatible dict.
+
+    Called by the refresh_layout agent tool so the frontend SVG can re-render
+    after room modifications.
+    """
+    tier = await _get_plan_tier(user_id, db)
+    if not tier_at_least(tier, "pro"):
+        raise HTTPException(403, "Pro plan required for agentic chat")
+
+    _project, _row, state = await _load_layout_state(project_id, user_id, db)
+    return {"layout": _state_to_layout_dict(state)}
+
+
 @router.get("/projects/{project_id}/rooms/{room_id}")
 async def get_room(
     project_id: str,
@@ -276,10 +329,10 @@ async def get_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    state = await _get_or_init_state(project_id, user_id, db)
+    _project, _row, state = await _load_layout_state(project_id, user_id, db)
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
         raise HTTPException(404, "Room not found")
@@ -295,12 +348,10 @@ async def move_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    project = await _get_project(project_id, user_id, db)
-    state = await _get_or_init_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
+    project, row, state = await _load_layout_state(project_id, user_id, db)
 
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
@@ -313,9 +364,10 @@ async def move_room(
     if not ok:
         return {"success": False, "error": err}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     room["x"] = body.x
     room["y"] = body.y
+    await layout_store.save_edited_geometry(row, state, db)
     return {"success": True, "room": room}
 
 
@@ -328,12 +380,10 @@ async def resize_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    project = await _get_project(project_id, user_id, db)
-    state = await _get_or_init_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
+    project, row, state = await _load_layout_state(project_id, user_id, db)
 
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
@@ -348,10 +398,11 @@ async def resize_room(
     if not ok:
         return {"success": False, "error": err, "adjusted": False}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     room["width"] = new_w
     room["depth"] = new_d
     room["area"] = round(new_w * new_d, 2)
+    await layout_store.save_edited_geometry(row, state, db)
     return {"success": True, "room": room, "adjusted": False}
 
 
@@ -363,11 +414,10 @@ async def swap_rooms(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    state = await _get_or_init_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
+    _project, row, state = await _load_layout_state(project_id, user_id, db)
 
     room_a, fk_a = _find_room_and_floor(state, body.room_id_a)
     room_b, fk_b = _find_room_and_floor(state, body.room_id_b)
@@ -376,7 +426,7 @@ async def swap_rooms(
     if fk_a != fk_b:
         return {"success": False, "error": "Rooms must be on the same floor to swap"}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     ax, ay, aw, ad = room_a["x"], room_a["y"], room_a["width"], room_a["depth"]
     room_a["x"], room_a["y"], room_a["width"], room_a["depth"] = (
         room_b["x"],
@@ -387,6 +437,7 @@ async def swap_rooms(
     room_a["area"] = round(room_b["width"] * room_b["depth"], 2)
     room_b["x"], room_b["y"], room_b["width"], room_b["depth"] = ax, ay, aw, ad
     room_b["area"] = round(aw * ad, 2)
+    await layout_store.save_edited_geometry(row, state, db)
     return {"success": True, "rooms": [room_a, room_b]}
 
 
@@ -398,12 +449,11 @@ async def add_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    import json
-    import uuid as _uuid
     import pathlib
+    import uuid as _uuid
 
     specs_path = (
         pathlib.Path(__file__).parent.parent.parent / "config" / "room_specs.json"
@@ -411,9 +461,7 @@ async def add_room(
     specs = json.loads(specs_path.read_text())
     spec = specs.get(body.type, specs.get("utility"))
 
-    project = await _get_project(project_id, user_id, db)
-    state = await _get_or_init_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
+    project, row, state = await _load_layout_state(project_id, user_id, db)
 
     floor_map = {
         "gf": "ground_floor",
@@ -438,7 +486,7 @@ async def add_room(
     if not ok:
         return {"success": False, "error": err}
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     new_room = {
         "id": f"custom_{_uuid.uuid4().hex[:8]}",
         "name": body.name or body.type.replace("_", " ").title(),
@@ -450,6 +498,7 @@ async def add_room(
         "area": round(w * d, 2),
     }
     state[floor_key]["rooms"].append(new_room)
+    await layout_store.save_edited_geometry(row, state, db)
     return {"success": True, "room": new_room}
 
 
@@ -461,19 +510,19 @@ async def delete_room(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    state = await _get_or_init_state(project_id, user_id, db)
-    key = _session_key(project_id, user_id)
+    _project, row, state = await _load_layout_state(project_id, user_id, db)
     room, floor_key = _find_room_and_floor(state, room_id)
     if not room:
         raise HTTPException(404, "Room not found")
 
-    _push_undo(key, json.loads(json.dumps(state)))
+    await _push_undo(db, project_id, user_id, state)
     state[floor_key]["rooms"] = [
         r for r in state[floor_key]["rooms"] if r["id"] != room_id
     ]
+    await layout_store.save_edited_geometry(row, state, db)
     return {"success": True}
 
 
@@ -485,11 +534,10 @@ async def available_space(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    project = await _get_project(project_id, user_id, db)
-    state = await _get_or_init_state(project_id, user_id, db)
+    project, _row, state = await _load_layout_state(project_id, user_id, db)
     rooms = _get_state_rooms(state, floor)
 
     buildable = _buildable_box(project)
@@ -518,11 +566,10 @@ async def check_compliance(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    project = await _get_project(project_id, user_id, db)
-    state = await _get_or_init_state(project_id, user_id, db)
+    project, _row, state = await _load_layout_state(project_id, user_id, db)
 
     from app.engine.compliance import check, load_rules
     from app.engine.models import (
@@ -530,9 +577,9 @@ async def check_compliance(
         ComplianceResult,
         FloorPlan,
         Layout,
-        PlotConfig,
         Room,
     )
+    from app.services.plot_config import plot_config_from_project
 
     def _state_to_floor(
         state_dict: dict | None, floor_num: int, ftype: str
@@ -557,24 +604,7 @@ async def check_compliance(
             columns=[Column(x=c["x"], y=c["y"]) for c in state_dict.get("columns", [])],
         )
 
-    cfg = PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_side=getattr(project, "road_side", "S") or "S",
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-    )
+    cfg = plot_config_from_project(project)
     layout = Layout(
         id="live",
         name="Live",
@@ -601,114 +631,105 @@ async def compliance_check_rooms(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Live compliance check for edited rooms.
+    """Live compliance check for edited rooms (stateless — no write).
 
     Accepts a flat list of rooms (all floors) from the frontend edit mode.
     Returns violations/warnings plus per-room issue mapping so the UI can
     highlight specific rooms in red.
     """
     project = await _get_project(x_project_id, user_id, db)
-
-    from app.engine.compliance import check, load_rules
-    from app.engine.models import (
-        ComplianceResult,
-        FloorPlan,
-        Layout,
-        PlotConfig,
-        Room,
-    )
-
-    floor_map_in = {
-        "gf": ("ground_floor", 0, "ground"),
-        "ff": ("first_floor", 1, "first"),
-        "sf": ("second_floor", 2, "second"),
-        "basement": ("basement_floor", -1, "basement"),
+    result, room_issues = _compliance_for_rooms(project, layout_id, body.rooms)
+    return {
+        "passed": result.passed,
+        "violations": result.violations,
+        "warnings": result.warnings,
+        "room_issues": room_issues,
     }
 
-    # Group rooms by floor
-    floor_rooms: dict[str, list[Room]] = {
-        "ground_floor": [],
-        "first_floor": [],
-        "second_floor": [],
-        "basement_floor": [],
-    }
+
+@router.patch("/projects/{project_id}/layouts/{layout_key}")
+async def update_layout_rooms(
+    project_id: str,
+    layout_key: str,
+    body: LayoutRoomsUpdate,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist edited room geometry (positions AND sizes) for one layout.
+
+    This is the edit-mode/canvas write-back path: floors present in the
+    payload replace that floor's rooms. Placement is validated server-side,
+    compliance re-runs, and the stored layout is marked source='edited' so
+    exports and the share view pick the edits up.
+    """
+    tier = await _get_plan_tier(user_id, db)
+    if not tier_at_least(tier, "pro"):
+        raise HTTPException(403, "Pro plan required for layout editing")
+
+    project = await _get_project(project_id, user_id, db)
+    row = await layout_store.get_stored_layout(project_id, layout_key, db)
+    if row is None:
+        raise HTTPException(404, "Layout not found")
+
+    # Group payload rooms per floor and validate placement within each floor
+    per_floor: dict[str, list[RoomEditItem]] = {}
     for item in body.rooms:
-        fk, _fnum, _ftype = floor_map_in.get(item.floor, ("ground_floor", 0, "ground"))
-        floor_rooms[fk].append(
-            Room(
-                id=item.id,
-                name=item.name,
-                type=item.type,  # type: ignore[arg-type]
-                x=item.x,
-                y=item.y,
-                width=item.width,
-                depth=item.height,  # frontend uses "height"
+        fk, _fnum, _ftype = FLOOR_MAP_IN.get(item.floor, ("ground_floor", 0, "ground"))
+        per_floor.setdefault(fk, []).append(item)
+
+    for _fk, items in per_floor.items():
+        room_dicts = [
+            {
+                "id": it.id,
+                "name": it.name,
+                "x": it.x,
+                "y": it.y,
+                "width": it.width,
+                "depth": it.height,
+            }
+            for it in items
+        ]
+        for it in items:
+            ok, err = _check_placement(
+                it.id, it.x, it.y, it.width, it.height, room_dicts, project
             )
-        )
+            if not ok:
+                raise HTTPException(400, f"{it.name}: {err}")
 
-    def _make_floor(key: str, fnum: int, ftype: str) -> FloorPlan:
-        return FloorPlan(floor=fnum, floor_type=ftype, rooms=floor_rooms[key])
+    result, room_issues = _compliance_for_rooms(project, layout_key, body.rooms)
 
-    gf = _make_floor("ground_floor", 0, "ground")
-    ff = _make_floor("first_floor", 1, "first")
-    sf = (
-        _make_floor("second_floor", 2, "second")
-        if floor_rooms["second_floor"]
-        else None
-    )
-    bf = (
-        _make_floor("basement_floor", -1, "basement")
-        if floor_rooms["basement_floor"]
-        else None
-    )
+    geometry = json.loads(json.dumps(row.geometry))  # deep copy
+    for fk, items in per_floor.items():
+        fp = geometry.get(fk)
+        if not fp:
+            raise HTTPException(400, f"Floor '{fk}' does not exist in this layout")
+        fp["rooms"] = [
+            {
+                "id": it.id,
+                "name": it.name,
+                "type": it.type,
+                "x": it.x,
+                "y": it.y,
+                "width": it.width,
+                "depth": it.height,
+                "area": round(it.width * it.height, 2),
+            }
+            for it in items
+        ]
+    geometry["compliance"] = {
+        "passed": result.passed,
+        "violations": result.violations,
+        "warnings": result.warnings,
+    }
 
-    cfg = PlotConfig(
-        plot_length=_to_float(project.plot_length),
-        plot_width=_to_float(project.plot_width),
-        setback_front=_to_float(project.setback_front),
-        setback_rear=_to_float(project.setback_rear),
-        setback_left=_to_float(project.setback_left),
-        setback_right=_to_float(project.setback_right),
-        num_bedrooms=project.num_bedrooms,
-        toilets=project.toilets,
-        parking=project.parking,
-        city=getattr(project, "city", "other") or "other",
-        vastu_enabled=getattr(project, "vastu_enabled", False) or False,
-        road_side=getattr(project, "road_side", "S") or "S",
-        municipality=getattr(project, "municipality", None),
-        plot_shape=getattr(project, "plot_shape", "rectangular") or "rectangular",
-        cutout_corner=getattr(project, "cutout_corner", None),
-        cutout_width=_to_float(getattr(project, "cutout_width_m", 0.0) or 0.0),
-        cutout_height=_to_float(getattr(project, "cutout_height_m", 0.0) or 0.0),
-    )
-
-    layout = Layout(
-        id=layout_id,
-        name="Edit Check",
-        ground_floor=gf,
-        first_floor=ff,
-        second_floor=sf,
-        basement_floor=bf,
-        compliance=ComplianceResult(passed=True),
-    )
-    rules = load_rules()
-    result = check(layout, cfg, rules)
-
-    # Build per-room issue map — match violation/warning text to room names
-    room_issues: dict[str, list[str]] = {}
-    all_rooms_flat = {item.id: item.name for item in body.rooms}
-    for issue in result.violations + result.warnings:
-        for rid, rname in all_rooms_flat.items():
-            if issue.startswith(rname + ":") or issue.startswith(rname + " "):
-                if rid not in room_issues:
-                    room_issues[rid] = []
-                room_issues[rid].append(issue)
+    await layout_store.save_edited_geometry(row, geometry, db)
 
     return {
         "passed": result.passed,
         "violations": result.violations,
         "warnings": result.warnings,
         "room_issues": room_issues,
+        "layout": geometry,
     }
 
 
@@ -719,19 +740,19 @@ async def undo_last(
     db: AsyncSession = Depends(get_db),
 ):
     tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
+    if not tier_at_least(tier, "pro"):
         raise HTTPException(403, "Pro plan required for agentic chat")
 
-    key = _session_key(project_id, user_id)
-    prev = _pop_undo(key)
+    _project, row, _state = await _load_layout_state(project_id, user_id, db)
+    prev = await _pop_undo(db, project_id, user_id)
     if prev is None:
         return {"success": False, "error": "Nothing to undo"}
-    _layout_state[key] = prev
+    await layout_store.save_edited_geometry(row, prev, db)
     return {"success": True, "layout": _state_to_layout_dict(prev)}
 
 
 def _state_to_layout_dict(state: dict) -> dict:
-    """Convert in-memory floor-plan state to a LayoutData-compatible dict."""
+    """Convert a stored geometry dict to a LayoutData-compatible dict."""
 
     def _ensure_floor(fp: dict | None) -> dict | None:
         if fp is None:
@@ -742,32 +763,15 @@ def _state_to_layout_dict(state: dict) -> dict:
         }
 
     return {
-        "id": "current",
-        "name": "Current Layout",
-        "compliance": {"passed": True, "violations": [], "warnings": []},
+        "id": state.get("id", "current"),
+        "name": state.get("name", "Current Layout"),
+        "compliance": state.get(
+            "compliance", {"passed": True, "violations": [], "warnings": []}
+        ),
         "ground_floor": _ensure_floor(state.get("ground_floor")),
         "first_floor": _ensure_floor(state.get("first_floor")),
         "second_floor": _ensure_floor(state.get("second_floor")),
         "basement_floor": _ensure_floor(state.get("basement_floor")),
-        "score": None,
-        "space_notes": [],
+        "score": state.get("score"),
+        "space_notes": state.get("space_notes", []),
     }
-
-
-@router.get("/projects/{project_id}/rooms/layout-state")
-async def get_layout_state(
-    project_id: str,
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Return the current in-memory layout state as a LayoutData-compatible dict.
-
-    Called by the refresh_layout agent tool so the frontend SVG can re-render
-    after room modifications.
-    """
-    tier = await _get_plan_tier(user_id, db)
-    if tier != "pro":
-        raise HTTPException(403, "Pro plan required for agentic chat")
-
-    state = await _get_or_init_state(project_id, user_id, db)
-    return {"layout": _state_to_layout_dict(state)}

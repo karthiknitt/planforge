@@ -14,13 +14,16 @@ import {
   Lock,
   MessageSquare,
   Pencil,
+  Redo2,
   RefreshCw,
   RotateCcw,
   Save,
   Settings2,
+  Undo2,
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
@@ -45,6 +48,23 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
+import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
+import {
+  canRedo,
+  canUndo,
+  type History as EditHistory,
+  initHistory,
+  pushHistory,
+  redoHistory,
+  undoHistory,
+} from "@/lib/edit-history";
+import {
+  type JobStatus,
+  jobPhase,
+  MAX_POLLS,
+  POLL_INTERVAL_MS,
+  stageLabel,
+} from "@/lib/generation-job";
 import type {
   ComplianceData,
   FloorPlanData,
@@ -53,6 +73,9 @@ import type {
   RoomData,
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
+import { tierAtLeast } from "@/lib/plan";
+import { buildRenderImageUrl, classifyRenderStatus } from "@/lib/render-tab";
+import { type TabId, visibleTabs } from "@/lib/tabs";
 
 interface RevisionListItem {
   id: number;
@@ -115,6 +138,242 @@ function ScoreBadge({ score }: { score: number }) {
     <span className={`ml-1.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold ${color}`}>
       {score.toFixed(0)}
     </span>
+  );
+}
+
+// ── CAD drawing-quality badge — lazily fetched per layout, progressive enhancement ──
+function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKey: string }) {
+  const [quality, setQuality] = useState<CadQuality | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/backend/projects/${projectId}/layouts/${layoutKey}/quality`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((q) => {
+        if (!cancelled && q) setQuality(q);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, layoutKey]);
+
+  if (!quality) return null;
+
+  const tone = cadQualityTone(quality);
+  const color =
+    tone === "good"
+      ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/40"
+      : tone === "ok"
+        ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40"
+        : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/40";
+  return (
+    <span
+      className={`ml-1.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold ${color}`}
+      title="Deterministic CAD drawing quality (monochrome, dimensions, labels, completeness)"
+    >
+      {cadQualityLabel(quality)}
+    </span>
+  );
+}
+
+// ── Render tab — generate + view an AI render of the active layout, Pro-gated ──
+// "checking" probes the GET endpoint (via a hidden <img>) to see if a render
+// already exists from a previous session; "busy" tracks an in-flight POST
+// separately so a regenerate can keep showing the last successful image.
+type RenderPhase = "checking" | "none" | "ready" | "upsell" | "unavailable" | "error";
+
+function RenderTab({
+  projectId,
+  layoutKey,
+  planTier,
+}: {
+  projectId: string;
+  layoutKey: string;
+  planTier: string;
+}) {
+  const [phase, setPhase] = useState<RenderPhase>("checking");
+  const [busy, setBusy] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [error, setError] = useState("");
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const pollCountRef = useRef(0);
+
+  // Reset and re-check whenever the viewed layout changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: projectId/layoutKey are intentional re-check triggers, not read in the body
+  useEffect(() => {
+    setPhase("checking");
+    setError("");
+    setJob(null);
+  }, [projectId, layoutKey]);
+
+  const isPro = tierAtLeast(planTier, "pro");
+
+  async function handleGenerate() {
+    setBusy(true);
+    setError("");
+    setJob(null);
+    pollCountRef.current = 0;
+    try {
+      const res = await fetch(
+        `/api/backend/projects/${projectId}/layouts/${layoutKey}/render-jobs`,
+        { method: "POST" }
+      );
+      const outcome = classifyRenderStatus(res.status);
+      if (outcome === "upsell") {
+        setPhase("upsell");
+        setBusy(false);
+        return;
+      }
+      if (outcome === "unavailable") {
+        setPhase("unavailable");
+        setBusy(false);
+        return;
+      }
+      if (outcome !== "ready") {
+        const data = await res.json().catch(() => ({}));
+        setError((data as { detail?: string })?.detail ?? `Render failed (${res.status})`);
+        setPhase("error");
+        setBusy(false);
+        return;
+      }
+      // 200 (inline fallback, already resolved) or 202 (queued) — either way
+      // the job-status poll below drives phase from here; busy stays true
+      // until the job resolves.
+      setJob(await res.json());
+    } catch {
+      setError("Render failed — is the backend running?");
+      setPhase("error");
+      setBusy(false);
+    }
+  }
+
+  const renderJobPhase = jobPhase(job);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  useEffect(() => {
+    if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
+    const t = setInterval(async () => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current > MAX_POLLS) {
+        setError("Render is taking unusually long — try again.");
+        setPhase("error");
+        setBusy(false);
+        clearInterval(t);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+        if (res.ok) setJob(await res.json());
+      } catch {
+        /* transient poll failure — keep polling */
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [job?.id, renderJobPhase, projectId]);
+
+  useEffect(() => {
+    if (renderJobPhase === "done") {
+      setVersion((v) => v + 1);
+      setPhase("ready");
+      setBusy(false);
+    } else if (renderJobPhase === "failed") {
+      setError(job?.error ?? "Render failed.");
+      setPhase("error");
+      setBusy(false);
+    }
+  }, [renderJobPhase, job?.error]);
+
+  if (!isPro) {
+    return (
+      <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
+        <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
+        <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
+        <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
+        <Button asChild className="mt-4" size="sm" variant="outline">
+          <Link href="/pricing">Upgrade to Pro</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {phase === "checking" && (
+        <>
+          <div className="h-64 w-full max-w-xl animate-pulse rounded-xl bg-muted" />
+          {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
+          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
+          <img
+            src={buildRenderImageUrl(projectId, layoutKey, version)}
+            alt=""
+            className="hidden"
+            onLoad={() => setPhase("ready")}
+            onError={() => setPhase("none")}
+          />
+        </>
+      )}
+
+      {phase === "ready" && (
+        <>
+          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
+          <img
+            src={buildRenderImageUrl(projectId, layoutKey, version)}
+            alt="AI render of the active layout"
+            className="w-full max-w-xl rounded-xl border"
+          />
+        </>
+      )}
+
+      {phase === "none" && (
+        <p className="text-sm text-muted-foreground">
+          No render yet for this layout. Generate an AI-rendered visualisation from the current
+          floor plan.
+        </p>
+      )}
+
+      {phase === "unavailable" && (
+        <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
+          <p className="font-medium">Rendering isn't configured on this server yet.</p>
+        </div>
+      )}
+
+      {phase === "upsell" && (
+        <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
+          <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
+          <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
+          <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
+          <Button asChild className="mt-4" size="sm" variant="outline">
+            <Link href="/pricing">Upgrade to Pro</Link>
+          </Button>
+        </div>
+      )}
+
+      {error && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      {(phase === "none" || phase === "ready" || phase === "error") && (
+        <Button
+          size="sm"
+          variant={phase === "ready" ? "outline" : "default"}
+          className="w-fit gap-1.5"
+          onClick={() => void handleGenerate()}
+          disabled={busy}
+        >
+          <RefreshCw className="h-3 w-3" />
+          {busy
+            ? "Generating…"
+            : phase === "ready"
+              ? "Regenerate"
+              : phase === "error"
+                ? "Retry"
+                : "Generate render"}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -295,6 +554,98 @@ function _VastuBadge({ compliance }: { compliance: ComplianceData }) {
   );
 }
 
+// ── Generation panel — polls a generate-job to completion, then refreshes ──
+function GenerationPanel({
+  projectId,
+  autoStart,
+  onDone,
+}: {
+  projectId: string;
+  autoStart: boolean;
+  onDone?: () => void;
+}) {
+  const router = useRouter();
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const [error, setError] = useState("");
+  const startedRef = useRef(false);
+  const pollCountRef = useRef(0);
+
+  const start = useCallback(async () => {
+    setError("");
+    setJob(null);
+    pollCountRef.current = 0;
+    try {
+      const res = await fetch(`/api/backend/projects/${projectId}/generate-jobs`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        setError(`Could not start generation (HTTP ${res.status}).`);
+        return;
+      }
+      setJob(await res.json());
+    } catch {
+      setError("Could not reach the layout engine.");
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (autoStart && !startedRef.current) {
+      startedRef.current = true;
+      start();
+    }
+  }, [autoStart, start]);
+
+  const phase = jobPhase(job);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  useEffect(() => {
+    if (!job || phase === "done" || phase === "failed") return;
+    const t = setInterval(async () => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current > MAX_POLLS) {
+        setError("Generation is taking unusually long — try refreshing the page.");
+        clearInterval(t);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+        if (res.ok) setJob(await res.json());
+      } catch {
+        /* transient poll failure — keep polling */
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [job?.id, phase, projectId]);
+
+  useEffect(() => {
+    if (phase !== "done") return;
+    fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).finally(() => {
+      onDone?.();
+      router.refresh();
+    });
+  }, [phase, projectId, router, onDone]);
+
+  if (error || phase === "failed") {
+    return (
+      <div className="rounded-lg border border-destructive/40 p-6 text-center">
+        <p className="text-sm text-destructive">{error || job?.error || "Generation failed."}</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={start}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-dashed p-10 text-center">
+      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <p className="mt-3 font-medium">Generating your 3 layouts</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {job ? stageLabel(job.stage) : "Starting…"}
+      </p>
+    </div>
+  );
+}
+
 export function LayoutViewer({
   generateData,
   plotWidth,
@@ -318,13 +669,14 @@ export function LayoutViewer({
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const { locale } = useLocale();
+  const [regenerating, setRegenerating] = useState(false);
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
   const [floor, setFloor] = useState(0);
-  const [activeTab, setActiveTab] = useState<"plan" | "section" | "boq" | "chat" | "compare">(
-    "plan"
-  );
+  const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
+  const tabs = visibleTabs(agentChatEnabled);
+  const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -333,10 +685,12 @@ export function LayoutViewer({
   // ── Edit mode state ────────────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false);
   const [editedRooms, setEditedRooms] = useState<RoomData[] | null>(null);
+  const [editHistory, setEditHistory] = useState<EditHistory<RoomData[]> | null>(null);
   const [complianceIssues, setComplianceIssues] = useState<Record<string, string[]>>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editSaveError, setEditSaveError] = useState("");
   const complianceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editedFloorRef = useRef<string | null>(null);
 
   // ── Annotation state ───────────────────────────────────────────────────────
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -476,66 +830,74 @@ export function LayoutViewer({
       // Exit edit mode — discard unsaved changes
       setEditMode(false);
       setEditedRooms(null);
+      setEditHistory(null);
       setComplianceIssues({});
       setEditSaveError("");
     } else {
       setEditMode(true);
       setEditedRooms(null);
+      setEditHistory(initHistory(floorPlan.rooms));
       setComplianceIssues({});
     }
   }
 
   function handleResetRooms() {
     setEditedRooms(null);
+    setEditHistory(initHistory(floorPlan.rooms));
     setComplianceIssues({});
   }
 
-  async function runComplianceCheck(rooms: RoomData[], floorLabel: string): Promise<void> {
-    if (!session) return;
-    const floorCode =
-      floorLabel === "ff"
-        ? "ff"
-        : floorLabel === "sf"
-          ? "sf"
-          : floorLabel === "basement"
-            ? "basement"
-            : "gf";
-    try {
-      const body = {
-        rooms: rooms.map((r) => ({
-          id: r.id,
-          type: r.type,
-          name: r.name,
-          x: r.x,
-          y: r.y,
-          width: r.width,
-          height: r.depth,
-          floor: floorCode,
-        })),
-      };
-      const res = await fetch(`/api/backend/layouts/${selectedId}/compliance-check`, {
-        method: "POST",
-        headers: {
-          "X-Project-Id": projectId,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        passed: boolean;
-        violations: string[];
-        warnings: string[];
-        room_issues: Record<string, string[]>;
-      };
-      setComplianceIssues(data.room_issues);
-    } catch {
-      // silent — compliance check is non-critical
-    }
-  }
+  const runComplianceCheck = useCallback(
+    async (rooms: RoomData[], floorLabel: string): Promise<void> => {
+      if (!session) return;
+      const floorCode =
+        floorLabel === "ff"
+          ? "ff"
+          : floorLabel === "sf"
+            ? "sf"
+            : floorLabel === "basement"
+              ? "basement"
+              : "gf";
+      try {
+        const body = {
+          rooms: rooms.map((r) => ({
+            id: r.id,
+            type: r.type,
+            name: r.name,
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.depth,
+            floor: floorCode,
+          })),
+        };
+        const res = await fetch(`/api/backend/layouts/${selectedId}/compliance-check`, {
+          method: "POST",
+          headers: {
+            "X-Project-Id": projectId,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          passed: boolean;
+          violations: string[];
+          warnings: string[];
+          room_issues: Record<string, string[]>;
+        };
+        setComplianceIssues(data.room_issues);
+      } catch {
+        // silent — compliance check is non-critical
+      }
+    },
+    [session, selectedId, projectId]
+  );
 
   function handleRoomsChange(rooms: RoomData[], floorCode: string) {
     setEditedRooms(rooms);
+    setEditHistory((h) => (h ? pushHistory(h, rooms) : h));
+    editedFloorRef.current = floorCode;
     // Debounced compliance check: runs 800ms after last drag
     if (complianceDebounceRef.current) clearTimeout(complianceDebounceRef.current);
     complianceDebounceRef.current = setTimeout(() => {
@@ -543,25 +905,83 @@ export function LayoutViewer({
     }, 800);
   }
 
+  const handleUndo = useCallback(() => {
+    setEditHistory((h) => {
+      if (!h || !canUndo(h)) return h;
+      const next = undoHistory(h);
+      setEditedRooms(next.present);
+      const floorCode =
+        editedFloorRef.current ??
+        (floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf");
+      void runComplianceCheck(next.present, floorCode);
+      return next;
+    });
+  }, [floor, runComplianceCheck]);
+
+  const handleRedo = useCallback(() => {
+    setEditHistory((h) => {
+      if (!h || !canRedo(h)) return h;
+      const next = redoHistory(h);
+      setEditedRooms(next.present);
+      const floorCode =
+        editedFloorRef.current ??
+        (floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf");
+      void runComplianceCheck(next.present, floorCode);
+      return next;
+    });
+  }, [floor, runComplianceCheck]);
+
+  useEffect(() => {
+    if (!editMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) handleRedo();
+      else handleUndo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editMode, handleUndo, handleRedo]);
+
   async function handleSaveEditedRooms(rooms: RoomData[]) {
     if (!session) return;
     setEditSaving(true);
     setEditSaveError("");
     try {
-      // Persist each modified room via the existing resize endpoint
-      for (const room of rooms) {
-        const res = await fetch(`/api/backend/projects/${projectId}/rooms/${room.id}/resize`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ new_width: room.width, new_depth: room.depth }),
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { detail?: string };
-          throw new Error(data?.detail ?? `Save failed (${res.status})`);
-        }
+      // One PATCH with the full room list — positions AND sizes. The old
+      // per-room resize loop silently dropped x/y (wall-drag moves were
+      // never persisted).
+      const floorCode = editedFloorRef.current ?? "gf";
+      const res = await fetch(`/api/backend/projects/${projectId}/layouts/${selectedId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rooms: rooms.map((r) => ({
+            id: r.id,
+            type: r.type,
+            name: r.name,
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.depth,
+            floor: floorCode,
+          })),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        detail?: string;
+        layout?: LayoutData;
+      };
+      if (!res.ok) {
+        throw new Error(data?.detail ?? `Save failed (${res.status})`);
       }
+      // Show the persisted geometry immediately instead of reverting to the
+      // stale pre-edit prop, and bust the server-side layout cache so a
+      // reload agrees with what was just saved.
+      if (data.layout) setLiveLayout(data.layout);
+      void fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).catch(() => {});
       setEditMode(false);
       setEditedRooms(null);
       setComplianceIssues({});
@@ -824,15 +1244,7 @@ export function LayoutViewer({
   }
 
   if (generateData.layouts.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-        <p className="font-medium">No compliant layouts could be generated</p>
-        <p className="mt-1 text-sm">
-          The plot configuration does not produce any layouts that satisfy the building compliance
-          rules. Try increasing the plot size or reducing the setbacks.
-        </p>
-      </div>
-    );
+    return <GenerationPanel projectId={projectId} autoStart />;
   }
 
   // Use restoredData for display when a revision is active, else live data
@@ -882,6 +1294,7 @@ export function LayoutViewer({
             >
               Layout {l.id} — {l.name}
               {l.score && <ScoreBadge score={l.score.total} />}
+              <CadQualityBadge layoutKey={l.id} projectId={projectId} />
               {vastuEnabled && (
                 <span
                   className={[
@@ -984,8 +1397,23 @@ export function LayoutViewer({
           >
             {approvalFetching ? "…" : "↻"}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+            onClick={() => setRegenerating(true)}
+            disabled={regenerating}
+            title="Re-run the layout engine for this project"
+          >
+            <RefreshCw className="h-3 w-3 mr-1.5" />
+            Regenerate layouts
+          </Button>
         </div>
       </div>
+
+      {regenerating && (
+        <GenerationPanel projectId={projectId} autoStart onDone={() => setRegenerating(false)} />
+      )}
 
       {/* Share error */}
       {shareError && (
@@ -1385,10 +1813,10 @@ export function LayoutViewer({
         </details>
       )}
 
-      {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat */}
+      {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
       <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 overflow-x-auto scrollbar-none w-full md:w-fit">
-        {(["plan", "section", "boq", "compare", "chat"] as const).map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab}
             type="button"
@@ -1408,7 +1836,9 @@ export function LayoutViewer({
                   ? "BOQ"
                   : tab === "compare"
                     ? "Compare"
-                    : "Chat"}
+                    : tab === "chat"
+                      ? "Chat"
+                      : "Render"}
           </button>
         ))}
       </div>
@@ -1530,7 +1960,7 @@ export function LayoutViewer({
                       </span>
                     )}
                   </button>
-                  {planTier === "pro" ? (
+                  {tierAtLeast(planTier, "pro") ? (
                     <button
                       type="button"
                       onClick={handleToggleEditMode}
@@ -1633,7 +2063,7 @@ export function LayoutViewer({
                 </span>
               )}
             </button>
-            {planTier === "pro" ? (
+            {tierAtLeast(planTier, "pro") ? (
               <button
                 type="button"
                 onClick={handleToggleEditMode}
@@ -1678,6 +2108,28 @@ export function LayoutViewer({
                 Drag shared walls (blue lines) to resize rooms. Changes are not saved automatically.
               </p>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  onClick={handleUndo}
+                  disabled={!editHistory || !canUndo(editHistory)}
+                  title="Undo (Ctrl/Cmd+Z)"
+                >
+                  <Undo2 className="h-3 w-3" />
+                  Undo
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  onClick={handleRedo}
+                  disabled={!editHistory || !canRedo(editHistory)}
+                  title="Redo (Ctrl/Cmd+Shift+Z)"
+                >
+                  <Redo2 className="h-3 w-3" />
+                  Redo
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1735,7 +2187,9 @@ export function LayoutViewer({
           )}
 
           <FloorPlanSVG
-            floorPlan={floorPlan}
+            floorPlan={
+              editMode ? { ...floorPlan, rooms: editedRooms ?? floorPlan.rooms } : floorPlan
+            }
             plotWidth={plotWidth}
             plotLength={plotLength}
             roadSide={roadSide}
@@ -1787,6 +2241,7 @@ export function LayoutViewer({
           <SectionViewSVG
             buildingWidth={plotWidth}
             className="w-full md:max-w-xl rounded-xl border"
+            stairTreadCount={layout.ground_floor.drawing?.stair?.tread_count}
           />
           <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
             <span>Floor height: 3.0 m (each floor)</span>
@@ -1820,7 +2275,8 @@ export function LayoutViewer({
       )}
 
       {activeTab === "chat" &&
-        (planTier === "pro" ? (
+        agentChatEnabled &&
+        (tierAtLeast(planTier, "pro") ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Left: live floor plan preview — hidden on mobile to save screen space */}
             <div className="hidden md:flex flex-col gap-2">
@@ -1870,6 +2326,10 @@ export function LayoutViewer({
             </Button>
           </div>
         ))}
+
+      {activeTab === "render" && (
+        <RenderTab projectId={projectId} layoutKey={selectedId} planTier={planTier} />
+      )}
 
       {/* ── Restored revision banner ─────────────────────────────────────── */}
       {restoredData && (

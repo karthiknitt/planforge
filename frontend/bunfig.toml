@@ -1,0 +1,6 @@
+[test]
+# Only unit tests under src/ — tests/e2e/*.spec.ts are Playwright specs and
+# crash when bun's runner loads them ("Playwright Test did not expect test()
+# to be called here"), which also poisons unrelated files in the same run.
+root = "src"
+preload = ["./src/test/setup.ts"]

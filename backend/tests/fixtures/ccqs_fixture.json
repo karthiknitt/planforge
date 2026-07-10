@@ -1,0 +1,544 @@
+{
+  "cfg": {
+    "plot_length": 15.0,
+    "plot_width": 9.0,
+    "setback_front": 1.5,
+    "setback_rear": 1.0,
+    "setback_left": 1.0,
+    "setback_right": 1.0,
+    "num_bedrooms": 3,
+    "toilets": 2,
+    "parking": true,
+    "city": "other",
+    "vastu_enabled": false,
+    "road_width_m": 9.0,
+    "road_side": "S",
+    "has_pooja": false,
+    "has_study": false,
+    "has_balcony": false,
+    "plot_shape": "rectangular",
+    "plot_front_width": 0.0,
+    "plot_rear_width": 0.0,
+    "plot_side_offset": 0.0,
+    "plot_corners": null,
+    "cutout_corner": "NE",
+    "cutout_width": 0.0,
+    "cutout_height": 0.0,
+    "num_floors": 2,
+    "has_stilt": false,
+    "has_basement": false,
+    "municipality": null,
+    "custom_room_config": null
+  },
+  "geometry": {
+    "id": "A",
+    "name": "Corner Entry",
+    "compliance": {
+      "passed": true,
+      "violations": [],
+      "warnings": [
+        "Living / Hall: provide \u2265 1.12 sqm window opening for ventilation (NBC 1/10th rule)",
+        "Kitchen: 27.7 sqm > 15.0 sqm \u2014 unusually large for a residential kitchen",
+        "Kitchen: provide \u2265 1.0 sqm direct external window opening (NBC kitchen ventilation)",
+        "Toilet 1: width 0.75 m < 1.2 m recommended (NBC)",
+        "Toilet 1: provide \u2265 0.37 sqm ventilation opening (NBC bath ventilation)",
+        "Toilet 2: 16.6 sqm > 6.0 sqm \u2014 consider using bathroom_master type for large bathrooms",
+        "Toilet 2: provide \u2265 0.37 sqm ventilation opening (NBC bath ventilation)",
+        "Bedroom 1: width 2.10 m < 2.4 m recommended (NBC 2.4 m habitable)",
+        "Bedroom 1: provide \u2265 1.88 sqm window opening for ventilation (NBC 1/10th rule)",
+        "Bedroom 2: width 2.10 m < 2.4 m recommended (NBC 2.4 m habitable)",
+        "Bedroom 2: provide \u2265 1.88 sqm window opening for ventilation (NBC 1/10th rule)",
+        "Bedroom 3: width 2.10 m < 2.4 m recommended (NBC 2.4 m habitable)",
+        "Bedroom 3: provide \u2265 1.88 sqm window opening for ventilation (NBC 1/10th rule)",
+        "Kitchen: span 7.7 m > 4.5 m \u2014 add intermediate beam",
+        "Dining: span 7.7 m > 4.5 m \u2014 add intermediate beam",
+        "Toilet 1: span 7.7 m > 4.5 m \u2014 add intermediate beam",
+        "Dining: provide \u2265 1.51 sqm window opening (NBC 1/10th rule)"
+      ]
+    },
+    "ground_floor": {
+      "floor": 0,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "gf_stair",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 1.23,
+          "y": 1.73,
+          "width": 0.9,
+          "depth": 3.0,
+          "area": 2.7
+        },
+        {
+          "id": "gf_parking",
+          "name": "Parking",
+          "type": "parking",
+          "x": 2.245,
+          "y": 1.73,
+          "width": 2.75,
+          "depth": 3.0,
+          "area": 8.25
+        },
+        {
+          "id": "gf_living",
+          "name": "Living / Hall",
+          "type": "living",
+          "x": 5.11,
+          "y": 1.73,
+          "width": 2.66,
+          "depth": 4.214,
+          "area": 11.21
+        },
+        {
+          "id": "gf_kitchen",
+          "name": "Kitchen",
+          "type": "kitchen",
+          "x": 1.23,
+          "y": 6.059,
+          "width": 3.597,
+          "depth": 7.711,
+          "area": 27.74
+        },
+        {
+          "id": "gf_dining",
+          "name": "Dining",
+          "type": "dining",
+          "x": 4.942,
+          "y": 6.059,
+          "width": 1.962,
+          "depth": 7.711,
+          "area": 15.13
+        },
+        {
+          "id": "gf_toilet_1",
+          "name": "Toilet 1",
+          "type": "toilet",
+          "x": 7.019,
+          "y": 6.059,
+          "width": 0.751,
+          "depth": 7.711,
+          "area": 5.79
+        }
+      ],
+      "columns": [
+        {
+          "x": 1.23,
+          "y": 1.73
+        },
+        {
+          "x": 1.23,
+          "y": 4.73
+        },
+        {
+          "x": 1.23,
+          "y": 5.944
+        },
+        {
+          "x": 1.23,
+          "y": 6.059
+        },
+        {
+          "x": 1.23,
+          "y": 13.77
+        },
+        {
+          "x": 2.13,
+          "y": 1.73
+        },
+        {
+          "x": 2.13,
+          "y": 4.73
+        },
+        {
+          "x": 2.13,
+          "y": 5.944
+        },
+        {
+          "x": 2.13,
+          "y": 6.059
+        },
+        {
+          "x": 2.13,
+          "y": 13.77
+        },
+        {
+          "x": 2.245,
+          "y": 1.73
+        },
+        {
+          "x": 2.245,
+          "y": 4.73
+        },
+        {
+          "x": 2.245,
+          "y": 5.944
+        },
+        {
+          "x": 2.245,
+          "y": 6.059
+        },
+        {
+          "x": 2.245,
+          "y": 13.77
+        },
+        {
+          "x": 4.827,
+          "y": 1.73
+        },
+        {
+          "x": 4.827,
+          "y": 4.73
+        },
+        {
+          "x": 4.827,
+          "y": 5.944
+        },
+        {
+          "x": 4.827,
+          "y": 6.059
+        },
+        {
+          "x": 4.827,
+          "y": 13.77
+        },
+        {
+          "x": 4.942,
+          "y": 1.73
+        },
+        {
+          "x": 4.942,
+          "y": 4.73
+        },
+        {
+          "x": 4.942,
+          "y": 5.944
+        },
+        {
+          "x": 4.942,
+          "y": 6.059
+        },
+        {
+          "x": 4.942,
+          "y": 13.77
+        },
+        {
+          "x": 4.995,
+          "y": 1.73
+        },
+        {
+          "x": 4.995,
+          "y": 4.73
+        },
+        {
+          "x": 4.995,
+          "y": 5.944
+        },
+        {
+          "x": 4.995,
+          "y": 6.059
+        },
+        {
+          "x": 4.995,
+          "y": 13.77
+        },
+        {
+          "x": 5.11,
+          "y": 1.73
+        },
+        {
+          "x": 5.11,
+          "y": 4.73
+        },
+        {
+          "x": 5.11,
+          "y": 5.944
+        },
+        {
+          "x": 5.11,
+          "y": 6.059
+        },
+        {
+          "x": 5.11,
+          "y": 13.77
+        },
+        {
+          "x": 6.904,
+          "y": 1.73
+        },
+        {
+          "x": 6.904,
+          "y": 4.73
+        },
+        {
+          "x": 6.904,
+          "y": 5.944
+        },
+        {
+          "x": 6.904,
+          "y": 6.059
+        },
+        {
+          "x": 6.904,
+          "y": 13.77
+        },
+        {
+          "x": 7.019,
+          "y": 1.73
+        },
+        {
+          "x": 7.019,
+          "y": 4.73
+        },
+        {
+          "x": 7.019,
+          "y": 5.944
+        },
+        {
+          "x": 7.019,
+          "y": 6.059
+        },
+        {
+          "x": 7.019,
+          "y": 13.77
+        },
+        {
+          "x": 7.77,
+          "y": 1.73
+        },
+        {
+          "x": 7.77,
+          "y": 4.73
+        },
+        {
+          "x": 7.77,
+          "y": 5.944
+        },
+        {
+          "x": 7.77,
+          "y": 6.059
+        },
+        {
+          "x": 7.77,
+          "y": 13.77
+        }
+      ],
+      "needs_mech_ventilation": false
+    },
+    "first_floor": {
+      "floor": 1,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "ff_stair",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 1.23,
+          "y": 1.73,
+          "width": 0.9,
+          "depth": 3.0,
+          "area": 2.7
+        },
+        {
+          "id": "ff_toilet_2",
+          "name": "Toilet 2",
+          "type": "toilet",
+          "x": 2.245,
+          "y": 1.73,
+          "width": 5.525,
+          "depth": 3.0,
+          "area": 16.58
+        },
+        {
+          "id": "ff_bed_1",
+          "name": "Bedroom 1",
+          "type": "bedroom",
+          "x": 1.23,
+          "y": 4.845,
+          "width": 2.103,
+          "depth": 8.925,
+          "area": 18.77
+        },
+        {
+          "id": "ff_bed_2",
+          "name": "Bedroom 2",
+          "type": "bedroom",
+          "x": 3.448,
+          "y": 4.845,
+          "width": 2.103,
+          "depth": 8.925,
+          "area": 18.77
+        },
+        {
+          "id": "ff_bed_3",
+          "name": "Bedroom 3",
+          "type": "bedroom",
+          "x": 5.667,
+          "y": 4.845,
+          "width": 2.103,
+          "depth": 8.925,
+          "area": 18.77
+        }
+      ],
+      "columns": [
+        {
+          "x": 1.23,
+          "y": 1.73
+        },
+        {
+          "x": 1.23,
+          "y": 4.73
+        },
+        {
+          "x": 1.23,
+          "y": 4.845
+        },
+        {
+          "x": 1.23,
+          "y": 13.77
+        },
+        {
+          "x": 2.13,
+          "y": 1.73
+        },
+        {
+          "x": 2.13,
+          "y": 4.73
+        },
+        {
+          "x": 2.13,
+          "y": 4.845
+        },
+        {
+          "x": 2.13,
+          "y": 13.77
+        },
+        {
+          "x": 2.245,
+          "y": 1.73
+        },
+        {
+          "x": 2.245,
+          "y": 4.73
+        },
+        {
+          "x": 2.245,
+          "y": 4.845
+        },
+        {
+          "x": 2.245,
+          "y": 13.77
+        },
+        {
+          "x": 3.333,
+          "y": 1.73
+        },
+        {
+          "x": 3.333,
+          "y": 4.73
+        },
+        {
+          "x": 3.333,
+          "y": 4.845
+        },
+        {
+          "x": 3.333,
+          "y": 13.77
+        },
+        {
+          "x": 3.448,
+          "y": 1.73
+        },
+        {
+          "x": 3.448,
+          "y": 4.73
+        },
+        {
+          "x": 3.448,
+          "y": 4.845
+        },
+        {
+          "x": 3.448,
+          "y": 13.77
+        },
+        {
+          "x": 5.551,
+          "y": 1.73
+        },
+        {
+          "x": 5.551,
+          "y": 4.73
+        },
+        {
+          "x": 5.551,
+          "y": 4.845
+        },
+        {
+          "x": 5.551,
+          "y": 13.77
+        },
+        {
+          "x": 5.667,
+          "y": 1.73
+        },
+        {
+          "x": 5.667,
+          "y": 4.73
+        },
+        {
+          "x": 5.667,
+          "y": 4.845
+        },
+        {
+          "x": 5.667,
+          "y": 13.77
+        },
+        {
+          "x": 7.77,
+          "y": 1.73
+        },
+        {
+          "x": 7.77,
+          "y": 4.73
+        },
+        {
+          "x": 7.77,
+          "y": 4.845
+        },
+        {
+          "x": 7.77,
+          "y": 13.77
+        },
+        {
+          "x": 7.77,
+          "y": 1.73
+        },
+        {
+          "x": 7.77,
+          "y": 4.73
+        },
+        {
+          "x": 7.77,
+          "y": 4.845
+        },
+        {
+          "x": 7.77,
+          "y": 13.77
+        }
+      ],
+      "needs_mech_ventilation": false
+    },
+    "second_floor": null,
+    "basement_floor": null,
+    "score": {
+      "total": 85.9,
+      "natural_light": 100.0,
+      "adjacency": 58.7,
+      "aspect_ratio": 85.3,
+      "circulation": 94.1,
+      "vastu": 100.0
+    },
+    "space_notes": [],
+    "auto_added_rooms": []
+  }
+}

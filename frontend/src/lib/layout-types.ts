@@ -14,12 +14,98 @@ export interface ColumnData {
   y: number;
 }
 
+// ── Canonical drawing model (mirrors backend app/engine/cad_elements.py) ───
+// Same FloorDrawing.to_dict() payload the PDF/DXF renderers project — see
+// app/engine/plan_geometry.py::build_floor_drawing().
+
+export interface WallSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  thickness: number;
+  kind: "external" | "internal";
+}
+
+export interface WallJunction {
+  x: number;
+  y: number;
+  degree: number;
+}
+
+export interface Opening {
+  kind: "door" | "window" | "ventilator";
+  cx: number;
+  cy: number;
+  width: number;
+  is_horizontal: boolean;
+  wall_thickness: number;
+  hinge_x: number;
+  hinge_y: number;
+  swing_into_room_id: string;
+  swing_cw: boolean;
+}
+
+export interface LabelBox {
+  room_id: string;
+  cx: number;
+  cy: number;
+  lines: string[];
+  font_pt: number;
+  leader: [number, number] | null;
+  rotated: boolean;
+}
+
+export interface DimChainEntry {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface DimChain {
+  side: "bottom" | "top" | "left" | "right";
+  level: number;
+  coord: number;
+  entries: DimChainEntry[];
+}
+
+export interface StairGeometry {
+  room_id: string;
+  treads: [number, number, number, number][];
+  break_line: [number, number, number, number];
+  arrow: [number, number, number, number];
+  up_label_xy: [number, number];
+  tread_count: number;
+}
+
+export interface ColumnMarker {
+  cx: number;
+  cy: number;
+  size: number;
+}
+
+export interface FloorDrawing {
+  floor: number;
+  walls: WallSegment[];
+  openings: Opening[];
+  columns: ColumnMarker[];
+  junctions: WallJunction[];
+  dim_chains: DimChain[];
+  labels: LabelBox[];
+  stair: StairGeometry | null;
+  bounds: [number, number, number, number];
+  version: number;
+}
+
 export interface FloorPlanData {
   floor: number;
   floor_type: string;
   rooms: RoomData[];
   columns: ColumnData[];
   needs_mech_ventilation: boolean;
+  // Absent for statically-authored demo data (e.g. the marketing gallery)
+  // that never goes through the backend /generate endpoint.
+  drawing?: FloorDrawing | null;
 }
 
 export interface ComplianceData {

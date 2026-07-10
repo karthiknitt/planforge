@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
@@ -7,7 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
-import { project as projectTable, user as userTable } from "@/db/schema";
+import { project as projectTable, teamMember, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { fetchBackend } from "@/lib/backend-fetch";
 import type { GenerateResponse } from "@/lib/layout-types";
@@ -37,23 +37,21 @@ async function fetchLayouts(projectId: string, userId: string): Promise<Generate
   // would otherwise be part of Next's fetch cache key and defeat caching on
   // every request (the token never repeats). unstable_cache() caches on
   // projectId alone — the token minting only happens on an actual cache miss.
-  // Safe to key on projectId without userId: the caller (ProjectPage below)
-  // already enforces project.userId === session.user.id via notFound() before
-  // this ever runs, so a given projectId's cache entry can only ever be
-  // created by — and served back to — its one owner. If project access is
-  // ever widened (e.g. team-shared projects), this cache key must include
-  // userId too, or a cached response could leak across users.
+  // Project access is team-widened (owner OR team member), so the cache key
+  // includes userId — a projectId-only key could serve one user's cached
+  // entry to another authorised user, and would become a cross-user leak if
+  // authorisation rules ever drift again.
   const getCached = unstable_cache(
     async (): Promise<GenerateResponse | null> => {
       try {
-        const res = await fetchBackend(userId, `projects/${projectId}/generate`);
+        const res = await fetchBackend(userId, `projects/${projectId}/layouts`);
         if (!res.ok) return null;
         return res.json();
       } catch {
         return null;
       }
     },
-    [`project-generate-${projectId}`],
+    [`project-generate-${projectId}`, userId],
     { revalidate: 300, tags: [`project-${projectId}`] }
   );
   return getCached();
@@ -222,8 +220,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const rows = await db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1);
   const project = rows[0];
+  if (!project) notFound();
 
-  if (!project || project.userId !== session.user.id) notFound();
+  // Owner OR member of the project's team — matches the backend access rule
+  let canAccess = project.userId === session.user.id;
+  if (!canAccess && project.teamId != null) {
+    const membership = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(and(eq(teamMember.teamId, project.teamId), eq(teamMember.userId, session.user.id)))
+      .limit(1);
+    canAccess = membership.length > 0;
+  }
+  if (!canAccess) notFound();
 
   const userRows = await db
     .select({ planTier: userTable.planTier })

@@ -1,0 +1,78 @@
+name: Deploy Backend v2 to Cloud Run
+
+# v2 line: a parallel deployment of the v2 branch, isolated from production.
+# Own Cloud Run service (planforge-backend-v2), own Neon branch DB, own
+# internal-auth secret. Merges to main continue to deploy the prod service
+# via deploy-backend.yml untouched.
+
+on:
+  push:
+    branches: [v2]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: v2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        working-directory: backend
+        run: |
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/planforge-backend/api-v2:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: planforge-backend-v2
+          region: ${{ vars.GCP_REGION }}
+          image: ${{ env.IMAGE }}
+          flags: >-
+            --min-instances=0
+            --max-instances=3
+            --concurrency=4
+            --timeout=300
+            --cpu=1
+            --memory=1Gi
+            --allow-unauthenticated
+          # See deploy-backend.yml for the env_vars comma-escaping caveat.
+          env_vars: |
+            DATABASE_URL=${{ secrets.NEON_DATABASE_URL_V2 }}
+            DB_USE_NULLPOOL=true
+            ALLOWED_ORIGINS=${{ secrets.BACKEND_ALLOWED_ORIGINS_V2 }}
+            INTERNAL_AUTH_SECRET=${{ secrets.INTERNAL_AUTH_SECRET_V2 }}
+            RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}
+            RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}
+            RENDER_PROVIDER=openrouter
+            RENDER_MODEL=openai/gpt-image-1
+            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+            INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
+            INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
+
+      - name: Print service URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

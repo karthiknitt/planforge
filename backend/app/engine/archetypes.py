@@ -27,17 +27,44 @@ POOJA_D = 1.5  # pooja room depth
 STUDY_W = 2.5  # study room minimum width
 
 
-def _trapezoid_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
-    usable_width = (
-        min(cfg.plot_front_width, cfg.plot_rear_width)
-        - cfg.setback_left
-        - cfg.setback_right
-        - 2 * ewt
+def _inscribed_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    """Largest safe axis-aligned rectangle inside the buildable polygon of a
+    CONVEX plot (trapezoid/quad): for convex shapes, an x-interval valid at
+    both the bottom and top edges is valid at every height in between."""
+    from shapely.geometry import LineString
+
+    from app.engine.geometry import buildable_polygon
+
+    inset = buildable_polygon(cfg, wall_clearance=ewt)
+    if inset.is_empty:
+        raise ValueError("Plot too small for given setbacks and wall thickness")
+    minx, miny, maxx, maxy = inset.bounds
+    eps = 1e-6
+    bot = inset.intersection(
+        LineString([(minx - 1, miny + eps), (maxx + 1, miny + eps)])
     )
-    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
-    ox = cfg.setback_left + ewt
-    oy = cfg.setback_front + ewt
-    return FloorPlate(ox=ox, oy=oy, width=usable_width, depth=depth)
+    top = inset.intersection(
+        LineString([(minx - 1, maxy - eps), (maxx + 1, maxy - eps)])
+    )
+    if bot.is_empty or top.is_empty:
+        raise ValueError("Plot too small for given setbacks and wall thickness")
+    x_lo = max(bot.bounds[0], top.bounds[0])
+    x_hi = min(bot.bounds[2], top.bounds[2])
+    if x_hi - x_lo <= 0:
+        raise ValueError("Plot too narrow for given setbacks")
+    return FloorPlate(
+        ox=round(x_lo, 3),
+        oy=round(miny, 3),
+        width=round(x_hi - x_lo, 3),
+        depth=round(maxy - miny, 3),
+    )
+
+
+def _trapezoid_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    # Safe inscribed rectangle of the true per-edge inset. The old version
+    # anchored min(front,rear) width at the LEFT setback — but trapezoid
+    # edges are centred, so rooms could poke out of the slanted side.
+    return _inscribed_plate(cfg, ewt)
 
 
 def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
@@ -60,21 +87,10 @@ def _quad_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     poly = Polygon(cfg.plot_corners)
     if not poly.is_valid or not poly.is_simple:
         raise ValueError("Quadrilateral corners do not form a valid simple polygon")
-    avg_sb = (
-        cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-    ) / 4
-    inset = poly.buffer(-(avg_sb + ewt), join_style="mitre")
-    if inset.is_empty:
-        raise ValueError(
-            "Quadrilateral plot too small for given setbacks and wall thickness"
-        )
-    minx, miny, maxx, maxy = inset.bounds
-    return FloorPlate(
-        ox=round(minx, 3),
-        oy=round(miny, 3),
-        width=round(maxx - minx, 3),
-        depth=round(maxy - miny, 3),
-    )
+    # Safe inscribed rectangle of the true per-edge inset (old version used a
+    # uniform averaged-setback buffer and the inset's bounding box, which both
+    # under-enforces the front setback and can poke outside slanted edges).
+    return _inscribed_plate(cfg, ewt)
 
 
 def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:

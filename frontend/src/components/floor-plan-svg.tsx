@@ -1,11 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
 import { PlumbingOverlay } from "@/components/plumbing-overlay";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { FloorPlanData, RoomData } from "@/lib/layout-types";
+import { applyResize, type Corner, type RectMM, snapRect } from "@/lib/canvas-snap";
+import type {
+  DimChain,
+  FloorPlanData,
+  Opening,
+  RoomData,
+  StairGeometry,
+  WallSegment,
+} from "@/lib/layout-types";
 import type { Locale } from "@/lib/locale-context";
 import { getRoomName } from "@/lib/room-names";
 
@@ -23,10 +31,6 @@ const VP_W = 600;
 const VP_H = 720;
 const PAD = 44; // padding for labels + road strip
 const ROAD_H = 22;
-
-// ── Wall thicknesses (metres → will be scaled to px) ─────────────────────────
-const EWT = 0.23; // external wall (m)
-const IWT = 0.115; // internal wall (m)
 
 // ── Room colour palette ───────────────────────────────────────────────────────
 const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = {
@@ -222,63 +226,6 @@ function WindowSymbol({
         fontWeight="700"
       >
         W
-      </text>
-    </g>
-  );
-}
-
-// ── Staircase treads ──────────────────────────────────────────────────────────
-function StaircaseSymbol({
-  room,
-  px,
-  py,
-  scale,
-}: {
-  room: { x: number; y: number; width: number; depth: number };
-  px: (v: number) => number;
-  py: (v: number) => number;
-  scale: number;
-}) {
-  const x0 = px(room.x);
-  const x1 = px(room.x + room.width);
-  const y0 = py(room.y + room.depth); // top in SVG (y flipped)
-  const y1 = py(room.y); // bottom in SVG
-  const h = Math.abs(y1 - y0);
-  const treadH = Math.max(4, Math.min(10, scale * 0.3));
-  const numTreads = Math.max(3, Math.floor(h / treadH));
-  const step = h / numTreads;
-
-  const lines: React.ReactNode[] = [];
-  for (let i = 1; i < numTreads; i++) {
-    const ly = y0 + i * step;
-    lines.push(<line key={i} x1={x0} y1={ly} x2={x1} y2={ly} stroke="#94A3B8" strokeWidth={0.6} />);
-  }
-  // Cut line (diagonal cross-hatching line with UP arrow)
-  const midY = (y0 + y1) / 2;
-  return (
-    <g>
-      {lines}
-      {/* Cut line */}
-      <line
-        x1={x0}
-        y1={midY}
-        x2={x1}
-        y2={midY}
-        stroke="#64748B"
-        strokeWidth={1.2}
-        strokeDasharray="4 2"
-      />
-      {/* UP label */}
-      <text
-        x={(x0 + x1) / 2}
-        y={midY - 4}
-        textAnchor="middle"
-        fontSize={Math.max(6, scale * 0.12)}
-        fontFamily="sans-serif"
-        fill="#64748B"
-        fontWeight="600"
-      >
-        UP
       </text>
     </g>
   );
@@ -665,76 +612,6 @@ function RoomFurniture({
   }
 }
 
-// ── Door symbol (line + quarter-arc + D label) ────────────────────────────────
-// wall: "bottom" | "top" | "left" | "right" — which wall edge the door is on
-function DoorSymbol({
-  hx,
-  hy,
-  doorPx,
-  wall = "bottom",
-}: {
-  hx: number;
-  hy: number;
-  doorPx: number;
-  wall?: "bottom" | "top" | "left" | "right";
-}) {
-  const r = doorPx;
-  // Door leaf and arc, oriented to the wall
-  let leafX2 = hx;
-  let leafY2 = hy;
-  let arcD = "";
-  let labelX = hx;
-  let labelY = hy;
-
-  if (wall === "bottom") {
-    // hinge at (hx, hy), door leaf goes right, arc sweeps up
-    leafX2 = hx + r;
-    leafY2 = hy;
-    arcD = `M ${hx + r} ${hy} A ${r} ${r} 0 0 0 ${hx} ${hy - r}`;
-    labelX = hx + r / 2;
-    labelY = hy - r / 2;
-  } else if (wall === "top") {
-    leafX2 = hx + r;
-    leafY2 = hy;
-    arcD = `M ${hx + r} ${hy} A ${r} ${r} 0 0 1 ${hx} ${hy + r}`;
-    labelX = hx + r / 2;
-    labelY = hy + r / 2;
-  } else if (wall === "left") {
-    leafX2 = hx;
-    leafY2 = hy - r;
-    arcD = `M ${hx} ${hy - r} A ${r} ${r} 0 0 1 ${hx + r} ${hy}`;
-    labelX = hx + r / 2;
-    labelY = hy - r / 2;
-  } else {
-    // right
-    leafX2 = hx;
-    leafY2 = hy - r;
-    arcD = `M ${hx} ${hy - r} A ${r} ${r} 0 0 0 ${hx - r} ${hy}`;
-    labelX = hx - r / 2;
-    labelY = hy - r / 2;
-  }
-
-  return (
-    <g stroke="#64748B" strokeWidth={0.75} fill="none">
-      <line x1={hx} y1={hy} x2={leafX2} y2={leafY2} />
-      <path d={arcD} />
-      <text
-        x={labelX}
-        y={labelY}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={6}
-        fontWeight="700"
-        fill="#64748B"
-        stroke="none"
-        fontFamily="sans-serif"
-      >
-        D
-      </text>
-    </g>
-  );
-}
-
 // ── Dimension line ────────────────────────────────────────────────────────────
 function DimLine({
   x1,
@@ -794,6 +671,228 @@ function DimLine({
   );
 }
 
+// ── Canonical drawing renderers ────────────────────────────────────────────────
+// Walls/openings/columns/stair/dim-chains projected from the backend's
+// FloorDrawing (app.engine.plan_geometry.build_floor_drawing) — the same
+// geometry the PDF/DXF exports draw. Room fills, labels (locale-aware),
+// furniture, and edit-mode interaction stay room-rect based (see M1 in
+// docs/superpowers/plans/2026-07-05-combined-phase3-cad-quality.md).
+
+function DrawingWall({
+  wall,
+  px,
+  py,
+  scale,
+}: {
+  wall: WallSegment;
+  px: (v: number) => number;
+  py: (v: number) => number;
+  scale: number;
+}) {
+  const half = (wall.thickness / 2) * scale;
+  const fill = wall.kind === "external" ? "#1E293B" : "#475569";
+  if (Math.abs(wall.x1 - wall.x2) < 1e-6) {
+    const x = px(wall.x1);
+    const yA = py(wall.y1);
+    const yB = py(wall.y2);
+    return (
+      <rect
+        x={x - half}
+        y={Math.min(yA, yB)}
+        width={2 * half}
+        height={Math.abs(yB - yA)}
+        fill={fill}
+      />
+    );
+  }
+  const y = py(wall.y1);
+  const xA = px(wall.x1);
+  const xB = px(wall.x2);
+  return (
+    <rect
+      x={Math.min(xA, xB)}
+      y={y - half}
+      width={Math.abs(xB - xA)}
+      height={2 * half}
+      fill={fill}
+    />
+  );
+}
+
+function VentilatorSymbol({
+  cx,
+  cy,
+  width,
+  horizontal,
+}: {
+  cx: number;
+  cy: number;
+  width: number;
+  horizontal: boolean;
+}) {
+  const hw = width / 2;
+  return (
+    <g stroke="#A855F7" strokeWidth={0.6}>
+      {[-2, 2].map((off) =>
+        horizontal ? (
+          <line key={off} x1={cx - hw} y1={cy + off} x2={cx + hw} y2={cy + off} />
+        ) : (
+          <line key={off} x1={cx + off} y1={cy - hw} x2={cx + off} y2={cy + hw} />
+        )
+      )}
+    </g>
+  );
+}
+
+// Door leaf + swing arc from the canonical Opening (hinge/swing-aware) —
+// unlike the legacy DoorSymbol, chirality is derived from real geometry
+// (hinge_x/y, swing_cw) rather than a fixed "prefer bottom wall" heuristic.
+function DrawingDoorSymbol({
+  op,
+  px,
+  py,
+}: {
+  op: Opening;
+  px: (v: number) => number;
+  py: (v: number) => number;
+}) {
+  const jambX = 2 * op.cx - op.hinge_x;
+  const jambY = 2 * op.cy - op.hinge_y;
+  const ang0 = Math.atan2(jambY - op.hinge_y, jambX - op.hinge_x);
+  const sweep = op.swing_cw ? -Math.PI / 2 : Math.PI / 2;
+  const openX = op.hinge_x + op.width * Math.cos(ang0 + sweep);
+  const openY = op.hinge_y + op.width * Math.sin(ang0 + sweep);
+
+  const hx = px(op.hinge_x);
+  const hy = py(op.hinge_y);
+  const jx = px(jambX);
+  const jy = py(jambY);
+  const ex = px(openX);
+  const ey = py(openY);
+  const r = Math.hypot(ex - hx, ey - hy);
+
+  // Sweep-flag derived from the transformed screen points (not re-applied
+  // from the swing_cw sign) so it self-corrects for the SVG y-flip.
+  const angJ = Math.atan2(jy - hy, jx - hx);
+  const angE = Math.atan2(ey - hy, ex - hx);
+  let delta = angE - angJ;
+  while (delta <= -Math.PI) delta += 2 * Math.PI;
+  while (delta > Math.PI) delta -= 2 * Math.PI;
+  const sweepFlag = delta > 0 ? 1 : 0;
+  const mid = angJ + delta / 2;
+
+  return (
+    <g stroke="#64748B" strokeWidth={0.75} fill="none">
+      <line x1={hx} y1={hy} x2={ex} y2={ey} />
+      <path d={`M ${jx} ${jy} A ${r} ${r} 0 0 ${sweepFlag} ${ex} ${ey}`} />
+      <text
+        x={hx + r * 0.55 * Math.cos(mid)}
+        y={hy + r * 0.55 * Math.sin(mid)}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={6}
+        fontWeight="700"
+        fill="#64748B"
+        stroke="none"
+        fontFamily="sans-serif"
+      >
+        D
+      </text>
+    </g>
+  );
+}
+
+function DrawingStairSymbol({
+  stair,
+  px,
+  py,
+}: {
+  stair: StairGeometry;
+  px: (v: number) => number;
+  py: (v: number) => number;
+}) {
+  const [bx1, by1, bx2, by2] = stair.break_line;
+  const [ax1, ay1, ax2, ay2] = stair.arrow;
+  const [ux, uy] = stair.up_label_xy;
+  return (
+    <g>
+      <g stroke="#94A3B8" strokeWidth={0.6}>
+        {stair.treads.map(([x1, y1, x2, y2]) => (
+          <line
+            key={`tread-${x1}-${y1}-${x2}-${y2}`}
+            x1={px(x1)}
+            y1={py(y1)}
+            x2={px(x2)}
+            y2={py(y2)}
+          />
+        ))}
+      </g>
+      <line
+        x1={px(bx1)}
+        y1={py(by1)}
+        x2={px(bx2)}
+        y2={py(by2)}
+        stroke="#64748B"
+        strokeWidth={1.2}
+        strokeDasharray="4 2"
+      />
+      <line x1={px(ax1)} y1={py(ay1)} x2={px(ax2)} y2={py(ay2)} stroke="#64748B" strokeWidth={1} />
+      <text
+        x={px(ux)}
+        y={py(uy)}
+        textAnchor="middle"
+        fontSize={7}
+        fontFamily="sans-serif"
+        fill="#64748B"
+        fontWeight="600"
+      >
+        UP
+      </text>
+    </g>
+  );
+}
+
+function DrawingDimChain({
+  chain,
+  px,
+  py,
+}: {
+  chain: DimChain;
+  px: (v: number) => number;
+  py: (v: number) => number;
+}) {
+  const horizontal = chain.side === "bottom" || chain.side === "top";
+  return (
+    <>
+      {chain.entries.map((entry) =>
+        horizontal ? (
+          <DimLine
+            key={`${chain.side}-${chain.level}-${entry.start}`}
+            x1={px(entry.start)}
+            y1={py(chain.coord)}
+            x2={px(entry.end)}
+            y2={py(chain.coord)}
+            label={entry.text}
+            offset={0}
+            horizontal
+          />
+        ) : (
+          <DimLine
+            key={`${chain.side}-${chain.level}-${entry.start}`}
+            x1={px(chain.coord)}
+            y1={py(entry.start)}
+            x2={px(chain.coord)}
+            y2={py(entry.end)}
+            label={entry.text}
+            offset={0}
+            horizontal={false}
+          />
+        )
+      )}
+    </>
+  );
+}
+
 // ── Minimum room side dimensions for edit-mode constraint enforcement ─────────
 const MIN_ROOM_SIDE: Record<string, number> = {
   bedroom: 3.0,
@@ -810,7 +909,7 @@ function getMinSide(type: string): number {
 }
 
 // ── Shared wall detection ─────────────────────────────────────────────────────
-interface SharedWall {
+export interface SharedWall {
   orientation: "vertical" | "horizontal";
   wallPos: number;
   roomA: RoomData;
@@ -821,7 +920,7 @@ interface SharedWall {
 
 const WALL_TOL = 0.01;
 
-function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
+export function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
   const walls: SharedWall[] = [];
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
@@ -1060,6 +1159,46 @@ export function FloorPlanSVG({
     depthB: number;
   } | null>(null);
 
+  // ── Edit mode: room selection + move-drag state ─────────────────────────────
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const moveRef = useRef<{
+    roomId: string;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const resizeRef = useRef<{
+    roomId: string;
+    corner: Corner;
+    startClientX: number;
+    startClientY: number;
+    orig: RectMM;
+  } | null>(null);
+  const svgElRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    if (!editMode) setSelectedRoomId(null);
+  }, [editMode]);
+
+  // Undo/redo (Task 10) lands as a new floorPlan.rooms identity from the
+  // parent. Drop our own drag-local override so displayRooms falls back to
+  // the incoming prop — otherwise the canvas would keep showing whatever
+  // was mid-drag before undo/redo fired instead of the reverted positions.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: floorPlan.rooms is a deliberate re-trigger on identity change, not read inside the effect
+  useEffect(() => {
+    if (editMode) setEditRooms(null);
+  }, [editMode, floorPlan.rooms]);
+
+  // client-pixel delta → metres in model space (y flipped: SVG y grows down,
+  // model y grows away from the road at the bottom)
+  const clientDeltaToMetres = (dxPx: number, dyPx: number): [number, number] => {
+    const el = svgElRef.current;
+    if (!el) return [0, 0];
+    const pxPerUnit = el.getBoundingClientRect().width / VP_W;
+    return [dxPx / pxPerUnit / scale, -dyPx / pxPerUnit / scale];
+  };
+
   // The rooms to render — use editRooms if in edit mode and user has dragged, else floorPlan.rooms
   const displayRooms: RoomData[] = editMode && editRooms !== null ? editRooms : floorPlan.rooms;
 
@@ -1082,35 +1221,12 @@ export function FloorPlanSVG({
 
   const rooms = displayRooms;
 
-  // Compute building extents for wall rendering
-  const minX = rooms.length ? Math.min(...rooms.map((r) => r.x)) : 0;
-  const maxX = rooms.length ? Math.max(...rooms.map((r) => r.x + r.width)) : 0;
-  const minY = rooms.length ? Math.min(...rooms.map((r) => r.y)) : 0;
-  const maxY = rooms.length ? Math.max(...rooms.map((r) => r.y + r.depth)) : 0;
-
-  // Internal wall x/y grid lines (exclude outer edges)
-  const wallXs = [...new Set(rooms.flatMap((r) => [r.x, r.x + r.width]))].sort((a, b) => a - b);
-  const wallYs = [...new Set(rooms.flatMap((r) => [r.y, r.y + r.depth]))].sort((a, b) => a - b);
-  const intWallXs = wallXs.slice(1, -1);
-  const intWallYs = wallYs.slice(1, -1);
-
-  // Windows on exterior-facing room walls
-  const habitable = new Set(["living", "bedroom", "kitchen", "study", "dining"]);
-  const winPx = Math.min(1.2, plotWidth * 0.15) * scale;
-  const tol = 0.05;
-
-  const uniqueCols = Array.from(
-    new Map(floorPlan.columns.map((c) => [`${c.x}-${c.y}`, c])).values()
-  );
-
-  const halfEwt = (EWT * scale) / 2;
-  const halfIwt = (IWT * scale) / 2;
-
-  // Building boundary in SVG coords
-  const bLeft = px(minX);
-  const bRight = px(maxX);
-  const bBottom = py(minY);
-  const bTop = py(maxY);
+  // Canonical drawing (walls/openings/columns/stair/dim_chains) — absent
+  // only for statically-authored demo data (marketing gallery) that never
+  // calls the backend. Dimmed in edit mode once a live drag has made it
+  // stale, refreshed to full opacity by the next save's fresh drawing.
+  const drawing = floorPlan.drawing ?? null;
+  const drawingOpacity = editMode && editRooms !== null ? 0.35 : 1;
 
   // Build annotation lookup by room_id for quick access
   const annotationMap = new Map(annotations.map((a) => [a.room_id, a]));
@@ -1134,7 +1250,78 @@ export function FloorPlanSVG({
     };
   }
 
+  function handleRoomMouseDown(e: React.MouseEvent, room: RoomData): void {
+    if (!editMode) return;
+    e.stopPropagation(); // don't let the svg background deselect
+    setSelectedRoomId(room.id);
+    moveRef.current = {
+      roomId: room.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      origX: room.x,
+      origY: room.y,
+    };
+  }
+
+  function handleResizeMouseDown(e: React.MouseEvent, room: RoomData, corner: Corner): void {
+    if (!editMode) return;
+    e.stopPropagation();
+    resizeRef.current = {
+      roomId: room.id,
+      corner,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      orig: { id: room.id, x: room.x, y: room.y, width: room.width, depth: room.depth },
+    };
+  }
+
   function handleSVGMouseMove(e: React.MouseEvent<SVGSVGElement>): void {
+    if (editMode && resizeRef.current) {
+      const rz = resizeRef.current;
+      const [dxM, dyM] = clientDeltaToMetres(
+        e.clientX - rz.startClientX,
+        e.clientY - rz.startClientY
+      );
+      const base = editRooms ?? floorPlan.rooms;
+      const target = base.find((r) => r.id === rz.roomId);
+      if (!target) return;
+      const resized = applyResize(
+        rz.orig,
+        rz.corner,
+        dxM,
+        dyM,
+        getMinSide(target.type),
+        base,
+        plotWidth,
+        plotLength
+      );
+      setEditRooms(base.map((r) => (r.id === rz.roomId ? { ...r, ...resized } : r)));
+      return;
+    }
+    if (editMode && moveRef.current) {
+      const m = moveRef.current;
+      const [dxM, dyM] = clientDeltaToMetres(
+        e.clientX - m.startClientX,
+        e.clientY - m.startClientY
+      );
+      const base = editRooms ?? floorPlan.rooms;
+      const moving = base.find((r) => r.id === m.roomId);
+      if (!moving) return;
+      const snapped = snapRect(
+        {
+          id: moving.id,
+          x: m.origX + dxM,
+          y: m.origY + dyM,
+          width: moving.width,
+          depth: moving.depth,
+        },
+        base,
+        plotWidth,
+        plotLength
+      );
+      setEditRooms(base.map((r) => (r.id === m.roomId ? { ...r, x: snapped.x, y: snapped.y } : r)));
+      return;
+    }
     if (!editMode || !dragRef.current) return;
     const drag = dragRef.current;
 
@@ -1230,6 +1417,20 @@ export function FloorPlanSVG({
   }
 
   function handleSVGMouseUp(): void {
+    if (editMode && resizeRef.current) {
+      resizeRef.current = null;
+      if (editRooms !== null && onRoomsChange) {
+        onRoomsChange(editRooms);
+      }
+      return;
+    }
+    if (editMode && moveRef.current) {
+      moveRef.current = null;
+      if (editRooms !== null && onRoomsChange) {
+        onRoomsChange(editRooms);
+      }
+      return;
+    }
     if (!editMode || !dragRef.current) return;
     dragRef.current = null;
     setDragTooltip(null);
@@ -1239,14 +1440,19 @@ export function FloorPlanSVG({
   }
 
   function handleSVGMouseLeave(): void {
-    if (dragRef.current) {
+    if (dragRef.current || moveRef.current || resizeRef.current) {
       handleSVGMouseUp();
     }
+  }
+
+  function handleSVGBackgroundMouseDown(): void {
+    if (editMode && !moveRef.current) setSelectedRoomId(null);
   }
 
   return (
     <TooltipProvider>
       <svg
+        ref={svgElRef}
         viewBox={`0 0 ${VP_W} ${VP_H}`}
         className={["floor-plan-svg", className].filter(Boolean).join(" ")}
         style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
@@ -1254,6 +1460,7 @@ export function FloorPlanSVG({
         onMouseMove={editMode ? handleSVGMouseMove : undefined}
         onMouseUp={editMode ? handleSVGMouseUp : undefined}
         onMouseLeave={editMode ? handleSVGMouseLeave : undefined}
+        onMouseDown={editMode ? handleSVGBackgroundMouseDown : undefined}
       >
         <defs>
           {/* Masonry wall hatch — 45° diagonal, for external walls */}
@@ -1416,6 +1623,13 @@ export function FloorPlanSVG({
           const roomCy = py(room.y + room.depth / 2);
           const hasIssue =
             editMode && complianceIssues[room.id] && complianceIssues[room.id].length > 0;
+          const isSelected = editMode && selectedRoomId === room.id;
+          const roomMouseDownProps = editMode
+            ? {
+                onMouseDown: (e: React.MouseEvent) => handleRoomMouseDown(e, room),
+                style: { cursor: "move" },
+              }
+            : {};
 
           if (annotationMode && onAnnotationClick) {
             const handleAnnotClick = () => onAnnotationClick(room.id, room.name, roomCx, roomCy);
@@ -1446,223 +1660,81 @@ export function FloorPlanSVG({
           if (hasIssue) {
             return (
               <g key={room.id}>
-                <rect x={rx} y={ry} width={rw} height={rh} fill="rgba(239,68,68,0.1)" />
+                <rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  fill="rgba(239,68,68,0.1)"
+                  {...roomMouseDownProps}
+                />
                 <rect
                   x={rx}
                   y={ry}
                   width={rw}
                   height={rh}
                   fill="none"
-                  stroke="#ef4444"
-                  strokeWidth={1.5}
+                  stroke={isSelected ? "#1d4ed8" : "#ef4444"}
+                  strokeWidth={isSelected ? 2.5 : 1.5}
                   strokeDasharray="4 2"
                 />
               </g>
             );
           }
           return (
-            <rect key={room.id} x={rx} y={ry} width={rw} height={rh} fill={color(room.type).fill} />
+            <rect
+              key={room.id}
+              x={rx}
+              y={ry}
+              width={rw}
+              height={rh}
+              fill={color(room.type).fill}
+              stroke={isSelected ? "#1d4ed8" : undefined}
+              strokeWidth={isSelected ? 2.5 : undefined}
+              {...roomMouseDownProps}
+            />
           );
         })}
 
-        {/* ── Internal wall double-lines ─────────────────────────────────── */}
-        {rooms.length > 0 && (
-          <g stroke="#334155">
-            {intWallXs.map((x) => {
-              const svgX = px(x);
-              return (
-                <g key={`vw-${x}`}>
-                  {/* Hatch fill band between the two wall lines */}
-                  <rect
-                    x={svgX - halfIwt}
-                    y={bTop}
-                    width={2 * halfIwt}
-                    height={bBottom - bTop}
-                    fill="url(#int-wall-hatch)"
-                    stroke="none"
-                  />
-                  <line
-                    x1={svgX - halfIwt}
-                    y1={bBottom}
-                    x2={svgX - halfIwt}
-                    y2={bTop}
-                    strokeWidth={0.4}
-                  />
-                  <line
-                    x1={svgX + halfIwt}
-                    y1={bBottom}
-                    x2={svgX + halfIwt}
-                    y2={bTop}
-                    strokeWidth={0.4}
-                  />
-                </g>
+        {/* ── Walls/openings/stair — projected from the canonical drawing ── */}
+        {drawing && (
+          <g opacity={drawingOpacity}>
+            {drawing.walls.map((wall) => (
+              <DrawingWall
+                key={`wall-${wall.x1}-${wall.y1}-${wall.x2}-${wall.y2}`}
+                wall={wall}
+                px={px}
+                py={py}
+                scale={scale}
+              />
+            ))}
+            {drawing.openings.map((op) => {
+              const opKey = `op-${op.kind}-${op.cx}-${op.cy}`;
+              if (op.kind === "door") {
+                return <DrawingDoorSymbol key={opKey} op={op} px={px} py={py} />;
+              }
+              const width = op.width * scale;
+              return op.kind === "window" ? (
+                <WindowSymbol
+                  key={opKey}
+                  cx={px(op.cx)}
+                  cy={py(op.cy)}
+                  width={width}
+                  horizontal={op.is_horizontal}
+                />
+              ) : (
+                <VentilatorSymbol
+                  key={opKey}
+                  cx={px(op.cx)}
+                  cy={py(op.cy)}
+                  width={width}
+                  horizontal={op.is_horizontal}
+                />
               );
             })}
-            {intWallYs.map((y) => {
-              const svgY = py(y);
-              return (
-                <g key={`hw-${y}`}>
-                  {/* Hatch fill band between the two wall lines */}
-                  <rect
-                    x={bLeft}
-                    y={svgY - halfIwt}
-                    width={bRight - bLeft}
-                    height={2 * halfIwt}
-                    fill="url(#int-wall-hatch)"
-                    stroke="none"
-                  />
-                  <line
-                    x1={bLeft}
-                    y1={svgY - halfIwt}
-                    x2={bRight}
-                    y2={svgY - halfIwt}
-                    strokeWidth={0.4}
-                  />
-                  <line
-                    x1={bLeft}
-                    y1={svgY + halfIwt}
-                    x2={bRight}
-                    y2={svgY + halfIwt}
-                    strokeWidth={0.4}
-                  />
-                </g>
-              );
-            })}
+            {drawing.stair && <DrawingStairSymbol stair={drawing.stair} px={px} py={py} />}
           </g>
         )}
-
-        {/* ── External wall hatch band (evenodd fills only the wall ring) ── */}
-        {rooms.length > 0 && (
-          <path
-            d={[
-              `M ${bLeft - halfEwt} ${bTop - halfEwt}`,
-              `H ${bRight + halfEwt} V ${bBottom + halfEwt} H ${bLeft - halfEwt} Z`,
-              `M ${bLeft + halfEwt} ${bTop + halfEwt}`,
-              `H ${bRight - halfEwt} V ${bBottom - halfEwt} H ${bLeft + halfEwt} Z`,
-            ].join(" ")}
-            fill="url(#wall-hatch-floor)"
-            fillRule="evenodd"
-            stroke="none"
-          />
-        )}
-
-        {/* ── External walls (outer + inner line) ───────────────────────── */}
-        {rooms.length > 0 && (
-          <g stroke="#1E293B" fill="none">
-            <rect
-              x={bLeft - halfEwt}
-              y={bTop - halfEwt}
-              width={bRight - bLeft + 2 * halfEwt}
-              height={bBottom - bTop + 2 * halfEwt}
-              strokeWidth={2}
-            />
-            <rect
-              x={bLeft + halfEwt}
-              y={bTop + halfEwt}
-              width={bRight - bLeft - 2 * halfEwt}
-              height={bBottom - bTop - 2 * halfEwt}
-              strokeWidth={0.8}
-            />
-          </g>
-        )}
-
-        {/* ── Window symbols on exterior walls ──────────────────────────── */}
-        {rooms
-          .filter((r) => habitable.has(r.type))
-          .flatMap((room) => {
-            const symbols = [];
-            const cx_m = room.x + room.width / 2;
-            const cy_m = room.y + room.depth / 2;
-
-            if (Math.abs(room.y - minY) < tol) {
-              symbols.push(
-                <WindowSymbol
-                  key={`w-front-${room.id}`}
-                  cx={px(cx_m)}
-                  cy={py(room.y)}
-                  width={winPx}
-                  horizontal
-                />
-              );
-            }
-            if (Math.abs(room.y + room.depth - maxY) < tol) {
-              symbols.push(
-                <WindowSymbol
-                  key={`w-rear-${room.id}`}
-                  cx={px(cx_m)}
-                  cy={py(room.y + room.depth)}
-                  width={winPx}
-                  horizontal
-                />
-              );
-            }
-            if (Math.abs(room.x - minX) < tol) {
-              symbols.push(
-                <WindowSymbol
-                  key={`w-left-${room.id}`}
-                  cx={px(room.x)}
-                  cy={py(cy_m)}
-                  width={winPx}
-                  horizontal={false}
-                />
-              );
-            }
-            if (Math.abs(room.x + room.width - maxX) < tol) {
-              symbols.push(
-                <WindowSymbol
-                  key={`w-right-${room.id}`}
-                  cx={px(room.x + room.width)}
-                  cy={py(cy_m)}
-                  width={winPx}
-                  horizontal={false}
-                />
-              );
-            }
-            return symbols;
-          })}
-
-        {/* ── Door symbols ──────────────────────────────────────────────── */}
-        {rooms
-          .filter((r) => habitable.has(r.type) || r.type === "utility")
-          .map((room) => {
-            const doorPx = Math.min(0.9 * scale, room.width * scale * 0.4);
-            // Place door on the wall that faces an adjacent room or exterior
-            // Prefer bottom wall (road-facing / front), else top
-            const onBottom = Math.abs(room.y - minY) < tol;
-            const onTop = Math.abs(room.y + room.depth - maxY) < tol;
-            const onLeft = Math.abs(room.x - minX) < tol;
-
-            let wall: "bottom" | "top" | "left" | "right" = "bottom";
-            let hx: number;
-            let hy: number;
-
-            if (onBottom) {
-              wall = "bottom";
-              hx = px(room.x + 0.1);
-              hy = py(room.y);
-            } else if (onTop) {
-              wall = "top";
-              hx = px(room.x + 0.1);
-              hy = py(room.y + room.depth);
-            } else if (onLeft) {
-              wall = "left";
-              hx = px(room.x);
-              hy = py(room.y + room.depth - 0.1);
-            } else {
-              wall = "right";
-              hx = px(room.x + room.width);
-              hy = py(room.y + room.depth - 0.1);
-            }
-
-            return <DoorSymbol key={`d-${room.id}`} hx={hx} hy={hy} doorPx={doorPx} wall={wall} />;
-          })}
-
-        {/* ── Staircase treads ──────────────────────────────────────────── */}
-        {rooms
-          .filter((r) => r.type === "staircase")
-          .map((room) => (
-            <StaircaseSymbol key={`stair-${room.id}`} room={room} px={px} py={py} scale={scale} />
-          ))}
 
         {/* ── Room furniture ────────────────────────────────────────────── */}
         {rooms
@@ -1671,17 +1743,18 @@ export function FloorPlanSVG({
             <RoomFurniture key={`furn-${room.id}`} room={room} px={px} py={py} scale={scale} />
           ))}
 
-        {/* ── Column markers ────────────────────────────────────────────── */}
-        {uniqueCols.map((col) => {
-          const colPx = Math.max(4, 0.3 * scale);
+        {/* ── Column markers — from the canonical drawing's junctions ────── */}
+        {drawing?.columns.map((col) => {
+          const colPx = Math.max(4, col.size * scale);
           return (
             <rect
-              key={`col-${col.x}-${col.y}`}
-              x={px(col.x) - colPx / 2}
-              y={py(col.y) - colPx / 2}
+              key={`col-${col.cx}-${col.cy}`}
+              x={px(col.cx) - colPx / 2}
+              y={py(col.cy) - colPx / 2}
               width={colPx}
               height={colPx}
               fill="#1E293B"
+              opacity={drawingOpacity}
             />
           );
         })}
@@ -1735,54 +1808,40 @@ export function FloorPlanSVG({
             );
           })}
 
-        {/* ── Internal room dimensions ──────────────────────────────────── */}
-        {rooms.map((room) => {
-          const roomPxW = room.width * scale;
-          const roomPxH = room.depth * scale;
-          if (roomPxW < 40 || roomPxH < 40) return null;
-
-          const cx = px(room.x + room.width / 2);
-          const cy = py(room.y + room.depth / 2);
-          const fs = Math.max(6, Math.min(8, roomPxW / 10));
-          // Place dimension text slightly below the room name
-          const offsetY = roomPxH >= 44 ? fs * 3.5 : fs * 2.2;
-
-          return (
-            <text
-              key={`dim-${room.id}`}
-              x={cx}
-              y={cy + offsetY}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={fs}
-              fontFamily="sans-serif"
-              fill={color(room.type).text}
-              opacity={0.7}
-            >
-              {room.width.toFixed(1)} × {room.depth.toFixed(1)} m
-            </text>
-          );
-        })}
-
-        {/* ── Dimension lines ───────────────────────────────────────────── */}
-        <DimLine
-          x1={originX}
-          y1={originY + drawH}
-          x2={originX + drawW}
-          y2={originY + drawH}
-          label={`${plotWidth} m`}
-          offset={-28}
-          horizontal
-        />
-        <DimLine
-          x1={originX}
-          y1={originY}
-          x2={originX}
-          y2={originY + drawH}
-          label={`${plotLength} m`}
-          offset={-28}
-          horizontal={false}
-        />
+        {/* ── Dimension chains — room + plot/setback levels, all 4 sides ─── */}
+        {drawing ? (
+          <g opacity={drawingOpacity}>
+            {drawing.dim_chains.map((chain) => (
+              <DrawingDimChain
+                key={`chain-${chain.side}-${chain.level}`}
+                chain={chain}
+                px={px}
+                py={py}
+              />
+            ))}
+          </g>
+        ) : (
+          <>
+            <DimLine
+              x1={originX}
+              y1={originY + drawH}
+              x2={originX + drawW}
+              y2={originY + drawH}
+              label={`${plotWidth} m`}
+              offset={-28}
+              horizontal
+            />
+            <DimLine
+              x1={originX}
+              y1={originY}
+              x2={originX}
+              y2={originY + drawH}
+              label={`${plotLength} m`}
+              offset={-28}
+              horizontal={false}
+            />
+          </>
+        )}
 
         {/* ── North arrow ───────────────────────────────────────────────── */}
         <NorthArrow x={originX + drawW - 2} y={originY + 18} rotation={northRotation} />
@@ -1923,6 +1982,32 @@ export function FloorPlanSVG({
               );
             }
           })}
+
+        {/* ── Edit mode: resize handles on the selected room ──────────────── */}
+        {editMode &&
+          rooms
+            .filter((room) => selectedRoomId === room.id)
+            .flatMap((room) =>
+              (["nw", "ne", "sw", "se"] as const).map((corner) => {
+                const cx = px(corner.includes("w") ? room.x : room.x + room.width);
+                const cy = py(corner.includes("s") ? room.y : room.y + room.depth);
+                return (
+                  <rect
+                    key={`handle-${room.id}-${corner}`}
+                    x={cx - 4}
+                    y={cy - 4}
+                    width={8}
+                    height={8}
+                    className="fill-background stroke-primary"
+                    strokeWidth={1.5}
+                    style={{
+                      cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                    }}
+                    onMouseDown={(e) => handleResizeMouseDown(e, room, corner)}
+                  />
+                );
+              })
+            )}
 
         {/* ── Edit mode: drag tooltip ────────────────────────────────────── */}
         {editMode &&
