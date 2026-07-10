@@ -51,5 +51,5 @@ def test_front_setback_label_does_not_collide_with_survey_caption():
     # exceptions and both texts are present.
     pdf = _render()
     text = pdf_page_text(pdf, 0)
-    assert "Front:" in text
+    assert "FRONT SETBACK" in text  # standardized callout format, e.g. 1.5M FRONT SETBACK
     assert "S.No:" in text

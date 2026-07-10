@@ -7,6 +7,14 @@
     "ft_in_labels": 20.0,
     "layout_completeness": 20.0
   },
+  "ccqs_approval": {
+    "total": 80.0,
+    "max": 80,
+    "monochrome": 20.0,
+    "dimension_density": 20.0,
+    "ft_in_labels": 20.0,
+    "layout_completeness": 20.0
+  },
   "gcs": {
     "total": 100.0,
     "max": 100,

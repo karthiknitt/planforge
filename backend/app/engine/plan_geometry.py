@@ -651,6 +651,7 @@ def opening_boxes(openings: list[Opening]) -> list[Polygon]:
 # ---------------------------------------------------------------------------
 
 _LANES = (0.6, 1.2, 1.8)  # cross-axis offsets for levels 0/1/2
+_OVERALL_LANE = 2.4  # overall (level-1) chain sits outside the plot chain
 _PT_TO_MODEL_M = 0.000352778 * 100  # 1 pt on paper at 1:100 -> metres in model
 _LABEL_MARGIN = 0.2
 _LABEL_FONT = "Helvetica-Bold"
@@ -705,18 +706,74 @@ def derive_dim_chains(
         )
     )
 
-    # Level 2 — plot chain incl. setbacks (also carries the overall extent,
-    # so a separate level-1 overall chain would be redundant clutter)
-    for side, coord, coords in (
-        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_width]),
-        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_width]),
-        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_length]),
-        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_length]),
+    # Level 2 — plot chain incl. setbacks. Setback segments are quoted in
+    # metres (municipal rules are metric); the building span stays ft-in.
+    for side, coord, coords, (blo, bhi) in (
+        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_width], (bx1, bx2)),
+        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_width], (bx1, bx2)),
+        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_length], (by1, by2)),
+        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_length], (by1, by2)),
+    ):
+        entries = entries_for(coords)
+        for e in entries:
+            if e.end <= blo + 1e-6 or e.start >= bhi - 1e-6:
+                e.text = f"{e.end - e.start:.1f}M"
+        chains.append(DimChain(side=side, level=2, coord=coord, entries=entries))
+
+    # Level 1 — overall plot extent, dual-unit (ft-in + metres), outermost lane
+    for side, coord, extent in (
+        ("top", by2 + _OVERALL_LANE, cfg.plot_width),
+        ("right", bx2 + _OVERALL_LANE, cfg.plot_length),
     ):
         chains.append(
-            DimChain(side=side, level=2, coord=coord, entries=entries_for(coords))
+            DimChain(
+                side=side,
+                level=1,
+                coord=coord,
+                entries=[
+                    DimChainEntry(
+                        start=0.0,
+                        end=extent,
+                        text=f"{metres_to_ftin(extent)} ({extent:.1f} m)",
+                    )
+                ],
+            )
         )
     return chains
+
+
+def setback_callouts(
+    cfg: PlotConfig, bounds: tuple[float, float, float, float]
+) -> list[tuple[str, float, float, bool]]:
+    """(text, x, y, rotated) callouts centred inside each setback strip,
+    e.g. "1.5M FRONT SETBACK" — the municipal-drawing convention. Front is
+    the -y edge (see geometry._edge_setback); left/right read rotated 90°."""
+    bx1, by1, bx2, by2 = bounds
+    mx, my = (bx1 + bx2) / 2, (by1 + by2) / 2
+    out: list[tuple[str, float, float, bool]] = []
+    if cfg.setback_front > 0.05:
+        out.append((f"{cfg.setback_front:.1f}M FRONT SETBACK", mx, by1 / 2, False))
+    if cfg.setback_rear > 0.05:
+        out.append(
+            (
+                f"{cfg.setback_rear:.1f}M REAR SETBACK",
+                mx,
+                (by2 + cfg.plot_length) / 2,
+                False,
+            )
+        )
+    if cfg.setback_left > 0.05:
+        out.append((f"{cfg.setback_left:.1f}M LEFT SETBACK", bx1 / 2, my, True))
+    if cfg.setback_right > 0.05:
+        out.append(
+            (
+                f"{cfg.setback_right:.1f}M RIGHT SETBACK",
+                (bx2 + cfg.plot_width) / 2,
+                my,
+                True,
+            )
+        )
+    return out
 
 
 def _text_width_m(text: str, font_pt: float) -> float:
@@ -734,10 +791,13 @@ def _lines_fit(
 
 
 def _room_label_lines(room) -> list[str]:
+    """Dual-unit label (ft-in + metric), matching Indian working-drawing
+    convention: NAME / 11'-10" × 25'-4" / (3.6 m × 7.7 m) / 299 SQFT."""
     area_sqft = round(room.width * room.depth * 10.7639)
     return [
         room.name.upper(),
         f"{metres_to_ftin(room.width)} × {metres_to_ftin(room.depth)}",
+        f"({room.width:.1f} m × {room.depth:.1f} m)",
         f"{area_sqft} SQFT",
     ]
 
@@ -749,6 +809,7 @@ def derive_labels(
     outside_count = 0
     for room in sorted(rooms, key=lambda r: r.id):
         lines = _room_label_lines(room)
+        lines3 = [lines[0], lines[1], lines[3]]  # drop the metric line first
         avail_w = room.width - _LABEL_MARGIN
         avail_h = room.depth - _LABEL_MARGIN
         cx = room.x + room.width / 2
@@ -760,6 +821,7 @@ def derive_labels(
         chosen: tuple[list[str], float] | None = None
         for cand, fonts in (
             (lines, (12.0, 11.0, 10.0, 9.0, 8.0)),
+            (lines3, (12.0, 11.0, 10.0, 9.0, 8.0)),
             (lines[:2], (8.0, 7.0, 6.0)),
             ([lines[0]], (7.0, 6.0)),
         ):
@@ -771,8 +833,9 @@ def derive_labels(
                 break
         if chosen is None and room.depth > room.width:
             # slim vertical room: retry the ladder rotated 90 degrees
+            # (metric line skipped — rotated labels are width-starved)
             for cand, fonts in (
-                (lines, (9.0, 8.0)),
+                (lines3, (9.0, 8.0)),
                 (lines[:2], (8.0, 7.0, 6.0)),
                 ([lines[0]], (7.0, 6.0)),
             ):
@@ -815,7 +878,7 @@ def derive_labels(
                     room_id=room.id,
                     cx=slot_x,
                     cy=slot_y,
-                    lines=lines,
+                    lines=lines3,
                     font_pt=7.0,
                     leader=(cx, room.y + room.depth / 2),
                 )
