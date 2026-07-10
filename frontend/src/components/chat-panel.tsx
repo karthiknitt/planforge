@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/model-selector";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useSession } from "@/lib/auth-client";
+import { extractToolResults, isToolPart, toolPartLabel } from "@/lib/chat-parts";
 import type { LayoutData } from "@/lib/layout-types";
 import { DEFAULT_MODEL_ID, MODEL_GROUPS, MODEL_OPTIONS } from "@/lib/models";
 
@@ -77,12 +78,10 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
     },
     onFinish: ({ message }) => {
       setAgentError(null);
-      for (const part of message.parts ?? []) {
-        if (part.type === "tool-invocation" && part.state === "output-available") {
-          const output = part.output as Record<string, unknown> | null;
-          if (output?.layout && onLayoutUpdate) {
-            onLayoutUpdate(output.layout as LayoutData);
-          }
+      for (const { output } of extractToolResults(message.parts ?? [])) {
+        const result = output as Record<string, unknown> | null;
+        if (result?.layout && onLayoutUpdate) {
+          onLayoutUpdate(result.layout as LayoutData);
         }
       }
       setTimeout(() => {
@@ -220,7 +219,7 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
 
         {messages.map((msg) => {
           const text = getMessageText(msg);
-          const toolParts = msg.parts?.filter((p) => p.type === "tool-invocation") ?? [];
+          const toolParts = msg.parts?.filter(isToolPart) ?? [];
           const hasContent = text || toolParts.length > 0;
 
           if (!hasContent && msg.role === "assistant") return null;
@@ -239,13 +238,10 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
                 ].join(" ")}
               >
                 {toolParts.map((part) => {
-                  const tp = part as { toolCallId?: string; toolName?: string };
+                  const { toolName } = toolPartLabel(part);
                   return (
-                    <div
-                      key={tp.toolCallId ?? tp.toolName ?? "tool"}
-                      className="mb-1 text-xs opacity-70 italic"
-                    >
-                      {`⚙ ${tp.toolName ?? "tool"}…`}
+                    <div key={part.toolCallId} className="mb-1 text-xs opacity-70 italic">
+                      {`⚙ ${toolName}…`}
                     </div>
                   );
                 })}
