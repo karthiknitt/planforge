@@ -63,8 +63,13 @@ def main() -> None:
     )
 
     ccqs = compute_ccqs_deterministic(standard_pdf)
+    ccqs_approval = compute_ccqs_deterministic(approval_pdf)
     gcs = compute_gcs(layout.ground_floor, cfg)
-    scores = {"ccqs": ccqs.as_dict(), "gcs": gcs.as_dict()}
+    scores = {
+        "ccqs": ccqs.as_dict(),
+        "ccqs_approval": ccqs_approval.as_dict(),
+        "gcs": gcs.as_dict(),
+    }
     (EXPERIMENTS / "scores.json").write_text(json.dumps(scores, indent=2))
 
     print(json.dumps(scores, indent=2))

@@ -11,6 +11,7 @@ from app.engine.plan_geometry import (
     derive_labels,
     derive_stair,
     derive_walls,
+    setback_callouts,
 )
 
 from tests.helpers.golden import golden_config, golden_layout
@@ -75,21 +76,58 @@ def test_dim_lanes_do_not_collide():
         assert len(coords) == len(set(round(c, 6) for c in coords))
 
 
-def test_dim_text_is_ft_in():
+def test_dim_text_formats_by_level():
+    """L0 room chains: ft-in. L1 overall: dual-unit. L2: metric setbacks,
+    ft-in building span (municipal convention — setbacks are quoted in metres)."""
     floor, cfg = _fixture_gf()
     walls = derive_walls(floor.rooms, buildable_polygon(cfg))
     chains = derive_dim_chains(floor.rooms, walls, cfg)
     for c in chains:
-        for e in c.entries:
-            assert re.match(r"^\d+'-\d+\"$", e.text), e.text
+        for i, e in enumerate(c.entries):
+            if c.level == 0:
+                assert re.match(r"^\d+'-\d+\"$", e.text), e.text
+            elif c.level == 1:
+                assert re.match(r"^\d+'-\d+\" \(\d+\.\d+ m\)$", e.text), e.text
+            elif i in (0, len(c.entries) - 1):
+                assert re.match(r"^\d+\.\d+M$", e.text), e.text
+            else:
+                assert re.match(r"^\d+'-\d+\"$", e.text), e.text
+
+
+def test_overall_chain_spans_full_plot_dual_unit():
+    floor, cfg = _fixture_gf()
+    walls = derive_walls(floor.rooms, buildable_polygon(cfg))
+    chains = derive_dim_chains(floor.rooms, walls, cfg)
+    lvl1 = [c for c in chains if c.level == 1]
+    assert {c.side for c in lvl1} == {"top", "right"}
+    top = next(c for c in lvl1 if c.side == "top")
+    assert len(top.entries) == 1
+    assert math.isclose(
+        top.entries[0].end - top.entries[0].start, cfg.plot_width, abs_tol=1e-6
+    )
+
+
+def test_setback_callouts_all_sides():
+    cfg = golden_config()
+    bounds = buildable_polygon(cfg).bounds
+    callouts = setback_callouts(cfg, bounds)
+    joined = " ".join(t for t, _x, _y, _rot in callouts)
+    assert "FRONT SETBACK" in joined
+    assert "REAR SETBACK" in joined
+    for text, _x, _y, rotated in callouts:
+        if "LEFT" in text or "RIGHT" in text:
+            assert rotated is True
+        else:
+            assert rotated is False
 
 
 def test_label_fits_inside_normal_room():
     labels = derive_labels([_room("bed", 2.0, 2.0, 3.5, 4.0)])
     lb = labels[0]
     assert lb.leader is None
-    assert len(lb.lines) == 3
+    assert len(lb.lines) == 4
     assert lb.lines[0] == "BED"
+    assert re.match(r"^\(\d+\.\d+ m × \d+\.\d+ m\)$", lb.lines[2]), lb.lines[2]
     assert 6.0 <= lb.font_pt <= 12.0
 
 

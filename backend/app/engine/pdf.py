@@ -959,17 +959,207 @@ def _draw_arrow(c, x, y, right: bool):
     c.drawPath(p, fill=1, stroke=0)
 
 
-def _draw_scale_bar(c: canvas.Canvas, x: float, y: float, scale: float) -> None:
-    bar_pt = 3.0 * scale
-    c.setStrokeColor(HexColor("#555555"))
-    c.setLineWidth(1.5)
-    c.line(x, y, x + bar_pt, y)
-    c.setLineWidth(1.0)
-    c.line(x, y - 3, x, y + 3)
-    c.line(x + bar_pt, y - 3, x + bar_pt, y + 3)
-    c.setFillColor(HexColor("#555555"))
-    c.setFont("Helvetica", 6)
-    c.drawCentredString(x + bar_pt / 2, y - 10, "3 m")
+def _draw_scale_bar(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    scale: float,
+    denom: int | None = None,
+    metres: int = 4,
+) -> None:
+    """IS-style graphic scale bar: alternating filled 1 m segments with
+    0/1M/2M… tick labels and the numeric scale above. Shared by every page
+    of both the standard and approval PDFs."""
+    seg = scale  # 1 model-metre in points
+    h = 4.0
+    c.setLineWidth(0.6)
+    c.setStrokeColor(HexColor("#000000"))
+    for i in range(metres):
+        c.setFillColor(HexColor("#000000") if i % 2 == 0 else HexColor("#FFFFFF"))
+        c.rect(x + i * seg, y, seg, h, fill=1, stroke=1)
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica", 5)
+    for i in range(metres + 1):
+        c.drawCentredString(x + i * seg, y + h + 2, "0" if i == 0 else f"{i}M")
+    if denom:
+        c.setFont("Helvetica-Bold", 6)
+        c.drawCentredString(x + metres * seg / 2, y + h + 9, f"SCALE 1:{denom}")
+
+
+def _draw_area_schedule_table(
+    c: canvas.Canvas, floor_plan: FloorPlan, x: float, y_top: float
+) -> float:
+    """Bordered ROOM | AREA (SQFT) table with a TOTAL row (reference-drawing
+    convention, replaces the old inline pipe-separated text). Returns height."""
+    rows = [
+        (r.name.upper(), f"{round(r.area * 10.764)}")
+        for r in sorted(floor_plan.rooms, key=lambda r: r.id)
+    ]
+    total = round(sum(r.area for r in floor_plan.rooms) * 10.764)
+    w_room, w_area = 96, 52
+    w = w_room + w_area
+    row_h, band_h = 9.0, 11.0
+    height = band_h + row_h * (len(rows) + 2)
+    y = y_top - height
+
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.7)
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(x, y, w, height, fill=1, stroke=1)
+    # Title band
+    c.setFillColor(HexColor("#000000"))
+    c.rect(x, y_top - band_h, w, band_h, fill=1, stroke=0)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 6)
+    c.drawCentredString(x + w / 2, y_top - band_h + 3.5, "AREA SCHEDULE")
+    # Column headers
+    hdr_y = y_top - band_h - row_h
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica-Bold", 5.5)
+    c.drawString(x + 3, hdr_y + 2.5, "ROOM")
+    c.drawRightString(x + w - 3, hdr_y + 2.5, "AREA (SQFT)")
+    c.setLineWidth(0.4)
+    c.line(x, hdr_y, x + w, hdr_y)
+    c.line(x + w_room, y, x + w_room, y_top - band_h)
+    # Rows
+    c.setFont("Helvetica", 5.5)
+    for i, (name, area) in enumerate(rows):
+        ry = hdr_y - (i + 1) * row_h
+        c.drawString(x + 3, ry + 2.5, name)
+        c.drawRightString(x + w - 3, ry + 2.5, area)
+        c.setLineWidth(0.25)
+        c.line(x, ry, x + w, ry)
+    # Total row
+    ty = hdr_y - (len(rows) + 1) * row_h
+    c.setFont("Helvetica-Bold", 5.5)
+    c.drawString(x + 3, ty + 2.5, "TOTAL AREA")
+    c.drawRightString(x + w - 3, ty + 2.5, str(total))
+    c.setLineWidth(0.7)
+    c.line(x, ty + row_h, x + w, ty + row_h)
+    return height
+
+
+_OPENING_HEIGHT_MM = {"door": 2100, "window": 1200, "ventilator": 600}
+_OPENING_PREFIX = {"door": "D", "window": "W", "ventilator": "V"}
+
+
+def _opening_marks(drawing) -> tuple[dict[int, str], list[tuple]]:
+    """IS 962 practice: same-kind, same-width openings share one mark
+    (D1 = all 900 mm doors, D2 = 750 mm wet-room doors, W1, V1 …).
+    Returns ({opening index: mark}, schedule rows (mark, type, w_mm, h_mm, nos))."""
+    groups: dict[tuple[str, int], list[int]] = {}
+    for i, o in enumerate(drawing.openings):
+        # snap to 50 mm modules so near-identical computed widths (1180 vs
+        # 1200) share one mark, as they would on a real drawing
+        groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
+    counters = dict.fromkeys(_OPENING_PREFIX, 0)
+    marks: dict[int, str] = {}
+    rows: list[tuple] = []
+    for (kind, width_mm), idxs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], -kv[0][1])
+    ):
+        counters[kind] += 1
+        mark = f"{_OPENING_PREFIX[kind]}{counters[kind]}"
+        for i in idxs:
+            marks[i] = mark
+        rows.append((mark, kind.upper(), width_mm, _OPENING_HEIGHT_MM[kind], len(idxs)))
+    return marks, rows
+
+
+def _draw_opening_tags(
+    c: canvas.Canvas, drawing, marks: dict[int, str], s: float, ox: float, oy: float
+) -> None:
+    """Tiny D1/W1/V1 tags beside each opening, offset away from the building
+    centre so window/ventilator tags land in the (empty) setback strip."""
+    bx1, by1, bx2, by2 = drawing.bounds
+    ccx, ccy = (bx1 + bx2) / 2, (by1 + by2) / 2
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica", 4.5)
+    for i, o in enumerate(drawing.openings):
+        off = o.wall_thickness * s / 2 + 3.5
+        if o.is_horizontal:
+            yp = oy + o.cy * s + (off if o.cy >= ccy else -off - 4)
+            c.drawCentredString(ox + o.cx * s, yp, marks[i])
+        else:
+            xp = ox + o.cx * s + (off + 1.5 if o.cx >= ccx else -off - 1.5)
+            c.saveState()
+            c.translate(xp, oy + o.cy * s)
+            c.rotate(90)
+            c.drawCentredString(0, -1.5, marks[i])
+            c.restoreState()
+
+
+def _draw_openings_schedule_table(
+    c: canvas.Canvas, rows: list[tuple], x: float, y_top: float
+) -> float:
+    """SCHEDULE OF OPENINGS table (municipal submission requirement).
+    Same visual style as the area schedule table. Returns height."""
+    col_ws = (22, 44, 28, 28, 26)
+    headers = ("MARK", "TYPE", "W (MM)", "H (MM)", "NOS")
+    w = sum(col_ws)
+    row_h, band_h = 9.0, 11.0
+    height = band_h + row_h * (len(rows) + 1)
+    y = y_top - height
+
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.7)
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(x, y, w, height, fill=1, stroke=1)
+    c.setFillColor(HexColor("#000000"))
+    c.rect(x, y_top - band_h, w, band_h, fill=1, stroke=0)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 6)
+    c.drawCentredString(x + w / 2, y_top - band_h + 3.5, "SCHEDULE OF OPENINGS")
+
+    hdr_y = y_top - band_h - row_h
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica-Bold", 5)
+    cx_acc = x
+    for cw, hdr in zip(col_ws, headers):
+        c.drawCentredString(cx_acc + cw / 2, hdr_y + 2.5, hdr)
+        cx_acc += cw
+    c.setLineWidth(0.4)
+    c.line(x, hdr_y, x + w, hdr_y)
+    cx_acc = x
+    for cw in col_ws[:-1]:
+        cx_acc += cw
+        c.line(cx_acc, y, cx_acc, y_top - band_h)
+
+    c.setFont("Helvetica", 5)
+    for i, row in enumerate(rows):
+        ry = hdr_y - (i + 1) * row_h
+        cx_acc = x
+        for cw, val in zip(col_ws, row):
+            c.drawCentredString(cx_acc + cw / 2, ry + 2.5, str(val))
+            cx_acc += cw
+        c.setLineWidth(0.25)
+        c.line(x, ry, x + w, ry)
+    return height
+
+
+def _draw_setback_callouts(
+    c: canvas.Canvas,
+    cfg: PlotConfig,
+    bounds: tuple[float, float, float, float],
+    s: float,
+    ox: float,
+    oy: float,
+) -> None:
+    """Text callouts ("1.5M FRONT SETBACK") centred in each setback strip."""
+    from app.engine.plan_geometry import setback_callouts
+
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica", 5.5)
+    for text, xm, ym, rotated in setback_callouts(cfg, bounds):
+        xp, yp = ox + xm * s, oy + ym * s
+        if rotated:
+            c.saveState()
+            c.translate(xp, yp)
+            c.rotate(90)
+            c.drawCentredString(0, 0, text)
+            c.restoreState()
+        else:
+            c.drawCentredString(xp, yp - 2, text)
 
 
 def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
@@ -1001,179 +1191,187 @@ def _draw_structural_floor(
     num_bedrooms: int,
     floor_label: str,
 ) -> None:
-    """Render a separate structural (beam & column) layout page."""
+    """Beam & column layout projected from the canonical FloorDrawing — the
+    same scale, grid derivation (wall centrelines), and page furniture as
+    the architectural pages, so all four sheets read as one set."""
+    from app.engine.plan_geometry import build_floor_drawing
+
     page_w, page_h = A4
-    scale, ox, oy, plot_px, plot_py = _compute_layout(cfg, page_w, page_h)
+    s, denom = _standard_scale(cfg, page_w, page_h)
+    plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
+    ox = MARGIN + (page_w - 2 * MARGIN - plot_px) / 2
+    oy = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
 
-    # Background
-    c.setFillColor(HexColor("#F8FAFC"))
-    c.rect(0, TITLE_H, page_w, page_h - TITLE_H, fill=1, stroke=0)
-
-    # Road strip
+    # Road strip + page label — identical furniture to architectural pages
     road_y = TITLE_H + MARGIN
-    c.setFillColor(HexColor("#E2E8F0"))
+    c.setFillColor(HexColor("#DDDDDD"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
-    c.setFillColor(HexColor("#808080"))
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(ox + plot_px / 2, road_y + ROAD_H / 2 - 3, "ROAD")
+    road_side_name = {"S": "SOUTH", "N": "NORTH", "E": "EAST", "W": "WEST"}.get(
+        cfg.road_side, ""
+    )
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica-Bold", 7)
+    c.drawCentredString(
+        ox + plot_px / 2,
+        road_y + ROAD_H - 7,
+        f"{floor_label.upper()} — BEAM/COLUMN LAYOUT",
+    )
+    c.setFillColor(HexColor("#444444"))
+    c.setFont("Helvetica", 5.5)
+    c.drawCentredString(
+        ox + plot_px / 2,
+        road_y + 3,
+        f"ROAD  ({road_side_name})" if road_side_name else "ROAD",
+    )
 
-    # Plot boundary
+    # Plot boundary (dashed) — same as architectural pages
     c.setDash(5, 3)
-    c.setStrokeColor(HexColor("#CCCCCC"))
-    c.setLineWidth(0.75)
+    c.setStrokeColor(HexColor("#333333"))
+    c.setLineWidth(0.5)
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
 
-    rooms = floor_plan.rooms
-    if not rooms:
+    if not floor_plan.rooms:
         _draw_title_block(
             c,
             project_name,
             layout.id,
             layout.name,
-            f"{floor_label} — Structural",
+            f"{floor_label} — Beam/Column Layout",
             cfg,
             num_bedrooms,
-            scale,
+            s,
             page_w,
+            scale_denom=denom,
         )
         return
 
-    min_x = min(r.x for r in rooms)
-    max_x = max(r.x + r.width for r in rooms)
-    min_y = min(r.y for r in rooms)
-    max_y = max(r.y + r.depth for r in rooms)
+    drawing = build_floor_drawing(floor_plan, cfg)
+    bx1, by1, bx2, by2 = drawing.bounds
 
-    # Room outlines — light gray, no fill
+    # Room outlines for context — light gray
     c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.5)
-    c.setDash()
-    for room in rooms:
-        rx = ox + room.x * scale
-        ry = oy + room.y * scale
-        rw = room.width * scale
-        rh = room.depth * scale
-        c.rect(rx, ry, rw, rh, fill=0, stroke=1)
+    for room in floor_plan.rooms:
+        c.rect(
+            ox + room.x * s,
+            oy + room.y * s,
+            room.width * s,
+            room.depth * s,
+            fill=0,
+            stroke=1,
+        )
 
-    # Structural grid dashed lines
-    xs = sorted(
-        {round(r.x, 3) for r in rooms} | {round(r.x + r.width, 3) for r in rooms}
-    )
-    ys = sorted(
-        {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
-    )
+    # Structural grid at wall CENTRELINES, clustered so closely spaced lines
+    # share one grid line and one bubble (fixes the overlapping-bubble mess
+    # the raw room-edge grid produced)
+    def _cluster(vals: list[float], tol: float = 0.3) -> list[float]:
+        groups: list[list[float]] = []
+        for v in sorted(vals):
+            if groups and v - groups[-1][-1] < tol:
+                groups[-1].append(v)
+            else:
+                groups.append([v])
+        return [sum(g) / len(g) for g in groups]
+
+    v_xs = _cluster([w.x1 for w in drawing.walls if abs(w.x1 - w.x2) < 1e-9])
+    h_ys = _cluster([w.y1 for w in drawing.walls if abs(w.y1 - w.y2) < 1e-9])
+
+    bx_lo, bx_hi = ox + bx1 * s, ox + bx2 * s
+    by_lo, by_hi = oy + by1 * s, oy + by2 * s
+    ext = 10  # pt extension past building
+    bubble_r = 6
 
     c.setStrokeColor(HexColor("#808080"))
     c.setLineWidth(0.4)
     c.setDash(4, 3)
-    bx_lo = ox + min_x * scale
-    bx_hi = ox + max_x * scale
-    by_lo = oy + min_y * scale
-    by_hi = oy + max_y * scale
-    ext = 8  # pt extension past building
-
-    for x in xs:
-        px_x = ox + x * scale
-        c.line(px_x, by_lo - ext, px_x, by_hi + ext)
-    for y in ys:
-        px_y = oy + y * scale
-        c.line(bx_lo - ext, px_y, bx_hi + ext, px_y)
+    for x in v_xs:
+        px = ox + x * s
+        c.line(px, by_lo - ext - 2, px, by_hi + ext + 2)
+    for y in h_ys:
+        py = oy + y * s
+        c.line(bx_lo - ext - 2, py, bx_hi + ext + 2, py)
     c.setDash()
 
-    # Grid bubble labels (A, B, C… / 1, 2, 3…)
     import string as _string
 
-    bubble_r = 6  # pt
-    c.setStrokeColor(HexColor("#555555"))
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.setLineWidth(0.6)
-
-    for i, x in enumerate(xs):
-        lbl = _string.ascii_uppercase[i % 26]
-        px_x = ox + x * scale
-        for bubble_y in [by_lo - ext - bubble_r - 2, by_hi + ext + bubble_r + 2]:
-            c.circle(px_x, bubble_y, bubble_r, fill=1, stroke=1)
-            c.setFillColor(HexColor("#333333"))
-            c.setFont("Helvetica-Bold", 6)
-            c.drawCentredString(px_x, bubble_y - 2.5, lbl)
-            c.setFillColor(HexColor("#FFFFFF"))
-
-    for j, y in enumerate(ys):
-        lbl = str(j + 1)
-        px_y = oy + y * scale
-        for bubble_x in [bx_lo - ext - bubble_r - 2, bx_hi + ext + bubble_r + 2]:
-            c.circle(bubble_x, px_y, bubble_r, fill=1, stroke=1)
-            c.setFillColor(HexColor("#333333"))
-            c.setFont("Helvetica-Bold", 6)
-            c.drawCentredString(bubble_x, px_y - 2.5, lbl)
-            c.setFillColor(HexColor("#FFFFFF"))
-
-    # Beam lines — connect columns that share the same X or Y
-    cols = floor_plan.columns
-    if cols:
-        seen: set[tuple] = set()
-        col_xs: dict[float, list] = {}
-        col_ys: dict[float, list] = {}
-        unique_cols = []
-        for col in cols:
-            key = (round(col.x, 2), round(col.y, 2))
-            if key in seen:
-                continue
-            seen.add(key)
-            unique_cols.append(col)
-            col_xs.setdefault(round(col.x, 2), []).append(col)
-            col_ys.setdefault(round(col.y, 2), []).append(col)
-
-        c.setStrokeColor(HexColor("#000000"))
-        c.setLineWidth(1.5)
-        c.setDash()
-
-        # Vertical beams (same X, different Y — sort by Y, connect pairs)
-        for _x, col_list in col_xs.items():
-            if len(col_list) < 2:
-                continue
-            sorted_cols = sorted(col_list, key=lambda col: col.y)
-            for k in range(len(sorted_cols) - 1):
-                c1, c2 = sorted_cols[k], sorted_cols[k + 1]
-                c.line(
-                    ox + c1.x * scale,
-                    oy + c1.y * scale,
-                    ox + c2.x * scale,
-                    oy + c2.y * scale,
-                )
-
-        # Horizontal beams (same Y, different X)
-        for _y, col_list in col_ys.items():
-            if len(col_list) < 2:
-                continue
-            sorted_cols = sorted(col_list, key=lambda col: col.x)
-            for k in range(len(sorted_cols) - 1):
-                c1, c2 = sorted_cols[k], sorted_cols[k + 1]
-                c.line(
-                    ox + c1.x * scale,
-                    oy + c1.y * scale,
-                    ox + c2.x * scale,
-                    oy + c2.y * scale,
-                )
-
-        # Column squares with numbers
-        col_sz = max(5, 0.3 * scale)
+    def _bubble(px: float, py: float, lbl: str) -> None:
+        c.setStrokeColor(HexColor("#555555"))
+        c.setFillColor(HexColor("#FFFFFF"))
+        c.setLineWidth(0.6)
+        c.circle(px, py, bubble_r, fill=1, stroke=1)
         c.setFillColor(HexColor("#000000"))
-        for idx, col in enumerate(unique_cols):
-            cx = ox + col.x * scale
-            cy = oy + col.y * scale
-            c.rect(cx - col_sz / 2, cy - col_sz / 2, col_sz, col_sz, fill=1, stroke=0)
-            # Column label
-            c.setFillColor(HexColor("#FFFFFF"))
-            c.setFont("Helvetica-Bold", max(4, col_sz * 0.55))
-            c.drawCentredString(cx, cy - col_sz * 0.2, f"C{idx + 1}")
-            c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica-Bold", 6)
+        c.drawCentredString(px, py - 2.2, lbl)
 
-    # Scale bar + north arrow
-    _draw_scale_bar(c, ox + 4, oy + 16, scale)
-    _draw_north_arrow(c, ox + plot_px - 22, oy + plot_py + TOP_PAD * 0.45, 16)
+    for i, x in enumerate(v_xs):
+        px = ox + x * s
+        for by_b in (by_lo - ext - bubble_r - 4, by_hi + ext + bubble_r + 4):
+            _bubble(px, by_b, _string.ascii_uppercase[i % 26])
+    for j, y in enumerate(h_ys):
+        py = oy + y * s
+        for bx_b in (bx_lo - ext - bubble_r - 4, bx_hi + ext + bubble_r + 4):
+            _bubble(bx_b, py, str(j + 1))
 
-    # Structural title block
+    # Beams: connect canonical junction columns sharing a grid ordinate
+    cols = drawing.columns
+    col_groups_x: dict[float, list] = {}
+    col_groups_y: dict[float, list] = {}
+    for col in cols:
+        col_groups_x.setdefault(round(col.cx, 2), []).append(col)
+        col_groups_y.setdefault(round(col.cy, 2), []).append(col)
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(1.3)
+    for group, key in ((col_groups_x, "cy"), (col_groups_y, "cx")):
+        for col_list in group.values():
+            if len(col_list) < 2:
+                continue
+            ordered = sorted(col_list, key=lambda cc: getattr(cc, key))
+            for a, b in zip(ordered, ordered[1:]):
+                c.line(ox + a.cx * s, oy + a.cy * s, ox + b.cx * s, oy + b.cy * s)
+
+    # Column markers with side tags (tags beside the marker, not inside —
+    # a 300 mm square at 1:100 is too small for legible inset text)
+    col_sz = max(5.0, 0.3 * s)
+    c.setFillColor(HexColor("#000000"))
+    for col in cols:
+        c.rect(
+            ox + col.cx * s - col_sz / 2,
+            oy + col.cy * s - col_sz / 2,
+            col_sz,
+            col_sz,
+            fill=1,
+            stroke=0,
+        )
+    c.setFont("Helvetica", 4.5)
+    placed_tags: list[tuple[float, float]] = []
+    for idx, col in enumerate(cols):
+        tx = ox + col.cx * s + col_sz / 2 + 1.5
+        ty = oy + col.cy * s + col_sz / 2 - 2
+        if any(abs(tx - px) < 16 and abs(ty - py) < 7 for px, py in placed_tags):
+            # neighbour tag would overlap: drop to the lower-left corner
+            tx = ox + col.cx * s - col_sz / 2 - 12
+            ty = oy + col.cy * s - col_sz / 2 - 3
+        placed_tags.append((tx, ty))
+        c.drawString(tx, ty, f"C{idx + 1}")
+
+    # Structural notes — same top-left slot the area schedule table uses on
+    # the architectural pages
+    notes = [
+        "STRUCTURAL NOTES:",
+        f"1. COLUMNS 300 x 300 MM (TYP.), {len(cols)} NOS — MARKED C1..C{len(cols)}",
+        "2. BEAMS 230 x 380 MM (TYP.) ALONG GRID LINES",
+        "3. GRID LINES AT WALL CENTRELINES",
+        "4. MAX CLEAR BEAM SPAN 4.5 M — VERIFY BEFORE EXECUTION",
+    ]
+    c.setFillColor(HexColor("#000000"))
+    for i, note in enumerate(notes):
+        c.setFont("Helvetica-Bold" if i == 0 else "Helvetica", 6 if i == 0 else 5.5)
+        c.drawString(MARGIN, page_h - MARGIN - 9 * i, note)
+
+    # Scale bar + north arrow + title block — shared furniture
+    _draw_scale_bar(c, MARGIN, TITLE_H + 2, s, denom)
+    _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
     _draw_title_block(
         c,
         project_name,
@@ -1182,8 +1380,11 @@ def _draw_structural_floor(
         f"{floor_label} — Beam/Column Layout",
         cfg,
         num_bedrooms,
-        scale,
+        s,
         page_w,
+        floor_plan=floor_plan,
+        scale_denom=denom,
+        far_text=_far_text(layout, cfg),
     )
 
 
@@ -1199,6 +1400,7 @@ def _draw_title_block(
     page_w: float,
     floor_plan: "FloorPlan | None" = None,
     scale_denom: int | None = None,
+    far_text: str | None = None,
 ) -> None:
     # Outer border around entire title block
     c.setStrokeColor(HexColor("#000000"))
@@ -1224,6 +1426,8 @@ def _draw_title_block(
         ("TOTAL AREA", f"{sqft_total} SQFT" if floor_plan else "—"),
         ("DATE", date.today().strftime("%d %b %Y")),
     ]
+    if far_text:
+        fields.insert(7, ("FAR", far_text))
 
     # Field cells — upper 40pt for fields, lower zone for area schedule
     FIELD_H = 40  # height of the field row
@@ -1274,38 +1478,17 @@ def _draw_title_block(
     c.setLineWidth(0.5)
     c.line(0, TITLE_H - FIELD_H, page_w, TITLE_H - FIELD_H)
 
-    # Area schedule: list room names and sizes in the lower zone
+    # Lower zone: total line (per-room breakdown lives in the bordered
+    # AREA SCHEDULE table drawn on the plan itself)
     if floor_plan and floor_plan.rooms:
         sched_y_top = TITLE_H - FIELD_H - 4
         c.setFillColor(HexColor("#000000"))
         c.setFont("Helvetica-Bold", 5.5)
-        c.drawString(4, sched_y_top, "AREA SCHEDULE:")
-        c.setFont("Helvetica", 5)
-        schedule_parts = [
-            f"{r.name.upper()}: {round(r.area * 10.764)} SQFT"
-            for r in floor_plan.rooms
-            if r.type not in {"staircase", "parking", "parking_4w", "parking_2w"}
-        ]
-        from reportlab.pdfbase import pdfmetrics
-
-        avail_w = page_w - 8
-        lines: list[str] = [""]
-        for part in schedule_parts:
-            cand = (lines[-1] + "   |   " + part) if lines[-1] else part
-            if pdfmetrics.stringWidth(cand, "Helvetica", 5) <= avail_w:
-                lines[-1] = cand
-            elif len(lines) < 2:
-                lines.append(part)
-            else:
-                lines[-1] += "   | +MORE (SEE PLAN)"
-                break
-        for li, line in enumerate(lines):
-            c.drawString(4, sched_y_top - 10 - 6 * li, line)
-        c.setFont("Helvetica-Bold", 5.5)
         c.drawString(
             4,
-            sched_y_top - 20,
-            f"TOTAL BUILT-UP AREA: {sqft_total} SQFT  ({sqm_total:.1f} SQ.M)",
+            sched_y_top - 6,
+            f"TOTAL BUILT-UP AREA: {sqft_total} SQFT  ({sqm_total:.1f} SQ.M)"
+            "   —   ROOM-WISE AREA: SEE AREA SCHEDULE TABLE ON PLAN",
         )
 
     # Branding
@@ -1317,6 +1500,16 @@ def _draw_title_block(
 # ── FloorDrawing projection renderer (Sprint 5.1) ────────────────────────────
 
 _PT_PER_PAPER_M = 72 / 0.0254  # points per paper metre
+
+
+def _far_text(layout: Layout, cfg: PlotConfig) -> str:
+    plot_area = cfg.plot_width * cfg.plot_length
+    if not plot_area:
+        return "0.00"
+    built = sum(r.area for r in layout.ground_floor.rooms) + sum(
+        r.area for r in layout.first_floor.rooms
+    )
+    return f"{built / plot_area:.2f}"
 
 
 def _standard_scale(cfg: PlotConfig, page_w: float, page_h: float) -> tuple[float, int]:
@@ -1415,7 +1608,9 @@ def _draw_dim_chains(
         if not chain.entries:
             continue
         horiz = chain.side in ("bottom", "top")
-        lane_idx = 0 if chain.level == 0 else 1
+        # room chain hugs the plot, the plot/setback chain keeps its historical
+        # lane, and the dual-unit overall chain (level 1) sits outermost
+        lane_idx = {0: 0, 2: 1}.get(chain.level, 2)
         lane = base[chain.side] + sign[chain.side] * lane_step * lane_idx
         bounds = [chain.entries[0].start] + [e.end for e in chain.entries]
         pts = [(ox if horiz else oy) + b * s for b in bounds]
@@ -1431,7 +1626,10 @@ def _draw_dim_chains(
             else:
                 c.line(lane - 3, p, lane + 3, p)
                 c.line(lane - 2, p - 2, lane + 2, p + 2)
-        c.setFont("Helvetica", 6)
+        if chain.level == 1:
+            c.setFont("Helvetica-Bold", 6.5)  # overall dual-unit dim reads bolder
+        else:
+            c.setFont("Helvetica", 6)
         c.setFillColor(HexColor("#000000"))
         for e in chain.entries:
             mid = (ox if horiz else oy) + (e.start + e.end) / 2 * s
@@ -1584,11 +1782,19 @@ def _draw_floor_projected(
     _draw_stair_geometry(c, drawing, s, ox, oy)
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
+    _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
+    marks, opening_rows = _opening_marks(drawing)
+    _draw_opening_tags(c, drawing, marks, s, ox, oy)
     if annotations:
         _draw_annotations(c, floor_plan.rooms, annotations, s, ox, oy)
 
-    # Furniture of the page: scale bar, north arrow, title block
-    _draw_scale_bar(c, MARGIN, TITLE_H + 6, s)
+    # Furniture of the page: scale bar, schedule tables, north arrow, title block
+    _draw_scale_bar(c, MARGIN, TITLE_H + 2, s, denom)
+    _draw_area_schedule_table(c, floor_plan, MARGIN, page_h - MARGIN)
+    if opening_rows:
+        _draw_openings_schedule_table(
+            c, opening_rows, page_w - MARGIN - 148, page_h - MARGIN - 48
+        )
     _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
     _draw_title_block(
         c,
@@ -1602,4 +1808,5 @@ def _draw_floor_projected(
         page_w,
         floor_plan=floor_plan,
         scale_denom=denom,
+        far_text=_far_text(layout, cfg),
     )

@@ -208,7 +208,7 @@ def _draw_site_location_plan(
             oy,
             sb_mid_x,
             bldg_y,
-            f"Front: {cfg.setback_front:.1f}m",
+            f"{cfg.setback_front:.1f}M FRONT SETBACK",
             vertical=True,
         )
 
@@ -220,7 +220,7 @@ def _draw_site_location_plan(
             bldg_y + bldg_h,
             ox + plot_px / 2,
             oy + plot_py,
-            f"Rear: {cfg.setback_rear:.1f}m",
+            f"{cfg.setback_rear:.1f}M REAR SETBACK",
             vertical=True,
         )
 
@@ -238,7 +238,7 @@ def _draw_site_location_plan(
         c.saveState()
         c.translate(comp_x - left_clear, comp_y + comp_h / 2)
         c.rotate(90)
-        c.drawCentredString(0, 0, f"Left: {cfg.setback_left:.1f}m")
+        c.drawCentredString(0, 0, f"{cfg.setback_left:.1f}M LEFT SETBACK")
         c.restoreState()
 
     if cfg.setback_right > 0:
@@ -248,7 +248,7 @@ def _draw_site_location_plan(
         c.saveState()
         c.translate(comp_x + comp_w + right_clear, comp_y + comp_h / 2)
         c.rotate(90)
-        c.drawCentredString(0, 0, f"Right: {cfg.setback_right:.1f}m")
+        c.drawCentredString(0, 0, f"{cfg.setback_right:.1f}M RIGHT SETBACK")
         c.restoreState()
 
     # North arrow — prominent, upper-right, fully inside the page margin
@@ -256,13 +256,21 @@ def _draw_site_location_plan(
         c, page_w - MARGIN - 24, page_h - 56 - 24, 20, cfg.road_side
     )
 
-    # Plot dimensions
+    # Plot dimensions \u2014 dual-unit (ft-in prominent, metric beneath)
+    from app.engine.cad_primitives import metres_to_ftin
+
     c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", 9)
     c.drawCentredString(
         ox + plot_px / 2,
-        oy + plot_py + 10,
-        f"{cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m",
+        oy + plot_py + 19,
+        f"{metres_to_ftin(cfg.plot_width)} \u00d7 {metres_to_ftin(cfg.plot_length)}",
+    )
+    c.setFont("Helvetica", 7)
+    c.drawCentredString(
+        ox + plot_px / 2,
+        oy + plot_py + 9,
+        f"({cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m)",
     )
 
     # Caption line below the compound (+ road strip, if on the south side):
@@ -281,6 +289,11 @@ def _draw_site_location_plan(
         comp_y - road_extra - 26,
         f"{owner.locality}, {owner.municipality}",
     )
+
+    # Graphic scale bar (site-plan scale is fit-based, not a standard denom)
+    from app.engine.pdf import _PT_PER_PAPER_M, _draw_scale_bar
+
+    _draw_scale_bar(c, MARGIN, 104, scale, denom=round(_PT_PER_PAPER_M / scale))
 
     # Bottom info bar
     c.setFillColor(HexColor("#000000"))
@@ -475,10 +488,16 @@ def _draw_approval_floor_plan(
     strict B/W, hatched walls, doors/windows/ventilators, full dimension
     chains (rooms + plot/setbacks), FAR strip clear of the plan."""
     from app.engine.pdf import (
+        _draw_area_schedule_table,
         _draw_dim_chains,
         _draw_labels,
         _draw_opening_symbol,
+        _draw_opening_tags,
+        _draw_openings_schedule_table,
+        _draw_scale_bar,
+        _draw_setback_callouts,
         _draw_stair_geometry,
+        _opening_marks,
         _shape_path,
         _standard_scale,
     )
@@ -556,6 +575,15 @@ def _draw_approval_floor_plan(
         plot_py,
         bottom_lane_y=oy - ROAD_GAP - ROAD_H - 10,
     )
+    _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
+    marks, opening_rows = _opening_marks(drawing)
+    _draw_opening_tags(c, drawing, marks, s, ox, oy)
+    _draw_area_schedule_table(c, floor_plan, MARGIN, page_h - 56)
+    if opening_rows:
+        _draw_openings_schedule_table(
+            c, opening_rows, page_w - MARGIN - 148, page_h - 56 - 52
+        )
+    _draw_scale_bar(c, MARGIN, TITLE_H + 22, s, _denom)
 
     _draw_large_north_arrow(
         c, page_w - MARGIN - 20, page_h - MARGIN - 20, 18, cfg.road_side
@@ -887,6 +915,17 @@ def _draw_section_view(
     c.drawString(sx - 20, gl_y + total_h_px + 20, "A")
     c.drawString(sx + bldg_w_m * scale + 5, gl_y + total_h_px + 20, "A")
 
+    # Graphic scale bar — same shared element as every other sheet
+    from app.engine.pdf import _PT_PER_PAPER_M, _draw_scale_bar
+
+    _draw_scale_bar(
+        c,
+        MARGIN,
+        tb_h + section_h - 40,
+        scale,
+        denom=round(_PT_PER_PAPER_M / scale),
+    )
+
 
 def _draw_professional_title_block(
     c: canvas.Canvas,
@@ -1014,21 +1053,6 @@ def _draw_professional_title_block(
 
 
 # ── Shared drawing helpers ────────────────────────────────────────────────────
-
-
-def _draw_scale_bar(c: canvas.Canvas, x: float, y: float, scale: float) -> None:
-    bar_pt = 3.0 * scale
-    c.setStrokeColor(HexColor("#333333"))
-    c.setLineWidth(1.5)
-    c.line(x, y, x + bar_pt, y)
-    c.setLineWidth(1.0)
-    c.line(x, y - 3, x, y + 3)
-    c.line(x + bar_pt, y - 3, x + bar_pt, y + 3)
-    c.setFillColor(HexColor("#333333"))
-    c.setFont("Helvetica", 6)
-    c.drawCentredString(x + bar_pt / 2, y - 11, "3 m")
-    c.setFont("Helvetica", 5)
-    c.drawCentredString(x + bar_pt / 2, y - 19, "SCALE 1:100")
 
 
 def _draw_approval_title_block(
