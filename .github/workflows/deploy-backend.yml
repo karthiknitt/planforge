@@ -68,6 +68,9 @@ jobs:
             INTERNAL_AUTH_SECRET=${{ secrets.INTERNAL_AUTH_SECRET }}
             RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}
             RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}
+            RENDER_PROVIDER=openrouter
+            RENDER_MODEL=openai/gpt-image-1
+            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
             INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
             INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
 
