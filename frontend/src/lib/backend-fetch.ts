@@ -31,11 +31,17 @@ export async function fetchBackend(
   const { timeoutMs, ...requestInit } = init ?? {};
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  // Combine the caller's signal (if any) with the timeout signal so BOTH can
+  // abort the request — previously a caller-supplied signal silently discarded
+  // the timeout, leaving slow-backend calls able to hang past timeoutMs.
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
   try {
     return await fetch(`${BACKEND_URL}/api/${path.replace(/^\//, "")}`, {
       ...requestInit,
       headers,
-      signal: init?.signal ?? controller.signal,
+      signal,
     });
   } finally {
     clearTimeout(timeoutId);
