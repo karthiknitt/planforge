@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
@@ -1815,64 +1816,59 @@ export function LayoutViewer({
 
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
-      <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 overflow-x-auto scrollbar-none w-full md:w-fit">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={[
-              "rounded-lg px-4 py-2 text-sm font-medium transition-colors shrink-0 min-h-[40px]",
-              activeTab === tab
-                ? "bg-background text-foreground shadow-sm"
-                : "hover:bg-background/50",
-            ].join(" ")}
-          >
-            {tab === "plan"
-              ? "Floor Plan"
-              : tab === "section"
-                ? "Section"
-                : tab === "boq"
-                  ? "BOQ"
-                  : tab === "compare"
-                    ? "Compare"
-                    : tab === "chat"
-                      ? "Chat"
-                      : "Render"}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+        <TabsList
+          variant="line"
+          className="w-full justify-start overflow-x-auto scrollbar-none md:w-fit"
+        >
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab} value={tab} className="min-h-[40px] shrink-0 flex-none px-4">
+              {tab === "plan"
+                ? "Floor Plan"
+                : tab === "section"
+                  ? "Section"
+                  : tab === "boq"
+                    ? "BOQ"
+                    : tab === "compare"
+                      ? "Compare"
+                      : tab === "chat"
+                        ? "Chat"
+                        : "Render"}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {activeTab === "plan" && (
         <div className="flex flex-col gap-3">
           {/* Dynamic floor toggle + mobile Options sheet trigger side-by-side */}
           <div className="flex items-center gap-2">
             {/* Floor toggle */}
-            <div className="flex flex-1 overflow-x-auto scrollbar-none items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              {availableFloors.map((f) => (
-                <button
-                  key={f.index}
-                  type="button"
-                  onClick={() => setFloor(f.index)}
-                  className={[
-                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors shrink-0 min-h-[40px]",
-                    floor === f.index
-                      ? "bg-background text-foreground shadow-sm"
-                      : "hover:bg-background/50",
-                  ].join(" ")}
-                >
-                  {f.label}
-                  {f.plan.needs_mech_ventilation && (
-                    <span
-                      className="ml-1 text-xs text-amber-600"
-                      title="Mechanical ventilation required"
-                    >
-                      ⚠
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              value={String(floor)}
+              onValueChange={(v) => setFloor(Number(v))}
+              className="flex-1 min-w-0"
+            >
+              <TabsList variant="line" className="w-full overflow-x-auto scrollbar-none">
+                {availableFloors.map((f) => (
+                  <TabsTrigger
+                    key={f.index}
+                    value={String(f.index)}
+                    className="min-h-[40px] shrink-0 flex-none px-3"
+                  >
+                    {f.label}
+                    {f.plan.needs_mech_ventilation && (
+                      <span
+                        className="ml-1 text-xs text-amber-600"
+                        title="Mechanical ventilation required"
+                      >
+                        ⚠
+                      </span>
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
             {/* Mobile: Options Sheet trigger — visible on < md */}
             <Sheet>

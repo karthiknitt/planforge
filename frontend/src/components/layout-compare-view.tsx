@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { FloorPlanData, LayoutData } from "@/lib/layout-types";
 import { type Locale, useLocale } from "@/lib/locale-context";
 
@@ -176,28 +177,23 @@ function LayoutPanel({
       </div>
 
       {/* Floor selector */}
-      <div className="flex w-fit items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-        {floors.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => onFloorChange(f.key)}
-            className={[
-              "rounded-lg px-3 py-1 text-sm font-medium transition-colors",
-              currentFloor.key === f.key
-                ? "bg-background text-foreground shadow-sm"
-                : "hover:bg-background/50",
-            ].join(" ")}
-          >
-            {f.label}
-            {f.plan.needs_mech_ventilation && (
-              <span className="ml-1 text-xs text-amber-600" title="Mechanical ventilation required">
-                ⚠
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs value={currentFloor.key} onValueChange={onFloorChange} className="w-fit">
+        <TabsList variant="line">
+          {floors.map((f) => (
+            <TabsTrigger key={f.key} value={f.key} className="flex-none px-3 py-1">
+              {f.label}
+              {f.plan.needs_mech_ventilation && (
+                <span
+                  className="ml-1 text-xs text-amber-600"
+                  title="Mechanical ventilation required"
+                >
+                  ⚠
+                </span>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* Floor plan SVG */}
       <FloorPlanSVG
