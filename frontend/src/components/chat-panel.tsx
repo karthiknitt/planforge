@@ -332,7 +332,12 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
           }}
         />
 
-        <Button type="submit" size="sm" disabled={isLoading || !input.trim()}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={isLoading || !input.trim()}
+          aria-label="Send message"
+        >
           <Send className="h-3.5 w-3.5" />
         </Button>
       </form>

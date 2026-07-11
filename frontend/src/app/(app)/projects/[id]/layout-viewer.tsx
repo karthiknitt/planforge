@@ -1515,7 +1515,7 @@ export function LayoutViewer({
               variant="outline"
               onClick={handleCopy}
               className="shrink-0"
-              title="Copy link"
+              aria-label={copied ? "Copied to clipboard" : "Copy link"}
             >
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
             </Button>
@@ -1558,7 +1558,7 @@ export function LayoutViewer({
               variant="outline"
               onClick={handleCopyApprovalLink}
               className="shrink-0"
-              title="Copy link"
+              aria-label={approvalShareCopied ? "Copied to clipboard" : "Copy approval link"}
             >
               {approvalShareCopied ? (
                 <Check className="h-4 w-4 text-green-600" />
