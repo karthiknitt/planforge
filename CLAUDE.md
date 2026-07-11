@@ -208,7 +208,7 @@ cd frontend && bunx drizzle-kit migrate
    - Tool invocation state is `"output-available"` not `"result"`
    - Error responses returned as JSON instead of stream (useChat can't parse)
 3. **Agent model fallback** — Added runtime fallback: if Anthropic fails (billing/quota), automatically retries with OpenAI `gpt-5.2`. Uses `createUIMessageStream` with a for-loop over models.
-4. **SVG column duplicate keys** — `floorPlan.columns.map` could produce duplicate React keys. Fixed with index-based keys (columns already deduped via Map).
+4. **SVG column duplicate keys** — `floorPlan.columns.map` could produce duplicate React keys. Fixed with index-based keys (columns already deduped via Map). Regressed on 2026-07-10 to coordinate-only keys; re-fixed on 2026-07-11 with index-suffixed keys (e.g., `col-${index}`)
 
 ### Needs Verification
 
@@ -228,9 +228,16 @@ cd frontend && bunx drizzle-kit migrate
 
 10. **Cloud Run deployment live** — Backend deployed to Google Cloud Run ($0-tier: min-instances=0, max=3): `https://planforge-backend-hoiaqu2xbq-uc.a.run.app`. GCP project `thermal-well-451906-b0` (region `us-central1`), Neon Postgres project `planforge` (id `plain-brook-17631682`), Artifact Registry `planforge-backend`, WIF-based GitHub Actions deploy (`.github/workflows/deploy-backend.yml`, triggers on `backend/**` push to `main`). Frontend redeployed to `https://planforge-mauve.vercel.app` with `BACKEND_URL`/`NEXT_PUBLIC_API_URL` pointed at the Cloud Run URL. Setup automated via `scripts/gcp-cloud-run-setup.sh`.
 
+### Fixed (2026-07-11)
+
+11. **Invalid model IDs + provider fallback gap** — `models.ts` used non-existent Anthropic IDs (`claude-sonnet-4-6`, `claude-opus-4-6`); Anthropic returned 404, and the fallback predicate only matched billing/quota errors, so the raw error streamed to chat as a "connection error". Fixed: current IDs (`claude-sonnet-5` default, `claude-opus-4-8`, `claude-haiku-4-5`), OpenRouter default now `anthropic/claude-sonnet-5` (old `anthropic/claude-3.5-sonnet` is retired), and `frontend/src/lib/agent-errors.ts` (`shouldFallback`) advances the provider chain on 401/402/404/429/5xx/network errors, with human-readable messages when all providers fail.
+12. **AI SDK v6 tool-part parsing** — `chat-panel.tsx` still checked v4's `part.type === "tool-invocation"`, so tool outputs were never detected and AI edits never updated the canvas preview. Fixed via `frontend/src/lib/chat-parts.ts` built on the SDK's `isToolUIPart`/`getToolName` (`tool-<name>`/`dynamic-tool` parts, `state === "output-available"`, result in `part.output`).
+13. **Agent tools solved synchronously + 15s timeout** — all 11 agent endpoints funnel through `_load_layout_state`, which ran up to 3 CP-SAT solves on a store miss; with Cloud Run cold starts (~23s measured) this blew `fetchBackend`'s 15s abort → "connection errors". Fixed: read-only load returning 409 `{"code": "no_layouts", "help": "Generate layouts first"}` (never solves), agent tools relay that conversationally, and `fetchBackend` accepts per-call `timeoutMs` (agent tools pass 45s).
+14. **Render provider env missing on prod** — `deploy-backend.yml` now passes `RENDER_PROVIDER`, `RENDER_MODEL`, `OPENROUTER_API_KEY` to Cloud Run (mirroring `deploy-backend-v2.yml`), so `ensure_provider_configured()` no longer raises on the render tab.
+
 ### Open / Deferred
 
-- **Anthropic billing** — User's Anthropic API balance is insufficient. Agent falls back to OpenAI `gpt-5.2` automatically. Top up when ready.
+- **Anthropic billing** — If the Anthropic key lacks balance, the agent now falls back automatically through OpenAI (`gpt-4o`) then OpenRouter via `agent-errors.ts`. Top up when ready.
 - **Voice transcription** — Code uses direct OpenAI SDK (Whisper). Needs retest with working mic + valid `OPENAI_API_KEY` in `.env.local`.
 
 ---
@@ -240,3 +247,13 @@ cd frontend && bunx drizzle-kit migrate
 - Backend: pytest (via `uv run pytest`) — 55/55 passing
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
