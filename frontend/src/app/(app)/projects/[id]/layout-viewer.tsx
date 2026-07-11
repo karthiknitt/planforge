@@ -1300,7 +1300,7 @@ export function LayoutViewer({
               {vastuEnabled && (
                 <span
                   className={[
-                    "ml-1 rounded-sm border px-1 py-0.5 text-xs",
+                    "ml-1 rounded-sm border px-1 py-0.5 text-xs flex items-center gap-1",
                     l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
                       ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
                       : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
@@ -1308,11 +1308,23 @@ export function LayoutViewer({
                         : "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
                   ].join(" ")}
                 >
-                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
-                    ? "Vastu ✗"
-                    : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
-                      ? "Vastu ⚠"
-                      : "Vastu ✓"}
+                  <span>Vastu</span>
+                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]")) ? (
+                    <>
+                      <X className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="sr-only">Vastu violation</span>
+                    </>
+                  ) : l.compliance.warnings.some((w) => w.startsWith("[Vastu]")) ? (
+                    <>
+                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="sr-only">Vastu warning</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="sr-only">Vastu passed</span>
+                    </>
+                  )}
                 </span>
               )}
             </button>
@@ -1767,8 +1779,20 @@ export function LayoutViewer({
         ].join(" ")}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold">
-            {layout.compliance.passed ? "✓ Compliance passed" : "✗ Compliance failed"}
+          <span className="font-semibold flex items-center gap-2">
+            {layout.compliance.passed ? (
+              <>
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+                <span>Compliance passed</span>
+                <span className="sr-only">Compliance check passed</span>
+              </>
+            ) : (
+              <>
+                <X className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+                <span>Compliance failed</span>
+                <span className="sr-only">Compliance check failed</span>
+              </>
+            )}
           </span>
           {municipality && (
             <span className="text-xs font-normal text-muted-foreground opacity-80">
@@ -1859,12 +1883,13 @@ export function LayoutViewer({
                   >
                     {f.label}
                     {f.plan.needs_mech_ventilation && (
-                      <span
-                        className="ml-1 text-xs text-amber-600"
-                        title="Mechanical ventilation required"
-                      >
-                        ⚠
-                      </span>
+                      <AlertTriangle
+                        className="ml-1 h-3 w-3 text-amber-600 shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    {f.plan.needs_mech_ventilation && (
+                      <span className="sr-only">Mechanical ventilation required</span>
                     )}
                   </TabsTrigger>
                 ))}
