@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
@@ -302,7 +303,7 @@ function RenderTab({
     <div className="flex flex-col gap-3">
       {phase === "checking" && (
         <>
-          <div className="h-64 w-full max-w-xl animate-pulse rounded-xl bg-muted" />
+          <Skeleton className="h-64 w-full max-w-xl rounded-xl" />
           {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
           {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
           <img
@@ -2422,7 +2423,7 @@ export function LayoutViewer({
             {revisionsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
+                  <Skeleton key={i} className="h-10 rounded-lg" />
                 ))}
               </div>
             ) : revisions.length === 0 ? (
