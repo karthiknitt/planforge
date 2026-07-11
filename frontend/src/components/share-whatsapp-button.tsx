@@ -68,7 +68,7 @@ export function ShareWhatsAppButton({ projectName, layoutId, message }: ShareWha
               size="sm"
               onClick={handleCopy}
               className="border-border text-foreground hover:bg-muted"
-              title="Copy link"
+              aria-label={copied ? "Copied to clipboard" : "Copy link"}
             >
               {copied ? (
                 <Share2 className="h-3.5 w-3.5 shrink-0 text-green-600" />

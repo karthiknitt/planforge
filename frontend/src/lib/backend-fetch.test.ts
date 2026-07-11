@@ -4,6 +4,7 @@ import { fetchBackend } from "./backend-fetch";
 
 const ORIGINAL_FETCH = global.fetch;
 const ORIGINAL_SECRET = process.env.INTERNAL_AUTH_SECRET;
+const ORIGINAL_SET_TIMEOUT = global.setTimeout;
 
 describe("fetchBackend", () => {
   beforeEach(() => {
@@ -12,6 +13,7 @@ describe("fetchBackend", () => {
 
   afterEach(() => {
     global.fetch = ORIGINAL_FETCH;
+    global.setTimeout = ORIGINAL_SET_TIMEOUT;
     process.env.INTERNAL_AUTH_SECRET = ORIGINAL_SECRET;
   });
 
@@ -135,7 +137,7 @@ describe("fetchBackend", () => {
     expect(capturedSignal?.aborted).toBe(false);
   });
 
-  test("a caller-supplied signal takes precedence over the default timeout signal", async () => {
+  test("combines a caller-supplied signal with the timeout signal so both can abort", async () => {
     let capturedSignal: AbortSignal | undefined;
     global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
       capturedSignal = init?.signal ?? undefined;
@@ -145,6 +147,78 @@ describe("fetchBackend", () => {
     const callerController = new AbortController();
     await fetchBackend("user-1", "projects", { signal: callerController.signal });
 
-    expect(capturedSignal).toBe(callerController.signal);
+    // The combined signal is NOT the caller's own — otherwise the timeout could
+    // never fire. Aborting the caller's controller still aborts the combination.
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal).not.toBe(callerController.signal);
+    expect(capturedSignal?.aborted).toBe(false);
+    callerController.abort();
+    expect(capturedSignal?.aborted).toBe(true);
+  });
+
+  test("a hung backend aborts after a short timeoutMs even with no caller signal", async () => {
+    global.fetch = mock((_url: string | URL, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted", "AbortError"));
+        });
+      });
+    }) as typeof fetch;
+
+    await expect(fetchBackend("user-1", "projects", { timeoutMs: 30 })).rejects.toThrow();
+  });
+
+  test("timeoutMs still fires when a caller signal is supplied that never aborts", async () => {
+    global.fetch = mock((_url: string | URL, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted", "AbortError"));
+        });
+      });
+    }) as typeof fetch;
+
+    const neverAborts = new AbortController();
+    await expect(
+      fetchBackend("user-1", "projects", { signal: neverAborts.signal, timeoutMs: 30 })
+    ).rejects.toThrow();
+  });
+
+  test("applies the default 15s timeout when none is specified", async () => {
+    const delays: number[] = [];
+    global.setTimeout = ((fn: () => void, delay?: number) => {
+      delays.push(delay ?? 0);
+      return ORIGINAL_SET_TIMEOUT(fn, delay);
+    }) as typeof setTimeout;
+    global.fetch = mock(async () => new Response("{}")) as typeof fetch;
+
+    await fetchBackend("user-1", "projects");
+
+    expect(delays.at(-1)).toBe(15_000);
+  });
+
+  test("honors a custom timeoutMs for slow paths", async () => {
+    const delays: number[] = [];
+    global.setTimeout = ((fn: () => void, delay?: number) => {
+      delays.push(delay ?? 0);
+      return ORIGINAL_SET_TIMEOUT(fn, delay);
+    }) as typeof setTimeout;
+    global.fetch = mock(async () => new Response("{}")) as typeof fetch;
+
+    await fetchBackend("user-1", "projects", { timeoutMs: 45_000 });
+
+    expect(delays.at(-1)).toBe(45_000);
+  });
+
+  test("does not forward timeoutMs into the fetch RequestInit", async () => {
+    let capturedInit: RequestInit | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response("{}");
+    }) as typeof fetch;
+
+    await fetchBackend("user-1", "projects", { timeoutMs: 45_000, method: "POST" });
+
+    expect(capturedInit?.method).toBe("POST");
+    expect((capturedInit as Record<string, unknown>)?.timeoutMs).toBeUndefined();
   });
 });

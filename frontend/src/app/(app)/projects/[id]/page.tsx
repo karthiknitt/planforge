@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db";
 import { project as projectTable, teamMember, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
@@ -188,12 +189,12 @@ function GeneratingFallback() {
       {/* Skeleton cards for layout buttons */}
       <div className="flex gap-3 pt-2">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-9 w-32 animate-pulse rounded-lg bg-muted" />
+          <Skeleton key={i} className="h-9 w-32 rounded-lg" />
         ))}
       </div>
 
       {/* SVG area skeleton */}
-      <div className="h-72 animate-pulse rounded-xl bg-muted/60" />
+      <Skeleton className="h-72 rounded-xl bg-muted/60" />
 
       <style>{`
         @keyframes progress-indeterminate {

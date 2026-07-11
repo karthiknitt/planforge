@@ -1,12 +1,21 @@
 import logging
+from datetime import datetime, timezone
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.settings import settings
 from app.models.job import GenerationJob
 from app.models.project import Project
 from app.services import layout_store
 
 logger = logging.getLogger(__name__)
+
+QUEUED_TIMEOUT_ERROR = (
+    "Job has been queued for over {timeout}s without starting. "
+    "Inngest app may not be synced to this deployment — see docs/deploy, "
+    "then retry generation."
+)
 
 
 async def create_job(
@@ -35,6 +44,52 @@ async def get_job(
     job = await db.get(GenerationJob, job_id)
     if job is None or job.project_id != project_id:
         return None
+    return await apply_queued_timeout(db, job)
+
+
+def _job_age_seconds(job: GenerationJob) -> float:
+    created = job.created_at
+    # SQLite (tests) returns naive datetimes; Postgres returns aware.
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created).total_seconds()
+
+
+async def apply_queued_timeout(db: AsyncSession, job: GenerationJob) -> GenerationJob:
+    """Watchdog: fail a job stuck in `queued` past `job_queued_timeout_s`.
+
+    Production generation is entirely Inngest-callback-driven once
+    INNGEST_EVENT_KEY/SIGNING_KEY are set (no inline fallback) — if the
+    Inngest app isn't synced to the current deployment URL, the enqueued
+    event is sent but never picked up, and the row would stay `queued`
+    forever while the frontend polls. Runs on every GET poll (`get_job`
+    above); past the timeout it flips the status to `failed` with an
+    actionable error. This is purely a status flip — it never re-runs
+    generation, and never touches `running`/`done`/`failed` jobs.
+
+    Uses an optimistic guard (`WHERE status = 'queued'`) so a job that
+    transitions off `queued` between the staleness check and this write
+    (e.g. the real Inngest callback finishes at the same moment) is never
+    clobbered — the update simply affects 0 rows and the fresh row (as
+    updated by the other writer) is returned instead.
+    """
+    if job.status != "queued":
+        return job
+    if _job_age_seconds(job) < settings.job_queued_timeout_s:
+        return job
+
+    error = QUEUED_TIMEOUT_ERROR.format(timeout=settings.job_queued_timeout_s)
+    await db.execute(
+        update(GenerationJob)
+        .where(GenerationJob.id == job.id, GenerationJob.status == "queued")
+        .values(status="failed", stage="failed", error=error[:2000])
+    )
+    await db.commit()
+    # `update()` is Core-level and doesn't sync the ORM instance; `refresh()`
+    # (unlike `db.get()`) always issues a real SELECT rather than returning
+    # the identity-mapped copy, so it reflects our write if it won, or the
+    # concurrent writer's if we lost the optimistic-guard race.
+    await db.refresh(job)
     return job
 
 

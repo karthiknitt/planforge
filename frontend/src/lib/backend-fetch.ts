@@ -2,10 +2,17 @@ import { signInternalAuthToken } from "@/lib/internal-auth";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+// Extends RequestInit with an optional per-call timeout. Callers that hit a
+// path known to be slow (e.g. the agent tool endpoints stacked on a Cloud Run
+// cold start) can raise it above the 15s default.
+export type FetchBackendInit = RequestInit & { timeoutMs?: number };
+
 export async function fetchBackend(
   userId: string,
   path: string,
-  init?: RequestInit
+  init?: FetchBackendInit
 ): Promise<Response> {
   const secret = process.env.INTERNAL_AUTH_SECRET;
   if (!secret) {
@@ -21,13 +28,20 @@ export async function fetchBackend(
   }
   headers.set("X-Internal-Auth", token);
 
+  const { timeoutMs, ...requestInit } = init ?? {};
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  // Combine the caller's signal (if any) with the timeout signal so BOTH can
+  // abort the request — previously a caller-supplied signal silently discarded
+  // the timeout, leaving slow-backend calls able to hang past timeoutMs.
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
   try {
     return await fetch(`${BACKEND_URL}/api/${path.replace(/^\//, "")}`, {
-      ...init,
+      ...requestInit,
       headers,
-      signal: init?.signal ?? controller.signal,
+      signal,
     });
   } finally {
     clearTimeout(timeoutId);

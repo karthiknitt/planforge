@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # registration to this name, so two deployments sharing one app_id race
     # for which URL actually receives invocations.
     inngest_app_id: str = "planforge"
+    # Watchdog (Task 1.5): if a job is still `queued` past this many seconds
+    # (e.g. the Inngest app isn't synced to the current deployment URL and
+    # the enqueued event is never picked up), the next GET poll fails it
+    # fast instead of leaving it queued forever.
+    job_queued_timeout_s: int = 120
 
     @field_validator("internal_auth_secret")
     @classmethod

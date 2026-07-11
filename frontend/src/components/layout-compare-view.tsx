@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, Check, X } from "lucide-react";
 import { useState } from "react";
 
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { FloorPlanData, LayoutData } from "@/lib/layout-types";
 import { type Locale, useLocale } from "@/lib/locale-context";
 
@@ -160,44 +162,58 @@ function LayoutPanel({
               : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400"
           }
         >
-          {layout.compliance.passed
-            ? "✓ Compliant"
-            : `✗ ${layout.compliance.violations.length} violation${layout.compliance.violations.length !== 1 ? "s" : ""}`}
+          <div className="flex items-center gap-1.5">
+            {layout.compliance.passed ? (
+              <>
+                <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>Compliant</span>
+              </>
+            ) : (
+              <>
+                <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  {layout.compliance.violations.length} violation
+                  {layout.compliance.violations.length !== 1 ? "s" : ""}
+                </span>
+              </>
+            )}
+          </div>
         </Badge>
         {layout.compliance.warnings.length > 0 && (
           <Badge
             variant="outline"
             className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
           >
-            ⚠ {layout.compliance.warnings.length} warning
-            {layout.compliance.warnings.length !== 1 ? "s" : ""}
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                {layout.compliance.warnings.length} warning
+                {layout.compliance.warnings.length !== 1 ? "s" : ""}
+              </span>
+            </div>
           </Badge>
         )}
       </div>
 
       {/* Floor selector */}
-      <div className="flex w-fit items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-        {floors.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => onFloorChange(f.key)}
-            className={[
-              "rounded-lg px-3 py-1 text-sm font-medium transition-colors",
-              currentFloor.key === f.key
-                ? "bg-background text-foreground shadow-sm"
-                : "hover:bg-background/50",
-            ].join(" ")}
-          >
-            {f.label}
-            {f.plan.needs_mech_ventilation && (
-              <span className="ml-1 text-xs text-amber-600" title="Mechanical ventilation required">
-                ⚠
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs value={currentFloor.key} onValueChange={onFloorChange} className="w-fit">
+        <TabsList variant="line">
+          {floors.map((f) => (
+            <TabsTrigger key={f.key} value={f.key} className="flex-none px-3 py-1">
+              {f.label}
+              {f.plan.needs_mech_ventilation && (
+                <AlertTriangle
+                  className="ml-1 h-3 w-3 text-amber-600 shrink-0"
+                  aria-hidden="true"
+                />
+              )}
+              {f.plan.needs_mech_ventilation && (
+                <span className="sr-only">Mechanical ventilation required</span>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* Floor plan SVG */}
       <FloorPlanSVG
@@ -250,19 +266,31 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
     {
       metric: "Compliance",
       left: leftLayout.compliance.passed ? (
-        <span className="text-green-700 dark:text-green-400 font-medium">✅ Pass</span>
+        <span className="text-green-700 dark:text-green-400 font-medium flex items-center gap-1.5">
+          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Pass</span>
+        </span>
       ) : (
-        <span className="text-red-700 dark:text-red-400 font-medium">
-          ✗ {leftLayout.compliance.violations.length} violation
-          {leftLayout.compliance.violations.length !== 1 ? "s" : ""}
+        <span className="text-red-700 dark:text-red-400 font-medium flex items-center gap-1.5">
+          <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            {leftLayout.compliance.violations.length} violation
+            {leftLayout.compliance.violations.length !== 1 ? "s" : ""}
+          </span>
         </span>
       ),
       right: rightLayout.compliance.passed ? (
-        <span className="text-green-700 dark:text-green-400 font-medium">✅ Pass</span>
+        <span className="text-green-700 dark:text-green-400 font-medium flex items-center gap-1.5">
+          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Pass</span>
+        </span>
       ) : (
-        <span className="text-red-700 dark:text-red-400 font-medium">
-          ✗ {rightLayout.compliance.violations.length} violation
-          {rightLayout.compliance.violations.length !== 1 ? "s" : ""}
+        <span className="text-red-700 dark:text-red-400 font-medium flex items-center gap-1.5">
+          <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            {rightLayout.compliance.violations.length} violation
+            {rightLayout.compliance.violations.length !== 1 ? "s" : ""}
+          </span>
         </span>
       ),
     },
@@ -272,16 +300,18 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
         leftLayout.compliance.warnings.length === 0 ? (
           <span className="text-muted-foreground">None</span>
         ) : (
-          <span className="text-amber-700 dark:text-amber-400">
-            ⚠ {leftLayout.compliance.warnings.length}
+          <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{leftLayout.compliance.warnings.length}</span>
           </span>
         ),
       right:
         rightLayout.compliance.warnings.length === 0 ? (
           <span className="text-muted-foreground">None</span>
         ) : (
-          <span className="text-amber-700 dark:text-amber-400">
-            ⚠ {rightLayout.compliance.warnings.length}
+          <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{rightLayout.compliance.warnings.length}</span>
           </span>
         ),
     },

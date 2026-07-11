@@ -11,11 +11,24 @@ import {
 } from "ai";
 import { headers } from "next/headers";
 import { z } from "zod";
+import { callBackendTool, roomIdSchema } from "@/lib/agent-backend-tool";
+import {
+  buildModelChainPlan,
+  type ModelChainEntry,
+  type ModelChainPlanEntry,
+  runModelChain,
+} from "@/lib/agent-model-chain";
 import { auth } from "@/lib/auth";
-import { fetchBackend } from "@/lib/backend-fetch";
-import { DEFAULT_MODEL_ID, getModelProvider } from "@/lib/models";
+import {
+  DEFAULT_MODEL_ID,
+  DEFAULT_OPENROUTER_MODEL_ID,
+  FALLBACK_OPENAI_MODEL_ID,
+  getModelProvider,
+} from "@/lib/models";
 
-export const maxDuration = 60;
+// Fluid Compute allows up to 300s on every Vercel plan; a multi-step tool
+// sequence (each backend call capped at 45s) must not be killed mid-stream.
+export const maxDuration = 300;
 
 function buildSystemPrompt(layoutState: unknown): string {
   return `You are PlanForge's AI layout assistant. You help users refine their residential floor plans through natural language.
@@ -61,28 +74,20 @@ function buildTools(projectId: string, userId: string) {
       inputSchema: z.object({
         floor: z.enum(["gf", "ff", "sf", "basement", "all"]).describe("Which floor to list"),
       }),
-      execute: async ({ floor }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms?floor=${floor}`);
-        return res.json();
-      },
+      execute: ({ floor }) => callBackendTool(userId, `projects/${projectId}/rooms?floor=${floor}`),
     }),
 
     get_room_details: tool({
       description: "Get details for a specific room by ID",
-      inputSchema: z.object({ room_id: z.string() }),
-      execute: async ({ room_id }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}`);
-        return res.json();
-      },
+      inputSchema: z.object({ room_id: roomIdSchema }),
+      execute: ({ room_id }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/${encodeURIComponent(room_id)}`),
     }),
 
     get_compliance_status: tool({
       description: "Check current compliance status of the layout",
       inputSchema: z.object({}),
-      execute: async () => {
-        const res = await fetchBackend(userId, `projects/${projectId}/compliance`);
-        return res.json();
-      },
+      execute: () => callBackendTool(userId, `projects/${projectId}/compliance`),
     }),
 
     get_available_space: tool({
@@ -90,60 +95,53 @@ function buildTools(projectId: string, userId: string) {
       inputSchema: z.object({
         floor: z.enum(["gf", "ff", "sf", "basement"]),
       }),
-      execute: async ({ floor }) => {
-        const res = await fetchBackend(
-          userId,
-          `projects/${projectId}/available-space?floor=${floor}`
-        );
-        return res.json();
-      },
+      execute: ({ floor }) =>
+        callBackendTool(userId, `projects/${projectId}/available-space?floor=${floor}`),
     }),
 
     move_room: tool({
       description: "Move a room to new coordinates. Validates no overlap and setback compliance.",
       inputSchema: z.object({
-        room_id: z.string(),
+        room_id: roomIdSchema,
         new_x: z.number().describe("New X position in metres"),
         new_y: z.number().describe("New Y position in metres"),
       }),
-      execute: async ({ room_id, new_x, new_y }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}/move`, {
+      execute: ({ room_id, new_x, new_y }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/${encodeURIComponent(room_id)}/move`, {
           method: "POST",
           body: JSON.stringify({ x: new_x, y: new_y }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     resize_room: tool({
       description: "Resize a room. Validates area minimums and no overlaps.",
       inputSchema: z.object({
-        room_id: z.string(),
+        room_id: roomIdSchema,
         new_width: z.number().optional().describe("New width in metres"),
         new_depth: z.number().optional().describe("New depth in metres"),
       }),
-      execute: async ({ room_id, new_width, new_depth }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}/resize`, {
-          method: "POST",
-          body: JSON.stringify({ new_width, new_depth }),
-        });
-        return res.json();
-      },
+      execute: ({ room_id, new_width, new_depth }) =>
+        callBackendTool(
+          userId,
+          `projects/${projectId}/rooms/${encodeURIComponent(room_id)}/resize`,
+          {
+            method: "POST",
+            body: JSON.stringify({ new_width, new_depth }),
+          }
+        ),
     }),
 
     swap_rooms: tool({
       description: "Swap the positions of two rooms on the same floor",
       inputSchema: z.object({
-        room_id_a: z.string(),
-        room_id_b: z.string(),
+        room_id_a: roomIdSchema,
+        room_id_b: roomIdSchema,
       }),
-      execute: async ({ room_id_a, room_id_b }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/swap`, {
+      execute: ({ room_id_a, room_id_b }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/swap`, {
           method: "POST",
           body: JSON.stringify({ room_id_a, room_id_b }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     add_room: tool({
@@ -157,53 +155,38 @@ function buildTools(projectId: string, userId: string) {
         width: z.number().optional(),
         depth: z.number().optional(),
       }),
-      execute: async ({ floor, type, name, x, y, width, depth }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms`, {
+      execute: ({ floor, type, name, x, y, width, depth }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms`, {
           method: "POST",
           body: JSON.stringify({ floor, type, name, x, y, width, depth }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     remove_room: tool({
       description: "Remove a room from the layout",
-      inputSchema: z.object({ room_id: z.string() }),
-      execute: async ({ room_id }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}`, {
+      inputSchema: z.object({ room_id: roomIdSchema }),
+      execute: ({ room_id }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/${encodeURIComponent(room_id)}`, {
           method: "DELETE",
-        });
-        return res.json();
-      },
+        }),
     }),
 
     undo_last_change: tool({
       description: "Undo the last room modification",
       inputSchema: z.object({}),
-      execute: async () => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/undo`, {
+      execute: () =>
+        callBackendTool(userId, `projects/${projectId}/rooms/undo`, {
           method: "POST",
-        });
-        return res.json();
-      },
+        }),
     }),
 
     refresh_layout: tool({
       description:
         "Fetch the current layout state so the floor plan re-renders. Call this after every successful room modification (move, resize, add, remove, swap, undo).",
       inputSchema: z.object({}),
-      execute: async () => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/layout-state`);
-        return res.json(); // { layout: LayoutData }
-      },
+      execute: () => callBackendTool(userId, `projects/${projectId}/rooms/layout-state`), // { layout: LayoutData }
     }),
   };
-}
-
-/** Check if an error is a billing/auth/rate-limit issue worth retrying on a different provider */
-function isProviderError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /billing|balance|insufficient|quota|rate.limit|payment|credit|402|429/i.test(msg);
 }
 
 type Params = Promise<{ projectId: string }>;
@@ -253,48 +236,40 @@ export async function POST(req: Request, { params }: { params: Params }) {
       })
     : null;
 
-  // Configurable OpenRouter fallback model (env var) — defaults to claude-3.5-sonnet
-  const openrouterFallbackModel = process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet";
+  // Configurable OpenRouter fallback model (env var) — defaults to a current Anthropic slug
+  const openrouterFallbackModel = process.env.OPENROUTER_MODEL ?? DEFAULT_OPENROUTER_MODEL_ID;
 
   const requestedId =
     typeof selectedModel === "string" && selectedModel ? selectedModel : DEFAULT_MODEL_ID;
 
   const provider = getModelProvider(requestedId);
-  const models: { model: LanguageModel; label: string }[] = [];
+  const plan = buildModelChainPlan({
+    requestedId,
+    requestedProvider: provider,
+    hasAnthropic,
+    hasOpenAI,
+    hasOpenRouter,
+    defaultModelId: DEFAULT_MODEL_ID,
+    fallbackOpenAIModelId: FALLBACK_OPENAI_MODEL_ID,
+    openrouterFallbackModel,
+  });
 
-  if (provider === "openrouter" && openrouterClient) {
-    models.push({ model: openrouterClient.chat(requestedId), label: requestedId });
-    // Fallback chain for OpenRouter failures
-    if (hasAnthropic)
-      models.push({ model: anthropic(DEFAULT_MODEL_ID), label: "claude-sonnet-fallback" });
-    else if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o-fallback" });
-  } else if (provider === "anthropic" && hasAnthropic) {
-    models.push({ model: anthropic(requestedId), label: requestedId });
-    if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o-fallback" });
-    else if (hasOpenRouter && openrouterClient)
-      models.push({
-        model: openrouterClient.chat(openrouterFallbackModel),
-        label: `openrouter-fallback(${openrouterFallbackModel})`,
-      });
-  } else if (provider === "openai" && hasOpenAI) {
-    models.push({ model: openai.chat(requestedId), label: requestedId });
-    if (hasAnthropic)
-      models.push({ model: anthropic("claude-sonnet-4-6"), label: "claude-sonnet-fallback" });
-    else if (hasOpenRouter && openrouterClient)
-      models.push({
-        model: openrouterClient.chat(openrouterFallbackModel),
-        label: `openrouter-fallback(${openrouterFallbackModel})`,
-      });
-  } else {
-    // No matching provider available — try all in priority order
-    if (hasAnthropic) models.push({ model: anthropic(DEFAULT_MODEL_ID), label: DEFAULT_MODEL_ID });
-    if (hasOpenAI) models.push({ model: openai.chat("gpt-4o"), label: "gpt-4o" });
-    if (hasOpenRouter && openrouterClient)
-      models.push({
-        model: openrouterClient.chat(openrouterFallbackModel),
-        label: `openrouter(${openrouterFallbackModel})`,
-      });
-  }
+  // OpenRouter models must route through .chat() (Chat Completions); every
+  // openrouter plan entry is only produced when openrouterClient exists.
+  const instantiate = (entry: ModelChainPlanEntry): LanguageModel => {
+    switch (entry.provider) {
+      case "anthropic":
+        return anthropic(entry.modelId);
+      case "openai":
+        return openai.chat(entry.modelId);
+      case "openrouter": {
+        if (!openrouterClient) {
+          throw new Error("OpenRouter client unavailable");
+        }
+        return openrouterClient.chat(entry.modelId);
+      }
+    }
+  };
 
   let modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>;
   try {
@@ -321,52 +296,47 @@ export async function POST(req: Request, { params }: { params: Params }) {
   const systemPrompt = buildSystemPrompt(layoutState);
   const tools = buildTools(projectId, session.user.id);
 
+  // Each plan entry becomes a chain entry that lazily opens a streamText run.
+  // In ai@6 a provider failure surfaces as an `error` CHUNK (never a thrown
+  // rejection), so the raw error is captured via toUIMessageStream's onError —
+  // runModelChain reads it to decide whether to fall back to the next provider.
+  const entries: ModelChainEntry[] = plan.map((planEntry) => {
+    const model = instantiate(planEntry);
+    return {
+      label: planEntry.label,
+      providerName: planEntry.providerName,
+      open: ({ sendStart }) => {
+        let rawError: unknown;
+        const result = streamText({
+          model,
+          system: systemPrompt,
+          messages: modelMessages,
+          stopWhen: stepCountIs(10),
+          tools,
+        });
+        const stream = result.toUIMessageStream({
+          sendStart,
+          onError: (err) => {
+            rawError = err;
+            return err instanceof Error ? err.message : String(err);
+          },
+        });
+        return { stream, getRawError: () => rawError };
+      },
+    };
+  });
+
   // Use createUIMessageStream to enable runtime model fallback:
-  // if primary model fails (billing, rate limit), transparently retry with next model
+  // if the primary model fails (billing, rate limit), transparently retry the next.
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
-      execute: async ({ writer }) => {
-        let lastError: unknown;
-
-        for (let i = 0; i < models.length; i++) {
-          const { model, label } = models[i];
-          const hasMoreModels = i < models.length - 1;
-          try {
-            console.log(`[agent] Trying model: ${label}`);
-            const result = streamText({
-              model,
-              system: systemPrompt,
-              messages: modelMessages,
-              stopWhen: stepCountIs(10),
-              tools,
-            });
-
-            // Consume the full stream — this is where provider errors surface
-            const uiStream = result.toUIMessageStream({ sendStart: true });
-            for await (const chunk of uiStream) {
-              writer.write(chunk);
-            }
-
-            console.log(`[agent] Completed with: ${label}`);
-            return;
-          } catch (err) {
-            lastError = err;
-            const errMsg = err instanceof Error ? err.message : String(err);
-            console.error(`[agent] Model ${label} failed: ${errMsg}`);
-
-            if (isProviderError(err) && hasMoreModels) {
-              console.log(`[agent] Falling back to next model...`);
-              continue;
-            }
-            break;
-          }
-        }
-
-        // All models failed
-        const errText = lastError instanceof Error ? lastError.message : "All AI providers failed";
-        console.error("[agent] All models exhausted:", errText);
-        writer.write({ type: "error", errorText: errText });
-      },
+      // Adapt the SDK writer to ChainWriter: every chunk runModelChain forwards
+      // is either a real UIMessageChunk from toUIMessageStream or a synthetic
+      // {type:"error", errorText} — both valid inputs to writer.write.
+      execute: ({ writer }) =>
+        runModelChain(entries, {
+          write: (chunk) => writer.write(chunk as Parameters<typeof writer.write>[0]),
+        }),
       onError: (err) => {
         console.error("[agent] Stream error:", err);
         return err instanceof Error ? err.message : "Agent error — check server logs";

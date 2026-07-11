@@ -46,6 +46,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
@@ -301,7 +303,7 @@ function RenderTab({
     <div className="flex flex-col gap-3">
       {phase === "checking" && (
         <>
-          <div className="h-64 w-full max-w-xl animate-pulse rounded-xl bg-muted" />
+          <Skeleton className="h-64 w-full max-w-xl rounded-xl" />
           {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
           {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
           <img
@@ -1298,7 +1300,7 @@ export function LayoutViewer({
               {vastuEnabled && (
                 <span
                   className={[
-                    "ml-1 rounded-sm border px-1 py-0.5 text-xs",
+                    "ml-1 rounded-sm border px-1 py-0.5 text-xs flex items-center gap-1",
                     l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
                       ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
                       : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
@@ -1306,11 +1308,23 @@ export function LayoutViewer({
                         : "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
                   ].join(" ")}
                 >
-                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
-                    ? "Vastu ✗"
-                    : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
-                      ? "Vastu ⚠"
-                      : "Vastu ✓"}
+                  <span>Vastu</span>
+                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]")) ? (
+                    <>
+                      <X className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="sr-only">Vastu violation</span>
+                    </>
+                  ) : l.compliance.warnings.some((w) => w.startsWith("[Vastu]")) ? (
+                    <>
+                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="sr-only">Vastu warning</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="sr-only">Vastu passed</span>
+                    </>
+                  )}
                 </span>
               )}
             </button>
@@ -1501,7 +1515,7 @@ export function LayoutViewer({
               variant="outline"
               onClick={handleCopy}
               className="shrink-0"
-              title="Copy link"
+              aria-label={copied ? "Copied to clipboard" : "Copy link"}
             >
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
             </Button>
@@ -1544,7 +1558,7 @@ export function LayoutViewer({
               variant="outline"
               onClick={handleCopyApprovalLink}
               className="shrink-0"
-              title="Copy link"
+              aria-label={approvalShareCopied ? "Copied to clipboard" : "Copy approval link"}
             >
               {approvalShareCopied ? (
                 <Check className="h-4 w-4 text-green-600" />
@@ -1765,8 +1779,20 @@ export function LayoutViewer({
         ].join(" ")}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold">
-            {layout.compliance.passed ? "✓ Compliance passed" : "✗ Compliance failed"}
+          <span className="font-semibold flex items-center gap-2">
+            {layout.compliance.passed ? (
+              <>
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+                <span>Compliance passed</span>
+                <span className="sr-only">Compliance check passed</span>
+              </>
+            ) : (
+              <>
+                <X className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+                <span>Compliance failed</span>
+                <span className="sr-only">Compliance check failed</span>
+              </>
+            )}
           </span>
           {municipality && (
             <span className="text-xs font-normal text-muted-foreground opacity-80">
@@ -1815,64 +1841,60 @@ export function LayoutViewer({
 
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
-      <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1 overflow-x-auto scrollbar-none w-full md:w-fit">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={[
-              "rounded-lg px-4 py-2 text-sm font-medium transition-colors shrink-0 min-h-[40px]",
-              activeTab === tab
-                ? "bg-background text-foreground shadow-sm"
-                : "hover:bg-background/50",
-            ].join(" ")}
-          >
-            {tab === "plan"
-              ? "Floor Plan"
-              : tab === "section"
-                ? "Section"
-                : tab === "boq"
-                  ? "BOQ"
-                  : tab === "compare"
-                    ? "Compare"
-                    : tab === "chat"
-                      ? "Chat"
-                      : "Render"}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+        <TabsList
+          variant="line"
+          className="w-full justify-start overflow-x-auto scrollbar-none md:w-fit"
+        >
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab} value={tab} className="min-h-[40px] shrink-0 flex-none px-4">
+              {tab === "plan"
+                ? "Floor Plan"
+                : tab === "section"
+                  ? "Section"
+                  : tab === "boq"
+                    ? "BOQ"
+                    : tab === "compare"
+                      ? "Compare"
+                      : tab === "chat"
+                        ? "Chat"
+                        : "Render"}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {activeTab === "plan" && (
         <div className="flex flex-col gap-3">
           {/* Dynamic floor toggle + mobile Options sheet trigger side-by-side */}
           <div className="flex items-center gap-2">
             {/* Floor toggle */}
-            <div className="flex flex-1 overflow-x-auto scrollbar-none items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              {availableFloors.map((f) => (
-                <button
-                  key={f.index}
-                  type="button"
-                  onClick={() => setFloor(f.index)}
-                  className={[
-                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors shrink-0 min-h-[40px]",
-                    floor === f.index
-                      ? "bg-background text-foreground shadow-sm"
-                      : "hover:bg-background/50",
-                  ].join(" ")}
-                >
-                  {f.label}
-                  {f.plan.needs_mech_ventilation && (
-                    <span
-                      className="ml-1 text-xs text-amber-600"
-                      title="Mechanical ventilation required"
-                    >
-                      ⚠
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              value={String(floor)}
+              onValueChange={(v) => setFloor(Number(v))}
+              className="flex-1 min-w-0"
+            >
+              <TabsList variant="line" className="w-full overflow-x-auto scrollbar-none">
+                {availableFloors.map((f) => (
+                  <TabsTrigger
+                    key={f.index}
+                    value={String(f.index)}
+                    className="min-h-[40px] shrink-0 flex-none px-3"
+                  >
+                    {f.label}
+                    {f.plan.needs_mech_ventilation && (
+                      <AlertTriangle
+                        className="ml-1 h-3 w-3 text-amber-600 shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    {f.plan.needs_mech_ventilation && (
+                      <span className="sr-only">Mechanical ventilation required</span>
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
             {/* Mobile: Options Sheet trigger — visible on < md */}
             <Sheet>
@@ -1975,13 +1997,16 @@ export function LayoutViewer({
                       {editMode ? "Exit Edit Mode" : "Edit Rooms"}
                     </button>
                   ) : (
-                    <Link
-                      href="/pricing"
-                      className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground min-h-[44px]"
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium min-h-[44px]"
                     >
-                      <Lock className="h-4 w-4" />
-                      Edit Rooms (Pro)
-                    </Link>
+                      <Link href="/pricing">
+                        <Lock className="h-4 w-4" />
+                        Edit Rooms (Pro)
+                      </Link>
+                    </Button>
                   )}
                 </div>
               </SheetContent>
@@ -2083,14 +2108,18 @@ export function LayoutViewer({
                 {editMode ? "Exit Edit" : "Edit Rooms"}
               </button>
             ) : (
-              <Link
-                href="/pricing"
-                className="flex w-fit items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-fit gap-1.5 text-xs"
                 title="Upgrade to Pro to enable manual room editing"
               >
-                <Lock className="h-3 w-3" />
-                Edit Rooms
-              </Link>
+                <Link href="/pricing">
+                  <Lock className="h-3 w-3" />
+                  Edit Rooms
+                </Link>
+              </Button>
             )}
           </div>
 
@@ -2419,7 +2448,7 @@ export function LayoutViewer({
             {revisionsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
+                  <Skeleton key={i} className="h-10 rounded-lg" />
                 ))}
               </div>
             ) : revisions.length === 0 ? (

@@ -424,8 +424,8 @@ function FurnitureKitchen({
       {[
         [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.3, rearY + cw * 0.3],
         [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.7, rearY + cw * 0.3],
-      ].map(([bx, by]) => (
-        <circle key={`burner-${bx}-${by}`} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
+      ].map(([bx, by], i) => (
+        <circle key={`burner-${i}-${bx}-${by}`} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
       ))}
     </g>
   );
@@ -817,9 +817,9 @@ function DrawingStairSymbol({
   return (
     <g>
       <g stroke="#94A3B8" strokeWidth={0.6}>
-        {stair.treads.map(([x1, y1, x2, y2]) => (
+        {stair.treads.map(([x1, y1, x2, y2], i) => (
           <line
-            key={`tread-${x1}-${y1}-${x2}-${y2}`}
+            key={`tread-${i}-${x1}-${y1}-${x2}-${y2}`}
             x1={px(x1)}
             y1={py(y1)}
             x2={px(x2)}
@@ -1699,17 +1699,17 @@ export function FloorPlanSVG({
         {/* ── Walls/openings/stair — projected from the canonical drawing ── */}
         {drawing && (
           <g opacity={drawingOpacity}>
-            {drawing.walls.map((wall) => (
+            {drawing.walls.map((wall, i) => (
               <DrawingWall
-                key={`wall-${wall.x1}-${wall.y1}-${wall.x2}-${wall.y2}`}
+                key={`wall-${i}-${wall.x1}-${wall.y1}-${wall.x2}-${wall.y2}`}
                 wall={wall}
                 px={px}
                 py={py}
                 scale={scale}
               />
             ))}
-            {drawing.openings.map((op) => {
-              const opKey = `op-${op.kind}-${op.cx}-${op.cy}`;
+            {drawing.openings.map((op, i) => {
+              const opKey = `op-${i}-${op.kind}-${op.cx}-${op.cy}`;
               if (op.kind === "door") {
                 return <DrawingDoorSymbol key={opKey} op={op} px={px} py={py} />;
               }
@@ -1744,11 +1744,11 @@ export function FloorPlanSVG({
           ))}
 
         {/* ── Column markers — from the canonical drawing's junctions ────── */}
-        {drawing?.columns.map((col) => {
+        {drawing?.columns.map((col, i) => {
           const colPx = Math.max(4, col.size * scale);
           return (
             <rect
-              key={`col-${col.cx}-${col.cy}`}
+              key={`col-${i}-${col.cx}-${col.cy}`}
               x={px(col.cx) - colPx / 2}
               y={py(col.cy) - colPx / 2}
               width={colPx}
