@@ -189,16 +189,22 @@ class LayoutRoomsUpdate(BaseModel):
 async def _load_layout_state(
     project_id: str, user_id: str, db: AsyncSession
 ) -> tuple[Project, StoredLayout, dict]:
-    """Load the first stored layout (solving + persisting when none exists).
+    """Load the first stored layout — read-only, never solves on a miss.
 
     Agent-chat edits operate on the first layout; mutations are written back
-    to the layouts table via layout_store.save_edited_geometry.
+    to the layouts table via layout_store.save_edited_geometry. Solving here
+    ran up to 3 CP-SAT solves (~15s) inside a single agent tool call which,
+    stacked on a Cloud Run cold start (~23s measured), blew past the frontend
+    fetch budget and surfaced as a "connection error". Generation is an
+    explicit action (POST /projects/{id}/generate-jobs); a store miss returns
+    409 so callers can prompt the user to generate first.
     """
     project = await _get_project(project_id, user_id, db)
-    stored = await layout_store.get_or_generate_layouts(project, db)
+    stored = await layout_store.get_stored_layouts(project.id, db)
     if not stored:
         raise HTTPException(
-            status_code=422, detail="No compliant layouts could be generated"
+            status_code=409,
+            detail={"code": "no_layouts", "help": "Generate layouts first"},
         )
     row = stored[0]
     return project, row, row.geometry

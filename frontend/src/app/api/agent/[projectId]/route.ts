@@ -60,6 +60,34 @@ BEHAVIOUR
 - Keep undo available — remind users they can say "undo" after changes.`;
 }
 
+// Agent tool calls can stack a CP-SAT-free read on top of a Cloud Run cold
+// start (~23s measured), so the default 15s fetch budget is too tight — the
+// route allows 60s (maxDuration), give each backend call 45s.
+const AGENT_TOOL_TIMEOUT_MS = 45_000;
+
+const NO_LAYOUTS_TOOL_RESULT =
+  "No layouts exist yet — ask the user to generate layouts first from the project page.";
+
+// Shared wrapper for every agent tool: applies the 45s timeout and turns the
+// backend's 409 {code: no_layouts} into a conversational result the model can
+// relay, rather than a thrown error that surfaces as an error banner.
+async function callBackendTool(userId: string, path: string, init?: RequestInit): Promise<unknown> {
+  const res = await fetchBackend(userId, path, {
+    ...init,
+    timeoutMs: AGENT_TOOL_TIMEOUT_MS,
+  });
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => null)) as {
+      detail?: { code?: string };
+    } | null;
+    if (body?.detail?.code === "no_layouts") {
+      return NO_LAYOUTS_TOOL_RESULT;
+    }
+    return body ?? { error: "Request conflicts with the current layout state" };
+  }
+  return res.json();
+}
+
 function buildTools(projectId: string, userId: string) {
   return {
     get_room_list: tool({
@@ -67,28 +95,19 @@ function buildTools(projectId: string, userId: string) {
       inputSchema: z.object({
         floor: z.enum(["gf", "ff", "sf", "basement", "all"]).describe("Which floor to list"),
       }),
-      execute: async ({ floor }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms?floor=${floor}`);
-        return res.json();
-      },
+      execute: ({ floor }) => callBackendTool(userId, `projects/${projectId}/rooms?floor=${floor}`),
     }),
 
     get_room_details: tool({
       description: "Get details for a specific room by ID",
       inputSchema: z.object({ room_id: z.string() }),
-      execute: async ({ room_id }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}`);
-        return res.json();
-      },
+      execute: ({ room_id }) => callBackendTool(userId, `projects/${projectId}/rooms/${room_id}`),
     }),
 
     get_compliance_status: tool({
       description: "Check current compliance status of the layout",
       inputSchema: z.object({}),
-      execute: async () => {
-        const res = await fetchBackend(userId, `projects/${projectId}/compliance`);
-        return res.json();
-      },
+      execute: () => callBackendTool(userId, `projects/${projectId}/compliance`),
     }),
 
     get_available_space: tool({
@@ -96,13 +115,8 @@ function buildTools(projectId: string, userId: string) {
       inputSchema: z.object({
         floor: z.enum(["gf", "ff", "sf", "basement"]),
       }),
-      execute: async ({ floor }) => {
-        const res = await fetchBackend(
-          userId,
-          `projects/${projectId}/available-space?floor=${floor}`
-        );
-        return res.json();
-      },
+      execute: ({ floor }) =>
+        callBackendTool(userId, `projects/${projectId}/available-space?floor=${floor}`),
     }),
 
     move_room: tool({
@@ -112,13 +126,11 @@ function buildTools(projectId: string, userId: string) {
         new_x: z.number().describe("New X position in metres"),
         new_y: z.number().describe("New Y position in metres"),
       }),
-      execute: async ({ room_id, new_x, new_y }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}/move`, {
+      execute: ({ room_id, new_x, new_y }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/${room_id}/move`, {
           method: "POST",
           body: JSON.stringify({ x: new_x, y: new_y }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     resize_room: tool({
@@ -128,13 +140,11 @@ function buildTools(projectId: string, userId: string) {
         new_width: z.number().optional().describe("New width in metres"),
         new_depth: z.number().optional().describe("New depth in metres"),
       }),
-      execute: async ({ room_id, new_width, new_depth }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}/resize`, {
+      execute: ({ room_id, new_width, new_depth }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/${room_id}/resize`, {
           method: "POST",
           body: JSON.stringify({ new_width, new_depth }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     swap_rooms: tool({
@@ -143,13 +153,11 @@ function buildTools(projectId: string, userId: string) {
         room_id_a: z.string(),
         room_id_b: z.string(),
       }),
-      execute: async ({ room_id_a, room_id_b }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/swap`, {
+      execute: ({ room_id_a, room_id_b }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/swap`, {
           method: "POST",
           body: JSON.stringify({ room_id_a, room_id_b }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     add_room: tool({
@@ -163,45 +171,36 @@ function buildTools(projectId: string, userId: string) {
         width: z.number().optional(),
         depth: z.number().optional(),
       }),
-      execute: async ({ floor, type, name, x, y, width, depth }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms`, {
+      execute: ({ floor, type, name, x, y, width, depth }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms`, {
           method: "POST",
           body: JSON.stringify({ floor, type, name, x, y, width, depth }),
-        });
-        return res.json();
-      },
+        }),
     }),
 
     remove_room: tool({
       description: "Remove a room from the layout",
       inputSchema: z.object({ room_id: z.string() }),
-      execute: async ({ room_id }) => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/${room_id}`, {
+      execute: ({ room_id }) =>
+        callBackendTool(userId, `projects/${projectId}/rooms/${room_id}`, {
           method: "DELETE",
-        });
-        return res.json();
-      },
+        }),
     }),
 
     undo_last_change: tool({
       description: "Undo the last room modification",
       inputSchema: z.object({}),
-      execute: async () => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/undo`, {
+      execute: () =>
+        callBackendTool(userId, `projects/${projectId}/rooms/undo`, {
           method: "POST",
-        });
-        return res.json();
-      },
+        }),
     }),
 
     refresh_layout: tool({
       description:
         "Fetch the current layout state so the floor plan re-renders. Call this after every successful room modification (move, resize, add, remove, swap, undo).",
       inputSchema: z.object({}),
-      execute: async () => {
-        const res = await fetchBackend(userId, `projects/${projectId}/rooms/layout-state`);
-        return res.json(); // { layout: LayoutData }
-      },
+      execute: () => callBackendTool(userId, `projects/${projectId}/rooms/layout-state`), // { layout: LayoutData }
     }),
   };
 }

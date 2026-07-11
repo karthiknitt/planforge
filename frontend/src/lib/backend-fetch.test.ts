@@ -4,6 +4,7 @@ import { fetchBackend } from "./backend-fetch";
 
 const ORIGINAL_FETCH = global.fetch;
 const ORIGINAL_SECRET = process.env.INTERNAL_AUTH_SECRET;
+const ORIGINAL_SET_TIMEOUT = global.setTimeout;
 
 describe("fetchBackend", () => {
   beforeEach(() => {
@@ -12,6 +13,7 @@ describe("fetchBackend", () => {
 
   afterEach(() => {
     global.fetch = ORIGINAL_FETCH;
+    global.setTimeout = ORIGINAL_SET_TIMEOUT;
     process.env.INTERNAL_AUTH_SECRET = ORIGINAL_SECRET;
   });
 
@@ -146,5 +148,44 @@ describe("fetchBackend", () => {
     await fetchBackend("user-1", "projects", { signal: callerController.signal });
 
     expect(capturedSignal).toBe(callerController.signal);
+  });
+
+  test("applies the default 15s timeout when none is specified", async () => {
+    const delays: number[] = [];
+    global.setTimeout = ((fn: () => void, delay?: number) => {
+      delays.push(delay ?? 0);
+      return ORIGINAL_SET_TIMEOUT(fn, delay);
+    }) as typeof setTimeout;
+    global.fetch = mock(async () => new Response("{}")) as typeof fetch;
+
+    await fetchBackend("user-1", "projects");
+
+    expect(delays.at(-1)).toBe(15_000);
+  });
+
+  test("honors a custom timeoutMs for slow paths", async () => {
+    const delays: number[] = [];
+    global.setTimeout = ((fn: () => void, delay?: number) => {
+      delays.push(delay ?? 0);
+      return ORIGINAL_SET_TIMEOUT(fn, delay);
+    }) as typeof setTimeout;
+    global.fetch = mock(async () => new Response("{}")) as typeof fetch;
+
+    await fetchBackend("user-1", "projects", { timeoutMs: 45_000 });
+
+    expect(delays.at(-1)).toBe(45_000);
+  });
+
+  test("does not forward timeoutMs into the fetch RequestInit", async () => {
+    let capturedInit: RequestInit | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response("{}");
+    }) as typeof fetch;
+
+    await fetchBackend("user-1", "projects", { timeoutMs: 45_000, method: "POST" });
+
+    expect(capturedInit?.method).toBe("POST");
+    expect((capturedInit as Record<string, unknown>)?.timeoutMs).toBeUndefined();
   });
 });
