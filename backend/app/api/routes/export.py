@@ -441,6 +441,7 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
 
     # Ground-floor building extents needed for post-loop setback callouts
     gf_bld_x = gf_bld_y = gf_bld_w = gf_bld_d = 0.0
+    gf_main_door_x: float | None = None
 
     for floor_plan in floor_plans:
         z_offset = float(floor_plan.floor) * 3.0
@@ -464,6 +465,11 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         # Canonical drawing for this floor — single source of truth for
         # walls/openings/columns/dims/labels/stair (Sprint 4/5).
         drawing = build_floor_drawing(floor_plan, cfg)
+
+        if floor_plan.floor == 0:
+            gf_main_door_x = next(
+                (o.cx for o in drawing.openings if getattr(o, "is_main", False)), None
+            )
 
         # 1-2. Walls: poché fill from the union of wall footprints with
         # opening boxes already subtracted (IS:962/AIA convention).
@@ -497,6 +503,25 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
                     z=z_offset,
                     mirror=op.swing_cw,
                 )
+                if getattr(op, "is_main", False):
+                    off = op.wall_thickness / 2 + 0.15
+                    tx, ty = (
+                        (op.cx, op.cy - off)
+                        if op.is_horizontal
+                        else (
+                            op.cx - off,
+                            op.cy,
+                        )
+                    )
+                    msp.add_mtext(
+                        "MD",
+                        dxfattribs={
+                            "layer": "TEXT",
+                            "char_height": 0.15,
+                            "insert": (tx, ty, z_offset),
+                            "attachment_point": 5,
+                        },
+                    )
                 continue
             if op.is_horizontal:
                 ins_x, ins_y, rotation = op.cx - op.width / 2, op.cy, 0.0
@@ -576,7 +601,9 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         )
 
         # ── Compound boundary wall with gate ─────────────────────────────────
-        draw_compound_wall(msp, cfg, layer="A-COMPOUND-WALL", z=0.0)
+        draw_compound_wall(
+            msp, cfg, layer="A-COMPOUND-WALL", z=0.0, gate_cx=gf_main_door_x
+        )
 
         # ── Title block (below the drawing) ───────────────────────────────────
         gf_sqft = sum(r.area for r in layout.ground_floor.rooms) * 10.764

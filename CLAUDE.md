@@ -82,6 +82,7 @@ PlanForge/
 - Kitchen ≥ 7 sqm
 - Toilet ≥ 3 sqm
 - Stair width ≥ 900 mm
+- Main entrance door ≥ 900 mm (default 1070 mm leaf), road-facing
 - External wall: 230 mm
 - Internal wall: 115 mm
 - Floor coverage % (FAR)

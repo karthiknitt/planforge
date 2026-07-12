@@ -119,23 +119,61 @@ def test_elevation_openings_inside_silhouette():
         assert rect.bounds[3] <= 2 * VS.floor_to_floor_m + 0.01
 
 
-def test_derive_elevation_all_road_sides():
+def test_derive_elevation_front_facade_is_always_y_min():
+    # Rooms are always laid out with the road at the y-min edge; road_side only
+    # records the compass direction that edge faces. The front facade (and thus
+    # the elevation silhouette) must therefore span the x-axis of the buildable
+    # bounds for every road_side value.
     from dataclasses import replace
 
     lay = _layout()
     bp = buildable_polygon(CFG)
-    minx, miny, maxx, maxy = bp.bounds
-    expected = {
-        "S": (minx, maxx),
-        "N": (minx, maxx),
-        "E": (miny, maxy),
-        "W": (miny, maxy),
-    }
-    for side, (u0, u1) in expected.items():
+    minx, _miny, maxx, _maxy = bp.bounds
+    for side in ("S", "N", "E", "W"):
         ed = derive_elevation(lay, replace(CFG, road_side=side))
         b = ed.silhouette.bounds
-        assert abs(b[0] - u0) < 1e-6, side
-        assert abs(b[2] - u1) < 1e-6, side
+        assert abs(b[0] - minx) < 1e-6, side
+        assert abs(b[2] - maxx) < 1e-6, side
         assert any("±0.00" in lv.label for lv in ed.levels), side
         for rect in ed.openings:
             assert rect.within(ed.silhouette.buffer(0.01)), side
+
+
+def test_elevation_includes_full_height_main_door():
+    from app.engine.plan_geometry import (
+        derive_columns,
+        derive_openings,
+        derive_walls,
+    )
+    from app.engine.standards import OpeningStandards
+    from tests.helpers.golden import golden_config, golden_layout
+
+    lay = golden_layout()
+    cfg = golden_config()
+    bp = buildable_polygon(cfg)
+    walls = derive_walls(lay.ground_floor.rooms, bp)
+    columns = derive_columns(walls)
+    md = next(
+        o
+        for o in derive_openings(
+            lay.ground_floor.rooms, walls, columns, OpeningStandards(), bp, floor=0
+        )
+        if o.is_main
+    )
+
+    ed = derive_elevation(lay, cfg)
+    # silhouette spans the x-axis (front facade = y-min wall), not the y-axis
+    minx, _miny, maxx, _maxy = bp.bounds
+    assert abs(ed.silhouette.bounds[0] - minx) < 1e-6
+    assert abs(ed.silhouette.bounds[2] - maxx) < 1e-6
+
+    # a full-height door rect (0 -> door_h_m) appears at the MD's x position
+    door_rects = [
+        r
+        for r in ed.openings
+        if abs(r.bounds[1] - 0.0) < 1e-6 and abs(r.bounds[3] - VS.door_h_m) < 1e-6
+    ]
+    assert door_rects, "no full-height door rect in the elevation"
+    assert any(r.bounds[0] <= md.cx <= r.bounds[2] for r in door_rects), (
+        "no elevation door rect at the main-door x position"
+    )

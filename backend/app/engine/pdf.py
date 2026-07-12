@@ -1093,9 +1093,14 @@ _OPENING_PREFIX = {"door": "D", "window": "W", "ventilator": "V"}
 def _opening_marks(drawing) -> tuple[dict[int, str], list[tuple]]:
     """IS 962 practice: same-kind, same-width openings share one mark
     (D1 = all 900 mm doors, D2 = 750 mm wet-room doors, W1, V1 …).
+    The main entrance door is tagged "MD" and kept out of the D-series.
     Returns ({opening index: mark}, schedule rows (mark, type, w_mm, h_mm, nos))."""
     groups: dict[tuple[str, int], list[int]] = {}
+    main_idx: list[int] = []
     for i, o in enumerate(drawing.openings):
+        if getattr(o, "is_main", False):
+            main_idx.append(i)
+            continue
         # snap to 50 mm modules so near-identical computed widths (1180 vs
         # 1200) share one mark, as they would on a real drawing
         groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
@@ -1110,6 +1115,13 @@ def _opening_marks(drawing) -> tuple[dict[int, str], list[tuple]]:
         for i in idxs:
             marks[i] = mark
         rows.append((mark, kind.upper(), width_mm, _OPENING_HEIGHT_MM[kind], len(idxs)))
+    if main_idx:
+        width_mm = round(drawing.openings[main_idx[0]].width * 1000 / 50) * 50
+        for i in main_idx:
+            marks[i] = "MD"
+        rows.insert(
+            0, ("MD", "MAIN DOOR", width_mm, _OPENING_HEIGHT_MM["door"], len(main_idx))
+        )
     return marks, rows
 
 

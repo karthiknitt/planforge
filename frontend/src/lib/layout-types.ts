@@ -44,6 +44,7 @@ export interface Opening {
   hinge_y: number;
   swing_into_room_id: string;
   swing_cw: boolean;
+  is_main?: boolean;
 }
 
 export interface LabelBox {

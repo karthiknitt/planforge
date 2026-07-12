@@ -63,6 +63,8 @@ _WINDOW_TYPES = {
     "servant_quarter",
 }
 _DOOR_NEIGHBOUR_PRIORITY = {"passage": 0, "living": 1, "dining": 2, "staircase": 3}
+_ENTRY_PRIORITY = {"living": 0, "passage": 1, "dining": 2}
+_NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
 
 
 def _merge_intervals(
@@ -482,6 +484,53 @@ def _make_door(
     )
 
 
+def _place_main_entrance(
+    rooms: list[Room],
+    obstacles: _ObstacleIndex,
+    std: OpeningStandards,
+    buildable: Polygon,
+    ewt: float,
+    tol: float,
+) -> Opening | None:
+    """Main entrance door (MD) in the road-facing external wall.
+
+    The road is always the y-min edge (archetypes/vastu convention: y=0 is
+    the road/front edge). Entry room preference follows Indian practice:
+    living > passage > dining; never parking, stairs or wet rooms. The
+    desired position is the facade midpoint so the door lines up with the
+    compound-wall gate (cad_advanced centres the gate on the road side).
+    """
+    bx1, by1, bx2, _by2 = buildable.bounds
+    py1 = by1 + ewt  # front plate boundary
+    coord = by1 + ewt / 2  # front external-wall centreline
+    width = std.main_door_width_m
+    gate_x = (bx1 + bx2) / 2
+    cands = []
+    for room in rooms:
+        if room.type in _NO_ENTRY_TYPES:
+            continue
+        if abs(room.y - py1) > 2 * tol:
+            continue
+        lo, hi = room.x, room.x + room.width
+        if hi - lo < width + 2 * _JAMB:
+            continue
+        prio = _ENTRY_PRIORITY.get(room.type, 3)
+        cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
+    for _prio, _dist, _rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
+        centre = _fit_along(
+            gate_x, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
+        )
+        if centre is None:
+            continue
+        door = _make_door(
+            room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
+        )
+        door.is_main = True
+        return door
+    logger.warning("no suitable road-facing room for a main entrance door")
+    return None
+
+
 def derive_openings(
     rooms: list[Room],
     walls: list[WallSegment],
@@ -491,6 +540,7 @@ def derive_openings(
     ewt: float = EWT,
     iwt: float = IWT,
     tol: float = 0.01,
+    floor: int = 0,
 ) -> list[Opening]:
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
@@ -503,6 +553,10 @@ def derive_openings(
         obstacles.add(opening)
         openings.append(opening)
         return True
+
+    # ── Main entrance first, so it claims front-wall space before windows ─
+    if floor == 0:
+        place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol))
 
     # ── Doors: one per non-passage room; a door in a shared wall serves
     # BOTH rooms, so a room whose gap already carries a door is done ──────
@@ -939,7 +993,12 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     junctions = derive_junctions(walls)
     columns = derive_columns(walls, junctions=junctions)
     openings = derive_openings(
-        rooms, walls, columns, get_opening_standards(), buildable
+        rooms,
+        walls,
+        columns,
+        get_opening_standards(),
+        buildable,
+        floor=floorplan.floor,
     )
     walls.sort(key=lambda w: (w.kind, w.x1, w.y1, w.x2, w.y2))
     openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
