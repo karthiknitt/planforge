@@ -25,12 +25,14 @@ async def create_job(
     requested_by: str,
     kind: str = "layout",
     layout_key: str | None = None,
+    reference_png: bytes | None = None,
 ) -> GenerationJob:
     job = GenerationJob(
         project_id=project_id,
         requested_by=requested_by,
         kind=kind,
         layout_key=layout_key,
+        reference_png=reference_png,
     )
     db.add(job)
     await db.commit()

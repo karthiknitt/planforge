@@ -16,7 +16,7 @@ import httpx
 _transport_for_tests: httpx.AsyncBaseTransport | None = None
 
 GEMINI_MODEL = "gemini-2.5-flash-image"
-OPENAI_MODEL = "gpt-image-1"
+OPENAI_MODEL = "gpt-image-2"
 OPENROUTER_MODEL = "google/gemini-2.5-flash-image"
 
 # Indicative per-image cost (USD) — refined at bake-off from real usage data.
@@ -104,7 +104,14 @@ async def _render_openai(
         resp = await client.post(
             "https://api.openai.com/v1/images/edits",
             headers={"Authorization": f"Bearer {api_key}"},
-            data={"model": model, "prompt": prompt},
+            data={
+                "model": model,
+                "prompt": prompt,
+                # gpt-image-2 keeps the reference geometry at high fidelity by
+                # default; explicit size + high quality sharpen the output.
+                "size": "1280x800",
+                "quality": "high",
+            },
             # Field name is `image[]` (bracketed array) per current OpenAI
             # docs, even for a single reference image.
             files=[("image[]", ("reference.png", reference_png, "image/png"))],

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
@@ -26,6 +26,9 @@ class GenerationJob(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
     stage: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional R3F 3D snapshot (PNG) sent by the frontend to condition the
+    # render on exact geometry instead of the rasterised 2D PDF plan.
+    reference_png: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     requested_by: Mapped[str] = mapped_column(String, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
