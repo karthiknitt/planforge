@@ -33,6 +33,7 @@ import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { LayoutCompareView } from "@/components/layout-compare-view";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
+import { StructuralViewer } from "@/components/structural-viewer";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1854,11 +1855,13 @@ export function LayoutViewer({
                   ? "Section"
                   : tab === "boq"
                     ? "BOQ"
-                    : tab === "compare"
-                      ? "Compare"
-                      : tab === "chat"
-                        ? "Chat"
-                        : "Render"}
+                    : tab === "structural"
+                      ? "Structural"
+                      : tab === "compare"
+                        ? "Compare"
+                        : tab === "chat"
+                          ? "Chat"
+                          : "Render"}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -2285,6 +2288,10 @@ export function LayoutViewer({
 
       {activeTab === "boq" && (
         <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
+      )}
+
+      {activeTab === "structural" && (
+        <StructuralViewer projectId={projectId} layoutId={selectedId} />
       )}
 
       {activeTab === "compare" && (
