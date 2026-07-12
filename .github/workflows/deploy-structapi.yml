@@ -1,0 +1,72 @@
+name: Deploy structapi to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "structapi-service/**"
+      - ".github/workflows/deploy-structapi.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        working-directory: structapi-service
+        run: |
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/planforge-backend/structapi:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: structapi
+          region: ${{ vars.GCP_REGION }}
+          image: ${{ env.IMAGE }}
+          flags: >-
+            --min-instances=0
+            --max-instances=2
+            --concurrency=8
+            --timeout=300
+            --cpu=1
+            --memory=1Gi
+            --allow-unauthenticated
+          # Public ingress is gated by the API key: STRUCTAPI_KEYS must equal
+          # the STRUCTURAL_API_KEY secret the backend sends (an empty value
+          # would run the service in OPEN dev mode — never deploy that).
+          env_vars: |
+            STRUCTAPI_KEYS=${{ secrets.STRUCTURAL_API_KEY }}
+            STRUCTAPI_RATE_LIMIT=120
+
+      - name: Smoke test /v1/health + print URL
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          echo "structapi URL: $URL"
+          curl -sf "$URL/v1/health"
+          echo
+          echo "Set it for the backend if not already:"
+          echo "  gh secret set STRUCTURAL_API_URL --body '$URL'"

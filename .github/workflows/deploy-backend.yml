@@ -73,6 +73,8 @@ jobs:
             OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
             INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
             INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
+            STRUCTURAL_API_URL=${{ secrets.STRUCTURAL_API_URL }}
+            STRUCTURAL_API_KEY=${{ secrets.STRUCTURAL_API_KEY }}
 
       - name: Print service URL
         run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

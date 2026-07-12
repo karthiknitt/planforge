@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openrouter_api_key: str = ""
 
+    # StructAgent structural-design API (structapi) — empty => feature off,
+    # the /structural endpoint returns 503 with a clear message.
+    structural_api_url: str = ""
+    structural_api_key: str = ""
+
     # Async job pipeline (Phase 3) — both empty => inline synchronous fallback
     inngest_event_key: str = ""
     inngest_signing_key: str = ""

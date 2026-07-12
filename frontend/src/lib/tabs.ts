@@ -1,4 +1,12 @@
-export const ALL_TABS = ["plan", "section", "boq", "compare", "chat", "render"] as const;
+export const ALL_TABS = [
+  "plan",
+  "section",
+  "boq",
+  "structural",
+  "compare",
+  "chat",
+  "render",
+] as const;
 export type TabId = (typeof ALL_TABS)[number];
 
 export function visibleTabs(agentChatEnabled: boolean): TabId[] {

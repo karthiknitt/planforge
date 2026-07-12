@@ -90,6 +90,34 @@ function buildTools(projectId: string, userId: string) {
       execute: () => callBackendTool(userId, `projects/${projectId}/compliance`),
     }),
 
+    run_structural_design: tool({
+      description:
+        "Run an IS-code (IS 456 LSM) structural design for the current layout's " +
+        "column grid: slabs, beams, columns, footings with clause-referenced " +
+        "checks and steel/concrete quantities. Use when the user asks about " +
+        "structural safety, member sizes, reinforcement, or material quantities. " +
+        "Report failed checks and the grid-confidence notes honestly.",
+      inputSchema: z.object({
+        layout_id: z
+          .string()
+          .regex(/^[\w-]{1,64}$/)
+          .default("A")
+          .describe("Layout key, e.g. 'A'"),
+        sbc_kpa: z
+          .number()
+          .min(50)
+          .max(600)
+          .default(200)
+          .describe("Safe bearing capacity of soil in kPa"),
+      }),
+      execute: ({ layout_id, sbc_kpa }) =>
+        callBackendTool(userId, `projects/${projectId}/structural`, {
+          method: "POST",
+          // PDF omitted in chat: base64 would blow up the model context.
+          body: JSON.stringify({ layout_id, sbc_kpa, include_pdf: false }),
+        }),
+    }),
+
     get_available_space: tool({
       description: "Get available (unoccupied) space on a floor",
       inputSchema: z.object({
