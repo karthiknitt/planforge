@@ -1,10 +1,15 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { auth } from "@/lib/auth";
+import { UserMenu } from "../(app)/user-menu";
 import { MobileNav } from "./mobile-nav";
 
-export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth.api.getSession({ headers: await headers() });
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* ── Sticky Nav ── */}
@@ -49,29 +54,46 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             {/* Right actions — visible from md+ */}
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               <ThemeToggle />
-              <Link href="/sign-in">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground font-medium"
-                >
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/sign-up">
-                <Button
-                  size="sm"
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/25 px-5"
-                >
-                  Get Started Free
-                </Button>
-              </Link>
+              {session ? (
+                <>
+                  <Link href="/dashboard">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-foreground font-medium"
+                    >
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <UserMenu name={session.user.name} email={session.user.email} />
+                </>
+              ) : (
+                <>
+                  <Link href="/sign-in">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-foreground font-medium"
+                    >
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/sign-up">
+                    <Button
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/25 px-5"
+                    >
+                      Get Started Free
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile — only on < md */}
             <div className="flex md:hidden items-center gap-2">
               <ThemeToggle />
-              <MobileNav />
+              <MobileNav isAuthenticated={!!session} />
             </div>
           </div>
         </div>
@@ -133,18 +155,29 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 Account
               </p>
               <nav className="flex flex-col gap-2">
-                <Link
-                  href="/sign-in"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Sign Up Free
-                </Link>
+                {session ? (
+                  <Link
+                    href="/dashboard"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      href="/sign-in"
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/sign-up"
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Sign Up Free
+                    </Link>
+                  </>
+                )}
               </nav>
             </div>
           </div>
