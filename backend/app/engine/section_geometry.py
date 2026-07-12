@@ -164,9 +164,6 @@ class ElevationDrawing:
     bounds: tuple[float, float, float, float]
 
 
-_ROAD_TO_AXIS = {"S": True, "N": True, "W": False, "E": False}  # True = facade along x
-
-
 def derive_elevation(
     layout: Layout, cfg: PlotConfig, vs: VerticalStandards = VS
 ) -> ElevationDrawing:
@@ -186,12 +183,15 @@ def derive_elevation(
     def z_ffl(i: int) -> float:
         return i * ftf
 
-    # Rule 1 — facade axis and the boundary coordinate the road-side wall sits on
+    # Rule 1 — facade axis. Rooms are always laid out with the road at the
+    # y-min edge (archetypes/vastu convention: y=0 is the road/front edge);
+    # cfg.road_side only records the compass direction that edge faces. The
+    # front facade is therefore always the y-min wall, running along x.
     buildable = buildable_polygon(cfg)
-    minx, miny, maxx, maxy = buildable.bounds
-    along_x = _ROAD_TO_AXIS[cfg.road_side]
-    v_front = {"S": miny, "N": maxy, "W": minx, "E": maxx}[cfg.road_side]
-    u_min, u_max = (minx, maxx) if along_x else (miny, maxy)
+    minx, miny, maxx, _maxy = buildable.bounds
+    along_x = True
+    v_front = miny
+    u_min, u_max = minx, maxx
 
     # Rule 2 — facade silhouette, GL to parapet top
     silhouette = box(u_min, gl, u_max, roof_z + parapet_h)

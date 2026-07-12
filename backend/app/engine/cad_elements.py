@@ -61,6 +61,7 @@ class Opening:
     hinge_y: float = 0.0
     swing_into_room_id: str = ""
     swing_cw: bool = True
+    is_main: bool = False  # main entrance door (MD) on the road-facing wall
 
 
 @dataclass

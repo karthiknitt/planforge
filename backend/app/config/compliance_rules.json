@@ -66,6 +66,7 @@
 
   "standard_openings": {
     "door_width_mm": 900,
+    "main_door_width_mm": 1070,
     "window_width_mm": 1200,
     "window_max_room_fraction": 0.6,
     "ventilator_width_mm": 600

@@ -44,7 +44,8 @@ def test_adjacent_rooms_share_one_door():
 
 def test_door_swing_direction_is_room_aware():
     openings, _walls = _openings_for(_two_bedrooms(), _cfg_9x15())
-    d = next(o for o in openings if o.kind == "door")
+    # skip the road-facing main entrance; assert on the internal partition door
+    d = next(o for o in openings if o.kind == "door" and not o.is_main)
     # hinge at the low jamb, leaf along +y, swinging into room "a" (-x side)
     # => counter-clockwise
     assert d.swing_into_room_id == "a"
@@ -112,9 +113,14 @@ def test_openings_use_configured_standards():
         ventilator_width_m=0.45,
     )
     openings, _walls = _openings_for(_two_bedrooms(), _cfg_9x15(), std=custom)
-    doors = [o for o in openings if o.kind == "door"]
+    doors = [o for o in openings if o.kind == "door" and not o.is_main]
+    main = [o for o in openings if o.is_main]
     windows = [o for o in openings if o.kind == "window"]
     assert all(math.isclose(d.width, 1.0, abs_tol=1e-9) for d in doors)
+    # the main entrance uses the dedicated main-door width, not door_width_m
+    assert main and all(
+        math.isclose(m.width, custom.main_door_width_m, abs_tol=1e-9) for m in main
+    )
     assert windows and all(w.width <= 1.5 + 1e-9 for w in windows)
 
 
@@ -187,3 +193,87 @@ def test_opening_boxes_subtract_from_wall_polygons():
     cut = wall_polygons(walls, openings=opening_boxes(openings))
     assert cut["internal"].area < full["internal"].area
     assert cut["external"].area < full["external"].area  # windows cut the ring
+
+
+# ── Main entrance door (MD) invariants ───────────────────────────────────────
+EWT = 0.23
+_NO_ENTRY_TYPES = {
+    "toilet",
+    "wc_only",
+    "bathroom_master",
+    "utility",
+    "parking",
+    "staircase",
+}
+
+
+def _golden_openings(floor: int):
+    layout = golden_layout()
+    cfg = golden_config()
+    fp = layout.ground_floor if floor == 0 else layout.first_floor
+    buildable = buildable_polygon(cfg)
+    walls = derive_walls(fp.rooms, buildable)
+    columns = derive_columns(walls)
+    openings = derive_openings(fp.rooms, walls, columns, STD, buildable, floor=floor)
+    return openings, fp, buildable
+
+
+def test_ground_floor_has_exactly_one_main_door():
+    openings, _fp, _buildable = _golden_openings(floor=0)
+    mains = [o for o in openings if o.is_main]
+    assert len(mains) == 1
+
+
+def test_main_door_sits_on_front_external_wall():
+    openings, _fp, buildable = _golden_openings(floor=0)
+    md = next(o for o in openings if o.is_main)
+    assert md.kind == "door"
+    assert md.is_horizontal is True
+    assert math.isclose(md.cy, buildable.bounds[1] + EWT / 2, abs_tol=1e-6)
+
+
+def test_main_door_width_is_standard_and_above_nbc_minimum():
+    openings, _fp, _buildable = _golden_openings(floor=0)
+    md = next(o for o in openings if o.is_main)
+    assert math.isclose(md.width, STD.main_door_width_m, abs_tol=1e-9)
+    assert md.width >= 0.9  # NBC minimum clear entrance width
+
+
+def test_first_floor_has_no_main_door():
+    openings, _fp, _buildable = _golden_openings(floor=1)
+    assert not [o for o in openings if o.is_main]
+
+
+def test_main_door_room_is_never_parking_stair_or_wet():
+    openings, fp, _buildable = _golden_openings(floor=0)
+    md = next(o for o in openings if o.is_main)
+    room = next(r for r in fp.rooms if r.id == md.swing_into_room_id)
+    assert room.type not in _NO_ENTRY_TYPES
+
+
+def test_main_door_does_not_overlap_other_openings_on_its_wall():
+    openings, _fp, _buildable = _golden_openings(floor=0)
+    md = next(o for o in openings if o.is_main)
+    for o in openings:
+        if o is md or o.is_horizontal != md.is_horizontal:
+            continue
+        if abs(o.cy - md.cy) > 1e-6:  # same horizontal wall line
+            continue
+        assert abs(o.cx - md.cx) >= (o.width + md.width) / 2 - 1e-9, (
+            f"MD overlaps {o.kind}@({o.cx:.2f},{o.cy:.2f})"
+        )
+
+
+def test_no_main_door_when_only_parking_faces_front():
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    # only the parking room touches the front (y-min) plate edge; the bedroom
+    # is set back behind it and never faces the road
+    rooms = [
+        _room("park", 1.23, 1.73, 6.54, 3.0, rtype="parking"),
+        _room("bed", 1.23, 5.0, 6.54, 8.77),
+    ]
+    walls = derive_walls(rooms, buildable)
+    columns = derive_columns(walls)
+    openings = derive_openings(rooms, walls, columns, STD, buildable, floor=0)
+    assert not [o for o in openings if o.is_main]

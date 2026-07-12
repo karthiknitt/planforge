@@ -252,13 +252,16 @@ def _draw_wall_segment_poly(msp, pts_2d: list[tuple], layer: str, z: float) -> N
         pass
 
 
-def draw_compound_wall(msp, cfg, layer: str, z: float) -> None:
+def draw_compound_wall(
+    msp, cfg, layer: str, z: float, gate_cx: float | None = None
+) -> None:
     """
     Draw compound (boundary) wall around the plot perimeter.
 
     Uses ``LineString.buffer(0.115)`` with mitered corners for each side.
-    A 3.6 m gate gap is placed at the centre of the road-facing side,
-    with 0.3 m square gate posts at the gap edges.
+    A 3.6 m gate gap is placed at the centre of the road-facing side by
+    default, or centred on ``gate_cx`` (the main entrance door's x position,
+    clamped to keep the gap within the wall) when given.
     """
     from shapely.geometry import LineString
 
@@ -290,7 +293,12 @@ def draw_compound_wall(msp, cfg, layer: str, z: float) -> None:
         dy = (p2[1] - p1[1]) / length
 
         if side_id == road:
-            gate_start_d = max(0.0, (length - gate_w) / 2)
+            if gate_cx is not None and abs(dx) > 0.5:
+                gate_start_d = max(
+                    0.0, min((gate_cx - p1[0]) / dx - gate_w / 2, length - gate_w)
+                )
+            else:
+                gate_start_d = max(0.0, (length - gate_w) / 2)
             gate_end_d = min(length, gate_start_d + gate_w)
 
             # Wall segment before gate

@@ -798,6 +798,21 @@ function DrawingDoorSymbol({
       >
         D
       </text>
+      {op.is_main && (
+        <text
+          x={hx + r * 1.15 * Math.cos(mid)}
+          y={hy + r * 1.15 * Math.sin(mid)}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={5}
+          fontWeight="700"
+          fill="#64748B"
+          stroke="none"
+          fontFamily="sans-serif"
+        >
+          MD
+        </text>
+      )}
     </g>
   );
 }
