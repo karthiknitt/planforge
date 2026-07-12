@@ -403,7 +403,8 @@ def derive_section(
         for piece in _as_polys(profile):
             polys.append(SectionPoly(piece, "rcc"))
         s_lab = s_start + direction * (n_draw - 1) * tread / 2
-        labels.append((s_lab, ftf / 2, f"{n_r}R @ {round(riser * 1000)}"))
+        # below the waist underside so it clears the room label on the diagonal
+        labels.append((s_lab, 0.7, f"{n_r}R @ {round(riser * 1000)}"))
 
     # Rule 8 — room labels per floor
     for i, fp in enumerate(floors):
