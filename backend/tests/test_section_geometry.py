@@ -117,3 +117,25 @@ def test_elevation_openings_inside_silhouette():
         assert rect.within(ed.silhouette.buffer(0.01))
     for rect in ed.openings:
         assert rect.bounds[3] <= 2 * VS.floor_to_floor_m + 0.01
+
+
+def test_derive_elevation_all_road_sides():
+    from dataclasses import replace
+
+    lay = _layout()
+    bp = buildable_polygon(CFG)
+    minx, miny, maxx, maxy = bp.bounds
+    expected = {
+        "S": (minx, maxx),
+        "N": (minx, maxx),
+        "E": (miny, maxy),
+        "W": (miny, maxy),
+    }
+    for side, (u0, u1) in expected.items():
+        ed = derive_elevation(lay, replace(CFG, road_side=side))
+        b = ed.silhouette.bounds
+        assert abs(b[0] - u0) < 1e-6, side
+        assert abs(b[2] - u1) < 1e-6, side
+        assert any("±0.00" in lv.label for lv in ed.levels), side
+        for rect in ed.openings:
+            assert rect.within(ed.silhouette.buffer(0.01)), side

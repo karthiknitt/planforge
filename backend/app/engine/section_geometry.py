@@ -433,11 +433,21 @@ def derive_section(
         vdims.append(VDim(z_ffl(k), z_ffl(k + 1), str(round(ftf * 1000))))
     vdims.append(VDim(roof_z, roof_z + parapet_h, str(round(parapet_h * 1000))))
 
-    # Rule 11 — annotation-padded bounds
-    s0b = min(p.poly.bounds[0] for p in polys) - 1.2
-    z0b = min(p.poly.bounds[1] for p in polys) - 1.2
-    s1b = max(p.poly.bounds[2] for p in polys) + 1.2
-    z1b = max(p.poly.bounds[3] for p in polys) + 1.2
+    # Rule 11 — annotation-padded bounds (union of polys, levels and labels)
+    all_s = (
+        [p.poly.bounds[0] for p in polys]
+        + [p.poly.bounds[2] for p in polys]
+        + [lv.s for lv in levels]
+        + [s for s, _, _ in labels]
+    )
+    all_z = (
+        [p.poly.bounds[1] for p in polys]
+        + [p.poly.bounds[3] for p in polys]
+        + [lv.z for lv in levels]
+        + [z for _, z, _ in labels]
+    )
+    s0b, z0b = min(all_s) - 1.2, min(all_z) - 1.2
+    s1b, z1b = max(all_s) + 1.2, max(all_z) + 1.2
 
     return SectionDrawing(
         title="SECTION A-A",
