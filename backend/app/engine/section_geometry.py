@@ -151,6 +151,120 @@ def _stair_profile(
     return Polygon(pts)
 
 
+@dataclass
+class ElevationDrawing:
+    title: str
+    silhouette: Polygon
+    openings: list[Polygon]
+    chajjas: list[Polygon]
+    ref_lines: list[tuple[float, float, float, float]]  # dashed FFL lines (s1,z1,s2,z2)
+    levels: list[LevelMark]
+    vdims: list[VDim]  # incl. overall height GL->parapet top
+    gl_z: float
+    bounds: tuple[float, float, float, float]
+
+
+_ROAD_TO_AXIS = {"S": True, "N": True, "W": False, "E": False}  # True = facade along x
+
+
+def derive_elevation(
+    layout: Layout, cfg: PlotConfig, vs: VerticalStandards = VS
+) -> ElevationDrawing:
+    ftf = vs.floor_to_floor_m
+    gl = -vs.plinth_h_m
+    lintel_h = vs.lintel_h_m
+    chajja_t = vs.chajja_t_m
+    parapet_h = vs.parapet_h_m
+
+    # Rule 1 — floors and their finished-floor levels
+    floors = [layout.ground_floor, layout.first_floor]
+    if layout.second_floor is not None:
+        floors.append(layout.second_floor)
+    n_floors = len(floors)
+    roof_z = n_floors * ftf
+
+    def z_ffl(i: int) -> float:
+        return i * ftf
+
+    # Rule 1 — facade axis and the boundary coordinate the road-side wall sits on
+    buildable = buildable_polygon(cfg)
+    minx, miny, maxx, maxy = buildable.bounds
+    along_x = _ROAD_TO_AXIS[cfg.road_side]
+    v_front = {"S": miny, "N": maxy, "W": minx, "E": maxx}[cfg.road_side]
+    u_min, u_max = (minx, maxx) if along_x else (miny, maxy)
+
+    # Rule 2 — facade silhouette, GL to parapet top
+    silhouette = box(u_min, gl, u_max, roof_z + parapet_h)
+
+    drawings: list[FloorDrawing] = [build_floor_drawing(fp, cfg) for fp in floors]
+
+    # Rules 3-4 — facade openings and their chajja bands, per floor
+    opening_rects: list[Polygon] = []
+    chajjas: list[Polygon] = []
+    for i, fdw in enumerate(drawings):
+        zf = z_ffl(i)
+        for op in fdw.openings:
+            if op.is_horizontal != along_x:
+                continue
+            perp = op.cy if along_x else op.cx
+            if abs(perp - v_front) >= 0.3:
+                continue
+            u_c = op.cx if along_x else op.cy
+            if op.kind == "door":
+                z_lo, z_hi = zf, zf + vs.door_h_m
+            elif op.kind == "window":
+                z_lo, z_hi = zf + vs.sill_h_m, zf + lintel_h
+            else:  # ventilator
+                z_lo, z_hi = zf + vs.vent_sill_m, zf + lintel_h
+            opening_rects.append(
+                box(u_c - op.width / 2, z_lo, u_c + op.width / 2, z_hi)
+            )
+            chajjas.append(
+                box(
+                    u_c - op.width / 2 - 0.15,
+                    zf + lintel_h,
+                    u_c + op.width / 2 + 0.15,
+                    zf + lintel_h + chajja_t,
+                )
+            )
+
+    # Rule 5 — dashed FFL/roof reference lines spanning the facade width
+    ref_zs = {0.0, roof_z}
+    for k in range(1, n_floors):
+        ref_zs.add(z_ffl(k))
+    ref_lines = [(u_min, z, u_max, z) for z in sorted(ref_zs)]
+
+    # Rule 6 — level marks and overall/plinth vertical dimensions
+    s_lvl = u_max + 0.6
+    levels = [
+        LevelMark(s_lvl, gl, "G.L. " + fmt_level(gl)),
+        LevelMark(s_lvl, 0.0, fmt_level(0.0)),
+    ]
+    for k in range(1, n_floors):
+        levels.append(LevelMark(s_lvl, z_ffl(k), fmt_level(z_ffl(k))))
+    levels.append(LevelMark(s_lvl, roof_z, fmt_level(roof_z)))
+    levels.append(LevelMark(s_lvl, roof_z + parapet_h, fmt_level(roof_z + parapet_h)))
+
+    vdims = [
+        VDim(gl, roof_z + parapet_h, str(round((roof_z + parapet_h - gl) * 1000))),
+        VDim(gl, 0.0, str(round(vs.plinth_h_m * 1000))),
+    ]
+
+    bounds = (u_min - 1.2, gl - 1.2, u_max + 1.2, roof_z + parapet_h + 1.2)
+
+    return ElevationDrawing(
+        title="FRONT ELEVATION",
+        silhouette=silhouette,
+        openings=opening_rects,
+        chajjas=chajjas,
+        ref_lines=ref_lines,
+        levels=levels,
+        vdims=vdims,
+        gl_z=gl,
+        bounds=bounds,
+    )
+
+
 def derive_section(
     layout: Layout, cfg: PlotConfig, vs: VerticalStandards = VS
 ) -> SectionDrawing:

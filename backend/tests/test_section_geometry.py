@@ -5,6 +5,7 @@ from app.engine.generator import generate
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig
 from app.engine.section_geometry import (
+    derive_elevation,
     derive_section,
     room_interval,
     section_cut_line,
@@ -97,3 +98,22 @@ def test_section_levels_and_dims():
     assert any("±0.00" in t for t in label_texts)
     assert any("+3.000" in t for t in label_texts)
     assert "3000" in [d.label for d in sd.vdims]
+
+
+def test_derive_elevation_silhouette_and_levels():
+    ed = derive_elevation(_layout(), CFG)
+    assert ed.title == "FRONT ELEVATION"
+    minx, miny, maxx, maxy = ed.silhouette.bounds
+    assert abs(maxy - (2 * VS.floor_to_floor_m + VS.parapet_h_m)) < 0.01
+    assert abs(miny - (-VS.plinth_h_m)) < 0.01
+    assert any("±0.00" in lv.label for lv in ed.levels)
+    total_mm = round((2 * VS.floor_to_floor_m + VS.parapet_h_m + VS.plinth_h_m) * 1000)
+    assert str(total_mm) in [d.label for d in ed.vdims]
+
+
+def test_elevation_openings_inside_silhouette():
+    ed = derive_elevation(_layout(), CFG)
+    for rect in ed.openings:
+        assert rect.within(ed.silhouette.buffer(0.01))
+    for rect in ed.openings:
+        assert rect.bounds[3] <= 2 * VS.floor_to_floor_m + 0.01
