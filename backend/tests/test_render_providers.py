@@ -63,6 +63,10 @@ async def test_openai_happy_path(monkeypatch):
         # OpenAI docs — not the bare `image` singular field.
         assert b'name="image[]"' in request.content
         assert b'name="prompt"' in request.content
+        # gpt-image-2 high-fidelity defaults: explicit size + quality.
+        assert b'name="model"\r\n\r\ngpt-image-2' in request.content
+        assert b'name="size"\r\n\r\n1280x800' in request.content
+        assert b'name="quality"\r\n\r\nhigh' in request.content
         return httpx.Response(
             200,
             json={"data": [{"b64_json": FAKE_B64}]},

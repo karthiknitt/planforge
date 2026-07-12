@@ -94,3 +94,46 @@ async def test_render_job_free_tier_402(client_db):
         headers={"X-Test-User-Id": "u2"},
     )
     assert resp.status_code == 402
+
+
+async def test_render_job_with_r3f_reference_conditions_prompt(client_db, monkeypatch):
+    """An uploaded R3F snapshot should be stored on the job, passed through as
+    the conditioning image, and switch the prompt to the r3f instruction —
+    instead of falling back to a rasterised PDF page."""
+    from app.config.settings import settings
+
+    monkeypatch.setattr(settings, "render_provider", "openrouter")
+    monkeypatch.setattr(settings, "openrouter_api_key", "test-key")
+
+    captured = {}
+
+    async def _fake(
+        prompt, reference_png, provider, *, api_key, model=None, timeout=120.0
+    ):
+        captured["prompt"] = prompt
+        captured["reference_png"] = reference_png
+        return RenderResult(
+            image_png=b"\x89PNG-fake",
+            provider=provider,
+            model=model or "m",
+            cost_usd=None,
+        )
+
+    monkeypatch.setattr(render_runner, "render_image", _fake)
+
+    client, SessionLocal = client_db
+    async with SessionLocal() as session:
+        await _seed_user(session, "u3", "pro")
+    project_id, layout_id = await _seed_project_with_layout(SessionLocal, "u3")
+
+    r3f_png = b"\x89PNG\r\n\x1a\nfake-r3f-snapshot"
+    resp = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render-jobs",
+        headers={"X-Test-User-Id": "u3"},
+        files={"reference": ("r3f.png", r3f_png, "image/png")},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "done"
+
+    assert captured["reference_png"] == r3f_png
+    assert "3D geometric model" in captured["prompt"]

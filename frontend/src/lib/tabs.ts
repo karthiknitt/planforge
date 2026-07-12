@@ -5,6 +5,7 @@ export const ALL_TABS = [
   "structural",
   "compare",
   "chat",
+  "r3f",
   "render",
 ] as const;
 export type TabId = (typeof ALL_TABS)[number];

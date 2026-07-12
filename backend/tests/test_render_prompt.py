@@ -77,6 +77,19 @@ def test_prompt_instructs_fidelity_to_reference():
     assert "exact" in prompt.lower() or "match" in prompt.lower()
 
 
+def test_prompt_uses_r3f_instruction_when_reference_kind_is_r3f():
+    prompt = build_render_prompt(
+        GEOMETRY, plot_length_m=15.0, plot_width_m=9.0, reference_kind="r3f"
+    )
+    assert "3D geometric model" in prompt
+    assert "exact CAD floor plan" not in prompt
+
+
+def test_prompt_defaults_to_cad_instruction():
+    prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
+    assert "exact CAD floor plan" in prompt
+
+
 def test_unknown_floor_raises():
     import pytest
 

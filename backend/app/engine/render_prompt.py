@@ -22,6 +22,7 @@ def build_render_prompt(
     north_direction: str = "N",
     floor: str = "ground_floor",
     style: str = DEFAULT_STYLE,
+    reference_kind: str = "cad",
 ) -> str:
     if floor not in geometry or geometry[floor] is None:
         raise KeyError(f"floor {floor!r} not present in geometry")
@@ -37,15 +38,30 @@ def build_render_prompt(
         )
     rooms_block = "\n".join(room_lines)
 
+    if reference_kind == "r3f":
+        reference_instruction = (
+            "IMPORTANT: The attached reference image is a 3D geometric model "
+            "(solid blocks / wireframe) of this exact floor plan, built from the "
+            "same dimensions — treat it as the structural truth. Match the room "
+            "positions, proportions and wall layout of the reference exactly — do "
+            "not move, resize, add or remove any room. Add realistic materials, "
+            "furniture, lighting and finishes on top of the geometry. Walls are "
+            "230mm external / 115mm internal."
+        )
+    else:
+        reference_instruction = (
+            "IMPORTANT: The attached reference image is the exact CAD floor plan. "
+            "Match the room positions, proportions and wall layout of the "
+            "reference exactly — do not move, resize, add or remove any room. "
+            "Walls are 230mm external / 115mm internal. Keep the same orientation "
+            "as the reference image."
+        )
+
     return (
         f"Render the {floor_label} of an Indian residential house "
         f"({plot_length_m:.1f}m x {plot_width_m:.1f}m plot, north facing "
         f"{north_direction}).\n\n"
         f"Rooms (positions and sizes are exact, in metres):\n{rooms_block}\n\n"
         f"Style: {style}.\n\n"
-        "IMPORTANT: The attached reference image is the exact CAD floor plan. "
-        "Match the room positions, proportions and wall layout of the "
-        "reference exactly — do not move, resize, add or remove any room. "
-        "Walls are 230mm external / 115mm internal. Keep the same orientation "
-        "as the reference image."
+        f"{reference_instruction}"
     )

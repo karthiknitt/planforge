@@ -1,5 +1,5 @@
 import inngest as inngest_lib
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.revisions import save_auto_revision
@@ -82,10 +82,21 @@ async def create_render_job(
     project_id: str,
     layout_id: str,
     response: Response,
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> JobOut:
     from app import inngest_app  # runtime import so tests can monkeypatch
+
+    # The frontend may attach an R3F 3D snapshot (multipart `reference` PNG) to
+    # condition the render on exact geometry. Read it manually (only when the
+    # request is actually multipart) so a body-less POST still works.
+    reference_png: bytes | None = None
+    if request.headers.get("content-type", "").startswith("multipart/form-data"):
+        form = await request.form()
+        ref = form.get("reference")
+        if hasattr(ref, "read"):
+            reference_png = await ref.read()
 
     project = await get_accessible_project(project_id, user_id, db)
     tier = await get_effective_plan_tier(user_id, db)
@@ -99,6 +110,7 @@ async def create_render_job(
         requested_by=user_id,
         kind="render",
         layout_key=layout_id,
+        reference_png=reference_png,
     )
 
     if inngest_app.inngest_enabled():

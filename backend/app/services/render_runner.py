@@ -81,13 +81,22 @@ def ensure_provider_configured() -> None:
 
 
 async def perform_render(
-    project_id: str, layout_id: str, db: AsyncSession
+    project_id: str,
+    layout_id: str,
+    db: AsyncSession,
+    *,
+    reference_png: bytes | None = None,
+    reference_kind: str = "cad",
 ) -> LayoutRender:
     """Render (or return the cached render for) one layout's geometry.
 
     Sets a transient `was_cached` attribute on the returned row — not a
     mapped column, just a same-request signal so callers (the sync POST
     endpoint) can report `cached: bool` without a second return type.
+
+    `reference_png` is the conditioning image: when the frontend supplies an
+    R3F 3D snapshot it is used directly (exact geometry, best fidelity);
+    otherwise we fall back to a rasterised 2D PDF plan.
     """
     ensure_provider_configured()
     provider = settings.render_provider
@@ -115,13 +124,16 @@ async def perform_render(
 
     cfg = plot_config_from_project(project)
     layout = layout_store.engine_layout_from_geometry(stored.geometry)
-    pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
-    reference_png = pdf_page_png(pdf_bytes)
+    if reference_png is None:
+        pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
+        reference_png = pdf_page_png(pdf_bytes)
+        reference_kind = "cad"
     prompt = build_render_prompt(
         stored.geometry,
         plot_length_m=cfg.plot_length,
         plot_width_m=cfg.plot_width,
         north_direction=project.north_direction,
+        reference_kind=reference_kind,
     )
 
     try:
@@ -156,7 +168,13 @@ async def execute_render_job(db: AsyncSession, job: GenerationJob) -> None:
         return
     try:
         await jobs.mark(db, job, status="running", stage="rendering")
-        await perform_render(job.project_id, job.layout_key, db)
+        await perform_render(
+            job.project_id,
+            job.layout_key,
+            db,
+            reference_png=job.reference_png,
+            reference_kind="r3f" if job.reference_png else "cad",
+        )
         await jobs.mark(db, job, status="done", stage="stored")
     except Exception as exc:
         logger.exception("render job %s failed", job.id)
