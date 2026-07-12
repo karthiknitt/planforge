@@ -38,6 +38,36 @@ def build_render_prompt(
         )
     rooms_block = "\n".join(room_lines)
 
+    # Data-driven negative constraints — image models routinely hallucinate
+    # a parked car, paving or a dining set where the plan has none (and drop
+    # rooms the plan does have). Say what must NOT appear, explicitly.
+    present = {r["type"] for r in fp.get("rooms", [])}
+    negatives: list[str] = []
+    if not present & {"parking", "parking_4w", "parking_2w", "garage"}:
+        negatives.append(
+            "This floor has NO parking, garage, driveway or paved car area — "
+            "do not draw a car or parking anywhere."
+        )
+    if "dining" not in present:
+        negatives.append("There is no separate dining room on this floor.")
+    else:
+        negatives.append(
+            "The Dining room MUST be visible and furnished as a dining area."
+        )
+    if "staircase" in present:
+        stair = next(r for r in fp["rooms"] if r["type"] == "staircase")
+        negatives.append(
+            f"The staircase occupies ONLY its marked position at "
+            f"{stair['x']:.1f}m from the left, {stair['y']:.1f}m from the "
+            "bottom — keep it there and put nothing else (no car, no "
+            "furniture) inside it."
+        )
+    negatives.append(
+        "Render every listed room and NOTHING that is not listed — no extra "
+        "rooms, gardens, pools or vehicles."
+    )
+    negatives_block = "\n".join(f"- {n}" for n in negatives)
+
     if reference_kind == "r3f":
         reference_instruction = (
             "IMPORTANT: The attached reference image is a 3D geometric model "
@@ -62,6 +92,7 @@ def build_render_prompt(
         f"({plot_length_m:.1f}m x {plot_width_m:.1f}m plot, north facing "
         f"{north_direction}).\n\n"
         f"Rooms (positions and sizes are exact, in metres):\n{rooms_block}\n\n"
+        f"Hard constraints:\n{negatives_block}\n\n"
         f"Style: {style}.\n\n"
         f"{reference_instruction}"
     )

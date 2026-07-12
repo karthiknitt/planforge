@@ -97,3 +97,38 @@ def test_unknown_floor_raises():
         build_render_prompt(
             GEOMETRY, plot_length_m=15.0, plot_width_m=9.0, floor="attic"
         )
+
+
+def test_prompt_negative_constraints_no_parking():
+    prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
+    assert "NO parking" in prompt
+    assert "do not draw a car" in prompt
+
+
+def test_prompt_pins_staircase_position():
+    geometry = {
+        "ground_floor": {
+            "floor": 0,
+            "rooms": [
+                {
+                    "id": "gf-stair",
+                    "name": "Staircase",
+                    "type": "staircase",
+                    "x": 1.2,
+                    "y": 1.7,
+                    "width": 0.9,
+                    "depth": 3.0,
+                    "area": 2.7,
+                },
+            ],
+            "columns": [],
+        },
+    }
+    prompt = build_render_prompt(geometry, plot_length_m=15.0, plot_width_m=9.0)
+    assert "staircase occupies ONLY its marked position" in prompt
+    assert "1.2m from the left" in prompt
+
+
+def test_prompt_forbids_unlisted_rooms():
+    prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
+    assert "NOTHING that is not listed" in prompt

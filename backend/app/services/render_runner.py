@@ -154,7 +154,11 @@ async def perform_render(
     layout = layout_store.engine_layout_from_geometry(stored.geometry)
     if reference_png is None:
         pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
-        reference_png = pdf_page_png(pdf_bytes)
+        # Standard PDF page order: GF architectural = 0, FF architectural = 1.
+        # Conditioning the FF render on the GF page made the model draw the
+        # wrong rooms — pick the page that matches the requested floor.
+        page_idx = {"ground_floor": 0, "first_floor": 1}.get(floor, 0)
+        reference_png = pdf_page_png(pdf_bytes, page_idx=page_idx)
         reference_kind = "cad"
     prompt = build_render_prompt(
         stored.geometry,
