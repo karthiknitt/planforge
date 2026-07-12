@@ -33,6 +33,7 @@ from app.engine.section_render import (
     render_elevation_view,
     render_section_view,
 )
+from app.engine.title_block import draw_title_block
 
 # ── Page geometry constants (points) ─────────────────────────────────────────
 MARGIN = 40
@@ -504,6 +505,10 @@ def _draw_approval_floor_plan(
     strict B/W, hatched walls, doors/windows/ventilators, full dimension
     chains (rooms + plot/setbacks), FAR strip clear of the plan."""
     from app.engine.pdf import (
+        SCHED_PAD,
+        SCHED_RESERVE,
+        _area_schedule_height,
+        _centered_plot_oy,
         _draw_area_schedule_table,
         _draw_dim_chains,
         _draw_labels,
@@ -513,7 +518,9 @@ def _draw_approval_floor_plan(
         _draw_scale_bar,
         _draw_setback_callouts,
         _draw_stair_geometry,
+        _openings_schedule_height,
         _opening_marks,
+        _schedule_column_x,
         _shape_path,
         _standard_scale,
     )
@@ -526,10 +533,23 @@ def _draw_approval_floor_plan(
     page_w, page_h = A4
     authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper())
 
-    s, _denom = _standard_scale(cfg, page_w, page_h)
+    s, _denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
     plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
-    ox = MARGIN + (page_w - 2 * MARGIN - plot_px) / 2
-    oy = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
+    # Centre the plot in the left region (reserved schedule column on the
+    # right) and centre the plot+road group vertically as a unit — the road
+    # sits below (S) or above (N) the plot on the actual road side.
+    road_upper = cfg.road_side.upper()
+    road_below = ROAD_H + ROAD_GAP if road_upper == "S" else 0.0
+    road_above = ROAD_H + ROAD_GAP if road_upper == "N" else 0.0
+    ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
+    oy = _centered_plot_oy(
+        page_h,
+        plot_py,
+        title_h=TITLE_H,
+        margin=MARGIN,
+        road_below=road_below,
+        road_above=road_above,
+    )
 
     c.setFillColor(HexColor("#FFFFFF"))
     c.rect(0, TITLE_H, page_w, page_h - TITLE_H, fill=1, stroke=0)
@@ -537,7 +557,7 @@ def _draw_approval_floor_plan(
     c.setFont("Helvetica-Bold", 9)
     c.setFillColor(HexColor("#000000"))
     c.drawCentredString(
-        ox + plot_px / 2, page_h - MARGIN + 6, f"{floor_label.upper()} PLAN"
+        ox + plot_px / 2, oy + plot_py + road_above + 10, f"{floor_label.upper()} PLAN"
     )
     _draw_road_strip_for_side(c, cfg.road_side, ox, oy, plot_px, plot_py)
 
@@ -599,11 +619,14 @@ def _draw_approval_floor_plan(
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)
     _draw_opening_tags(c, drawing, marks, s, ox, oy)
-    _draw_area_schedule_table(c, floor_plan, MARGIN, page_h - 56)
+    # Schedule tables stacked bottom-right, above the FAR strip + title block.
+    sched_x = _schedule_column_x(page_w, MARGIN)
+    sched_base = TITLE_H + 18  # clear the full-width FAR strip band
+    area_top = sched_base + SCHED_PAD + _area_schedule_height(floor_plan)
+    _draw_area_schedule_table(c, floor_plan, sched_x, area_top)
     if opening_rows:
-        _draw_openings_schedule_table(
-            c, opening_rows, page_w - MARGIN - 148, page_h - 56 - 52
-        )
+        openings_top = area_top + SCHED_PAD + _openings_schedule_height(opening_rows)
+        _draw_openings_schedule_table(c, opening_rows, sched_x, openings_top)
     _draw_scale_bar(c, MARGIN, TITLE_H + 22, s, _denom)
 
     _draw_large_north_arrow(
@@ -816,119 +839,36 @@ def _draw_professional_title_block(
     page_w: float,
     tb_h: float,
 ) -> None:
-    """Full professional title block for municipality submission."""
-    # Outer border
-    c.setStrokeColor(HexColor("#000000"))
-    c.setLineWidth(2.0)
-    c.rect(MARGIN, 8, page_w - 2 * MARGIN, tb_h - 12, fill=0, stroke=1)
-
-    # Inner header band
-    c.setFillColor(HexColor("#000000"))
-    c.rect(MARGIN, tb_h - 12 - 28, page_w - 2 * MARGIN, 28, fill=1, stroke=0)
-
-    project_title = f"Residential Building at {owner.locality}, {owner.municipality}"
-    c.setFillColor(white)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(page_w / 2, tb_h - 12 - 28 + 9, project_title)
-
-    # Grid of fields — 3 columns × 5 rows
-    col_w = (page_w - 2 * MARGIN) / 3
-    row_h = 20
-    fields_grid = [
-        # Row 1
-        ("Owner", owner.owner_name),
-        ("Plot No. / Survey No.", owner.survey_number),
-        ("Municipality / ULB", f"{owner.municipality} ({authority})"),
-        # Row 2
-        ("Site Area", f"{cfg.plot_width * cfg.plot_length:.1f} sqm"),
-        (
-            "Built-up Area (GF)",
-            f"{sum(r.area for r in layout.ground_floor.rooms):.1f} sqm",
-        ),
-        (
-            "Built-up Area (FF)",
-            f"{sum(r.area for r in layout.first_floor.rooms):.1f} sqm",
-        ),
-        # Row 3
-        ("Architect / Engineer", owner.engineer_name),
-        ("License No.", owner.license_number),
-        ("Date of Submission", date.today().strftime("%d/%m/%Y")),
-        # Row 4
-        ("Scale", "1:100"),
-        ("Drawing Reference", f"Layout {layout.id} — {layout.name}"),
-        ("Software", "PlanForge"),
+    """Full professional title block for municipality submission (shared look)."""
+    gf = sum(r.area for r in layout.ground_floor.rooms)
+    ff = sum(r.area for r in layout.first_floor.rooms)
+    fields = [
+        ("OWNER", owner.owner_name),
+        ("SURVEY NO.", owner.survey_number),
+        ("ULB", f"{owner.municipality} ({authority})"),
+        ("SITE AREA", f"{cfg.plot_width * cfg.plot_length:.1f} SQM"),
+        ("BUILT-UP GF", f"{gf:.1f} SQM"),
+        ("BUILT-UP FF", f"{ff:.1f} SQM"),
+        ("ENGINEER", owner.engineer_name),
+        ("LICENSE NO.", owner.license_number),
+        ("SCALE", "1:100"),
+        ("LAYOUT", f"{layout.id} - {layout.name}"),
+        ("DATE", date.today().strftime("%d/%m/%Y")),
     ]
-
-    tb_content_top = tb_h - 12 - 28  # bottom of header band
-
-    for i, (label, value) in enumerate(fields_grid):
-        row = i // 3
-        col = i % 3
-        fx = MARGIN + col * col_w
-        fy = tb_content_top - (row + 1) * row_h
-
-        # Cell border
-        c.setStrokeColor(HexColor("#CCCCCC"))
-        c.setLineWidth(0.4)
-        c.rect(fx, fy, col_w, row_h, fill=0, stroke=1)
-
-        # Label
-        c.setFillColor(HexColor("#555555"))
-        c.setFont("Helvetica", 6)
-        c.drawString(fx + 4, fy + row_h - 9, label)
-
-        # Value
-        c.setFillColor(HexColor("#000000"))
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(fx + 4, fy + 4, value[:35] if len(value) > 35 else value)
-
-    # Signature + Seal row at bottom
-    sig_y = 8
-    sig_h = tb_content_top - 4 * row_h - 8 - sig_y
-    sig_w = (page_w - 2 * MARGIN) / 2
-
-    # Signature box (left half)
-    c.setStrokeColor(HexColor("#CCCCCC"))
-    c.setLineWidth(0.5)
-    c.rect(MARGIN, sig_y, sig_w, sig_h, fill=0, stroke=1)
-    c.setFillColor(HexColor("#555555"))
-    c.setFont("Helvetica", 7)
-    c.drawString(MARGIN + 6, sig_y + sig_h - 12, "Signature of Architect/Engineer:")
-    c.setStrokeColor(HexColor("#808080"))
-    c.setLineWidth(0.5)
-    sig_line_y = sig_y + sig_h * 0.4
-    c.line(MARGIN + 8, sig_line_y, MARGIN + sig_w - 8, sig_line_y)
-    c.setFillColor(HexColor("#808080"))
-    c.setFont("Helvetica-Oblique", 6)
-    c.drawCentredString(MARGIN + sig_w / 2, sig_line_y - 9, "(Authorised Signatory)")
-
-    # Seal box (right half)
-    c.setStrokeColor(HexColor("#CCCCCC"))
-    c.setLineWidth(0.5)
-    c.rect(MARGIN + sig_w, sig_y, sig_w, sig_h, fill=0, stroke=1)
-    seal_cx = MARGIN + sig_w + sig_w / 2
-    seal_cy = sig_y + sig_h / 2
-    seal_r = min(sig_h / 2 - 4, sig_w / 3)
-    c.setStrokeColor(HexColor("#CCCCCC"))
-    c.setLineWidth(0.75)
-    c.circle(seal_cx, seal_cy, seal_r, fill=0, stroke=1)
-    c.setStrokeColor(HexColor("#EBEBEB"))
-    c.circle(seal_cx, seal_cy, seal_r * 0.8, fill=0, stroke=1)
-    c.setFillColor(HexColor("#CCCCCC"))
-    c.setFont("Helvetica", 6)
-    c.drawCentredString(seal_cx, seal_cy + 3, "SEAL")
-    c.drawCentredString(seal_cx, seal_cy - 6, "(Office Stamp)")
-    c.setFillColor(HexColor("#555555"))
-    c.setFont("Helvetica", 7)
-    c.drawString(MARGIN + sig_w + 6, sig_y + sig_h - 12, "Official Seal:")
-
-    # Footer
-    c.setFillColor(HexColor("#808080"))
-    c.setFont("Helvetica", 5)
-    c.drawCentredString(
-        page_w / 2,
-        2,
-        "Generated by PlanForge · NBC 2016 Compliant · For Municipality Submission Only",
+    subtitle_lines = [
+        f"Residential Building at {owner.locality}, {owner.municipality}",
+    ]
+    draw_title_block(
+        c,
+        page_w,
+        tb_h,
+        fields,
+        subtitle_lines=subtitle_lines,
+        signature=True,
+        footer=(
+            "Generated by PlanForge · NBC 2016 Compliant · "
+            "For Municipality Submission Only"
+        ),
     )
 
 
@@ -945,17 +885,9 @@ def _draw_approval_title_block(
     page_w: float,
     far: float = 0.0,
 ) -> None:
-    """Compact title block for floor plan pages."""
-    c.setStrokeColor(HexColor("#000000"))
-    c.setLineWidth(1.0)
-    c.line(0, TITLE_H, page_w, TITLE_H)
-    c.setStrokeColor(HexColor("#EBEBEB"))
-    c.setLineWidth(0.3)
-    c.line(0, TITLE_H - 36, page_w, TITLE_H - 36)
-
+    """Compact title block for floor plan pages (shared look)."""
     scale_ratio = 100  # Fixed 1:100
 
-    # Compute built-up area in SQFT for title block
     gf_sqft = round(sum(r.area for r in layout.ground_floor.rooms) * 10.764)
     ff_sqft = round(sum(r.area for r in layout.first_floor.rooms) * 10.764)
     total_sqft = gf_sqft + ff_sqft
@@ -980,45 +912,10 @@ def _draw_approval_title_block(
         ("DATE", date.today().strftime("%d/%m/%Y")),
         ("ENGINEER", owner.engineer_name or "-"),
     ]
-
-    col_w = page_w / len(fields)
-    for i, (label, value) in enumerate(fields):
-        cx = col_w * i + col_w / 2
-        if i > 0:
-            c.setStrokeColor(HexColor("#EBEBEB"))
-            c.setLineWidth(0.4)
-            c.line(col_w * i, 0, col_w * i, TITLE_H)
-
-        c.setFillColor(HexColor("#555555"))
-        c.setFont("Helvetica", 5.5)
-        c.drawCentredString(cx, TITLE_H - 14, label)
-
-        c.setFillColor(HexColor("#000000"))
-        c.setFont("Helvetica-Bold", 7)
-        from reportlab.pdfbase import pdfmetrics
-
-        vfont = 7.0
-        while (
-            vfont > 4.5
-            and pdfmetrics.stringWidth(value, "Helvetica-Bold", vfont) > col_w - 4
-        ):
-            vfont -= 0.5
-        c.setFont("Helvetica-Bold", vfont)
-        c.drawCentredString(cx, TITLE_H - 27, value)
-
-    # Bottom sub-row: owner details
-    c.setFillColor(HexColor("#F0F0F0"))
-    c.rect(0, 0, page_w, 36, fill=1, stroke=0)
-    c.setFillColor(HexColor("#333333"))
-    c.setFont("Helvetica", 7)
-    owner_line = f"Owner: {owner.owner_name}  |  Plot No.: {owner.survey_number}  |  {owner.locality}, {owner.municipality}"
-    c.drawCentredString(page_w / 2, 26, owner_line)
-    c.setFont("Helvetica-Oblique", 6.5)
-    c.drawCentredString(
-        page_w / 2,
-        13,
-        f"Prepared by: {owner.engineer_name}  |  Lic. No.: {owner.license_number}  |  {authority} Submission",
-    )
-    c.setFillColor(HexColor("#808080"))
-    c.setFont("Helvetica", 5)
-    c.drawCentredString(page_w / 2, 3, "Generated by PlanForge · NBC 2016 Compliant")
+    subtitle_lines = [
+        f"Owner: {owner.owner_name}  |  Plot No.: {owner.survey_number}  |  "
+        f"{owner.locality}, {owner.municipality}",
+        f"Prepared by: {owner.engineer_name}  |  Lic. No.: {owner.license_number}"
+        f"  |  {authority} Submission",
+    ]
+    draw_title_block(c, page_w, TITLE_H, fields, subtitle_lines=subtitle_lines)

@@ -21,6 +21,7 @@ from app.engine.section_render import (
     render_elevation_view,
     render_section_view,
 )
+from app.engine.title_block import draw_title_block
 
 # ---------------------------------------------------------------------------
 # Internal CAD drawing helpers (ReportLab, not ezdxf)
@@ -184,6 +185,59 @@ INT_LW = 1.0  # internal wall lineweight (pt)
 DIM_LW = 0.5  # dimension line lineweight (pt)
 WIN_LW = 0.75  # window line lineweight (pt)
 MIN_DIM_SPAN = 0.5  # metres — filter out wall-thickness micro-gaps from chain dims
+
+# ── Schedule-table column (points) ────────────────────────────────────────────
+# The AREA / OPENINGS schedule tables live in a reserved right-hand column,
+# stacked just above the title block.  The plot is scaled + centred in the
+# remaining left region so it never overlaps the tables for any aspect ratio.
+SCHED_W = 148  # width of both schedule tables (they share this width)
+SCHED_PAD = 12  # gap between the plot region and the schedule column
+SCHED_RESERVE = SCHED_W + SCHED_PAD  # width withheld from the plot's available width
+SCHED_ROW_H = 9.0  # schedule table row height
+SCHED_BAND_H = 11.0  # schedule table title-band height
+
+
+def _centered_plot_oy(
+    page_h: float,
+    plot_py: float,
+    *,
+    title_h: float,
+    margin: float,
+    road_below: float = 0.0,
+    road_above: float = 0.0,
+) -> float:
+    """Return ``oy`` (plot-origin Y in points) that vertically centres the
+    plot — together with any road strip drawn directly below/above it — in the
+    band between the title block top (``title_h``) and the top page margin.
+
+    ``road_below`` / ``road_above`` are the total heights (strip + gap) the road
+    adds under / over the plot, so the whole plot+road group centres as a unit.
+    """
+    band_bottom = title_h
+    band_top = page_h - margin
+    group_h = plot_py + road_below + road_above
+    slack = max(0.0, (band_top - band_bottom - group_h) / 2)
+    return band_bottom + road_below + slack
+
+
+def _area_schedule_height(floor_plan: FloorPlan) -> float:
+    """Height (points) of the AREA SCHEDULE table for ``floor_plan``.
+
+    Mirrors the row math in :func:`_draw_area_schedule_table` so callers can
+    stack tables without first drawing them."""
+    return SCHED_BAND_H + SCHED_ROW_H * (len(floor_plan.rooms) + 2)
+
+
+def _openings_schedule_height(rows: list[tuple]) -> float:
+    """Height (points) of the SCHEDULE OF OPENINGS table for ``rows``.
+
+    Mirrors the row math in :func:`_draw_openings_schedule_table`."""
+    return SCHED_BAND_H + SCHED_ROW_H * (len(rows) + 1)
+
+
+def _schedule_column_x(page_w: float, margin: float) -> float:
+    """X of the left edge of the reserved schedule column."""
+    return page_w - margin - SCHED_W
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -1045,8 +1099,8 @@ def _draw_area_schedule_table(
     total = round(sum(r.area for r in floor_plan.rooms) * 10.764)
     w_room, w_area = 96, 52
     w = w_room + w_area
-    row_h, band_h = 9.0, 11.0
-    height = band_h + row_h * (len(rows) + 2)
+    row_h, band_h = SCHED_ROW_H, SCHED_BAND_H
+    height = _area_schedule_height(floor_plan)
     y = y_top - height
 
     c.setStrokeColor(HexColor("#000000"))
@@ -1156,8 +1210,8 @@ def _draw_openings_schedule_table(
     col_ws = (22, 44, 28, 28, 26)
     headers = ("MARK", "TYPE", "W (MM)", "H (MM)", "NOS")
     w = sum(col_ws)
-    row_h, band_h = 9.0, 11.0
-    height = band_h + row_h * (len(rows) + 1)
+    row_h, band_h = SCHED_ROW_H, SCHED_BAND_H
+    height = _openings_schedule_height(rows)
     y = y_top - height
 
     c.setStrokeColor(HexColor("#000000"))
@@ -1256,13 +1310,17 @@ def _draw_structural_floor(
     from app.engine.plan_geometry import build_floor_drawing
 
     page_w, page_h = A4
-    s, denom = _standard_scale(cfg, page_w, page_h)
+    # Same scale + centring as the architectural pages (incl. the reserved
+    # schedule column) so all four sheets read as one set.
+    s, denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
     plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
-    ox = MARGIN + (page_w - 2 * MARGIN - plot_px) / 2
-    oy = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
+    ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
+    oy = _centered_plot_oy(
+        page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
+    )
 
     # Road strip + page label — identical furniture to architectural pages
-    road_y = TITLE_H + MARGIN
+    road_y = oy - ROAD_GAP - ROAD_H
     c.setFillColor(HexColor("#DDDDDD"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
     road_side_name = {"S": "SOUTH", "N": "NORTH", "E": "EAST", "W": "WEST"}.get(
@@ -1461,14 +1519,6 @@ def _draw_title_block(
     scale_denom: int | None = None,
     far_text: str | None = None,
 ) -> None:
-    # Outer border around entire title block
-    c.setStrokeColor(HexColor("#000000"))
-    c.setLineWidth(1.0)
-    c.rect(0, 0, page_w, TITLE_H, fill=0, stroke=1)
-    # Heavy top border line separating title block from drawing
-    c.setLineWidth(1.5)
-    c.line(0, TITLE_H, page_w, TITLE_H)
-
     scale_ratio = scale_denom if scale_denom else round(1000 / (scale * (25.4 / 72)))
 
     # Compute area total in sqft when floor plan is available
@@ -1488,72 +1538,14 @@ def _draw_title_block(
     if far_text:
         fields.insert(7, ("FAR", far_text))
 
-    # Field cells — upper 40pt for fields, lower zone for area schedule
-    FIELD_H = 40  # height of the field row
-    col_w = page_w / len(fields)
-    for i, (label, value) in enumerate(fields):
-        cx = col_w * i + col_w / 2
-        cell_x = col_w * i
-        # Dark header band for each field label
-        c.setFillColor(HexColor("#222222"))
-        c.rect(cell_x, TITLE_H - 18, col_w, 18, fill=1, stroke=0)
-        # Field label in white on dark background
-        c.setFillColor(HexColor("#FFFFFF"))
-        c.setFont("Helvetica-Bold", 6)
-        c.drawCentredString(cx, TITLE_H - 12, label)
-        # Value in black below — shrink to fit the cell, wrap to 2 lines if needed
-        c.setFillColor(HexColor("#000000"))
-        from reportlab.pdfbase import pdfmetrics
-
-        avail = col_w - 6
-        vfont = 7.5
-        while (
-            vfont > 5.0
-            and pdfmetrics.stringWidth(value, "Helvetica-Bold", vfont) > avail
-        ):
-            vfont -= 0.5
-        if pdfmetrics.stringWidth(value, "Helvetica-Bold", vfont) <= avail:
-            c.setFont("Helvetica-Bold", vfont)
-            c.drawCentredString(cx, TITLE_H - 34, value)
-        else:
-            words = value.split()
-            line1, line2 = "", ""
-            for w in words:
-                cand = (line1 + " " + w).strip()
-                if pdfmetrics.stringWidth(cand, "Helvetica-Bold", 5.5) <= avail:
-                    line1 = cand
-                else:
-                    line2 = (line2 + " " + w).strip()
-            c.setFont("Helvetica-Bold", 5.5)
-            c.drawCentredString(cx, TITLE_H - 30, line1)
-            c.drawCentredString(cx, TITLE_H - 37, line2 or "")
-        # Vertical divider between cells
-        if i > 0:
-            c.setStrokeColor(HexColor("#000000"))
-            c.setLineWidth(0.5)
-            c.line(cell_x, 0, cell_x, TITLE_H)
-    # Horizontal separator between fields and area schedule zone
-    c.setStrokeColor(HexColor("#000000"))
-    c.setLineWidth(0.5)
-    c.line(0, TITLE_H - FIELD_H, page_w, TITLE_H - FIELD_H)
-
-    # Lower zone: total line (per-room breakdown lives in the bordered
-    # AREA SCHEDULE table drawn on the plan itself)
+    subtitle_lines = None
     if floor_plan and floor_plan.rooms:
-        sched_y_top = TITLE_H - FIELD_H - 4
-        c.setFillColor(HexColor("#000000"))
-        c.setFont("Helvetica-Bold", 5.5)
-        c.drawString(
-            4,
-            sched_y_top - 6,
+        subtitle_lines = [
             f"TOTAL BUILT-UP AREA: {sqft_total} SQFT  ({sqm_total:.1f} SQ.M)"
-            "   —   ROOM-WISE AREA: SEE AREA SCHEDULE TABLE ON PLAN",
-        )
+            "   —   ROOM-WISE AREA: SEE AREA SCHEDULE TABLE ON PLAN"
+        ]
 
-    # Branding
-    c.setFillColor(HexColor("#888888"))
-    c.setFont("Helvetica", 5)
-    c.drawRightString(page_w - 4, 8, "Generated by PlanForge · NBC 2016 Compliant")
+    draw_title_block(c, page_w, TITLE_H, fields, subtitle_lines=subtitle_lines)
 
 
 # ── FloorDrawing projection renderer (Sprint 5.1) ────────────────────────────
@@ -1571,13 +1563,19 @@ def _far_text(layout: Layout, cfg: PlotConfig) -> str:
     return f"{built / plot_area:.2f}"
 
 
-def _standard_scale(cfg: PlotConfig, page_w: float, page_h: float) -> tuple[float, int]:
+def _standard_scale(
+    cfg: PlotConfig, page_w: float, page_h: float, reserve_w: float = 0.0
+) -> tuple[float, int]:
     """Largest standard scale (1:50/1:100/1:200) that fits the plot on A4.
 
     Returns (points per model metre, scale denominator). Falls back to the
     next 50-multiple denominator when even 1:200 does not fit.
+
+    ``reserve_w`` withholds horizontal space (e.g. for the schedule-table
+    column) so the plot is scaled to fit the *remaining* width — this is how
+    the plot shrinks just enough to keep clear of the bottom-right tables.
     """
-    avail_w = page_w - 2 * MARGIN
+    avail_w = page_w - 2 * MARGIN - reserve_w
     avail_h = page_h - TITLE_H - 2 * MARGIN - ROAD_H - ROAD_GAP - TOP_PAD
     for denom in (50, 100, 200):
         s = _PT_PER_PAPER_M / denom
@@ -1781,15 +1779,19 @@ def _draw_floor_projected(
     )
 
     page_w, page_h = A4
-    s, denom = _standard_scale(cfg, page_w, page_h)
+    s, denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
     plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
-    ox = MARGIN + (page_w - 2 * MARGIN - plot_px) / 2
-    oy = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
+    # Centre the plot in the left region, leaving the reserved schedule column
+    # on the right; centre the plot+road group vertically in the page band.
+    ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
+    oy = _centered_plot_oy(
+        page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
+    )
 
     drawing = build_floor_drawing(floor_plan, cfg)
 
-    # Road strip + floor label
-    road_y = TITLE_H + MARGIN
+    # Road strip + floor label (drawn directly below the plot)
+    road_y = oy - ROAD_GAP - ROAD_H
     c.setFillColor(HexColor("#DDDDDD"))
     c.rect(ox, road_y, plot_px, ROAD_H, fill=1, stroke=0)
     road_side_name = {"S": "SOUTH", "N": "NORTH", "E": "EAST", "W": "WEST"}.get(
@@ -1852,13 +1854,15 @@ def _draw_floor_projected(
     if annotations:
         _draw_annotations(c, floor_plan.rooms, annotations, s, ox, oy)
 
-    # Furniture of the page: scale bar, schedule tables, north arrow, title block
+    # Furniture of the page: scale bar (bottom-left), schedule tables stacked
+    # bottom-right just above the title block, north arrow (top-right), title block
     _draw_scale_bar(c, MARGIN, TITLE_H + 2, s, denom)
-    _draw_area_schedule_table(c, floor_plan, MARGIN, page_h - MARGIN)
+    sched_x = _schedule_column_x(page_w, MARGIN)
+    area_top = TITLE_H + SCHED_PAD + _area_schedule_height(floor_plan)
+    _draw_area_schedule_table(c, floor_plan, sched_x, area_top)
     if opening_rows:
-        _draw_openings_schedule_table(
-            c, opening_rows, page_w - MARGIN - 148, page_h - MARGIN - 48
-        )
+        openings_top = area_top + SCHED_PAD + _openings_schedule_height(opening_rows)
+        _draw_openings_schedule_table(c, opening_rows, sched_x, openings_top)
     _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
     _draw_title_block(
         c,
