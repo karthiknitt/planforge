@@ -114,3 +114,29 @@ Tasks 13–14 (opening sizes in `compliance_rules.json`, DXF door/window/vent bl
 ## Known deferred items
 - Inngest Realtime replaced by 2s job polling for day one (no realtime dep in frontend, Python SDK's realtime story immature) — revisit post-launch.
 - Plot preview (Task 12) only covers `rectangular`/`l_shaped` plot shapes; trapezoid/quadrilateral use separate field sets not modeled by the preview.
+
+---
+
+# Section A-A + Front Elevation (feat/section-elevation-views, 2026-07-12)
+
+Executed per `docs/superpowers/plans/2026-07-11-section-elevation-views.md` (subagent-driven, per-task model tiers; Tasks 3/5/7 finished inline after opus/sonnet session limits).
+
+| Commit | Task |
+|---|---|
+| `5aea562` | Task 0 — plan doc committed on new branch |
+| `8db3e12` | Task 1 — `vertical_standards.py` (single vertical-dims source, foundation 0.6→0.9m) |
+| `5efe0db` | Task 2 — cut-line/cut-interval geometry (`section_geometry.py` pt 1) |
+| `c6c08f9` | Task 3 — `derive_section()` (11 IS 962 construction rules) |
+| `5b2d532` | Task 4 — `derive_elevation()` (facade from `road_side`) |
+| `f2243f4` | Task 5 — `section_render.py` (clip-path hatching, levels, vdims, A-A marker) |
+| `1f39db4` | review fixes — bounds union + all-road-sides test |
+| `33126ea` | Task 6 — standard PDF 4→6 pages + plan cut markers |
+| `cbec6a7` | Task 7 — approval PDF 4→5 pages, old schematic section deleted |
+
+## Test state
+- Backend: full suite green (see Task 8 run), ruff clean; CCQS gates unchanged (page-0 scoring untouched by new pages).
+- Preview PNGs approved-in-flight (sent 2026-07-12); wired-page renders verified at Task 8.
+
+## Review debt (clear before merge)
+- Task 5 renderer + Tasks 6/7 wiring reviews died on the session limit (resets 3:30pm IST) — covered by the final whole-branch review before PR.
+- Adjudications: stair label keeps true riser count (`n_r`); `ewt_m` stays literal (function deleted in Task 7).

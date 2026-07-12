@@ -94,9 +94,11 @@ PlanForge/
 - No structural calculations
 
 ### PDF Output
-- Single PDF: Ground floor + First floor
-- Column markers, room labels, dimensions, north arrow, title block
-- Scale: 1:100
+- Standard PDF (6 pages): GF plan, FF plan, GF structural, FF structural, SECTION A-A, FRONT ELEVATION
+- Approval PDF (5 pages): site plan, GF plan, FF plan, SECTION A-A + title block, FRONT ELEVATION + title block
+- Column markers, room labels, dimensions, north arrow, title block; A-A cut markers on plan pages
+- Section/elevation built from Shapely via `section_geometry.py` → `section_render.py` (IS 962 hatching, `vertical_standards.py` dims)
+- Scale: 1:100 nominal (section/elevation pages fit-to-region with computed `SCALE 1:N`)
 
 ### Vastu
 - **NOT in Lean MVP** — deferred to post-launch
