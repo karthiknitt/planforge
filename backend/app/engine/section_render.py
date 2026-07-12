@@ -1,6 +1,7 @@
 import math
 
 from reportlab.pdfgen.canvas import Canvas
+from reportlab.pdfgen.pathobject import PDFPathObject
 
 from app.engine.section_geometry import (
     ElevationDrawing,
@@ -20,6 +21,8 @@ def hatch_polygon(
     material: str,
     spacing_pt: float = 5.0,
 ) -> None:
+    if spacing_pt <= 0:
+        raise ValueError("spacing_pt must be positive")
     if len(pts) < 3:
         return
     c.saveState()
@@ -138,7 +141,7 @@ def _draw_scale_bar(
     c.drawCentredString(x + metres * scale / 2, y + h + 9, f"SCALE 1:{denom}")
 
 
-def _poly_path(c: Canvas, pts: list[tuple[float, float]]):
+def _poly_path(c: Canvas, pts: list[tuple[float, float]]) -> PDFPathObject:
     p = c.beginPath()
     p.moveTo(pts[0][0], pts[0][1])
     for q in pts[1:]:
