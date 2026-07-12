@@ -735,10 +735,12 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
             italic=True, color="CC0000" if diff > 0 else "007700"
         )
 
-    # Auto-width columns
+    # Auto-width columns (skip merged cells)
     for col in ws.columns:
         max_len = max((len(str(cell.value or "")) for cell in col), default=10)
-        ws.column_dimensions[col[0].column_letter].width = max(max_len + 2, 12)
+        cell = col[0]
+        if hasattr(cell, "column_letter"):
+            ws.column_dimensions[cell.column_letter].width = max(max_len + 2, 12)
 
     # Footer note
     note_row = len(boq.line_items) + 9
