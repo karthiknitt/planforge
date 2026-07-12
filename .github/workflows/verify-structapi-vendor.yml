@@ -1,0 +1,38 @@
+name: Verify structapi vendor sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "structapi-service/**"
+      - ".github/workflows/verify-structapi-vendor.yml"
+  pull_request:
+    paths:
+      - "structapi-service/**"
+  schedule:
+    # Weekly freshness check (informational — opens an issue, doesn't fail)
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  vendor-sync:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify vendored copy matches the pinned structapi tag
+        env:
+          GH_TOKEN: ${{ secrets.STRUCTAPI_SYNC_TOKEN }}
+        run: bash scripts/verify-structapi-vendor.sh
+
+  vendor-freshness:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check whether a newer structapi release exists
+        env:
+          GH_TOKEN: ${{ secrets.STRUCTAPI_SYNC_TOKEN }}
+        run: bash scripts/check-structapi-freshness.sh
