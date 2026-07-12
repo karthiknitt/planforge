@@ -5,5 +5,13 @@ describe("visibleTabs", () => {
   test("chat hidden by default", () => expect(visibleTabs(false)).not.toContain("chat"));
   test("chat shown when enabled", () => expect(visibleTabs(true)).toContain("chat"));
   test("other tabs always present", () =>
-    expect(visibleTabs(false)).toEqual(["plan", "section", "boq", "compare", "render"]));
+    expect(visibleTabs(false)).toEqual([
+      "plan",
+      "section",
+      "boq",
+      "structural",
+      "compare",
+      "r3f",
+      "render",
+    ]));
 });

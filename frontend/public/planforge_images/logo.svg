@@ -1,0 +1,20 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" rx="32" fill="#0f172a"/>
+
+  <!-- Building Outline -->
+  <path d="M 50 150 L 50 70 Q 50 50 70 50 L 130 50 Q 150 50 150 70 L 150 150 Z" stroke="white" stroke-width="3" fill="none"/>
+
+  <!-- Interior Walls -->
+  <line x1="70" y1="110" x2="130" y2="110" stroke="#93c5fd" stroke-width="1.5"/>
+  <line x1="100" y1="70" x2="100" y2="110" stroke="#93c5fd" stroke-width="1.5"/>
+
+  <!-- North Arrow -->
+  <polygon points="140,75 145,85 135,85" fill="#f97316"/>
+  <text x="136" y="92" font-size="8" fill="#f97316" font-family="sans-serif">N</text>
+
+  <!-- Optional Corner Brackets -->
+  <line x1="53" y1="53" x2="63" y2="53" stroke="#f97316" stroke-width="1.5"/>
+  <line x1="53" y1="53" x2="53" y2="63" stroke="#f97316" stroke-width="1.5"/>
+  <line x1="147" y1="53" x2="137" y2="53" stroke="#f97316" stroke-width="1.5"/>
+  <line x1="147" y1="53" x2="147" y2="63" stroke="#f97316" stroke-width="1.5"/>
+</svg>

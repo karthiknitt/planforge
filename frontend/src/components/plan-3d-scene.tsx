@@ -10,6 +10,8 @@ export interface Plan3DHandle {
   capture: () => string | null;
 }
 
+export type Plan3DView = "top" | "iso";
+
 interface Plan3DSceneProps {
   floorPlan: FloorPlanData;
   plotWidth: number;
@@ -17,6 +19,9 @@ interface Plan3DSceneProps {
   roadSide?: string;
   floorHeight?: number;
   className?: string;
+  /** "top" = direct plan view (default — best for viewers and as AI render
+   * conditioning); "iso" = 3/4 isometric orbit view. */
+  view?: Plan3DView;
 }
 
 // Muted per-room floor tints (conditioning hint, not the final look).
@@ -195,7 +200,15 @@ function CaptureRegistrar({ register }: { register: (fn: () => string | null) =>
 }
 
 export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function Plan3DScene(
-  { floorPlan, plotWidth, plotLength, roadSide: _roadSide, floorHeight = 3.0, className },
+  {
+    floorPlan,
+    plotWidth,
+    plotLength,
+    roadSide: _roadSide,
+    floorHeight = 3.0,
+    className,
+    view = "top",
+  },
   ref
 ) {
   const captureImpl = useRef<() => string | null>(() => null);
@@ -219,11 +232,15 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
 
   const span = Math.max(plotWidth, plotLength);
   const camDist = span * 1.15;
-  const camPos: [number, number, number] = [camDist, camDist * 0.85, camDist];
+  // Top-down: camera straight above with a hair of z-offset so lookAt stays
+  // stable with the default up vector; distance sized to fit the whole plot.
+  const camPos: [number, number, number] =
+    view === "top" ? [0, span * 1.45, 0.02] : [camDist, camDist * 0.85, camDist];
 
   return (
     <div className={className} style={{ width: "100%", height: "100%" }}>
       <Canvas
+        key={view} // camera props are initial-only — remount on view change
         gl={{ preserveDrawingBuffer: true, antialias: true }}
         camera={{ position: camPos, fov: 45, up: [0, 1, 0] }}
         dpr={[1, 2]}

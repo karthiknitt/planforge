@@ -56,6 +56,9 @@ async function proxy(
   const responseBody = await backendResponse.arrayBuffer();
   const contentType = backendResponse.headers.get("content-type") ?? "application/json";
   const contentDisposition = backendResponse.headers.get("content-disposition");
+  // Preserve backend caching intent (e.g. no-store on AI render images so a
+  // stale image is never shown for changed geometry / another project).
+  const cacheControl = backendResponse.headers.get("cache-control");
 
   return new NextResponse(responseBody, {
     status: backendResponse.status,
@@ -65,6 +68,7 @@ async function proxy(
       ...(contentDisposition && {
         "Content-Disposition": contentDisposition,
       }),
+      ...(cacheControl && { "Cache-Control": cacheControl }),
     },
   });
 }
