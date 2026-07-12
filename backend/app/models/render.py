@@ -24,6 +24,14 @@ class LayoutRender(Base):
         ForeignKey("layouts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     layout_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Which floor of the layout this render depicts (geometry dict key:
+    # ground_floor / first_floor / second_floor / basement_floor).
+    floor: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="ground_floor",
+        server_default="ground_floor",
+    )
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(64), nullable=False)
     image_png: Mapped[bytes] = deferred(mapped_column(LargeBinary, nullable=False))

@@ -83,6 +83,7 @@ async def create_render_job(
     layout_id: str,
     response: Response,
     request: Request,
+    floor: str = "ground_floor",
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> JobOut:
@@ -98,6 +99,7 @@ async def create_render_job(
         if hasattr(ref, "read"):
             reference_png = await ref.read()
 
+    render_runner.validate_render_floor(floor)
     project = await get_accessible_project(project_id, user_id, db)
     tier = await get_effective_plan_tier(user_id, db)
     if not tier_at_least(tier, "pro"):
@@ -111,6 +113,7 @@ async def create_render_job(
         kind="render",
         layout_key=layout_id,
         reference_png=reference_png,
+        render_floor=floor,
     )
 
     if inngest_app.inngest_enabled():

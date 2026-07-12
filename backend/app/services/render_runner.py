@@ -42,8 +42,20 @@ _DEFAULT_MODELS = {
 }
 
 
+RENDER_FLOORS = ("ground_floor", "first_floor", "second_floor", "basement_floor")
+
+
 def _geometry_hash(geometry: dict) -> str:
     return hashlib.sha256(json.dumps(geometry, sort_keys=True).encode()).hexdigest()
+
+
+def validate_render_floor(floor: str) -> str:
+    if floor not in RENDER_FLOORS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"floor must be one of {', '.join(RENDER_FLOORS)}",
+        )
+    return floor
 
 
 async def find_render(
@@ -51,6 +63,7 @@ async def find_render(
     db: AsyncSession,
     *,
     layout_hash: str | None = None,
+    floor: str | None = None,
     provider: str | None = None,
     model: str | None = None,
     with_image: bool = False,
@@ -58,6 +71,8 @@ async def find_render(
     stmt = select(LayoutRender).where(LayoutRender.layout_id == layout_pk)
     if layout_hash is not None:
         stmt = stmt.where(LayoutRender.layout_hash == layout_hash)
+    if floor is not None:
+        stmt = stmt.where(LayoutRender.floor == floor)
     if provider is not None:
         stmt = stmt.where(LayoutRender.provider == provider)
     if model is not None:
@@ -87,8 +102,9 @@ async def perform_render(
     *,
     reference_png: bytes | None = None,
     reference_kind: str = "cad",
+    floor: str = "ground_floor",
 ) -> LayoutRender:
-    """Render (or return the cached render for) one layout's geometry.
+    """Render (or return the cached render for) one floor of a layout.
 
     Sets a transient `was_cached` attribute on the returned row — not a
     mapped column, just a same-request signal so callers (the sync POST
@@ -114,9 +130,21 @@ async def perform_render(
             status.HTTP_404_NOT_FOUND, f"Layout {layout_id!r} not found"
         )
 
+    validate_render_floor(floor)
+    if stored.geometry.get(floor) is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Floor {floor!r} not present in layout {layout_id!r}",
+        )
+
     layout_hash = _geometry_hash(stored.geometry)
     cached = await find_render(
-        stored.id, db, layout_hash=layout_hash, provider=provider, model=effective_model
+        stored.id,
+        db,
+        layout_hash=layout_hash,
+        floor=floor,
+        provider=provider,
+        model=effective_model,
     )
     if cached is not None:
         cached.was_cached = True
@@ -133,6 +161,7 @@ async def perform_render(
         plot_length_m=cfg.plot_length,
         plot_width_m=cfg.plot_width,
         north_direction=project.north_direction,
+        floor=floor,
         reference_kind=reference_kind,
     )
 
@@ -147,6 +176,7 @@ async def perform_render(
         project_id=project_id,
         layout_id=stored.id,
         layout_hash=layout_hash,
+        floor=floor,
         provider=result.provider,
         model=result.model,
         image_png=result.image_png,
@@ -174,6 +204,7 @@ async def execute_render_job(db: AsyncSession, job: GenerationJob) -> None:
             db,
             reference_png=job.reference_png,
             reference_kind="r3f" if job.reference_png else "cad",
+            floor=job.render_floor or "ground_floor",
         )
         await jobs.mark(db, job, status="done", stage="stored")
     except Exception as exc:

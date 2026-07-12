@@ -75,9 +75,11 @@ def _usable_gaps(fp, plate):
     for g in regions:
         if g.area < MIN_USABLE_AREA:
             continue
-        # "Usable" = a MIN_USABLE_SIDE square fits inside the region
-        # (bbox checks misclassify concave chains of narrow slivers).
-        if not g.buffer(-(MIN_USABLE_SIDE / 2 - 1e-3)).is_empty:
+        # "Usable" = a ~1.3 m square fits inside the region with room to
+        # spare (bbox checks misclassify concave chains of narrow slivers,
+        # and exact-width erosions leave degenerate zero-area specks).
+        eroded = g.buffer(-(MIN_USABLE_SIDE / 2 + 0.05))
+        if not eroded.is_empty and eroded.area > 1e-4:
             gaps.append(g)
     return gaps
 
@@ -117,6 +119,23 @@ def test_study_meets_spec_min_area():
     ]
     for r in studies:
         assert r.area >= 6.0 - 1e-6, f"Study only {r.area:.2f} m2 (spec min 6.0)"
+
+
+@pytest.mark.parametrize("cfg", CONFIGS, ids=["bug-plot-60x40", "small-9x12"])
+def test_rooms_never_overlap(cfg):
+    """Space filling must never stamp one room over another."""
+    for layout in generate(cfg):
+        for fp in _floors(layout):
+            for i, a in enumerate(fp.rooms):
+                box_a = box(a.x, a.y, a.x + a.width, a.y + a.depth)
+                for b in fp.rooms[i + 1 :]:
+                    box_b = box(b.x, b.y, b.x + b.width, b.y + b.depth)
+                    ov = box_a.intersection(box_b).area
+                    # The room-edit validator rejects ANY positive-area overlap
+                    assert ov <= 1e-6, (
+                        f"layout {layout.id} floor {fp.floor}: {a.name} overlaps "
+                        f"{b.name} by {ov:.3f} m2"
+                    )
 
 
 @pytest.mark.parametrize("cfg", CONFIGS, ids=["bug-plot-60x40", "small-9x12"])

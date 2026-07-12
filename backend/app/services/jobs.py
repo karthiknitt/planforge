@@ -26,6 +26,7 @@ async def create_job(
     kind: str = "layout",
     layout_key: str | None = None,
     reference_png: bytes | None = None,
+    render_floor: str | None = None,
 ) -> GenerationJob:
     job = GenerationJob(
         project_id=project_id,
@@ -33,6 +34,7 @@ async def create_job(
         kind=kind,
         layout_key=layout_key,
         reference_png=reference_png,
+        render_floor=render_floor,
     )
     db.add(job)
     await db.commit()

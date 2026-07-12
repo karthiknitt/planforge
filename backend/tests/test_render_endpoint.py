@@ -135,7 +135,12 @@ async def test_render_first_call_generates_and_stores(client_db, monkeypatch):
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body == {"cached": False, "provider": "gemini", "model": "test-model"}
+    assert body == {
+        "cached": False,
+        "provider": "gemini",
+        "model": "test-model",
+        "floor": "ground_floor",
+    }
     mock.assert_awaited_once()
 
 
@@ -161,6 +166,7 @@ async def test_render_second_call_is_cache_hit(client_db, monkeypatch):
         "cached": True,
         "provider": "gemini",
         "model": "test-model",
+        "floor": "ground_floor",
     }
 
     # The provider must NOT be called again for an unchanged geometry hash.
@@ -210,7 +216,9 @@ async def test_render_cache_miss_after_geometry_edit(client_db, monkeypatch):
         }
         for r in layout["first_floor"]["rooms"]
     ]
-    rooms[0]["x"] = round(rooms[0]["x"] + 0.1, 3)
+    # Shrink (never shift) so the edit can't overlap a neighbour — layouts
+    # now pack tightly with no residual gaps between rooms.
+    rooms[0]["width"] = round(rooms[0]["width"] - 0.05, 3)
     patch = await client.patch(
         f"/api/projects/{project_id}/layouts/{layout_id}",
         json={"rooms": rooms},
@@ -255,3 +263,126 @@ async def test_render_get_returns_png_after_post(client_db, monkeypatch):
     assert get_res.status_code == 200
     assert get_res.headers["content-type"] == "image/png"
     assert get_res.content == FAKE_PNG
+
+
+# ── Per-floor renders + stale-geometry 404 (bugs #5/#6, 2026-07-12) ──────────
+
+
+async def test_render_per_floor_cached_separately(client_db, monkeypatch):
+    client, sf = client_db
+    await _pro_user(sf)
+    project_id, layout_id = await _make_project_with_layout(client)
+
+    mock = _mock_render_image()
+    _configure_provider(monkeypatch, mock)
+
+    gf = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render?floor=ground_floor",
+        headers=HDRS,
+    )
+    assert gf.status_code == 200, gf.text
+    assert gf.json()["floor"] == "ground_floor"
+
+    ff = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render?floor=first_floor",
+        headers=HDRS,
+    )
+    assert ff.status_code == 200, ff.text
+    assert ff.json() == {
+        "cached": False,
+        "provider": "gemini",
+        "model": "test-model",
+        "floor": "first_floor",
+    }
+    # Two distinct provider calls — one per floor, cached independently.
+    assert mock.await_count == 2
+
+    again = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render?floor=first_floor",
+        headers=HDRS,
+    )
+    assert again.json()["cached"] is True
+    assert mock.await_count == 2
+
+    got = await client.get(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render?floor=first_floor",
+        headers=HDRS,
+    )
+    assert got.status_code == 200
+    assert got.headers["content-type"] == "image/png"
+    assert got.headers["cache-control"] == "no-store"
+
+
+async def test_render_missing_floor_404(client_db, monkeypatch):
+    client, sf = client_db
+    await _pro_user(sf)
+    project_id, layout_id = await _make_project_with_layout(client)
+    _configure_provider(monkeypatch, _mock_render_image())
+
+    res = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render?floor=second_floor",
+        headers=HDRS,
+    )
+    assert res.status_code == 404  # G+1 layout has no second floor
+
+
+async def test_render_invalid_floor_422(client_db, monkeypatch):
+    client, sf = client_db
+    await _pro_user(sf)
+    project_id, layout_id = await _make_project_with_layout(client)
+    _configure_provider(monkeypatch, _mock_render_image())
+
+    res = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render?floor=attic",
+        headers=HDRS,
+    )
+    assert res.status_code == 422
+
+
+async def test_render_get_404_after_geometry_edit(client_db, monkeypatch):
+    """GET must never serve a render of stale geometry (the stale-image bug)."""
+    client, sf = client_db
+    await _pro_user(sf)
+    project_id, layout_id = await _make_project_with_layout(client)
+    _configure_provider(monkeypatch, _mock_render_image())
+
+    first = await client.post(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render", headers=HDRS
+    )
+    assert first.status_code == 200
+
+    got = await client.get(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render", headers=HDRS
+    )
+    assert got.status_code == 200
+
+    gen = (
+        await client.get(f"/api/projects/{project_id}/generate", headers=HDRS)
+    ).json()
+    layout = next(lay for lay in gen["layouts"] if lay["id"] == layout_id)
+    rooms = [
+        {
+            "id": r["id"],
+            "type": r["type"],
+            "name": r["name"],
+            "x": r["x"],
+            "y": r["y"],
+            "width": r["width"],
+            "height": r["depth"],
+            "floor": fl,
+        }
+        for fl, key in (("gf", "ground_floor"), ("ff", "first_floor"))
+        for r in layout[key]["rooms"]
+    ]
+    rooms[0]["width"] = round(rooms[0]["width"] - 0.05, 3)
+    patch = await client.patch(
+        f"/api/projects/{project_id}/layouts/{layout_id}",
+        json={"rooms": rooms},
+        headers=HDRS,
+    )
+    assert patch.status_code == 200, patch.text
+
+    stale = await client.get(
+        f"/api/projects/{project_id}/layouts/{layout_id}/render", headers=HDRS
+    )
+    assert stale.status_code == 404
