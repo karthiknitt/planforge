@@ -11,7 +11,11 @@ from reportlab.pdfgen import canvas
 from app.engine.cad_primitives import metres_to_ftin
 from app.engine.geometry import buildable_polygon
 from app.engine.models import FloorPlan, Layout, PlotConfig
-from app.engine.section_geometry import derive_elevation, derive_section, section_cut_line
+from app.engine.section_geometry import (
+    derive_elevation,
+    derive_section,
+    section_cut_line,
+)
 from app.engine.section_render import (
     draw_section_marker,
     render_elevation_view,
@@ -1811,9 +1815,7 @@ def _draw_floor_projected(
     # Section A-A cut marker
     line, _along_y = section_cut_line(floor_plan.rooms, buildable_polygon(cfg))
     (lx1, ly1), (lx2, ly2) = line.coords[0], line.coords[-1]
-    draw_section_marker(
-        c, ox + lx1 * s, oy + ly1 * s, ox + lx2 * s, oy + ly2 * s, "A"
-    )
+    draw_section_marker(c, ox + lx1 * s, oy + ly1 * s, ox + lx2 * s, oy + ly2 * s, "A")
 
     # Openings, columns, stair, labels, dims
     for o in drawing.openings:
