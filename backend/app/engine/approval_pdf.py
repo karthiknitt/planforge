@@ -21,6 +21,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.models import FloorPlan, Layout, PlotConfig
+from app.engine.vertical_standards import VS
 
 # ── Page geometry constants (points) ─────────────────────────────────────────
 MARGIN = 40
@@ -763,10 +764,10 @@ def _draw_section_view(
 ) -> None:
     """Parametric building section (GF + FF + slab + parapet)."""
     bldg_w_m = cfg.plot_width - cfg.setback_left - cfg.setback_right
-    floor_h_m = 3.0  # floor-to-floor height (m)
-    slab_t_m = 0.15  # slab thickness (m)
-    parapet_h_m = 1.0
-    found_d_m = 0.6  # foundation depth below GL
+    floor_h_m = VS.floor_to_floor_m
+    slab_t_m = VS.slab_t_m
+    parapet_h_m = VS.parapet_h_m
+    found_d_m = VS.foundation_depth_m
     ewt_m = 0.23
 
     num_floors = getattr(cfg, "num_floors", 2)

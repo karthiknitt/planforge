@@ -13,9 +13,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .models import FloorPlan, Layout, PlotConfig
+from .vertical_standards import VS
 
 
-FLOOR_HEIGHT_M = 3.0  # floor-to-floor height (m)
+FLOOR_HEIGHT_M = VS.floor_to_floor_m
 SLAB_THICKNESS = 0.125  # 125 mm RC slab
 COLUMN_SIZE = 0.30  # 300 mm × 300 mm column
 STEEL_PER_M3 = 80.0  # kg of steel per m³ of column/beam concrete (rule of thumb)
