@@ -20,6 +20,8 @@ out/
 .env
 .env.local
 .env.*.local
+.env.staging
+.env.production
 
 # OS
 .DS_Store
@@ -39,6 +41,10 @@ data/
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+.claude/*.local.md
 .worktrees/
 .vercel
 .gcp-cloud-run-setup.out
+
+# Graphify codebase graph (regenerable local artifact)
+graphify-out/

@@ -238,16 +238,23 @@ cd frontend && bunx drizzle-kit migrate
 13. **Agent tools solved synchronously + 15s timeout** — all 11 agent endpoints funnel through `_load_layout_state`, which ran up to 3 CP-SAT solves on a store miss; with Cloud Run cold starts (~23s measured) this blew `fetchBackend`'s 15s abort → "connection errors". Fixed: read-only load returning 409 `{"code": "no_layouts", "help": "Generate layouts first"}` (never solves), agent tools relay that conversationally, and `fetchBackend` accepts per-call `timeoutMs` (agent tools pass 45s).
 14. **Render provider env missing on prod** — `deploy-backend.yml` now passes `RENDER_PROVIDER`, `RENDER_MODEL`, `OPENROUTER_API_KEY` to Cloud Run (mirroring `deploy-backend-v2.yml`), so `ensure_provider_configured()` no longer raises on the render tab.
 
+### Fixed (2026-07-12)
+
+15. **StructAgent integration** — IS-code structural design per layout. New `backend/app/api/routes/structural.py` + `backend/app/services/structagent_client.py` call the `structapi` service (configured via `structagent` settings; empty key disables the feature). CI now byte-diffs the vendor/pinned structapi tag on every push/PR and files a weekly freshness issue (`.github/workflows` — PR #21).
+16. **SECTION A-A + FRONT ELEVATION pages in both PDF generators** — Standard and approval PDFs now emit both a `SECTION A-A` (cross-section) and a `FRONT ELEVATION` page. `section_geometry.py` builds both views; `pdf.py`/`approval_pdf.py` render them with A-A cut markers on the plan pages (PR #20).
+17. **Main entrance door (MD) on road-facing wall** — Dedicated GF-only main-entrance pass in `plan_geometry.py`: entry room priority living > passage > dining (never parking/stair/wet); door centred toward the facade midpoint to align with the compound gate. `Opening.is_main` flag + `OpeningStandards.main_door_width_m` (1070 mm leaf, NBC min clear 900 mm) from `compliance_rules.json`. FRONT ELEVATION always uses the y-min (road) wall so the correct facade is drawn for `road_side` N/E/W; MD shows full height. MD mark + MAIN DOOR schedule row in both PDFs, DXF gate gap aligned to MD x, SVG `MD` tag. 8 new MD tests + elevation regression (PR #22).
+
 ### Open / Deferred
 
 - **Anthropic billing** — If the Anthropic key lacks balance, the agent now falls back automatically through OpenAI (`gpt-4o`) then OpenRouter via `agent-errors.ts`. Top up when ready.
 - **Voice transcription** — Code uses direct OpenAI SDK (Whisper). Needs retest with working mic + valid `OPENAI_API_KEY` in `.env.local`.
+- **StructAgent key** — Structural design feature is off until `structagent` API key/endpoint is configured; layout generation still works without it.
 
 ---
 
 ## Testing
 
-- Backend: pytest (via `uv run pytest`) — 55/55 passing
+- Backend: pytest (via `uv run pytest`) — 413 passing
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts
 

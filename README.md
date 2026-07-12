@@ -33,8 +33,9 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 - **5-component layout scorer** — natural light, adjacency, aspect ratio, circulation, Vastu (0–100)
 
 ### Output & Visualisation
-- **SVG preview** — double-line walls, door arcs, window markers, columns, north arrow, dimension lines
-- **Section view** — parametric 2D cross-section with floor slabs and parapet
+- **SVG preview** — double-line walls, door arcs, window markers, columns, north arrow, dimension lines; main entrance door (MD) tagged on the road-facing wall
+- **Section view** — parametric 2D cross-section (`SECTION A-A`) with floor slabs and parapet
+- **Front elevation** — dedicated `FRONT ELEVATION` view always drawn for the road-facing (y-min) facade, with the main door shown full height
 - **Interior furniture overlay** — 11 furniture symbols (bed, sofa, dining, kitchen slab, etc.)
 - **Electrical overlay** — switch, socket, light point, fan positions per NBC residential standard
 - **Plumbing overlay** — supply spine + drain routing for bathrooms and kitchen
@@ -43,8 +44,8 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 - **Room annotations** — sticky notes on rooms, exported to PDF
 
 ### Export
-- **PDF export** — ReportLab A4 at 1:100; professional double-line walls, boxed window symbols, single door arcs, chain dimensions in ft-in, room schedule, north arrow (free)
-- **Approval drawing PDF** — municipality-format 4-page package; solid B&W walls, setback dims, FAR table, owner info, engineer seal, CMDA/BBMP/GHMC/PMC/MCGM submission ready (per-submission add-on)
+- **PDF export** — ReportLab A4 at 1:100; professional double-line walls, boxed window symbols, single door arcs (main door marked), chain dimensions in ft-in, room schedule, north arrow, plus `SECTION A-A` and `FRONT ELEVATION` pages (free)
+- **Approval drawing PDF** — municipality-format package with site plan, GF/FF plans, `SECTION A-A` + title block, `FRONT ELEVATION` + title block; solid B&W walls, setback dims, FAR table, owner info, engineer seal, CMDA/BBMP/GHMC/PMC/MCGM submission ready (per-submission add-on)
 - **DXF export** — ezdxf with CAD layers, ANSI hatch fills, door/window symbols, per-layer lineweights (0.09–0.50mm), ARCH_MM dimstyle (text above line), graphical scale bar (Basic+)
 - **Bill of Quantities** — city-linked material rates for 8 cities; JSON (free) + formatted Excel (Pro)
 
@@ -67,6 +68,9 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 - **Authentication** — Better Auth (TypeScript-native, session-based)
 - **Payments** — Razorpay with plan tiers: Free / Basic / Pro
 - **Blueprint Dark theme** — Outfit + Plus Jakarta Sans + JetBrains Mono fonts; `prefers-reduced-motion` support
+
+### Structural
+- **Structural design (StructAgent)** — IS-code structural design generated per layout via the `structapi` service; automatically disabled when no API key is configured, so layout generation still works standalone (when key configured)
 
 ### SEO & Marketing
 - **Metadata API** — Per-page `title` / `description` with `%s | PlanForge` template; `lang="en-IN"` for Google India
@@ -178,7 +182,7 @@ PlanForge/
 │   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, pdf, approval_pdf, BOQ
 │   │   ├── models/            # SQLAlchemy ORM models
 │   │   └── schemas/           # Pydantic I/O schemas
-│   └── tests/                 # 159 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD)
+│   └── tests/                 # 413 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD, openings, section)
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -207,7 +211,7 @@ PlanForge/
 ```bash
 # Backend
 cd backend
-uv run pytest tests/ -v          # run 159 tests (in-memory SQLite, no Neon needed)
+uv run pytest tests/ -v          # run 413 tests (in-memory SQLite, no Neon needed)
 uv run ruff check . && uv run ruff format .
 docker build -t planforge-backend .   # validate the Dockerfile only
 
