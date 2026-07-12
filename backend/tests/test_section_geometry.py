@@ -5,10 +5,12 @@ from app.engine.generator import generate
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig
 from app.engine.section_geometry import (
+    derive_section,
     room_interval,
     section_cut_line,
     wall_cut_intervals,
 )
+from app.engine.vertical_standards import VS
 
 CFG = PlotConfig(
     plot_length=12.0,
@@ -66,3 +68,32 @@ def test_room_interval():
     iv = room_interval(line, r)
     assert iv is not None
     assert abs((iv[1] - iv[0]) - 5.0) < 0.01
+
+
+def test_derive_section_structure():
+    sd = derive_section(_layout(), CFG)
+    assert sd.title == "SECTION A-A"
+    mats = {p.material for p in sd.polys}
+    assert {"brick", "rcc", "pcc", "earth"} <= mats
+    z_top = max(p.poly.bounds[3] for p in sd.polys)
+    assert abs(z_top - (2 * VS.floor_to_floor_m + VS.parapet_h_m)) < 0.01
+    z_bot = min(p.poly.bounds[1] for p in sd.polys)
+    assert abs(z_bot - (-VS.plinth_h_m - VS.foundation_depth_m)) < 0.01
+
+
+def test_section_has_stair_profile_and_labels():
+    sd = derive_section(_layout(), CFG)
+    stair_polys = [
+        p for p in sd.polys if p.material == "rcc" and len(p.poly.exterior.coords) > 10
+    ]
+    assert stair_polys, "expected a stepped stair profile polygon"
+    assert any("R @" in t for _, _, t in sd.labels)
+    assert len([t for _, _, t in sd.labels if "R @" not in t]) >= 2
+
+
+def test_section_levels_and_dims():
+    sd = derive_section(_layout(), CFG)
+    label_texts = [lv.label for lv in sd.levels]
+    assert any("±0.00" in t for t in label_texts)
+    assert any("+3.000" in t for t in label_texts)
+    assert "3000" in [d.label for d in sd.vdims]
