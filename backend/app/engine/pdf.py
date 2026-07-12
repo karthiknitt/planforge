@@ -9,7 +9,18 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_primitives import metres_to_ftin
+from app.engine.geometry import buildable_polygon
 from app.engine.models import FloorPlan, Layout, PlotConfig
+from app.engine.section_geometry import (
+    derive_elevation,
+    derive_section,
+    section_cut_line,
+)
+from app.engine.section_render import (
+    draw_section_marker,
+    render_elevation_view,
+    render_section_view,
+)
 
 # ---------------------------------------------------------------------------
 # Internal CAD drawing helpers (ReportLab, not ezdxf)
@@ -192,6 +203,8 @@ def render_pdf(
       2. First Floor architectural plan
       3. Ground Floor structural (beam & column) layout
       4. First Floor structural (beam & column) layout
+      5. Section A-A
+      6. Front Elevation
     """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -218,6 +231,40 @@ def render_pdf(
             c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label
         )
         c.showPage()
+
+    # ── Section & elevation pages ─────────────────────────────────────────────
+    page_w, page_h = A4
+    region = (MARGIN, TITLE_H + 30, page_w - 2 * MARGIN, page_h - TITLE_H - 60)
+
+    sd = derive_section(layout, cfg)
+    sd_scale = render_section_view(c, sd, region)
+    _draw_title_block(
+        c,
+        project_name,
+        layout.id,
+        layout.name,
+        sd.title,
+        cfg,
+        num_bedrooms,
+        sd_scale,
+        page_w,
+    )
+    c.showPage()
+
+    ed = derive_elevation(layout, cfg)
+    ed_scale = render_elevation_view(c, ed, region)
+    _draw_title_block(
+        c,
+        project_name,
+        layout.id,
+        layout.name,
+        ed.title,
+        cfg,
+        num_bedrooms,
+        ed_scale,
+        page_w,
+    )
+    c.showPage()
 
     c.save()
     return buf.getvalue()
@@ -1764,6 +1811,11 @@ def _draw_floor_projected(
     _shape_path(c, polys["external"], s, ox, oy)
     c.setLineWidth(0.35)
     _shape_path(c, polys["internal"], s, ox, oy)
+
+    # Section A-A cut marker
+    line, _along_y = section_cut_line(floor_plan.rooms, buildable_polygon(cfg))
+    (lx1, ly1), (lx2, ly2) = line.coords[0], line.coords[-1]
+    draw_section_marker(c, ox + lx1 * s, oy + ly1 * s, ox + lx2 * s, oy + ly2 * s, "A")
 
     # Openings, columns, stair, labels, dims
     for o in drawing.openings:

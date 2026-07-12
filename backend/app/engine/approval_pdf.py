@@ -1,13 +1,14 @@
 """
 Municipality Approval Drawing Package PDF generator.
 
-Produces a 4-page A4 PDF formatted for Indian building plan submissions
+Produces a 5-page A4 PDF formatted for Indian building plan submissions
 (CMDA Chennai, BBMP Bangalore, GHMC Hyderabad, etc.).
 
 Page 1 — Site Location Plan
 Page 2 — Ground Floor Approval Plan
 Page 3 — First Floor Approval Plan
-Page 4 — Section View + Professional Title Block
+Page 4 — Section A-A + Professional Title Block
+Page 5 — Front Elevation + Professional Title Block
 """
 
 from __future__ import annotations
@@ -20,7 +21,18 @@ from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+from app.engine.geometry import buildable_polygon
 from app.engine.models import FloorPlan, Layout, PlotConfig
+from app.engine.section_geometry import (
+    derive_elevation,
+    derive_section,
+    section_cut_line,
+)
+from app.engine.section_render import (
+    draw_section_marker,
+    render_elevation_view,
+    render_section_view,
+)
 
 # ── Page geometry constants (points) ─────────────────────────────────────────
 MARGIN = 40
@@ -71,7 +83,7 @@ def generate_approval_pdf(
     owner_info: OwnerInfo,
     layout_id: str,
 ) -> bytes:
-    """Return raw PDF bytes of the 4-page municipality approval drawing package."""
+    """Return raw PDF bytes of the 5-page municipality approval drawing package."""
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
 
@@ -93,6 +105,10 @@ def generate_approval_pdf(
 
     # Page 4: Section View + Title Block
     _draw_section_and_title_block(c, layout, plot_config, owner_info)
+    c.showPage()
+
+    # Page 5: Front Elevation + Title Block
+    _draw_elevation_and_title_block(c, layout, plot_config, owner_info)
     c.showPage()
 
     c.save()
@@ -550,6 +566,11 @@ def _draw_approval_floor_plan(
     _shape_path(c, polys["internal"], s, ox, oy)
     _hatch_polygons(c, polys["internal"], s, ox, oy, spacing=2.5)
 
+    # Section A-A cut marker
+    line, _along_y = section_cut_line(floor_plan.rooms, buildable_polygon(cfg))
+    (lx1, ly1), (lx2, ly2) = line.coords[0], line.coords[-1]
+    draw_section_marker(c, ox + lx1 * s, oy + ly1 * s, ox + lx2 * s, oy + ly2 * s, "A")
+
     for o in drawing.openings:
         _draw_opening_symbol(c, o, s, ox, oy)
     half_col = 0.15 * s
@@ -734,7 +755,6 @@ def _draw_section_and_title_block(
 
     # Title block occupies bottom quarter of the page
     tb_h = page_h * 0.27
-    section_h = page_h - tb_h - 20
 
     # Background
     c.setFillColor(HexColor("#FFFFFF"))
@@ -747,184 +767,44 @@ def _draw_section_and_title_block(
     c.setFont("Helvetica-Bold", 11)
     c.drawCentredString(page_w / 2, page_h - 24, "SECTION AA — RESIDENTIAL BUILDING")
 
-    # Parametric section view
-    _draw_section_view(c, cfg, page_w, tb_h, section_h)
+    # Convention-faithful section through the staircase
+    sd = derive_section(layout, cfg)
+    render_section_view(
+        c, sd, (MARGIN, tb_h + 10, page_w - 2 * MARGIN, page_h - 36 - tb_h - 20)
+    )
 
     # Professional title block
     _draw_professional_title_block(c, layout, cfg, owner, authority, page_w, tb_h)
 
 
-def _draw_section_view(
+def _draw_elevation_and_title_block(
     c: canvas.Canvas,
+    layout: Layout,
     cfg: PlotConfig,
-    page_w: float,
-    tb_h: float,
-    section_h: float,
+    owner: OwnerInfo,
 ) -> None:
-    """Parametric building section (GF + FF + slab + parapet)."""
-    bldg_w_m = cfg.plot_width - cfg.setback_left - cfg.setback_right
-    floor_h_m = 3.0  # floor-to-floor height (m)
-    slab_t_m = 0.15  # slab thickness (m)
-    parapet_h_m = 1.0
-    found_d_m = 0.6  # foundation depth below GL
-    ewt_m = 0.23
+    page_w, page_h = A4
+    authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper())
 
-    num_floors = getattr(cfg, "num_floors", 2)
-    total_above_gl = num_floors * floor_h_m + slab_t_m + parapet_h_m
-    total_h_m = total_above_gl + found_d_m
+    tb_h = page_h * 0.27
 
-    avail_w = page_w - 2 * MARGIN - 40
-    avail_h = section_h - tb_h - 50
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(0, tb_h, page_w, page_h - tb_h, fill=1, stroke=0)
 
-    scale = min(avail_w / (bldg_w_m + 4), avail_h / (total_h_m + 0.5))
-    sx = MARGIN + 20 + (avail_w - bldg_w_m * scale) / 2
-    gl_y = tb_h + 20 + found_d_m * scale
-
-    # GL line (ground level)
-    c.setStrokeColor(HexColor("#333333"))
-    c.setLineWidth(1.0)
-    c.setDash(4, 2)
-    c.line(MARGIN, gl_y, page_w - MARGIN, gl_y)
-    c.setDash()
-    c.setFillColor(HexColor("#555555"))
-    c.setFont("Helvetica", 7)
-    c.drawString(MARGIN + 2, gl_y + 3, "G.L.")
-
-    # Foundation
-    c.setFillColor(HexColor("#D1D5DB"))
-    c.setStrokeColor(HexColor("#333333"))
-    c.setLineWidth(0.5)
-    found_w_px = bldg_w_m * scale + ewt_m * 2 * scale + 0.3 * scale
-    found_h_px = found_d_m * scale
-    c.rect(
-        sx - ewt_m * scale, gl_y - found_h_px, found_w_px, found_h_px, fill=1, stroke=1
-    )
-    c.setFillColor(HexColor("#333333"))
-    c.setFont("Helvetica", 6)
-    c.drawCentredString(
-        sx + bldg_w_m * scale / 2, gl_y - found_h_px / 2 - 3, "FOUNDATION"
-    )
-
-    # Floors
-    floor_colors = ["#E8E8E8", "#EEEEEE"]
-    for floor_idx in range(num_floors):
-        floor_y = gl_y + floor_idx * floor_h_m * scale
-        floor_py = floor_h_m * scale - slab_t_m * scale
-
-        # Wall fill
-        c.setFillColor(HexColor(floor_colors[floor_idx % len(floor_colors)]))
-        c.setStrokeColor(HexColor("#000000"))
-        c.setLineWidth(EXT_LW)
-        c.rect(sx, floor_y, bldg_w_m * scale, floor_py, fill=1, stroke=1)
-
-        # Slab
-        slab_y = floor_y + floor_py
-        c.setFillColor(HexColor("#808080"))
-        c.setStrokeColor(HexColor("#444444"))
-        c.setLineWidth(1.0)
-        c.rect(sx, slab_y, bldg_w_m * scale, slab_t_m * scale, fill=1, stroke=1)
-
-        # Floor label
-        label = "GROUND FLOOR" if floor_idx == 0 else "FIRST FLOOR"
-        c.setFillColor(HexColor("#000000"))
-        c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(
-            sx + bldg_w_m * scale / 2, floor_y + floor_py / 2 - 3, label
-        )
-        c.setFont("Helvetica", 6)
-        c.drawCentredString(
-            sx + bldg_w_m * scale / 2,
-            floor_y + floor_py / 2 - 12,
-            f"Ht: {floor_h_m:.1f}m",
-        )
-
-        # Height dimension line (right side)
-        dim_x = sx + bldg_w_m * scale + 20
-        c.setStrokeColor(HexColor("#555555"))
-        c.setLineWidth(DIM_LW)
-        c.line(dim_x, floor_y, dim_x, floor_y + floor_py)
-        c.line(dim_x - 4, floor_y, dim_x + 4, floor_y)
-        c.line(dim_x - 4, floor_y + floor_py, dim_x + 4, floor_y + floor_py)
-        c.setFillColor(HexColor("#555555"))
-        c.setFont("Helvetica", 6)
-        c.drawString(dim_x + 5, floor_y + floor_py / 2 - 3, f"{floor_h_m:.1f}m")
-
-    # Parapet
-    parapet_y = gl_y + num_floors * floor_h_m * scale
-    c.setFillColor(HexColor("#EBEBEB"))
-    c.setStrokeColor(HexColor("#444444"))
-    c.setLineWidth(1.0)
-    # Left parapet wall
-    c.rect(sx, parapet_y, ewt_m * scale * 1.5, parapet_h_m * scale, fill=1, stroke=1)
-    # Right parapet wall
-    c.rect(
-        sx + bldg_w_m * scale - ewt_m * scale * 1.5,
-        parapet_y,
-        ewt_m * scale * 1.5,
-        parapet_h_m * scale,
-        fill=1,
-        stroke=1,
-    )
-    c.setFillColor(HexColor("#555555"))
-    c.setFont("Helvetica", 6)
-    c.drawCentredString(
-        sx + bldg_w_m * scale / 2,
-        parapet_y + parapet_h_m * scale / 2,
-        f"PARAPET {parapet_h_m:.1f}m",
-    )
-
-    # Building width dimension at top
-    top_y = parapet_y + parapet_h_m * scale + 8
-    c.setStrokeColor(HexColor("#555555"))
-    c.setLineWidth(DIM_LW)
-    c.line(sx, top_y, sx + bldg_w_m * scale, top_y)
-    c.line(sx, top_y - 4, sx, top_y + 4)
-    c.line(sx + bldg_w_m * scale, top_y - 4, sx + bldg_w_m * scale, top_y + 4)
-    c.setFillColor(HexColor("#333333"))
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(sx + bldg_w_m * scale / 2, top_y + 5, f"{bldg_w_m:.2f}m")
-
-    # Total height annotation
-    total_h_px = total_above_gl * scale
-    c.setStrokeColor(HexColor("#000000"))
-    c.setLineWidth(0.5)
-    left_dim_x = sx - 28
-    c.line(left_dim_x, gl_y, left_dim_x, gl_y + total_h_px)
-    c.line(left_dim_x - 4, gl_y, left_dim_x + 4, gl_y)
-    c.line(left_dim_x - 4, gl_y + total_h_px, left_dim_x + 4, gl_y + total_h_px)
-    c.saveState()
-    c.translate(left_dim_x - 8, gl_y + total_h_px / 2)
-    c.rotate(90)
     c.setFillColor(HexColor("#000000"))
-    c.setFont("Helvetica-Bold", 7)
-    c.drawCentredString(0, 0, f"Total Ht: {total_above_gl:.2f}m")
-    c.restoreState()
-
-    # Slab label
-    c.setFillColor(HexColor("#444444"))
-    c.setFont("Helvetica", 6)
-    c.drawString(
-        sx + bldg_w_m * scale + 5,
-        gl_y + num_floors * floor_h_m * scale - slab_t_m * scale / 2 - 3,
-        "150mm slab",
+    c.rect(0, page_h - 36, page_w, 36, fill=1, stroke=0)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(
+        page_w / 2, page_h - 24, "FRONT ELEVATION — RESIDENTIAL BUILDING"
     )
 
-    # Section cut symbol header
-    c.setFillColor(HexColor("#555555"))
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(sx - 20, gl_y + total_h_px + 20, "A")
-    c.drawString(sx + bldg_w_m * scale + 5, gl_y + total_h_px + 20, "A")
-
-    # Graphic scale bar — same shared element as every other sheet
-    from app.engine.pdf import _PT_PER_PAPER_M, _draw_scale_bar
-
-    _draw_scale_bar(
-        c,
-        MARGIN,
-        tb_h + section_h - 40,
-        scale,
-        denom=round(_PT_PER_PAPER_M / scale),
+    ed = derive_elevation(layout, cfg)
+    render_elevation_view(
+        c, ed, (MARGIN, tb_h + 10, page_w - 2 * MARGIN, page_h - 36 - tb_h - 20)
     )
+
+    _draw_professional_title_block(c, layout, cfg, owner, authority, page_w, tb_h)
 
 
 def _draw_professional_title_block(
