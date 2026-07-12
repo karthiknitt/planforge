@@ -23,8 +23,13 @@ router = APIRouter()
 #: IS 1893:2016 Annex E seismic zones for supported municipalities.
 #: Default zone III is conservative for most of peninsular India.
 CITY_SEISMIC_ZONE = {
-    "chennai": "III", "bengaluru": "II", "bangalore": "II",
-    "hyderabad": "II", "pune": "III", "mumbai": "III", "delhi": "IV",
+    "chennai": "III",
+    "bengaluru": "II",
+    "bangalore": "II",
+    "hyderabad": "II",
+    "pune": "III",
+    "mumbai": "III",
+    "delhi": "IV",
 }
 
 
@@ -46,8 +51,7 @@ async def structural_design(
     if not structagent_client.is_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Structural design service is not configured "
-                   "(STRUCTURAL_API_URL).",
+            detail="Structural design service is not configured (STRUCTURAL_API_URL).",
         )
     project = await get_accessible_project(project_id, user_id, db)
 
@@ -64,14 +68,15 @@ async def structural_design(
     if not grid.x_spacings_m or not grid.y_spacings_m:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": "Could not extract a structural grid from "
-                               "this layout", "notes": grid.notes},
+            detail={
+                "message": "Could not extract a structural grid from this layout",
+                "notes": grid.notes,
+            },
         )
 
     city = (project.city or "").lower()
     payload = {
-        "grid": {"x_spacings_m": grid.x_spacings_m,
-                 "y_spacings_m": grid.y_spacings_m},
+        "grid": {"x_spacings_m": grid.x_spacings_m, "y_spacings_m": grid.y_spacings_m},
         "storeys": max(int(project.num_floors or 1), 1),
         "occupancy": "residential_room",
         "location": {
@@ -85,16 +90,19 @@ async def structural_design(
 
     try:
         result = await structagent_client.design_building(
-            payload, correlation_id=f"{project_id}:{body.layout_id}")
+            payload, correlation_id=f"{project_id}:{body.layout_id}"
+        )
     except structagent_client.StructuralAPIError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
-                            detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
     return {
         "ok": result.ok,
-        "grid": {"x_spacings_m": grid.x_spacings_m,
-                 "y_spacings_m": grid.y_spacings_m,
-                 "confident": grid.confident, "notes": grid.notes},
+        "grid": {
+            "x_spacings_m": grid.x_spacings_m,
+            "y_spacings_m": grid.y_spacings_m,
+            "confident": grid.confident,
+            "notes": grid.notes,
+        },
         "checks": result.checks,
         "data": result.data,
         "artifacts": result.artifacts,

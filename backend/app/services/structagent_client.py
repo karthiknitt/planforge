@@ -42,8 +42,9 @@ def is_configured() -> bool:
     return bool(settings.structural_api_url)
 
 
-async def design_building(payload: dict, *, correlation_id: str = "",
-                          timeout: float = 120.0) -> StructuralResult:
+async def design_building(
+    payload: dict, *, correlation_id: str = "", timeout: float = 120.0
+) -> StructuralResult:
     """POST /v1/design/building on structapi and return the parsed envelope."""
     if not settings.structural_api_url:
         raise StructuralAPIError("STRUCTURAL_API_URL is not configured")
@@ -60,7 +61,8 @@ async def design_building(payload: dict, *, correlation_id: str = "",
             raise StructuralAPIError(f"structapi unreachable: {exc}") from exc
     if resp.status_code != 200:
         raise StructuralAPIError(
-            f"structapi HTTP {resp.status_code}: {resp.text[:300]}")
+            f"structapi HTTP {resp.status_code}: {resp.text[:300]}"
+        )
     body = resp.json()
     return StructuralResult(
         ok=bool(body.get("ok")),

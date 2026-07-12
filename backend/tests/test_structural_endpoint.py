@@ -41,13 +41,20 @@ class _FakeRow:
 ENVELOPE = {
     "api_version": "1",
     "ok": True,
-    "checks": [{"name": "columns/interior: biaxial interaction <= 1.0 (cl 39.6)",
-                "ok": True}],
-    "data": {"quantities": {"steel_kg": {"total": 1234.5},
-                            "concrete_m3": {"total": 21.0}}},
-    "artifacts": [{"name": "building_report.pdf",
-                   "content_type": "application/pdf",
-                   "encoding": "base64", "content": "JVBERi0="}],
+    "checks": [
+        {"name": "columns/interior: biaxial interaction <= 1.0 (cl 39.6)", "ok": True}
+    ],
+    "data": {
+        "quantities": {"steel_kg": {"total": 1234.5}, "concrete_m3": {"total": 21.0}}
+    },
+    "artifacts": [
+        {
+            "name": "building_report.pdf",
+            "content_type": "application/pdf",
+            "encoding": "base64",
+            "content": "JVBERi0=",
+        }
+    ],
     "disclaimer": "verify against official BIS copies",
 }
 
@@ -87,8 +94,9 @@ async def test_structural_503_when_unconfigured(client_db, monkeypatch):
     client, _ = client_db
     project_id = await _make_project(client)
     monkeypatch.setattr(settings, "structural_api_url", "")
-    res = await client.post(f"/api/projects/{project_id}/structural",
-                            json={}, headers=HDRS)
+    res = await client.post(
+        f"/api/projects/{project_id}/structural", json={}, headers=HDRS
+    )
     assert res.status_code == 503
 
 
@@ -101,8 +109,9 @@ async def test_structural_404_missing_layout(client_db, monkeypatch):
         return []
 
     monkeypatch.setattr(layout_store, "get_or_generate_layouts", _none)
-    res = await client.post(f"/api/projects/{project_id}/structural",
-                            json={"layout_id": "A"}, headers=HDRS)
+    res = await client.post(
+        f"/api/projects/{project_id}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
     assert res.status_code == 404
 
 
@@ -125,12 +134,15 @@ async def test_structural_happy_path(client_db, monkeypatch):
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=ENVELOPE)
 
-    monkeypatch.setattr(structagent_client, "_transport_for_tests",
-                        httpx.MockTransport(handler))
+    monkeypatch.setattr(
+        structagent_client, "_transport_for_tests", httpx.MockTransport(handler)
+    )
 
-    res = await client.post(f"/api/projects/{project_id}/structural",
-                            json={"layout_id": "A", "sbc_kpa": 180},
-                            headers=HDRS)
+    res = await client.post(
+        f"/api/projects/{project_id}/structural",
+        json={"layout_id": "A", "sbc_kpa": 180},
+        headers=HDRS,
+    )
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["ok"] is True
@@ -156,9 +168,12 @@ async def test_structural_502_on_upstream_error(client_db, monkeypatch):
 
     monkeypatch.setattr(layout_store, "get_or_generate_layouts", _stored)
     monkeypatch.setattr(
-        structagent_client, "_transport_for_tests",
-        httpx.MockTransport(lambda r: httpx.Response(500, text="boom")))
+        structagent_client,
+        "_transport_for_tests",
+        httpx.MockTransport(lambda r: httpx.Response(500, text="boom")),
+    )
 
-    res = await client.post(f"/api/projects/{project_id}/structural",
-                            json={}, headers=HDRS)
+    res = await client.post(
+        f"/api/projects/{project_id}/structural", json={}, headers=HDRS
+    )
     assert res.status_code == 502

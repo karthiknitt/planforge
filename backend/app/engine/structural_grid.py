@@ -45,8 +45,7 @@ def extract_grid(columns: list[dict]) -> GridExtraction:
     """columns: [{x, y}, ...] for one floor (typically the ground floor)."""
     out = GridExtraction()
     if len(columns) < 4:
-        out.notes.append(
-            f"only {len(columns)} columns — need at least a 4-column bay")
+        out.notes.append(f"only {len(columns)} columns — need at least a 4-column bay")
         return out
 
     xs = _cluster([float(c["x"]) for c in columns])
@@ -64,16 +63,17 @@ def extract_grid(columns: list[dict]) -> GridExtraction:
             if s < MIN_SPACING or s > MAX_SPACING:
                 confident = False
                 out.notes.append(
-                    f"{axis}-spacing {s} m outside {MIN_SPACING}-{MAX_SPACING} m")
+                    f"{axis}-spacing {s} m outside {MIN_SPACING}-{MAX_SPACING} m"
+                )
     # grid completeness: a full grid has len(xs)*len(ys) columns
     expected = len(xs) * len(ys)
     if len(columns) < 0.7 * expected:
         confident = False
         out.notes.append(
             f"{len(columns)} columns vs {expected} grid intersections — "
-            "irregular layout; grid needs review")
+            "irregular layout; grid needs review"
+        )
     out.confident = confident
     if not confident:
-        out.notes.append("structural grid needs review before relying on "
-                         "the design")
+        out.notes.append("structural grid needs review before relying on the design")
     return out
