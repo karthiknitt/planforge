@@ -3,7 +3,10 @@ from __future__ import annotations
 from shapely.geometry import Polygon
 
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
-from .geometry import compute_l_shaped_polygon  # noqa: F401  (re-export; historical import site)
+from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; historical import site)
+    buildable_polygon,
+    compute_l_shaped_polygon,
+)
 from .compliance import check, load_rules
 from .models import FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
@@ -55,22 +58,20 @@ def _next_id(prefix: str) -> str:
 def _plate_box(cfg: PlotConfig, ewt: float):
     """Return a Shapely geometry for the usable floor plate.
 
-    For L-shaped plots, returns the L-polygon inset by setbacks + wall thickness.
-    For all other shapes, returns a simple rectangle.
+    Delegates to the canonical buildable_polygon() (per-edge setbacks, all
+    plot shapes). A plain rectangle here made the fill passes treat the
+    trapezoid/quad bounding box as buildable and create rooms outside the
+    slanted plot boundary.
     """
     from shapely.geometry import box
 
+    plate = buildable_polygon(cfg, wall_clearance=ewt)
+    if not plate.is_empty:
+        return plate
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
     w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
     d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
-    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
-        l_poly = compute_l_shaped_polygon(cfg)
-        avg_sb = (
-            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-        ) / 4
-        inset = l_poly.buffer(-(avg_sb + ewt), join_style="mitre")
-        return inset if not inset.is_empty else box(ox, oy, ox + w, oy + d)
     return box(ox, oy, ox + w, oy + d)
 
 
