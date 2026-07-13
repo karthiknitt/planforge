@@ -3,7 +3,10 @@ from __future__ import annotations
 from shapely.geometry import Polygon
 
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
-from .geometry import compute_l_shaped_polygon  # noqa: F401  (re-export; historical import site)
+from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; historical import site)
+    buildable_polygon,
+    compute_l_shaped_polygon,
+)
 from .compliance import check, load_rules
 from .models import FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
@@ -55,23 +58,58 @@ def _next_id(prefix: str) -> str:
 def _plate_box(cfg: PlotConfig, ewt: float):
     """Return a Shapely geometry for the usable floor plate.
 
-    For L-shaped plots, returns the L-polygon inset by setbacks + wall thickness.
-    For all other shapes, returns a simple rectangle.
+    Delegates to the canonical buildable_polygon() (per-edge setbacks, all
+    plot shapes). A plain rectangle here made the fill passes treat the
+    trapezoid/quad bounding box as buildable and create rooms outside the
+    slanted plot boundary.
     """
     from shapely.geometry import box
 
+    plate = buildable_polygon(cfg, wall_clearance=ewt)
+    if not plate.is_empty:
+        return plate
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
     w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
     d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
-    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
-        l_poly = compute_l_shaped_polygon(cfg)
-        avg_sb = (
-            cfg.setback_front + cfg.setback_rear + cfg.setback_left + cfg.setback_right
-        ) / 4
-        inset = l_poly.buffer(-(avg_sb + ewt), join_style="mitre")
-        return inset if not inset.is_empty else box(ox, oy, ox + w, oy + d)
     return box(ox, oy, ox + w, oy + d)
+
+
+def _trim_micro_overlaps(floor_plan: FloorPlan) -> None:
+    """Remove millimetre-scale room overlaps left by 3-dp rounding.
+
+    Archetype arithmetic rounds each coordinate independently, so
+    ``round(a + b) != round(a) + round(b)`` can leave <=5 mm sliver overlaps
+    that the room-edit validator (which rejects ANY positive-area overlap)
+    would flag on the next round-trip. Trim the sliver off the larger room.
+    """
+    _MICRO = 0.05  # m — anything bigger is a real bug, leave it visible
+    rooms = floor_plan.rooms
+    for i, a in enumerate(rooms):
+        for b in rooms[i + 1 :]:
+            ox1 = max(a.x, b.x)
+            oy1 = max(a.y, b.y)
+            ox2 = min(a.x + a.width, b.x + b.width)
+            oy2 = min(a.y + a.depth, b.y + b.depth)
+            w_ov = ox2 - ox1
+            d_ov = oy2 - oy1
+            if w_ov <= 0 or d_ov <= 0:
+                continue
+            if min(w_ov, d_ov) > _MICRO:
+                continue  # not a rounding sliver
+            t = a if a.area >= b.area else b
+            if w_ov <= d_ov:
+                if abs(t.x + t.width - ox2) < 1e-9:  # sliver at t's right edge
+                    t.width = round(t.width - w_ov, 3)
+                elif abs(t.x - ox1) < 1e-9:  # sliver at t's left edge
+                    t.x = round(t.x + w_ov, 3)
+                    t.width = round(t.width - w_ov, 3)
+            else:
+                if abs(t.y + t.depth - oy2) < 1e-9:
+                    t.depth = round(t.depth - d_ov, 3)
+                elif abs(t.y - oy1) < 1e-9:
+                    t.y = round(t.y + d_ov, 3)
+                    t.depth = round(t.depth - d_ov, 3)
 
 
 def _fill_blank_areas(
@@ -83,15 +121,138 @@ def _fill_blank_areas(
     """
     Detect unoccupied space in ``floor_plan`` and fill it intelligently.
 
+    Runs up to 3 passes: absorbing strips into adjacent rooms makes the
+    remaining leftover more rectangular, which lets a later pass turn it
+    into a real room (Store/Utility/Open Terrace). A single pass could
+    neither absorb nor room-ify L-shaped leftovers and left dead space.
+    """
+    notes: list[str] = []
+    for _ in range(3):
+        pass_notes = _fill_blank_areas_once(floor_plan, cfg, ewt, is_topmost)
+        if not pass_notes:
+            break
+        notes.extend(pass_notes)
+    # Terminating pass: whatever absorb couldn't legally reach (a rectangle
+    # may only slide a full edge) is carved into maximal inscribed rectangles
+    # and kept as real rooms so no usable dead space survives.
+    notes.extend(_rect_fill_remainder(floor_plan, cfg, ewt, is_topmost))
+    return notes
+
+
+def _largest_inscribed_rect(piece):
+    """Largest axis-aligned rectangle inside ``piece`` whose corners lie on
+    the polygon's own coordinate grid."""
+    from shapely.geometry import box
+
+    # Raw coords — rounding here can push a candidate past the true boundary
+    # into a neighbouring room; callers snap the winning rect inward instead.
+    coords = list(piece.exterior.coords)
+    for hole in piece.interiors:
+        coords.extend(hole.coords)
+    xs = sorted({c[0] for c in coords})
+    ys = sorted({c[1] for c in coords})
+    best = None
+    best_area = 0.5
+    min_side = 1.2 - 1e-3  # tolerance: grid coords carry float noise
+    for i, x0 in enumerate(xs[:-1]):
+        for x1 in xs[i + 1 :]:
+            w = x1 - x0
+            if w < min_side:
+                continue
+            for k, y0 in enumerate(ys[:-1]):
+                for y1 in ys[k + 1 :]:
+                    if y1 - y0 < min_side:
+                        continue
+                    area = w * (y1 - y0)
+                    if area <= best_area:
+                        continue
+                    cand = box(x0, y0, x1, y1)
+                    if cand.difference(piece).area < 1e-6:
+                        best = cand
+                        best_area = area
+    return best
+
+
+def _rect_fill_remainder(
+    floor_plan: FloorPlan,
+    cfg: PlotConfig,
+    ewt: float,
+    is_topmost: bool,
+) -> list[str]:
+    from shapely.geometry import box
+    from shapely.ops import unary_union
+
+    notes: list[str] = []
+    if not floor_plan.rooms:
+        return notes
+    plate = _plate_box(cfg, ewt)
+    occupied = unary_union(
+        [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in floor_plan.rooms]
+    )
+    leftover = plate.difference(occupied)
+    if leftover.is_empty or leftover.area < 1.5:
+        return notes
+
+    for _ in range(12):
+        if leftover.geom_type in ("MultiPolygon", "GeometryCollection"):
+            pieces = [g for g in leftover.geoms if g.geom_type == "Polygon"]
+        else:
+            pieces = [leftover] if leftover.geom_type == "Polygon" else []
+        rect = None
+        for piece in sorted(pieces, key=lambda g: g.area, reverse=True):
+            if piece.area < 1.5:
+                break
+            rect = _largest_inscribed_rect(piece)
+            if rect is not None and rect.area >= 1.5:
+                break
+            rect = None
+        if rect is None:
+            break
+        minx, miny, maxx, maxy = _snap_rect_inward(rect.bounds)
+        area = round((maxx - minx) * (maxy - miny), 2)
+        if is_topmost and area >= 15.0:
+            rid, name, rtype = _next_id("open_terrace"), "Open Terrace", "balcony"
+        elif area >= 4.0:
+            rid, name, rtype = _next_id("utility_auto"), "Utility", "utility"
+        else:
+            rid, name, rtype = _next_id("store_auto"), "Store", "store_room"
+        floor_plan.rooms.append(
+            Room(
+                id=rid,
+                name=name,
+                type=rtype,
+                x=round(minx, 3),
+                y=round(miny, 3),
+                width=round(maxx - minx, 3),
+                depth=round(maxy - miny, 3),
+            )
+        )
+        notes.append(
+            f"{name} ({area:.1f} sqm) added on floor {floor_plan.floor} "
+            "to use residual space."
+        )
+        leftover = leftover.difference(rect)
+    return notes
+
+
+def _fill_blank_areas_once(
+    floor_plan: FloorPlan,
+    cfg: PlotConfig,
+    ewt: float,
+    is_topmost: bool,
+) -> list[str]:
+    """
+    One fill pass.
+
     For the topmost occupied floor:
       ≥ 15 m²  → Open Terrace
       4–15 m²  → Utility
-      < 4 m²   → merge into adjacent room
+      < 4 m²   → merge into adjacent room, else a small Store
 
     For other floors:
       ≥ 8 m²   → Store Room
       4–8 m²   → Utility
-      < 4 m²   → merge into adjacent room
+      < 4 m²   → merge into adjacent room, else a small Store
 
     Returns a list of human-readable notes about what was added/changed.
     """
@@ -127,104 +288,101 @@ def _fill_blank_areas(
         if area < 0.5:
             continue
 
-        # Skip non-rectangular leftovers — bounding-box rooms would overlap existing rooms.
-        # A region is "usable" if its area fills ≥ 70 % of its own bounding box.
+        # Non-rectangular leftovers: grow adjacent rooms into contained
+        # strips; the terminating rect-fill pass mops up what remains.
         bbox_area = rw * rd
         if bbox_area > 0 and (area / bbox_area) < 0.70:
             _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
             continue
 
-        if is_topmost:
-            if area >= 15.0:
-                # Large top-floor leftover → Open Terrace (min 1.5 m each dimension)
-                if rw >= 1.5 and rd >= 1.5:
-                    room_id = _next_id("open_terrace")
-                    floor_plan.rooms.append(
-                        Room(
-                            id=room_id,
-                            name="Open Terrace",
-                            type="balcony",  # closest existing type for compliance purposes
-                            x=round(minx, 3),
-                            y=round(miny, 3),
-                            width=rw,
-                            depth=rd,
-                        )
-                    )
-                    notes.append(f"Open Terrace ({area:.1f} sqm) added to top floor.")
-                else:
-                    _absorb_into_adjacent(
-                        floor_plan, region, minx, miny, maxx, maxy, notes
-                    )
-            elif area >= 4.0:
-                # Medium top-floor leftover → Utility
-                if rw >= 1.5 and rd >= 1.5:
-                    room_id = _next_id("utility_auto")
-                    floor_plan.rooms.append(
-                        Room(
-                            id=room_id,
-                            name="Utility",
-                            type="utility",
-                            x=round(minx, 3),
-                            y=round(miny, 3),
-                            width=rw,
-                            depth=rd,
-                        )
-                    )
-                    notes.append(f"Utility ({area:.1f} sqm) added to top floor.")
-                else:
-                    _absorb_into_adjacent(
-                        floor_plan, region, minx, miny, maxx, maxy, notes
-                    )
-            else:
-                # < 4 m² → merge into adjacent room
-                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+        # Created rooms must NEVER overlap neighbours — use the largest
+        # inscribed rectangle, not the bounding box (a 70 %-filled bbox
+        # room overlapped adjacent rooms by up to 30 % of its area).
+        rect = _largest_inscribed_rect(region)
+        if rect is None or rect.area < 1.5:
+            _absorb_or_store(
+                floor_plan, region, minx, miny, maxx, maxy, notes, area, rw, rd
+            )
+            continue
+        rminx, rminy, rmaxx, rmaxy = _snap_rect_inward(rect.bounds)
+        rarea = round((rmaxx - rminx) * (rmaxy - rminy), 2)
 
-        else:
-            if area >= 8.0:
-                # Large gap → Store Room
-                if rw >= 1.5 and rd >= 1.5:
-                    room_id = _next_id("store_auto")
-                    floor_plan.rooms.append(
-                        Room(
-                            id=room_id,
-                            name="Store Room",
-                            type="store_room",
-                            x=round(minx, 3),
-                            y=round(miny, 3),
-                            width=rw,
-                            depth=rd,
-                        )
-                    )
-                    notes.append(f"Store Room ({area:.1f} sqm) added to Ground Floor.")
-                else:
-                    _absorb_into_adjacent(
-                        floor_plan, region, minx, miny, maxx, maxy, notes
-                    )
-            elif area >= 4.0:
-                # Medium gap → Utility
-                if rw >= 1.5 and rd >= 1.5:
-                    room_id = _next_id("utility_auto")
-                    floor_plan.rooms.append(
-                        Room(
-                            id=room_id,
-                            name="Utility",
-                            type="utility",
-                            x=round(minx, 3),
-                            y=round(miny, 3),
-                            width=rw,
-                            depth=rd,
-                        )
-                    )
-                    notes.append(f"Utility ({area:.1f} sqm) added to Ground Floor.")
-                else:
-                    _absorb_into_adjacent(
-                        floor_plan, region, minx, miny, maxx, maxy, notes
-                    )
+        if is_topmost:
+            if rarea >= 15.0:
+                rid, name, rtype = _next_id("open_terrace"), "Open Terrace", "balcony"
+                note = f"Open Terrace ({rarea:.1f} sqm) added to top floor."
+            elif rarea >= 4.0:
+                rid, name, rtype = _next_id("utility_auto"), "Utility", "utility"
+                note = f"Utility ({rarea:.1f} sqm) added to top floor."
             else:
-                # < 4 m² → merge into adjacent room
-                _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes)
+                _absorb_or_store(
+                    floor_plan, region, minx, miny, maxx, maxy, notes, area, rw, rd
+                )
+                continue
+        else:
+            if rarea >= 8.0:
+                rid, name, rtype = _next_id("store_auto"), "Store Room", "store_room"
+                note = f"Store Room ({rarea:.1f} sqm) added to Ground Floor."
+            elif rarea >= 4.0:
+                rid, name, rtype = _next_id("utility_auto"), "Utility", "utility"
+                note = f"Utility ({rarea:.1f} sqm) added to Ground Floor."
+            else:
+                _absorb_or_store(
+                    floor_plan, region, minx, miny, maxx, maxy, notes, area, rw, rd
+                )
+                continue
+
+        floor_plan.rooms.append(
+            Room(
+                id=rid,
+                name=name,
+                type=rtype,
+                x=round(rminx, 3),
+                y=round(rminy, 3),
+                width=round(rmaxx - rminx, 3),
+                depth=round(rmaxy - rminy, 3),
+            )
+        )
+        notes.append(note)
 
     return notes
+
+
+def _absorb_or_store(
+    floor_plan: FloorPlan,
+    region,
+    minx: float,
+    miny: float,
+    maxx: float,
+    maxy: float,
+    notes: list[str],
+    area: float,
+    rw: float,
+    rd: float,
+) -> None:
+    """Absorb a small leftover into a neighbour; if geometry forbids that
+    (no room edge can slide over it), keep it as a small Store Room rather
+    than leaving dead space — but only when it is genuinely rectangular."""
+    if _absorb_into_adjacent(floor_plan, region, minx, miny, maxx, maxy, notes):
+        return
+    bbox_area = rw * rd
+    if area >= 1.5 and rw >= 1.2 and rd >= 1.2 and bbox_area > 0:
+        if area / bbox_area >= 0.95:
+            floor_plan.rooms.append(
+                Room(
+                    id=_next_id("store_auto"),
+                    name="Store",
+                    type="store_room",
+                    x=round(minx, 3),
+                    y=round(miny, 3),
+                    width=rw,
+                    depth=rd,
+                )
+            )
+            notes.append(
+                f"Store ({area:.1f} sqm) added on floor {floor_plan.floor} "
+                "(leftover space not absorbable by any adjacent room)."
+            )
 
 
 _NO_ABSORB_TYPES = {
@@ -265,11 +423,20 @@ def _split_oversized_wet_rooms(floor_plan: FloorPlan) -> list[str]:
         if rem_len < 0.9:  # nothing meaningful to carve off
             continue
         old_area = room.area
+        rem_area = rem_len * short_side
+        # A remainder bigger than a real passage becomes a real room —
+        # labelling a 15 m² strip "Passage" was the 38 sqm-Passage bug.
+        if rem_area >= 9.5:
+            rem_name, rem_type = "Family Lounge", "living"
+        elif rem_area > 6.0:
+            rem_name, rem_type = "Utility", "utility"
+        else:
+            rem_name, rem_type = "Passage", "passage"
         if along_width:
             passage = Room(
                 id=f"{room.id}_passage",
-                name="Passage",
-                type="passage",
+                name=rem_name,
+                type=rem_type,
                 x=round(room.x + wet_len + _IWT_GAP, 3),
                 y=room.y,
                 width=round(rem_len, 3),
@@ -279,8 +446,8 @@ def _split_oversized_wet_rooms(floor_plan: FloorPlan) -> list[str]:
         else:
             passage = Room(
                 id=f"{room.id}_passage",
-                name="Passage",
-                type="passage",
+                name=rem_name,
+                type=rem_type,
                 x=room.x,
                 y=round(room.y + wet_len + _IWT_GAP, 3),
                 width=room.width,
@@ -290,10 +457,53 @@ def _split_oversized_wet_rooms(floor_plan: FloorPlan) -> list[str]:
         floor_plan.rooms.append(passage)
         notes.append(
             f"{room.name} ({old_area:.1f} m²) was implausibly large for a wet "
-            f"room — split into {room.name} ({room.area:.1f} m²) + Passage "
+            f"room — split into {room.name} ({room.area:.1f} m²) + {rem_name} "
             f"({passage.area:.1f} m²) on floor {floor_plan.floor}."
         )
     return notes
+
+
+# Absorption priority: starved habitable rooms grow first; circulation last.
+# (Growing the largest neighbour — the old rule — is what ballooned Passages
+# to 38 sqm while a 5 sqm Study sat next to dead space.)
+_ABSORB_TIER = {
+    "study": 0,
+    "bedroom": 0,
+    "dining": 0,
+    "living": 0,
+    "home_office": 0,
+    "kitchen": 1,
+    "store_room": 2,
+    "balcony": 2,
+    "parking": 3,
+    "passage": 4,
+}
+
+
+def _floor_mm(v: float) -> float:
+    """Round DOWN to mm — expansions/creations must never overshoot into a
+    neighbour (the edit validator rejects any positive-area overlap)."""
+    import math
+
+    return math.floor(v * 1000 + 1e-9) / 1000
+
+
+def _ceil_mm(v: float) -> float:
+    import math
+
+    return math.ceil(v * 1000 - 1e-9) / 1000
+
+
+def _snap_rect_inward(bounds: tuple) -> tuple:
+    minx, miny, maxx, maxy = bounds
+    return _ceil_mm(minx), _ceil_mm(miny), _floor_mm(maxx), _floor_mm(maxy)
+
+
+def _largest_piece(geom):
+    if geom.geom_type in ("MultiPolygon", "GeometryCollection"):
+        polys = [g for g in geom.geoms if g.geom_type == "Polygon"]
+        return max(polys, key=lambda g: g.area) if polys else None
+    return geom if geom.geom_type == "Polygon" else None
 
 
 def _absorb_into_adjacent(
@@ -304,61 +514,88 @@ def _absorb_into_adjacent(
     maxx: float,
     maxy: float,
     notes: list[str],
-) -> None:
-    """Expand the largest room that shares an edge with the leftover region."""
-    tol = 0.05
-    candidates = []
-    for room in floor_plan.rooms:
-        # Shares right edge with leftover's left edge
-        if (
-            abs(room.x + room.width - minx) < tol
-            and room.y < maxy
-            and room.y + room.depth > miny
-        ):
-            candidates.append((room, "right"))
-        # Shares top edge with leftover's bottom edge
-        elif (
-            abs(room.y + room.depth - miny) < tol
-            and room.x < maxx
-            and room.x + room.width > minx
-        ):
-            candidates.append((room, "top"))
-        # Shares left edge with leftover's right edge
-        elif abs(room.x - maxx) < tol and room.y < maxy and room.y + room.depth > miny:
-            candidates.append((room, "left"))
-        # Shares bottom edge with leftover's top edge
-        elif abs(room.y - maxy) < tol and room.x < maxx and room.x + room.width > minx:
-            candidates.append((room, "bottom"))
+) -> bool:
+    """Distribute a leftover region into adjacent rooms.
 
-    if not candidates:
-        return
+    Greedy strip decomposition: repeatedly find the best (priority tier,
+    smallest room, largest gain) axis-aligned strip that extends one room's
+    edge and is fully contained in the remaining empty region, apply it, and
+    subtract it. Expansion is strictly containment-checked — a room never
+    grows over another room. Returns True if any room was expanded.
+    """
+    from shapely.geometry import box
 
-    # Wet rooms and stairs must not swallow leftover space — a toilet that
-    # absorbs a 2 m band stays labelled "Toilet" at an absurd size (the
-    # "TOILET 2 — 275 SQFT" bug). Prefer any non-capped neighbour.
-    preferred = [rc for rc in candidates if rc[0].type not in _NO_ABSORB_TYPES]
-    if preferred:
-        candidates = preferred
+    remaining = region
+    absorbed_any = False
+    for _ in range(10):
+        if remaining.is_empty or remaining.area < 0.3:
+            return absorbed_any
+        piece = _largest_piece(remaining)
+        if piece is None or piece.area < 0.3:
+            return absorbed_any
 
-    # Pick the candidate with the largest area
-    best_room, direction = max(candidates, key=lambda rc: rc[0].area)
-    old_area = best_room.area
+        # Raw coords — see _largest_inscribed_rect; rounded coords can push a
+        # strip past the true boundary into a neighbouring room.
+        coords = list(piece.exterior.coords)
+        for hole in piece.interiors:
+            coords.extend(hole.coords)
+        xs = sorted({c[0] for c in coords})
+        ys = sorted({c[1] for c in coords})
 
-    if direction == "right":
-        best_room.width = round(best_room.width + (maxx - minx), 3)
-    elif direction == "top":
-        best_room.depth = round(best_room.depth + (maxy - miny), 3)
-    elif direction == "left":
-        best_room.x = round(minx, 3)
-        best_room.width = round(best_room.width + (maxx - minx), 3)
-    elif direction == "bottom":
-        best_room.y = round(miny, 3)
-        best_room.depth = round(best_room.depth + (maxy - miny), 3)
+        best = None  # (tier, room_area, -gain, room, strip, direction, dist)
+        for room in floor_plan.rooms:
+            if room.type in _NO_ABSORB_TYPES:
+                continue
+            tier = _ABSORB_TIER.get(room.type, 1)
+            rx2 = round(room.x + room.width, 3)
+            ry2 = round(room.y + room.depth, 3)
+            trials = []
+            for t in (x - rx2 for x in xs if x > rx2 + 0.05):
+                trials.append(("right", box(rx2, room.y, rx2 + t, ry2), t))
+            for t in (room.x - x for x in xs if x < room.x - 0.05):
+                trials.append(("left", box(room.x - t, room.y, room.x, ry2), t))
+            for t in (y - ry2 for y in ys if y > ry2 + 0.05):
+                trials.append(("top", box(room.x, ry2, rx2, ry2 + t), t))
+            for t in (room.y - y for y in ys if y < room.y - 0.05):
+                trials.append(("bottom", box(room.x, room.y - t, rx2, room.y), t))
+            for direction, strip, dist in trials:
+                if strip.area < 0.25:
+                    continue
+                if strip.difference(piece).area > 1e-6:
+                    continue  # not fully contained in empty space
+                cand = (tier, room.area, -strip.area, room, strip, direction, dist)
+                if best is None or cand[:3] < best[:3]:
+                    best = cand
+            # (largest contained strip per direction wins via -gain ordering)
 
-    notes.append(
-        f"{best_room.name} expanded from {old_area:.1f} m² → {best_room.area:.1f} m² "
-        f"to absorb unused space on floor {floor_plan.floor}."
-    )
+        if best is None:
+            # No contained strip — leave the remainder for the rect-fill
+            # pass. (The old fallback expanded a room across the region's
+            # whole bounding box, stamping it over other rooms.)
+            return absorbed_any
+
+        _, _, _, room, strip, direction, dist = best
+        old_area = room.area
+        dist = _floor_mm(dist)  # never overshoot into a neighbour
+        if dist <= 0:
+            return absorbed_any
+        if direction == "right":
+            room.width = round(room.width + dist, 3)
+        elif direction == "left":
+            room.x = round(room.x - dist, 3)
+            room.width = round(room.width + dist, 3)
+        elif direction == "top":
+            room.depth = round(room.depth + dist, 3)
+        else:  # bottom
+            room.y = round(room.y - dist, 3)
+            room.depth = round(room.depth + dist, 3)
+        remaining = remaining.difference(strip)
+        absorbed_any = True
+        notes.append(
+            f"{room.name} expanded from {old_area:.1f} m² → {room.area:.1f} m² "
+            f"to absorb unused space on floor {floor_plan.floor}."
+        )
+    return absorbed_any
 
 
 def generate(cfg: PlotConfig) -> list[Layout]:
@@ -466,6 +703,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             notes = _fill_blank_areas(fp, cfg, ewt, is_topmost=is_top)
             space_notes.extend(notes)
             space_notes.extend(_split_oversized_wet_rooms(fp))
+            _trim_micro_overlaps(fp)
 
         layout.space_notes = list(layout.space_notes) + space_notes
 

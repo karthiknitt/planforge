@@ -22,8 +22,11 @@ const SUPPORTED_CITIES = [
 type SupportedCity = (typeof SUPPORTED_CITIES)[number];
 
 function formatINR(amount: number): string {
-  if (amount >= 10_00_000) {
-    return `₹${(amount / 10_00_000).toFixed(2)}L`;
+  if (amount >= 1_00_00_000) {
+    return `₹${(amount / 1_00_00_000).toFixed(2)}Cr`;
+  }
+  if (amount >= 1_00_000) {
+    return `₹${(amount / 1_00_000).toFixed(2)}L`;
   }
   if (amount >= 1_000) {
     return `₹${(amount / 1_000).toFixed(1)}K`;
@@ -86,7 +89,16 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
         a.download = `planforge-boq-layout-${layoutId}.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
+      } else {
+        try {
+          const errData = await res.json();
+          setError(errData.detail || "Failed to download Excel file");
+        } catch {
+          setError(`Download failed: ${res.statusText}`);
+        }
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed");
     } finally {
       setDownloading(false);
     }

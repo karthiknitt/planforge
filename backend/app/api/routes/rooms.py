@@ -101,15 +101,19 @@ def _check_placement(
     rooms: list[dict],
     project: Project,
 ) -> tuple[bool, str]:
+    # Area-based checks with a 1 mm² epsilon — exact intersects/touches
+    # predicates reject float noise (1.23 + 4.147 == 5.377000000000001, so
+    # two rooms sharing an edge "overlap" by ~1e-15 m and fail spuriously).
+    _EPS_AREA = 1e-6
     new_poly = box(x, y, x + w, y + d)
     buildable = _buildable_box(project)
-    if not buildable.contains(new_poly):
+    if new_poly.difference(buildable).area > _EPS_AREA:
         return False, "Extends outside buildable area (setback violation)"
     for r in rooms:
         if r["id"] == room_id:
             continue
         r_poly = box(r["x"], r["y"], r["x"] + r["width"], r["y"] + r["depth"])
-        if new_poly.intersects(r_poly) and not new_poly.touches(r_poly):
+        if new_poly.intersection(r_poly).area > _EPS_AREA:
             return False, f"Overlaps with {r['name']}"
     return True, ""
 

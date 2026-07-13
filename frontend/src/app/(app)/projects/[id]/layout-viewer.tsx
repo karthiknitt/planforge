@@ -31,7 +31,7 @@ import { ChatPanel } from "@/components/chat-panel";
 import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { LayoutCompareView } from "@/components/layout-compare-view";
-import { type Plan3DHandle, Plan3DScene } from "@/components/plan-3d-scene";
+import { type Plan3DHandle, Plan3DScene, type Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
 import { StructuralViewer } from "@/components/structural-viewer";
@@ -78,7 +78,12 @@ import type {
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
 import { tierAtLeast } from "@/lib/plan";
-import { buildRenderImageUrl, classifyRenderStatus } from "@/lib/render-tab";
+import {
+  buildRenderImageUrl,
+  classifyRenderStatus,
+  floorKeyFromIndex,
+  type RenderFloorKey,
+} from "@/lib/render-tab";
 import { type TabId, visibleTabs } from "@/lib/tabs";
 
 interface RevisionListItem {
@@ -181,24 +186,82 @@ function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKe
   );
 }
 
-// ── Render tab — generate + view an AI render of the active layout, Pro-gated ──
-// "checking" probes the GET endpoint (via a hidden <img>) to see if a render
-// already exists from a previous session; "busy" tracks an in-flight POST
-// separately so a regenerate can keep showing the last successful image.
+// ── Render tab — generate + view AI renders per floor, Pro-gated ──────────────
+// One FloorRenderSection per available floor: "checking" probes the GET
+// endpoint (via a hidden <img>) to see if a render already exists; "busy"
+// tracks an in-flight POST separately so a regenerate can keep showing the
+// last successful image.
 type RenderPhase = "checking" | "none" | "ready" | "upsell" | "unavailable" | "error";
 
 function RenderTab({
   projectId,
   layoutKey,
   planTier,
-  r3fPng,
+  floors,
+  r3fPngs,
   registerTrigger,
 }: {
   projectId: string;
   layoutKey: string;
   planTier: string;
+  floors: { label: string; index: number }[];
+  r3fPngs: Record<number, string | null>;
+  registerTrigger?: (fn: (floorIndex: number, png?: string | null) => void) => void;
+}) {
+  const isPro = tierAtLeast(planTier, "pro");
+  const sectionTriggers = useRef<Record<string, (png?: string | null) => void>>({});
+  useEffect(() => {
+    registerTrigger?.((floorIndex: number, png?: string | null) => {
+      sectionTriggers.current[floorKeyFromIndex(floorIndex)]?.(png);
+    });
+  }, [registerTrigger]);
+
+  if (!isPro) {
+    return (
+      <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
+        <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
+        <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
+        <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
+        <Button asChild className="mt-4" size="sm" variant="outline">
+          <Link href="/pricing">Upgrade to Pro</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {floors.map((f) => (
+        <FloorRenderSection
+          key={f.index}
+          projectId={projectId}
+          layoutKey={layoutKey}
+          floorKey={floorKeyFromIndex(f.index)}
+          label={f.label}
+          r3fPng={r3fPngs[f.index]}
+          register={(fn) => {
+            sectionTriggers.current[floorKeyFromIndex(f.index)] = fn;
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FloorRenderSection({
+  projectId,
+  layoutKey,
+  floorKey,
+  label,
+  r3fPng,
+  register,
+}: {
+  projectId: string;
+  layoutKey: string;
+  floorKey: RenderFloorKey;
+  label: string;
   r3fPng?: string | null;
-  registerTrigger?: (fn: (png?: string | null) => void) => void;
+  register?: (fn: (png?: string | null) => void) => void;
 }) {
   const [phase, setPhase] = useState<RenderPhase>("checking");
   const [busy, setBusy] = useState(false);
@@ -213,18 +276,19 @@ function RenderTab({
     void handleGenerate(png);
   };
   useEffect(() => {
-    registerTrigger?.((png?: string | null) => handleGenRef.current(png));
-  }, [registerTrigger]);
+    register?.((png?: string | null) => handleGenRef.current(png));
+  }, [register]);
 
-  // Reset and re-check whenever the viewed layout changes.
+  // Reset and re-check whenever the viewed project/layout changes — the
+  // version cache-buster must reset too, or a previous project's cached
+  // image URL could be shown (the stale-render bug).
   // biome-ignore lint/correctness/useExhaustiveDependencies: projectId/layoutKey are intentional re-check triggers, not read in the body
   useEffect(() => {
     setPhase("checking");
     setError("");
     setJob(null);
+    setVersion(0);
   }, [projectId, layoutKey]);
-
-  const isPro = tierAtLeast(planTier, "pro");
 
   async function handleGenerate(overridePng?: string | null) {
     setBusy(true);
@@ -239,7 +303,7 @@ function RenderTab({
         fd.append("reference", blob, "r3f.png");
       }
       const res = await fetch(
-        `/api/backend/projects/${projectId}/layouts/${layoutKey}/render-jobs`,
+        `/api/backend/projects/${projectId}/layouts/${layoutKey}/render-jobs?floor=${floorKey}`,
         { method: "POST", body: fd }
       );
       const outcome = classifyRenderStatus(res.status);
@@ -307,28 +371,16 @@ function RenderTab({
     }
   }, [renderJobPhase, job?.error]);
 
-  if (!isPro) {
-    return (
-      <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-        <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-        <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-        <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
-        <Button asChild className="mt-4" size="sm" variant="outline">
-          <Link href="/pricing">Upgrade to Pro</Link>
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3">
+      <p className="font-medium text-sm">{label}</p>
       {phase === "checking" && (
         <>
           <Skeleton className="h-64 w-full max-w-xl rounded-xl" />
           {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
           {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
           <img
-            src={buildRenderImageUrl(projectId, layoutKey, version)}
+            src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
             alt=""
             className="hidden"
             onLoad={() => setPhase("ready")}
@@ -341,8 +393,8 @@ function RenderTab({
         <>
           {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
           <img
-            src={buildRenderImageUrl(projectId, layoutKey, version)}
-            alt="AI render of the active layout"
+            src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
+            alt={`AI render — ${label}`}
             className="w-full max-w-xl rounded-xl border"
           />
         </>
@@ -350,8 +402,8 @@ function RenderTab({
 
       {phase === "none" && (
         <p className="text-sm text-muted-foreground">
-          No render yet for this layout. Generate an AI-rendered visualisation from the current
-          floor plan.
+          No render yet for the {label.toLowerCase()} of this layout. Generate an AI-rendered
+          visualisation from the current floor plan.
         </p>
       )}
 
@@ -699,24 +751,37 @@ export function LayoutViewer({
 
   // ── R3F 3D engine (geometric conditioning image for the AI render) ───────
   const plan3dApiRef = useRef<Plan3DHandle | null>(null);
-  const [r3fPng, setR3fPng] = useState<string | null>(null);
-  const renderTriggerRef = useRef<(png?: string | null) => void>(() => {});
+  // One captured snapshot per floor index — each floor gets its own render.
+  const [r3fPngs, setR3fPngs] = useState<Record<number, string | null>>({});
+  const [r3fView, setR3fView] = useState<Plan3DView>("top");
+  const renderTriggerRef = useRef<(floorIndex: number, png?: string | null) => void>(() => {});
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
-  const captureR3f = useCallback(() => plan3dApiRef.current?.capture() ?? null, []);
   const [floor, setFloor] = useState(0);
+  // Snapshots are per layout — drop them when the viewed layout changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedId is an intentional reset trigger, not read in the body
+  useEffect(() => {
+    setR3fPngs({});
+  }, [selectedId]);
+  const captureR3f = useCallback(() => {
+    const png = plan3dApiRef.current?.capture() ?? null;
+    if (png) setR3fPngs((prev) => ({ ...prev, [floor]: png }));
+    return png;
+  }, [floor]);
   const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
   const tabs = visibleTabs(agentChatEnabled);
   const [activeTab, setActiveTab] = useState<TabId>("plan");
-  // Auto-capture the offscreen R3F view as a preview when the Render tab opens.
+  // Auto-capture the offscreen R3F view when the Render tab opens or the
+  // viewed floor / camera view changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: r3fView is an intentional re-capture trigger (the Canvas remounts on view change), not read in the body
   useEffect(() => {
     if (activeTab === "r3f" && mounted) {
-      const t = setTimeout(() => setR3fPng(captureR3f()), 500);
+      const t = setTimeout(() => captureR3f(), 500);
       return () => clearTimeout(t);
     }
-  }, [activeTab, mounted, captureR3f]);
+  }, [activeTab, mounted, captureR3f, r3fView]);
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -1898,6 +1963,7 @@ export function LayoutViewer({
             plotWidth={plotWidth}
             plotLength={plotLength}
             roadSide={roadSide}
+            view={r3fView}
           />
         )}
       </div>
@@ -2432,7 +2498,8 @@ export function LayoutViewer({
           projectId={projectId}
           layoutKey={selectedId}
           planTier={planTier}
-          r3fPng={r3fPng}
+          floors={availableFloors.map((f) => ({ label: f.label, index: f.index }))}
+          r3fPngs={r3fPngs}
           registerTrigger={(fn) => {
             renderTriggerRef.current = fn;
           }}
@@ -2442,38 +2509,63 @@ export function LayoutViewer({
       {activeTab === "r3f" && (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            Geometric 3D view of the active floor, built from the exact plan dimensions. Use it to
-            condition the photorealistic AI render.
+            Geometric plan view of the selected floor, built from the exact plan dimensions. Use it
+            to condition the photorealistic AI render — one render per floor.
           </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {availableFloors.map((f) => (
+              <Button
+                key={f.index}
+                size="sm"
+                variant={floor === f.index ? "default" : "outline"}
+                onClick={() => setFloor(f.index)}
+              >
+                {f.label}
+              </Button>
+            ))}
+            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+            <Button
+              size="sm"
+              variant={r3fView === "top" ? "default" : "outline"}
+              onClick={() => setR3fView("top")}
+            >
+              Plan view
+            </Button>
+            <Button
+              size="sm"
+              variant={r3fView === "iso" ? "default" : "outline"}
+              onClick={() => setR3fView("iso")}
+            >
+              3D view
+            </Button>
+          </div>
           <div className="w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
-            {r3fPng ? (
+            {r3fPngs[floor] ? (
               // biome-ignore lint/performance/noImgElement: captured canvas PNG, not a next/image candidate
-              <img src={r3fPng} alt="3D geometric view of the active floor" className="w-full" />
+              <img
+                src={r3fPngs[floor] ?? undefined}
+                alt={`Geometric view — ${currentFloorEntry.label}`}
+                className="w-full"
+              />
             ) : (
               <Skeleton className="h-64 w-full rounded-none" />
             )}
           </div>
           <div className="flex w-fit flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => setR3fPng(captureR3f())}
-            >
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => captureR3f()}>
               <RefreshCw className="h-3 w-3" />
-              Refresh 3D view
+              Refresh view
             </Button>
             <Button
               size="sm"
               className="gap-1.5"
               onClick={() => {
                 const png = captureR3f();
-                setR3fPng(png);
                 setActiveTab("render");
-                renderTriggerRef.current(png);
+                renderTriggerRef.current(floor, png);
               }}
             >
-              Generate AI Render
+              Generate AI Render — {currentFloorEntry.label}
             </Button>
           </div>
         </div>

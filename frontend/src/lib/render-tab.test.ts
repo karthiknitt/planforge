@@ -1,20 +1,33 @@
 import { describe, expect, it } from "bun:test";
-import { buildRenderImageUrl, classifyRenderStatus } from "./render-tab";
+import { buildRenderImageUrl, classifyRenderStatus, floorKeyFromIndex } from "./render-tab";
 
 describe("buildRenderImageUrl", () => {
-  it("builds the GET render URL with a cache-busting version param", () => {
+  it("builds the GET render URL with floor + cache-busting version params", () => {
     expect(buildRenderImageUrl("proj-1", "A", 0)).toBe(
-      "/api/backend/projects/proj-1/layouts/A/render?v=0"
+      "/api/backend/projects/proj-1/layouts/A/render?floor=ground_floor&v=0"
     );
-    expect(buildRenderImageUrl("proj-1", "A", 3)).toBe(
-      "/api/backend/projects/proj-1/layouts/A/render?v=3"
+    expect(buildRenderImageUrl("proj-1", "A", 3, "first_floor")).toBe(
+      "/api/backend/projects/proj-1/layouts/A/render?floor=first_floor&v=3"
     );
   });
 
   it("encodes projectId and layoutKey so special characters can't break the path", () => {
     expect(buildRenderImageUrl("proj 1", "A/B", 0)).toBe(
-      "/api/backend/projects/proj%201/layouts/A%2FB/render?v=0"
+      "/api/backend/projects/proj%201/layouts/A%2FB/render?floor=ground_floor&v=0"
     );
+  });
+});
+
+describe("floorKeyFromIndex", () => {
+  it("maps viewer floor indices to geometry dict keys", () => {
+    expect(floorKeyFromIndex(-1)).toBe("basement_floor");
+    expect(floorKeyFromIndex(0)).toBe("ground_floor");
+    expect(floorKeyFromIndex(1)).toBe("first_floor");
+    expect(floorKeyFromIndex(2)).toBe("second_floor");
+  });
+
+  it("falls back to ground floor for unknown indices", () => {
+    expect(floorKeyFromIndex(99)).toBe("ground_floor");
   });
 });
 

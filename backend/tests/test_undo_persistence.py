@@ -54,8 +54,17 @@ async def test_undo_survives_a_fresh_session(client_db):
     ).json()
     first = rooms[0]
 
-    # Small shift within the inter-room gap (rooms are separated by a 0.115m
-    # iwt gap in generated layouts — a larger delta collides with a neighbor).
+    # Generated rooms fill the buildable envelope, so a pure outward shift
+    # collides with a neighbour or the setback line. Shrink the room first,
+    # then move it inside the freed space — both operations push undo frames.
+    shrunk = await client.post(
+        f"/api/projects/{project_id}/rooms/{first['id']}/resize",
+        json={"new_width": round(first["width"] - 0.1, 3)},
+        headers={"X-Test-User-Id": "u1"},
+    )
+    assert shrunk.status_code == 200, shrunk.text
+    assert shrunk.json()["success"] is True
+
     moved = await client.post(
         f"/api/projects/{project_id}/rooms/{first['id']}/move",
         json={"x": first["x"] + 0.05, "y": first["y"]},
@@ -68,7 +77,7 @@ async def test_undo_survives_a_fresh_session(client_db):
     async with SessionLocal() as session:
         row = await session.get(UndoStack, (project_id, "u1"))
         assert row is not None
-        assert len(row.stack) == 1
+        assert len(row.stack) == 2
 
     undone = await client.post(
         f"/api/projects/{project_id}/rooms/undo", headers={"X-Test-User-Id": "u1"}

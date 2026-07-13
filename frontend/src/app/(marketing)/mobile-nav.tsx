@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export function MobileNav() {
+interface MobileNavProps {
+  isAuthenticated?: boolean;
+}
+
+export function MobileNav({ isAuthenticated = false }: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -44,23 +48,38 @@ export function MobileNav() {
             >
               Pricing
             </Link>
-            <Link
-              href="/sign-in"
-              onClick={() => setOpen(false)}
-              className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              Sign In
-            </Link>
-            <div className="pt-2 pb-1">
-              <Link href="/sign-up" onClick={() => setOpen(false)}>
-                <Button
-                  size="sm"
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine"
+            {isAuthenticated ? (
+              <div className="pt-2 pb-1">
+                <Link href="/dashboard" onClick={() => setOpen(false)}>
+                  <Button
+                    size="sm"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine"
+                  >
+                    Dashboard
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <>
+                <Link
+                  href="/sign-in"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
-                  Get Started Free
-                </Button>
-              </Link>
-            </div>
+                  Sign In
+                </Link>
+                <div className="pt-2 pb-1">
+                  <Link href="/sign-up" onClick={() => setOpen(false)}>
+                    <Button
+                      size="sm"
+                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine"
+                    >
+                      Get Started Free
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            )}
           </nav>
         </div>
       )}

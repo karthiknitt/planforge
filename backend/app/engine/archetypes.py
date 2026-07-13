@@ -297,6 +297,43 @@ def _bed_rooms_ff(
     return rooms
 
 
+def _stair_band_rooms(
+    cfg: PlotConfig,
+    x: float,
+    y: float,
+    band_w: float,
+    band_d: float,
+    iwt: float,
+) -> list[Room]:
+    """Fill the FF strip beside the staircase.
+
+    The old archetypes gave the whole band to Toilet 2 (or Landing); on wide
+    plots that made a 13 m x 3 m "toilet" which _split_oversized_wet_rooms
+    carved into a ~38 sqm Passage. Cap the toilet at spec-sane size and turn
+    the remainder into a real room (Family Lounge) or a small Landing.
+    """
+    rooms: list[Room] = []
+    rem_x, rem_w = x, band_w
+    if cfg.toilets >= 2 and band_w > 0.5:
+        t2_w = min(band_w, 2.0)
+        rooms.append(_r("ff_toilet_2", "Toilet 2", "toilet", x, y, t2_w, band_d))
+        rem_x = x + t2_w + iwt
+        rem_w = band_w - t2_w - iwt
+    rooms += _band_filler_rooms("ff", rem_x, y, rem_w, band_d)
+    return rooms
+
+
+def _band_filler_rooms(
+    prefix: str, x: float, y: float, w: float, d: float
+) -> list[Room]:
+    """Turn a leftover band strip into a Family Lounge (if room-sized) or Landing."""
+    if w <= 0.5:
+        return []
+    if w * d >= 9.5:
+        return [_r(f"{prefix}_lounge", "Family Lounge", "living", x, y, w, d)]
+    return [_r(f"{prefix}_landing", "Landing", "utility", x, y, w, d)]
+
+
 # ---------------------------------------------------------------------------
 # Layout A - Front Staircase
 # ---------------------------------------------------------------------------
@@ -436,31 +473,9 @@ def layout_a(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     ff_rooms: list[Room] = []
 
     ff_rooms.append(_r("ff_stair", "Staircase", "staircase", ox, oy, STAIR_W, d_stair))
-    wc2_w = W - STAIR_W - iwt
-    if cfg.toilets >= 2:
-        ff_rooms.append(
-            _r(
-                "ff_toilet_2",
-                "Toilet 2",
-                "toilet",
-                ox + STAIR_W + iwt,
-                oy,
-                wc2_w,
-                d_stair,
-            )
-        )
-    else:
-        ff_rooms.append(
-            _r(
-                "ff_landing",
-                "Landing",
-                "utility",
-                ox + STAIR_W + iwt,
-                oy,
-                wc2_w,
-                d_stair,
-            )
-        )
+    ff_rooms += _stair_band_rooms(
+        cfg, ox + STAIR_W + iwt, oy, W - STAIR_W - iwt, d_stair, iwt
+    )
 
     bed_y = oy + d_stair + iwt
     d_bed = D - d_stair - iwt
@@ -468,7 +483,9 @@ def layout_a(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     # Study room on first floor if requested
     if cfg.has_study and d_bed > 3.5 and W > STUDY_W + iwt + 3.0:
         study_w = STUDY_W
-        d_study = min(d_bed, 3.0)
+        # Fill the full bedroom band depth — a depth cap left a dead gap
+        # behind the Study (the "5.25 sqm Study with space around it" bug).
+        d_study = d_bed
         ff_rooms.append(
             _r("ff_study", "Study", "study", ox + W - study_w, bed_y, study_w, d_study)
         )
@@ -484,7 +501,7 @@ def layout_a(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     if cfg.has_balcony and d_bed > 2.5:
         bal_d = 1.2
         for rm in ff_rooms:
-            if rm.type == "bedroom" and abs(rm.y - bed_y) < 0.01:
+            if rm.type in ("bedroom", "study") and abs(rm.y - bed_y) < 0.01:
                 rm.depth = round(rm.depth - bal_d - iwt, 3)
         ff_rooms.append(
             _r(
@@ -630,30 +647,7 @@ def layout_b(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     ff_rooms.append(
         _r("ff_stair", "Staircase", "staircase", ox, stair_y, STAIR_W, d_stair)
     )
-    if cfg.toilets >= 2:
-        ff_rooms.append(
-            _r(
-                "ff_toilet_2",
-                "Toilet 2",
-                "toilet",
-                ox + STAIR_W + iwt,
-                stair_y,
-                wc_w,
-                d_stair,
-            )
-        )
-    else:
-        ff_rooms.append(
-            _r(
-                "ff_landing",
-                "Landing",
-                "utility",
-                ox + STAIR_W + iwt,
-                stair_y,
-                wc_w,
-                d_stair,
-            )
-        )
+    ff_rooms += _stair_band_rooms(cfg, ox + STAIR_W + iwt, stair_y, wc_w, d_stair, iwt)
 
     # Rear zone on first floor: bed 3 (3BHK+), study, or utility
     if n_beds >= 3:
@@ -801,14 +795,7 @@ def layout_c(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
         _r("ff_stair", "Staircase", "staircase", stair_x, stair_y, STAIR_W, d_stair)
     )
     toilet_zone_w = W - STAIR_W - iwt
-    if cfg.toilets >= 2:
-        ff_rooms.append(
-            _r("ff_toilet_2", "Toilet 2", "toilet", ox, stair_y, toilet_zone_w, d_stair)
-        )
-    else:
-        ff_rooms.append(
-            _r("ff_landing", "Landing", "utility", ox, stair_y, toilet_zone_w, d_stair)
-        )
+    ff_rooms += _stair_band_rooms(cfg, ox, stair_y, toilet_zone_w, d_stair, iwt)
 
     gf = FloorPlan(floor=0, rooms=gf_rooms, columns=_columns_from_rooms(gf_rooms))
     ff = FloorPlan(floor=1, rooms=ff_rooms, columns=_columns_from_rooms(ff_rooms))
@@ -944,30 +931,7 @@ def layout_d(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     ff_rooms.append(_r("ff_stair", "Staircase", "staircase", ox, oy, STAIR_W, d_stair))
 
     landing_w = W - STAIR_W - iwt
-    if cfg.toilets >= 2:
-        ff_rooms.append(
-            _r(
-                "ff_toilet_2",
-                "Toilet 2",
-                "toilet",
-                ox + STAIR_W + iwt,
-                oy,
-                landing_w,
-                d_stair,
-            )
-        )
-    else:
-        ff_rooms.append(
-            _r(
-                "ff_landing",
-                "Landing",
-                "utility",
-                ox + STAIR_W + iwt,
-                oy,
-                landing_w,
-                d_stair,
-            )
-        )
+    ff_rooms += _stair_band_rooms(cfg, ox + STAIR_W + iwt, oy, landing_w, d_stair, iwt)
 
     bed_y = oy + d_stair + iwt
     d_bed = D - d_stair - iwt
@@ -1050,6 +1014,7 @@ def layout_e(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
         _r("gf_stair", "Staircase", "staircase", ox, stair_y, STAIR_W, d_mid)
     )
     t_ctr_w = W - STAIR_W - iwt
+    t1_w = min(t_ctr_w, 2.0)
     gf_rooms.append(
         _r(
             "gf_toilet_1",
@@ -1057,9 +1022,12 @@ def layout_e(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
             "toilet",
             ox + STAIR_W + iwt,
             stair_y,
-            t_ctr_w,
+            t1_w,
             d_mid,
         )
+    )
+    gf_rooms += _band_filler_rooms(
+        "gf", ox + STAIR_W + iwt + t1_w + iwt, stair_y, t_ctr_w - t1_w - iwt, d_mid
     )
 
     # Rear: open plan kitchen + dining
@@ -1093,30 +1061,7 @@ def layout_e(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     ff_rooms.append(
         _r("ff_stair", "Staircase", "staircase", ox, stair_y, STAIR_W, d_mid)
     )
-    if cfg.toilets >= 2:
-        ff_rooms.append(
-            _r(
-                "ff_toilet_2",
-                "Toilet 2",
-                "toilet",
-                ox + STAIR_W + iwt,
-                stair_y,
-                t_ctr_w,
-                d_mid,
-            )
-        )
-    else:
-        ff_rooms.append(
-            _r(
-                "ff_landing",
-                "Landing",
-                "utility",
-                ox + STAIR_W + iwt,
-                stair_y,
-                t_ctr_w,
-                d_mid,
-            )
-        )
+    ff_rooms += _stair_band_rooms(cfg, ox + STAIR_W + iwt, stair_y, t_ctr_w, d_mid, iwt)
 
     # Front zone → bedrooms
     bed_count = min(n_beds, 3) if n_beds == 4 else n_beds
@@ -1247,30 +1192,9 @@ def layout_f(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout | No
     ff_rooms.append(
         _r("ff_stair", "Staircase", "staircase", ox, rear_y, STAIR_W, d_rear)
     )
-    if cfg.toilets >= 2:
-        ff_rooms.append(
-            _r(
-                "ff_toilet_2",
-                "Toilet 2",
-                "toilet",
-                ox + STAIR_W + iwt,
-                rear_y,
-                W - STAIR_W - iwt,
-                d_rear,
-            )
-        )
-    else:
-        ff_rooms.append(
-            _r(
-                "ff_landing",
-                "Landing",
-                "utility",
-                ox + STAIR_W + iwt,
-                rear_y,
-                W - STAIR_W - iwt,
-                d_rear,
-            )
-        )
+    ff_rooms += _stair_band_rooms(
+        cfg, ox + STAIR_W + iwt, rear_y, W - STAIR_W - iwt, d_rear, iwt
+    )
 
     # Bedrooms around courtyard
     bed_count = min(n_beds, 3) if n_beds == 4 else n_beds

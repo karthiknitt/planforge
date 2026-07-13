@@ -29,6 +29,8 @@ class GenerationJob(Base):
     # Optional R3F 3D snapshot (PNG) sent by the frontend to condition the
     # render on exact geometry instead of the rasterised 2D PDF plan.
     reference_png: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # Floor the render job targets (geometry dict key); render jobs only.
+    render_floor: Mapped[str | None] = mapped_column(String(24), nullable=True)
     requested_by: Mapped[str] = mapped_column(String, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

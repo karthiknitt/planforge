@@ -212,8 +212,12 @@ class TestLayoutPatch:
         client, sf = client_db
         pid, layout = await self._setup(client, sf)
         rooms = self._rooms_payload(layout)
-        # Nudge the first GF room by 10 cm — position (x/y), not just size
-        rooms[0]["x"] = round(rooms[0]["x"] + 0.1, 3)
+        # Nudge the first GF room by 5 cm — position (x/y), not just size.
+        # Shrink the width by 10 cm in the same edit so the moved rect stays
+        # inside the room's original footprint: generated rooms now fill the
+        # buildable envelope, so a pure outward shift is a setback violation.
+        rooms[0]["x"] = round(rooms[0]["x"] + 0.05, 3)
+        rooms[0]["width"] = round(rooms[0]["width"] - 0.1, 3)
         res = await client.patch(
             f"/api/projects/{pid}/layouts/{layout['id']}",
             json={"rooms": rooms},

@@ -121,6 +121,7 @@
 
 /* ─── Dark Mode — Blueprint Dark ─────────────────────────────────────────── */
 .dark {
+  color-scheme: dark;
   --background: oklch(0.085 0.02 255); /* #070D1E deep navy-black */
   --foreground: oklch(0.92 0.012 252); /* #E2E8F8 cool off-white */
   --card: oklch(0.13 0.022 252); /* #0D1529 dark card */
@@ -547,6 +548,15 @@
   z-index: -1;
   animation: gradient-border 3s linear infinite;
   opacity: 0.5;
+}
+
+/* ─── Scrollbar hiding utility ──────────────────────────────────────────── */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* ─── Form element glow on focus (dark mode) ────────────────────────────── */

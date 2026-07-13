@@ -338,8 +338,13 @@ def _solve_one(
                 model.add_abs_equality(dyv, 2 * a.y + a.d - 2 * b.y - b.d)
                 dist_terms.append(pts * (dxv + dyv))
 
-    if dist_terms:
-        model.minimize(sum(dist_terms))
+    # Secondary pressure: grow rooms toward their spec max (w+d is a linear
+    # size proxy). Without this the solver returns minimum-area rooms and
+    # dumps all slack into leftover space (the "5 sqm Study, 38 sqm Passage"
+    # bug). Adjacency terms are points-weighted per mm, so they still dominate.
+    size_terms = [rv.w + rv.d for rv in room_vars]
+    if dist_terms or size_terms:
+        model.minimize(sum(dist_terms) - sum(size_terms))
 
     # ── Solve ─────────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()

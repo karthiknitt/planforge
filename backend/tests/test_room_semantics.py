@@ -36,12 +36,16 @@ def test_split_carves_oversized_toilet_into_toilet_plus_passage():
     notes = _split_oversized_wet_rooms(fp)
     toilet = next(r for r in fp.rooms if r.type == "toilet")
     assert toilet.area <= WET_CAP_SQM + 0.01, f"toilet still {toilet.area} sqm"
-    passage = [r for r in fp.rooms if r.type == "passage"]
-    assert passage, "remainder not carved into a passage"
+    # Remainder is typed by size: room-sized remainders become a real room
+    # (Family Lounge, living) instead of a giant mislabelled "Passage".
+    remainder = [r for r in fp.rooms if r.id == "ff_toilet_2_passage"]
+    assert remainder, "remainder not carved off the oversized toilet"
+    assert remainder[0].type == "living", remainder[0].type
+    assert remainder[0].name == "Family Lounge"
     # split leaves the standard iwt gap between the two new rooms
-    gap = passage[0].x - (toilet.x + toilet.width)
+    gap = remainder[0].x - (toilet.x + toilet.width)
     if gap < 0:
-        gap = toilet.x - (passage[0].x + passage[0].width)
+        gap = toilet.x - (remainder[0].x + remainder[0].width)
     assert abs(gap - IWT) < 1e-6
     assert notes, "split should be reported in space notes"
 

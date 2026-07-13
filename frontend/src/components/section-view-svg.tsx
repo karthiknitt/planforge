@@ -60,8 +60,11 @@ export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: Se
   const totalHPx = TOTAL_H * scale;
 
   const ox = PAD_X + (drawW - bPx) / 2;
-  // oy = SVG y of the GL (ground level line)
-  const oy = PAD_T + FOUND_D * scale + (drawH - totalHPx) / 2;
+  // oy = SVG y of the GL (ground level line).
+  // The drawn figure spans from parapet top (above GL) to foundation bottom
+  // (below GL); centering it vertically means offsetting GL down from the
+  // padded top by the parapet height, not the foundation depth.
+  const oy = PAD_T + EL_PARAPET_TOP * scale + (drawH - totalHPx) / 2;
 
   // Convert elevation (m, 0=GL, positive = up) to SVG y coordinate
   const sy = (elev: number) => oy - elev * scale;
