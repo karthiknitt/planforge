@@ -82,6 +82,16 @@ def test_score_adjacency_kitchen_dining():
     assert score > 0
 
 
+def test_score_adjacency_kitchen_toilet_wetzone():
+    # UPAVP EWS type-design drawings (15/25, 18/40) consistently cluster
+    # kitchen with toilet/bath to share a single plumbing stack.
+    kitchen = _make_room("k", "kitchen", 0, 0, 2, 2)
+    toilet = _make_room("t", "toilet", 2, 0, 1.5, 2)  # shares wall with kitchen
+    layout = _make_layout([kitchen, toilet])
+    score = _score_adjacency(layout)
+    assert score > 0
+
+
 def test_score_layout_returns_all_components():
     cfg = _basic_cfg()
     rooms = [

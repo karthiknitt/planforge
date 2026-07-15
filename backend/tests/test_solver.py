@@ -81,6 +81,63 @@ def test_solve_layouts_pass_compliance():
         )
 
 
+def test_solve_columns_use_wall_junction_pipeline_not_room_corners():
+    # Regression: solver used to place a column at all 4 corners of every
+    # room (deduped only by rounded coordinate) via a local `_corner_cols`
+    # helper — dense, structurally unjustified "intermediate" column grids
+    # independent of the correct wall-junction + beam-span logic that
+    # plan_geometry.build_floor_drawing already used for the structural
+    # pages. This asserts solver.py's FloorPlan.columns are exactly what
+    # the shared derive_walls/derive_junctions/derive_columns pipeline
+    # produces for the same rooms — i.e. solver.py stays wired to the one
+    # correct implementation instead of drifting back to a duplicate.
+    from app.engine.geometry import buildable_polygon
+    from app.engine.plan_geometry import derive_columns, derive_junctions, derive_walls
+
+    cfg = _basic_cfg(
+        plot_length=15.0, plot_width=12.0, num_bedrooms=3, toilets=2, parking=True
+    )
+    ewt = 0.23
+    layouts = solve_layouts(cfg, ewt)
+    assert layouts, "expected at least one solver layout for this fixture"
+    buildable = buildable_polygon(cfg)
+
+    naive_corner_total = 0
+    pipeline_total = 0
+    for layout in layouts:
+        for floor_plan in (layout.ground_floor, layout.first_floor):
+            if not floor_plan.rooms:
+                continue
+            walls = derive_walls(floor_plan.rooms, buildable, ewt=ewt)
+            junctions = derive_junctions(walls)
+            expected = derive_columns(walls, junctions=junctions)
+            expected_pts = {(round(c.cx, 3), round(c.cy, 3)) for c in expected}
+            actual_pts = {(round(c.x, 3), round(c.y, 3)) for c in floor_plan.columns}
+            assert actual_pts == expected_pts, (
+                f"layout {layout.id} floor {floor_plan.floor}: solver columns "
+                "diverge from the shared derive_columns pipeline"
+            )
+
+            naive_corners = {
+                (round(cx, 2), round(cy, 2))
+                for r in floor_plan.rooms
+                for cx, cy in [
+                    (r.x, r.y),
+                    (r.x + r.width, r.y),
+                    (r.x, r.y + r.depth),
+                    (r.x + r.width, r.y + r.depth),
+                ]
+            }
+            naive_corner_total += len(naive_corners)
+            pipeline_total += len(expected_pts)
+
+    # Aggregated across all floors of all layouts, the span-aware pipeline
+    # should still come out below the old naive per-room-corner scheme —
+    # even though a single floor can occasionally need a couple more
+    # exterior-ring columns than its rooms happen to touch.
+    assert pipeline_total < naive_corner_total
+
+
 def test_solve_too_small_plot_returns_empty():
     cfg = _basic_cfg(
         plot_length=5.0,

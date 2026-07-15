@@ -375,31 +375,41 @@ def _solve_one(
         )
         (gf_rooms if rv.floor == 0 else ff_rooms).append(room)
 
-    # Simple corner columns
-    def _corner_cols(rooms: list[Room]) -> list[Column]:
-        cols = []
-        seen: set[tuple[float, float]] = set()
-        for r in rooms:
-            for cx, cy in [
-                (r.x, r.y),
-                (r.x + r.width, r.y),
-                (r.x, r.y + r.depth),
-                (r.x + r.width, r.y + r.depth),
-            ]:
-                k = (round(cx, 2), round(cy, 2))
-                if k not in seen:
-                    seen.add(k)
-                    cols.append(Column(x=cx, y=cy))
-        return cols
+    # Structural columns: only at exterior-ring junctions, true 4-way
+    # crossings, or interior T-junctions whose removal would leave a beam
+    # span exceeding max_beam_span_m — NOT at every room corner (that placed
+    # a column on both sides of every internal partition, producing dense,
+    # visually cluttered "intermediate" grids that add no structural value).
+    def _wall_junction_cols(rooms: list[Room]) -> list[Column]:
+        if not rooms:
+            return []
+        from app.engine.geometry import buildable_polygon
+        from app.engine.plan_geometry import (
+            derive_columns,
+            derive_junctions,
+            derive_walls,
+        )
+
+        buildable = buildable_polygon(cfg)
+        walls = derive_walls(rooms, buildable, ewt=ewt)
+        junctions = derive_junctions(walls)
+        columns = derive_columns(walls, junctions=junctions)
+        return [Column(x=c.cx, y=c.cy) for c in columns]
 
     from .compliance import check, load_rules
     from .vastu import check_vastu
 
     gf = FloorPlan(
-        floor=0, floor_type="ground", rooms=gf_rooms, columns=_corner_cols(gf_rooms)
+        floor=0,
+        floor_type="ground",
+        rooms=gf_rooms,
+        columns=_wall_junction_cols(gf_rooms),
     )
     ff = FloorPlan(
-        floor=1, floor_type="first", rooms=ff_rooms, columns=_corner_cols(ff_rooms)
+        floor=1,
+        floor_type="first",
+        rooms=ff_rooms,
+        columns=_wall_junction_cols(ff_rooms),
     )
 
     from .models import ComplianceResult

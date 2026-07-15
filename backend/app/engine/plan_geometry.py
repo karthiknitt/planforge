@@ -287,14 +287,119 @@ def derive_junctions(walls: list[WallSegment], tol: float = 0.01) -> list[WallJu
     return junctions
 
 
+def _on_exterior_ring(
+    ext_walls: list[WallSegment], x: float, y: float, tol: float
+) -> bool:
+    for w in ext_walls:
+        if _is_vertical(w):
+            lo, hi = min(w.y1, w.y2), max(w.y1, w.y2)
+            if abs(w.x1 - x) <= tol and lo - tol <= y <= hi + tol:
+                return True
+        else:
+            lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+            if abs(w.y1 - y) <= tol and lo - tol <= x <= hi + tol:
+                return True
+    return False
+
+
+def _through_axes(
+    walls: list[WallSegment], x: float, y: float, tol: float
+) -> tuple[bool, bool]:
+    """(horizontal_through, vertical_through) at (x, y): whether a wall
+    continues on BOTH sides along that axis (vs. dead-ending there)."""
+    has_n = has_s = has_e = has_w = False
+    for w in walls:
+        if _is_vertical(w):
+            if abs(w.x1 - x) > tol:
+                continue
+            lo, hi = min(w.y1, w.y2), max(w.y1, w.y2)
+            if lo - tol <= y <= hi + tol:
+                if hi > y + tol:
+                    has_n = True
+                if lo < y - tol:
+                    has_s = True
+        else:
+            if abs(w.y1 - y) > tol:
+                continue
+            lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+            if lo - tol <= x <= hi + tol:
+                if hi > x + tol:
+                    has_e = True
+                if lo < x - tol:
+                    has_w = True
+    return (has_e and has_w, has_n and has_s)
+
+
 def derive_columns(
     walls: list[WallSegment],
     tol: float = 0.01,
     junctions: list[WallJunction] | None = None,
+    max_beam_span_m: float | None = None,
 ) -> list[ColumnMarker]:
+    """Place columns only where structurally significant.
+
+    Every wall junction used to get a column, including interior T-ties
+    where a partition simply dead-ends into another partition (degree 3,
+    touching neither the exterior ring nor a true 4-way crossing) — these
+    are infill ties, not load-bearing nodes, and cluttered real layouts
+    with far more columns than needed (per CLAUDE.md: columns belong at
+    "outer corners, staircase core, major wall intersections").
+
+    Such interior Ts are dropped UNLESS omitting them would leave the
+    through-wall's beam run exceeding max_beam_span_m between its nearest
+    surviving neighbours on that same line.
+    """
     if junctions is None:
         junctions = derive_junctions(walls, tol=tol)
-    return [ColumnMarker(cx=j.x, cy=j.y) for j in junctions]
+    if max_beam_span_m is None:
+        from app.engine.compliance import load_rules
+
+        max_beam_span_m = load_rules()["max_beam_span_m"]
+
+    ext_walls = [w for w in walls if w.kind == "external"]
+    certain = [
+        j
+        for j in junctions
+        if j.degree >= 4 or _on_exterior_ring(ext_walls, j.x, j.y, tol)
+    ]
+    certain_keys = {(round(j.x, 6), round(j.y, 6)) for j in certain}
+    candidates = [
+        j for j in junctions if (round(j.x, 6), round(j.y, 6)) not in certain_keys
+    ]
+
+    kept: list[WallJunction] = list(certain)
+
+    for cand in sorted(candidates, key=lambda j: (j.x, j.y)):
+        horiz_through, vert_through = _through_axes(walls, cand.x, cand.y, tol)
+        exceeds = False
+        if horiz_through:
+            xs = sorted(k.x for k in kept if abs(k.y - cand.y) <= tol)
+            below = max((v for v in xs if v < cand.x - tol), default=None)
+            above = min((v for v in xs if v > cand.x + tol), default=None)
+            # Gap that would result if cand is dropped — the span between
+            # its flanking kept points, not cand's own distance to each.
+            if below is not None and above is not None:
+                if above - below > max_beam_span_m:
+                    exceeds = True
+            elif below is not None and cand.x - below > max_beam_span_m:
+                exceeds = True
+            elif above is not None and above - cand.x > max_beam_span_m:
+                exceeds = True
+        if vert_through:
+            ys = sorted(k.y for k in kept if abs(k.x - cand.x) <= tol)
+            below = max((v for v in ys if v < cand.y - tol), default=None)
+            above = min((v for v in ys if v > cand.y + tol), default=None)
+            if below is not None and above is not None:
+                if above - below > max_beam_span_m:
+                    exceeds = True
+            elif below is not None and cand.y - below > max_beam_span_m:
+                exceeds = True
+            elif above is not None and above - cand.y > max_beam_span_m:
+                exceeds = True
+        if exceeds:
+            kept.append(cand)
+
+    return [ColumnMarker(cx=j.x, cy=j.y) for j in kept]
 
 
 def wall_polygons(
