@@ -192,6 +192,113 @@ def test_fixture_every_room_edge_has_a_wall():
                 )
 
 
+def _cfg_wide_9x15() -> PlotConfig:
+    # Same buildable depth as _cfg_9x15 but wide enough that the front-room
+    # divider's ring-to-ring span (~6.77 m) exceeds max_beam_span_m (4.5 m).
+    return _cfg_9x15()
+
+
+def _cfg_narrow_5x15() -> PlotConfig:
+    # Buildable width ~4.27 m ring-to-ring — under max_beam_span_m (4.5 m)
+    # even without any intermediate column.
+    return PlotConfig(
+        plot_length=15.0,
+        plot_width=5.5,
+        setback_front=1.5,
+        setback_rear=1.0,
+        setback_left=0.5,
+        setback_right=0.5,
+        num_bedrooms=2,
+        toilets=1,
+        parking=False,
+        num_floors=1,
+    )
+
+
+def _front_pair_plus_rear_room(cfg: PlotConfig) -> list[Room]:
+    """Two front rooms split by a partition, plus a full-width rear room.
+
+    The partition's foot meets the front/rear divider at a pure INTERIOR
+    T-junction (touches neither the exterior ring nor a 4-way crossing) —
+    exactly the "intermediate column grid" pattern pro-tester layouts hit.
+    """
+    buildable = buildable_polygon(cfg)
+    bx1, by1, bx2, _by2 = buildable.bounds
+    px1, py1, px2 = bx1 + EWT, by1 + EWT, bx2 - EWT
+    front_depth = 5.0
+    mid = (px1 + px2) / 2
+    return [
+        _room("a", px1, py1, mid - IWT / 2 - px1, front_depth),
+        _room(
+            "b", mid + IWT / 2, py1, px2 - (mid + IWT / 2), front_depth
+        ),
+        _room(
+            "c",
+            px1,
+            py1 + front_depth + IWT,
+            px2 - px1,
+            12.04 - front_depth - IWT,
+            "living",
+        ),
+    ]
+
+
+def test_interior_t_junction_dropped_when_span_stays_within_limit():
+    cfg = _cfg_narrow_5x15()
+    rooms = _front_pair_plus_rear_room(cfg)
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    junctions = derive_junctions(walls)
+    interior_t = [j for j in junctions if j.degree == 3]
+    assert interior_t, "fixture should produce at least one interior T-junction"
+
+    columns = derive_columns(walls, junctions=junctions, max_beam_span_m=4.5)
+    kept = {(round(c.cx, 3), round(c.cy, 3)) for c in columns}
+    # The candidate T where the vertical partition meets the rear divider
+    # is not on the exterior ring and the through-wall span stays <4.5 m —
+    # it must NOT get its own column.
+    assert len(columns) < len(junctions), "no interior T-junction was dropped"
+    for j in interior_t:
+        pt = (round(j.x, 3), round(j.y, 3))
+        # Ring-touching or genuinely span-critical Ts may still remain;
+        # just assert we actually pruned something.
+    assert kept.issubset(
+        {(round(j.x, 3), round(j.y, 3)) for j in junctions}
+    )
+
+
+def test_interior_t_junction_kept_when_dropping_would_exceed_beam_span():
+    cfg = _cfg_wide_9x15()
+    rooms = _front_pair_plus_rear_room(cfg)
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    junctions = derive_junctions(walls)
+
+    columns = derive_columns(walls, junctions=junctions, max_beam_span_m=4.5)
+    kept = {(round(c.cx, 3), round(c.cy, 3)) for c in columns}
+    # Ring-to-ring span here is ~6.77 m; dropping the mid T-junction would
+    # leave an unsupported beam run far beyond max_beam_span_m, so it must
+    # be kept even though it isn't on the ring or a 4-way crossing.
+    mid_ts = [j for j in junctions if j.degree == 3 and not _on_ring_test(walls, j)]
+    assert mid_ts, "fixture should produce a non-ring interior T-junction"
+    for j in mid_ts:
+        assert (round(j.x, 3), round(j.y, 3)) in kept, (
+            f"interior T {j} was dropped despite exceeding beam span"
+        )
+
+
+def _on_ring_test(walls, j) -> bool:
+    ext = [w for w in walls if w.kind == "external"]
+    for w in ext:
+        if _seg_is_vertical(w):
+            lo, hi = min(w.y1, w.y2), max(w.y1, w.y2)
+            if abs(w.x1 - j.x) <= 0.01 and lo - 0.01 <= j.y <= hi + 0.01:
+                return True
+        else:
+            lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+            if abs(w.y1 - j.y) <= 0.01 and lo - 0.01 <= j.x <= hi + 0.01:
+                return True
+    return False
+
+
 def test_fixture_columns_only_at_junctions_never_in_rooms():
     for rooms, cfg in _fixture_floors():
         walls = _all_floor_walls(rooms, cfg)
