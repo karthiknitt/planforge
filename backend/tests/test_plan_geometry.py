@@ -229,9 +229,7 @@ def _front_pair_plus_rear_room(cfg: PlotConfig) -> list[Room]:
     mid = (px1 + px2) / 2
     return [
         _room("a", px1, py1, mid - IWT / 2 - px1, front_depth),
-        _room(
-            "b", mid + IWT / 2, py1, px2 - (mid + IWT / 2), front_depth
-        ),
+        _room("b", mid + IWT / 2, py1, px2 - (mid + IWT / 2), front_depth),
         _room(
             "c",
             px1,
@@ -257,13 +255,9 @@ def test_interior_t_junction_dropped_when_span_stays_within_limit():
     # is not on the exterior ring and the through-wall span stays <4.5 m —
     # it must NOT get its own column.
     assert len(columns) < len(junctions), "no interior T-junction was dropped"
-    for j in interior_t:
-        pt = (round(j.x, 3), round(j.y, 3))
-        # Ring-touching or genuinely span-critical Ts may still remain;
-        # just assert we actually pruned something.
-    assert kept.issubset(
-        {(round(j.x, 3), round(j.y, 3)) for j in junctions}
-    )
+    # Ring-touching or genuinely span-critical Ts may still remain among
+    # `kept`; the len() check above already confirms at least one was pruned.
+    assert kept.issubset({(round(j.x, 3), round(j.y, 3)) for j in junctions})
 
 
 def test_interior_t_junction_kept_when_dropping_would_exceed_beam_span():
