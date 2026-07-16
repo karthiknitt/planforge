@@ -42,6 +42,7 @@ class LayoutScoreOut(BaseModel):
     aspect_ratio: float
     circulation: float
     vastu: float
+    grid_regularity: float = 100.0
 
 
 class LayoutOut(BaseModel):

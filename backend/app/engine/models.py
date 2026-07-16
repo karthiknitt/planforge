@@ -151,6 +151,8 @@ class LayoutScore:
     aspect_ratio: float
     circulation: float
     vastu: float
+    # default keeps pre-existing stored layouts (no key) rehydrating cleanly
+    grid_regularity: float = 100.0
 
 
 @dataclass

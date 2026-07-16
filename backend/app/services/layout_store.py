@@ -80,6 +80,7 @@ def layout_out_from_engine(lay: Any) -> LayoutOut:
             aspect_ratio=lay.score.aspect_ratio,
             circulation=lay.score.circulation,
             vastu=lay.score.vastu,
+            grid_regularity=lay.score.grid_regularity,
         )
         if lay.score
         else None,
@@ -233,6 +234,7 @@ def engine_layout_from_geometry(g: dict) -> Layout:
             aspect_ratio=score["aspect_ratio"],
             circulation=score["circulation"],
             vastu=score["vastu"],
+            grid_regularity=score.get("grid_regularity", 100.0),
         )
         if score
         else None,
