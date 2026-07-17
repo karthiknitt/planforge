@@ -139,9 +139,22 @@ def _fill_blank_areas(
     return notes
 
 
-def _largest_inscribed_rect(piece):
+_USABLE_EROSION_R = 1.2 / 2 + 0.05
+_RELAXED_MIN_SIDE = 0.9
+
+
+def _region_is_usable(piece) -> bool:
+    """Mirror of the "usable leftover" criterion the quality checks apply:
+    a ~1.3 m pocket fits inside the region after erosion."""
+    eroded = piece.buffer(-_USABLE_EROSION_R)
+    return not eroded.is_empty and eroded.area > 1e-4
+
+
+def _largest_inscribed_rect(piece, min_side: float = 1.2 - 1e-3):
     """Largest axis-aligned rectangle inside ``piece`` whose corners lie on
-    the polygon's own coordinate grid."""
+    the polygon's own coordinate grid. ``min_side`` default carries a float
+    tolerance: grid coords are differences of 3-dp values, so an intended
+    1.2 m leg can measure 1.1989999…."""
     from shapely.geometry import box
 
     # Raw coords — rounding here can push a candidate past the true boundary
@@ -153,7 +166,6 @@ def _largest_inscribed_rect(piece):
     ys = sorted({c[1] for c in coords})
     best = None
     best_area = 0.5
-    min_side = 1.2 - 1e-3  # tolerance: grid coords carry float noise
     for i, x0 in enumerate(xs[:-1]):
         for x1 in xs[i + 1 :]:
             w = x1 - x0
@@ -205,6 +217,15 @@ def _rect_fill_remainder(
             rect = _largest_inscribed_rect(piece)
             if rect is not None and rect.area >= 1.5:
                 break
+            # A usable pocket can exist with no ≥1.2 m rectangle at all (an
+            # L whose legs are ~1.19 m — the CI gap of 2026-07-17). The fill
+            # must be at least as inclusive as the usability criterion, so
+            # reclaim it as a niche room: erosion-usable regions always
+            # contain a ≥0.92 m square, hence 0.9 always finds a candidate.
+            if _region_is_usable(piece):
+                rect = _largest_inscribed_rect(piece, min_side=_RELAXED_MIN_SIDE)
+                if rect is not None and rect.area >= 0.8:
+                    break
             rect = None
         if rect is None:
             break

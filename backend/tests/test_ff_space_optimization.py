@@ -108,6 +108,52 @@ def test_no_usable_leftover_gaps(cfg):
             )
 
 
+def test_fill_covers_usable_gap_with_sub_1p2m_legs():
+    """Regression (CI failure on PR #29 merge, 2026-07-17): an L-shaped
+    leftover whose legs are both just under 1.2 m (1.197 / 1.199 m) passes
+    the erosion usability check (a 1.3 m pocket fits at the inner corner)
+    but every inscribed rectangle was rejected by _largest_inscribed_rect's
+    min_side, and all neighbours were _NO_ABSORB_TYPES — leaving a 5.87 m²
+    dead pocket the fill safety net never reclaimed."""
+    from app.engine.generator import _fill_blank_areas
+    from app.engine.models import FloorPlan, Room
+
+    cfg = CONFIGS[1]  # small-9x12
+    plate = _plate(cfg)
+
+    def room(id_, name, rtype, x0, y0, x1, y1):
+        return Room(
+            id=id_,
+            name=name,
+            type=rtype,
+            x=round(x0, 3),
+            y=round(y0, 3),
+            width=round(x1 - x0, 3),
+            depth=round(y1 - y0, 3),
+        )
+
+    # Plate minus these three rooms is exactly the CI gap polygon:
+    # (1.13 1.73, 1.13 5.33, 2.327 5.33, 2.327 2.929, 3.631 2.929, 3.631 1.73)
+    fp = FloorPlan(
+        floor=1,
+        rooms=[
+            room("ut", "Utility", "utility", 3.631, 1.73, 7.87, 10.27),
+            room("st", "Staircase", "staircase", 2.327, 2.929, 3.631, 10.27),
+            room("to", "Toilet 2", "toilet", 1.13, 5.33, 2.327, 10.27),
+        ],
+    )
+    gaps_before = _usable_gaps(fp, plate)
+    assert gaps_before, "fixture must start with a usable gap"
+
+    _fill_blank_areas(fp, cfg, EWT, is_topmost=True)
+
+    gaps = _usable_gaps(fp, plate)
+    details = [
+        f"{g.area:.2f} m2 @ {tuple(round(v, 2) for v in g.bounds)}" for g in gaps
+    ]
+    assert not gaps, f"usable gap survived the fill safety net: {details}"
+
+
 def test_study_meets_spec_min_area():
     layouts = generate(_cfg())
     studies = [
