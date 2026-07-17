@@ -177,3 +177,59 @@ def test_boq_engine_city_total_higher_than_generic():
     assert total_mumbai > total_generic, (
         f"Mumbai BOQ ({total_mumbai}) should exceed Generic BOQ ({total_generic})"
     )
+
+
+# ── Structural design merge (Stage 2.6) ────────────────────────────────────
+
+
+def test_boq_no_design_is_preliminary_and_all_estimated():
+    cfg = _base_cfg("Generic")
+    layout = generate(cfg)[0]
+    result = QuantityEngine().calculate(layout, cfg, project_name="T", city="Generic")
+    body = result.to_dict()
+    assert body["preliminary"] is True
+    assert body["basis_summary"]["designed_items"] == 0
+    assert all(item["basis"] == "estimated" for item in body["items"])
+
+
+def test_boq_with_design_tags_structural_items_designed():
+    cfg = _base_cfg("Generic")
+    layout = generate(cfg)[0]
+    structural_quantities = {
+        "concrete_m3": {
+            "slabs": 12.5,
+            "beams": 4.2,
+            "columns": 3.1,
+            "footings": 5.6,
+            "total": 25.4,
+        },
+        "steel_kg": {
+            "slabs": 800.0,
+            "beams": 300.0,
+            "columns": 200.0,
+            "footings": 150.0,
+            "total": 1450.0,
+        },
+        "grade": "M25 / Fe500",
+    }
+    result = QuantityEngine().calculate(
+        layout,
+        cfg,
+        project_name="T",
+        city="Generic",
+        structural_quantities=structural_quantities,
+    )
+    body = result.to_dict()
+    assert body["preliminary"] is False
+    assert body["basis_summary"]["designed_items"] == 5  # slab/beam/col/footing/steel
+    assert body["basis_summary"]["estimated_items"] > 0
+
+    designed = {
+        item["item"]: item for item in body["items"] if item["basis"] == "designed"
+    }
+    assert designed["3"]["quantity"] == 12.5
+    assert designed["3b"]["quantity"] == 4.2
+    assert designed["4"]["quantity"] == 3.1
+    assert designed["4b"]["quantity"] == 5.6
+    assert designed["5"]["quantity"] == 1450.0
+    assert designed["5"]["amount"] > 0

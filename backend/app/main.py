@@ -33,6 +33,7 @@ import app.models.payment  # noqa: F401
 import app.models.project  # noqa: F401
 import app.models.render  # noqa: F401
 import app.models.revision  # noqa: F401
+import app.models.structural  # noqa: F401
 import app.models.team  # noqa: F401
 import app.models.undo  # noqa: F401
 import app.models.user  # noqa: F401

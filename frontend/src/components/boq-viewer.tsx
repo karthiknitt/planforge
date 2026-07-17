@@ -3,8 +3,10 @@
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { useSession } from "@/lib/auth-client";
+import { boqBasisLabel, shouldShowPreliminaryBanner } from "@/lib/boq-provenance";
 import type { BOQResponse } from "@/lib/layout-types";
 
 const SUPPORTED_CITIES = [
@@ -152,9 +154,17 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
 
   const diff = boq.cost_difference;
   const showComparison = boq.city !== "Generic" && diff !== null && diff !== 0;
+  const showPreliminaryBanner = shouldShowPreliminaryBanner(boq);
 
   return (
     <div className="flex flex-col gap-4">
+      {showPreliminaryBanner && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-400">
+          PRELIMINARY ESTIMATE — based on architectural quantities only. Run structural design for
+          IS-code-backed member sizing.
+        </div>
+      )}
+
       {/* Header row: title + city selector + export */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
         <div className="flex flex-col gap-1">
@@ -237,6 +247,7 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
               <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">
                 Item Description
               </th>
+              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Basis</th>
               <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground">
                 Quantity
               </th>
@@ -254,6 +265,14 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
               <tr key={item.item} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
                 <td className="px-4 py-2 text-muted-foreground">{item.item}</td>
                 <td className="px-4 py-2">{item.description}</td>
+                <td className="px-4 py-2">
+                  <Badge
+                    variant={item.basis === "designed" ? "default" : "outline"}
+                    className="text-[10px]"
+                  >
+                    {boqBasisLabel(item.basis)}
+                  </Badge>
+                </td>
                 <td className="px-4 py-2 text-right font-mono">{item.quantity.toFixed(2)}</td>
                 <td className="px-4 py-2 text-muted-foreground">{item.unit}</td>
                 <td className="px-4 py-2 text-right font-mono text-muted-foreground">
@@ -267,7 +286,7 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
           </tbody>
           <tfoot>
             <tr className="border-t bg-muted/50 font-semibold">
-              <td colSpan={5} className="px-4 py-2.5 text-right">
+              <td colSpan={6} className="px-4 py-2.5 text-right">
                 Total Estimated Cost
               </td>
               <td className="px-4 py-2.5 text-right font-mono">

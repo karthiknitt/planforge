@@ -118,10 +118,14 @@ async def regenerate_and_store(
     Destructive for edited layouts by design — callers snapshot a revision
     first (generate.py does).
     """
+    from app.services import structural_store
+
     cfg = plot_config_from_project(project)
     layouts = generate(cfg)
 
     await db.execute(delete(StoredLayout).where(StoredLayout.project_id == project.id))
+    # Regeneration replaces every layout — all structural designs are stale.
+    await structural_store.mark_designs_stale(project.id, db)
     stored: list[StoredLayout] = []
     for lay in layouts:
         row = StoredLayout(
@@ -148,11 +152,26 @@ async def get_or_generate_layouts(
 async def save_edited_geometry(
     stored: StoredLayout, geometry: dict, db: AsyncSession
 ) -> StoredLayout:
+    from app.services import structural_store
+
     stored.geometry = geometry
     # Callers often mutate the same dict instance in place — SQLAlchemy's
     # change tracking misses that, so force the column dirty.
     flag_modified(stored, "geometry")
     stored.source = "edited"
+    # Stage 2 invalidation: an edit that no longer matches the approved
+    # revision's hash drops the layout back to Draft — mark dependent
+    # structural designs stale in the same transaction as the edit.
+    rev = await structural_store.find_revision_for_hash(
+        stored.project_id,
+        stored.layout_key,
+        structural_store.geometry_hash(geometry),
+        db,
+    )
+    if rev is None:
+        await structural_store.mark_designs_stale(
+            stored.project_id, db, layout_key=stored.layout_key
+        )
     await db.commit()
     await db.refresh(stored)
     return stored

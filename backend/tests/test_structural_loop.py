@@ -1,0 +1,328 @@
+"""Closed-loop structural design (Stage 2.4).
+
+structapi violations re-constrain the solver (span caps), the re-solve is
+drift-minimised against the approved plan, the loop caps at 3 iterations,
+and the stored layout is never overwritten — adjusted geometry lands in
+StructuralDesign.final_geometry with a deterministic changelog.
+"""
+
+import httpx
+
+from app.config.settings import settings
+from app.engine.models import Column, ComplianceResult, FloorPlan, Layout, Room
+from app.models.layout import StoredLayout
+from app.models.structural import StructuralDesign
+from app.services import structagent_client, structural_loop
+
+HDRS = {"X-Test-User-Id": "loop-owner"}
+
+PROJECT_BODY = {
+    "name": "Loop Test",
+    "plot_length": 15.0,
+    "plot_width": 10.0,
+    "setback_front": 1.5,
+    "setback_rear": 1.0,
+    "setback_left": 1.0,
+    "setback_right": 1.0,
+    "road_side": "S",
+    "north_direction": "N",
+    "num_bedrooms": 2,
+    "toilets": 2,
+    "parking": False,
+}
+
+GRID_COLUMNS = [{"x": x, "y": y} for x in (0.0, 4.0, 8.0) for y in (0.0, 4.5)]
+IRREGULAR_COLUMNS = [{"x": x, "y": y} for x in (0.0, 0.9) for y in (0.0, 4.0)]
+
+ROOM_V1 = {
+    "id": "living_0",
+    "name": "Living Room",
+    "type": "living",
+    "x": 1.0,
+    "y": 1.0,
+    "width": 5.0,
+    "depth": 4.0,
+    "area": 20.0,
+}
+
+GEO_V1 = {
+    "id": "A",
+    "name": "Layout A",
+    "ground_floor": {"floor": 0, "rooms": [ROOM_V1], "columns": GRID_COLUMNS},
+    "first_floor": {"floor": 1, "rooms": [], "columns": []},
+}
+
+OK_ENVELOPE = {
+    "api_version": "1",
+    "ok": True,
+    "checks": [{"name": "all pass", "ok": True}],
+    "data": {"quantities": {}, "violations": []},
+    "artifacts": [],
+    "disclaimer": "verify against official BIS copies",
+}
+
+SPAN_VIOLATION = {
+    "member_type": "beam",
+    "axis": "x",
+    "grid_ref": "beam line y=0, span 0",
+    "span_m": 5.0,
+    "check": "deflection L/d (cl 23.2.1)",
+    "actual": 32.0,
+    "limit": 26.0,
+    "unit": "ratio",
+    "remedy_hint": "reduce_span",
+}
+
+FAIL_ENVELOPE = {
+    **OK_ENVELOPE,
+    "ok": False,
+    "checks": [{"name": "deflection L/d (cl 23.2.1)", "ok": False}],
+    "data": {"quantities": {}, "violations": [SPAN_VIOLATION]},
+}
+
+
+def _adjusted_layout() -> Layout:
+    return Layout(
+        id="A",
+        name="Layout A",
+        ground_floor=FloorPlan(
+            floor=0,
+            floor_type="ground",
+            rooms=[
+                Room(
+                    id="living_0",
+                    name="Living Room",
+                    type="living",
+                    x=1.0,
+                    y=1.0,
+                    width=4.0,
+                    depth=4.0,
+                )
+            ],
+            columns=[Column(x=c["x"], y=c["y"]) for c in GRID_COLUMNS],
+        ),
+        first_floor=FloorPlan(floor=1, floor_type="first", rooms=[]),
+        compliance=ComplianceResult(passed=True),
+    )
+
+
+async def _setup(client, SessionLocal, geometry=GEO_V1) -> str:
+    res = await client.post("/api/projects", json=PROJECT_BODY, headers=HDRS)
+    assert res.status_code == 201, res.text
+    pid = res.json()["id"]
+    async with SessionLocal() as s:
+        s.add(
+            StoredLayout(
+                project_id=pid, layout_key="A", source="solver", geometry=geometry
+            )
+        )
+        await s.commit()
+    approve = await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert approve.status_code == 200, approve.text
+    return pid
+
+
+def _configure(monkeypatch, responses: list[dict]):
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        idx = min(calls["n"], len(responses) - 1)
+        calls["n"] += 1
+        return httpx.Response(200, json=responses[idx])
+
+    monkeypatch.setattr(settings, "structural_api_url", "http://sapi.test")
+    monkeypatch.setattr(settings, "structural_api_key", "k1")
+    monkeypatch.setattr(
+        structagent_client, "_transport_for_tests", httpx.MockTransport(handler)
+    )
+    return calls
+
+
+# ── unit: remedy math + changelog diff ──────────────────────────────────────
+
+
+def test_cap_from_violation_reduce_span_uses_limit_ratio():
+    cap = structural_loop.cap_from_violation(SPAN_VIOLATION)
+    assert cap == round(5.0 * (26.0 / 32.0), 3)
+
+
+def test_cap_from_violation_add_grid_line_halves_bay():
+    v = {**SPAN_VIOLATION, "remedy_hint": "add_grid_line"}
+    assert structural_loop.cap_from_violation(v) == round(5.0 * 0.55, 3)
+
+
+def test_cap_from_violation_without_span_is_none():
+    assert structural_loop.cap_from_violation({"remedy_hint": "reduce_span"}) is None
+
+
+def test_diff_rooms_reports_resize_move_add_remove():
+    before = {
+        "ground_floor": {
+            "rooms": [
+                {**ROOM_V1},
+                {**ROOM_V1, "id": "k", "name": "Kitchen", "x": 7.0},
+            ]
+        },
+        "first_floor": {"rooms": []},
+    }
+    after = {
+        "ground_floor": {
+            "rooms": [
+                {**ROOM_V1, "width": 4.0},
+                {**ROOM_V1, "id": "t", "name": "Toilet"},
+            ]
+        },
+        "first_floor": {"rooms": []},
+    }
+    entries = structural_loop.diff_rooms(before, after)
+    joined = "\n".join(entries)
+    assert "Living Room resized 5.0×4.0 m → 4.0×4.0 m" in joined
+    assert "Kitchen removed" in joined
+    assert "Toilet added" in joined
+
+
+# ── endpoint loop behaviour ─────────────────────────────────────────────────
+
+
+async def test_loop_converges_and_records_changelog(client_db, monkeypatch):
+    client, SessionLocal = client_db
+    pid = await _setup(client, SessionLocal)
+    calls = _configure(monkeypatch, [FAIL_ENVELOPE, OK_ENVELOPE])
+    monkeypatch.setattr(
+        structural_loop.solver,
+        "resolve_with_constraints",
+        lambda cfg, ewt, approved, caps, deviation_weight=3: _adjusted_layout(),
+    )
+
+    res = await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert calls["n"] == 2
+    assert body["iterations_used"] == 2
+    assert body["status"] == "designed"
+    assert body["layout_adjusted"] is True
+    joined = "\n".join(body["changelog"])
+    assert "deflection" in joined
+    assert "capped room spans along x" in joined
+    assert "resized" in joined
+
+    # stored layout stays the ARCHITECTURAL set; adjustment is on the design
+    async with SessionLocal() as s:
+        design = await s.get(StructuralDesign, body["design_id"])
+        assert design.final_geometry is not None
+        assert design.final_geometry["ground_floor"]["rooms"][0]["width"] == 4.0
+        row = (
+            await s.execute(
+                StoredLayout.__table__.select().where(StoredLayout.project_id == pid)
+            )
+        ).first()
+        assert row.geometry["ground_floor"]["rooms"][0]["width"] == 5.0
+
+
+async def test_loop_caps_at_three_iterations(client_db, monkeypatch):
+    client, SessionLocal = client_db
+    pid = await _setup(client, SessionLocal)
+    calls = _configure(monkeypatch, [FAIL_ENVELOPE])  # always failing
+    monkeypatch.setattr(
+        structural_loop.solver,
+        "resolve_with_constraints",
+        lambda cfg, ewt, approved, caps, deviation_weight=3: _adjusted_layout(),
+    )
+
+    res = await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert calls["n"] == 3
+    assert body["iterations_used"] == 3
+    assert body["status"] == "designed_with_warnings"
+    assert any("Iteration cap" in line for line in body["changelog"])
+
+
+async def test_loop_stops_when_resolve_infeasible(client_db, monkeypatch):
+    client, SessionLocal = client_db
+    pid = await _setup(client, SessionLocal)
+    calls = _configure(monkeypatch, [FAIL_ENVELOPE])
+    monkeypatch.setattr(
+        structural_loop.solver,
+        "resolve_with_constraints",
+        lambda cfg, ewt, approved, caps, deviation_weight=3: None,
+    )
+
+    res = await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert calls["n"] == 1
+    assert body["status"] == "designed_with_warnings"
+    assert body["layout_adjusted"] is False
+    assert any("infeasible" in line for line in body["changelog"])
+
+
+async def test_unconfident_grid_requires_confirmation(client_db, monkeypatch):
+    client, SessionLocal = client_db
+    geo = {
+        **GEO_V1,
+        "ground_floor": {**GEO_V1["ground_floor"], "columns": IRREGULAR_COLUMNS},
+    }
+    pid = await _setup(client, SessionLocal, geometry=geo)
+    _configure(monkeypatch, [OK_ENVELOPE])
+
+    res = await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+    assert res.status_code == 409, res.text
+    assert res.json()["detail"]["code"] == "grid_needs_review"
+
+    res = await client.post(
+        f"/api/projects/{pid}/structural",
+        json={"layout_id": "A", "allow_unconfident_grid": True},
+        headers=HDRS,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "designed"
+
+
+# ── solver: real constrained re-solve ───────────────────────────────────────
+
+
+def test_resolve_with_constraints_respects_span_cap():
+    from app.engine.models import PlotConfig
+    from app.engine.solver import resolve_with_constraints, solve_layouts
+
+    cfg = PlotConfig(
+        plot_length=15.0,
+        plot_width=12.0,
+        setback_front=1.5,
+        setback_rear=1.0,
+        setback_left=0.9,
+        setback_right=0.9,
+        num_bedrooms=2,
+        toilets=2,
+        parking=False,
+        city="other",
+        road_side="S",
+        vastu_enabled=False,
+    )
+    layouts = solve_layouts(cfg, 0.23)
+    assert layouts
+    approved = layouts[0]
+
+    cap = 3.6
+    adjusted = resolve_with_constraints(cfg, 0.23, approved, {"x": cap})
+    assert adjusted is not None
+    for fp in (adjusted.ground_floor, adjusted.first_floor):
+        for room in fp.rooms:
+            assert room.width <= cap + 0.51, (
+                f"{room.id} width {room.width} exceeds span cap (+snap slack)"
+            )
+    # identity preserved — same layout, structurally adjusted
+    assert adjusted.id == approved.id

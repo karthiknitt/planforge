@@ -18,7 +18,7 @@ from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
 from app.services.plans import get_effective_plan_tier, tier_at_least
-from app.services import layout_store
+from app.services import layout_store, structural_store
 from app.services.plot_config import plot_config_from_project
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,12 @@ def _cfg_from_project(project: Project) -> PlotConfig:
 
 async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Project:
     return await get_accessible_project(project_id, user_id, db)
+
+
+async def _maybe_structural_design(
+    project_id: str, layout_id: str, geometry: dict, db: AsyncSession
+) -> dict | None:
+    return await structural_store.design_surface(project_id, layout_id, geometry, db)
 
 
 # ── PDF export ────────────────────────────────────────────────────────────────
@@ -63,9 +69,20 @@ async def export_pdf(
         )
     layout = layout_store.engine_layout_from_geometry(row.geometry)
 
+    design = await _maybe_structural_design(project_id, layout_id, row.geometry, db)
+    if design is not None:
+        geom = design.get("final_geometry") or row.geometry
+        layout = layout_store.engine_layout_from_geometry(geom)
+
     annotations = getattr(project, "annotations", None) or {}
     pdf_bytes = render_pdf(
-        project.name, layout, cfg, project.num_bedrooms, annotations=annotations or None
+        project.name,
+        layout,
+        cfg,
+        project.num_bedrooms,
+        annotations=annotations or None,
+        structural_design=design,
+        watermark_preliminary=True,
     )
 
     return Response(
@@ -197,7 +214,12 @@ async def export_dxf(
         )
     layout = layout_store.engine_layout_from_geometry(row.geometry)
 
-    dxf_bytes = _render_dxf(project.name, layout, cfg)
+    design = await _maybe_structural_design(project_id, layout_id, row.geometry, db)
+    if design is not None:
+        geom = design.get("final_geometry") or row.geometry
+        layout = layout_store.engine_layout_from_geometry(geom)
+
+    dxf_bytes = _render_dxf(project.name, layout, cfg, structural_design=design)
 
     return Response(
         content=dxf_bytes,
@@ -314,7 +336,9 @@ def _draw_dim_chains_dxf(msp, drawing, layer: str) -> None:
                 logger.warning("Dimension render failed: %s", exc)
 
 
-def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
+def _render_dxf(
+    project_name: str, layout, cfg: PlotConfig, structural_design: dict | None = None
+) -> bytes:
     import ezdxf
     from ezdxf import colors
 
@@ -324,7 +348,9 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         draw_furniture,
         draw_open_terrace,
         draw_setback_zones,
+        draw_sized_columns,
         draw_structural_grid,
+        draw_structural_schedule,
         shapely_poly_to_dxf,
         solid_fill_polygon,
     )
@@ -345,6 +371,10 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         wall_polygons,
     )
 
+    design_data: dict = {}
+    if structural_design and structural_design.get("status") not in (None, "stale"):
+        design_data = (structural_design.get("structapi") or {}).get("data") or {}
+
     doc = ezdxf.new("R2010", setup=True)  # setup=True loads standard linetypes
     doc.header["$INSUNITS"] = 6  # metres (geometry stored in metres)
     doc.header["$MEASUREMENT"] = 1  # metric hatch/linetype scaling
@@ -362,6 +392,8 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
         ("S-COLUMN", colors.WHITE, 0.35),
         ("S-BEAM", colors.WHITE, 0.35),
         ("S-GRID", colors.GRAY, 0.18),
+        ("S-COLUMNS-SIZED", colors.RED, 0.50),
+        ("S-SCHEDULE", colors.WHITE, 0.18),
         ("DIM-LINE", colors.GRAY, 0.18),
         ("TEXT", colors.WHITE, 0.18),
         # Advanced CAD layers
@@ -560,6 +592,15 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
             draw_structural_grid(
                 msp, rooms, bld_x, bld_y, bld_w, bld_d, layer="S-GRID", z=z_offset
             )
+            if design_data:
+                draw_sized_columns(
+                    msp,
+                    drawing.columns,
+                    drawing.walls,
+                    design_data.get("columns") or {},
+                    layer="S-COLUMNS-SIZED",
+                    z=z_offset,
+                )
 
         # 6c. Furniture per room
         for room in rooms:
@@ -620,6 +661,17 @@ def _render_dxf(project_name: str, layout, cfg: PlotConfig) -> bytes:
             insert_y=global_min_y - 5.5,
         )
 
+        if design_data:
+            draw_structural_schedule(
+                msp,
+                design_data.get("columns") or {},
+                design_data.get("beams") or {},
+                insert_x=global_max_x + 2.0,
+                insert_y=global_min_y - 5.5,
+                layer="S-SCHEDULE",
+                z=0.0,
+            )
+
     # ezdxf writes DXF as text (not binary) — use StringIO then encode
     text_buf = StringIO()
     doc.write(text_buf)
@@ -650,8 +702,23 @@ async def export_boq(
         )
     layout = layout_store.engine_layout_from_geometry(row.geometry)
 
+    design = await _maybe_structural_design(project_id, layout_id, row.geometry, db)
+    structural_quantities = None
+    if design is not None:
+        geom = design.get("final_geometry") or row.geometry
+        layout = layout_store.engine_layout_from_geometry(geom)
+        structural_quantities = ((design.get("structapi") or {}).get("data") or {}).get(
+            "quantities"
+        )
+
     engine = QuantityEngine()
-    boq = engine.calculate(layout, cfg, project_name=project.name, city=city)
+    boq = engine.calculate(
+        layout,
+        cfg,
+        project_name=project.name,
+        city=city,
+        structural_quantities=structural_quantities,
+    )
 
     if fmt == "excel":
         plan = await _get_plan_tier(user_id, db)
@@ -698,7 +765,15 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     ws["A2"].alignment = Alignment(horizontal="center")
 
     # Column headers
-    headers = ["S.No", "Item Description", "Quantity", "Unit", "Rate (₹)", "Amount (₹)"]
+    headers = [
+        "S.No",
+        "Item Description",
+        "Quantity",
+        "Unit",
+        "Rate (₹)",
+        "Amount (₹)",
+        "Basis",
+    ]
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=4, column=col, value=h)
         cell.font = Font(bold=True, color="FFFFFF")
@@ -713,6 +788,7 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
         ws.cell(row=row_idx, column=4, value=item.unit)
         ws.cell(row=row_idx, column=5, value=round(item.rate, 2) if item.rate else "")
         ws.cell(row=row_idx, column=6, value=round(item.amount) if item.amount else "")
+        ws.cell(row=row_idx, column=7, value=item.basis)
 
     # Total row
     total_row = len(boq.line_items) + 6

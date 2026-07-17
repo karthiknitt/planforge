@@ -1,11 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
+import { changelogCount } from "@/lib/structural-status";
+
+export interface StructuralDesignInfo {
+  id: string;
+  status: string;
+  iterations_used: number;
+  created_at: string;
+  changelog: string[] | null;
+}
+
+export interface StructuralStatusResponse {
+  layout_id: string;
+  status: string;
+  geometry_hash: string;
+  revision_id: string | null;
+  design: StructuralDesignInfo | null;
+}
 
 interface StructuralViewerProps {
   projectId: string;
   layoutId: string;
+  // Lifecycle status from GET /structural/status, owned by the parent layout
+  // viewer (it also drives the header badge, so a single fetch feeds both).
+  status: StructuralStatusResponse | null;
+  approving: boolean;
+  onApprove: () => Promise<void> | void;
+  onDesignComplete: () => Promise<void> | void;
 }
 
 interface StructuralCheck {
@@ -22,6 +46,12 @@ interface StructuralArtifact {
 
 interface StructuralResponse {
   ok: boolean;
+  revision_id: string;
+  design_id: string;
+  status: string;
+  iterations_used: number;
+  changelog: string[];
+  layout_adjusted: boolean;
   grid: {
     x_spacings_m: number[];
     y_spacings_m: number[];
@@ -42,6 +72,12 @@ interface StructuralResponse {
   disclaimer: string;
 }
 
+interface GateError {
+  code: "not_approved" | "grid_needs_review" | null;
+  message: string;
+  notes?: string[];
+}
+
 function downloadArtifact(artifact: StructuralArtifact) {
   const bytes = Uint8Array.from(atob(artifact.content), (c) => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: artifact.content_type });
@@ -53,23 +89,64 @@ function downloadArtifact(artifact: StructuralArtifact) {
   URL.revokeObjectURL(url);
 }
 
-export function StructuralViewer({ projectId, layoutId }: StructuralViewerProps) {
+export function StructuralViewer({
+  projectId,
+  layoutId,
+  status,
+  approving,
+  onApprove,
+  onDesignComplete,
+}: StructuralViewerProps) {
   const { data: session } = useSession();
   const [result, setResult] = useState<StructuralResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [gateError, setGateError] = useState<GateError | null>(null);
   const [sbc, setSbc] = useState(200);
 
-  async function runDesign() {
+  // Reset any in-session run result when the viewed layout changes — a
+  // stale result from a different layout must not linger in this tab.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: layoutId is an intentional reset trigger, not read in the body
+  useEffect(() => {
+    setResult(null);
+    setGateError(null);
+  }, [layoutId]);
+
+  async function runDesign(allowUnconfidentGrid = false) {
     if (!session) return;
     setLoading(true);
-    setError("");
+    setGateError(null);
     try {
       const res = await fetch(`/api/backend/projects/${projectId}/structural`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layout_id: layoutId, sbc_kpa: sbc, include_pdf: true }),
+        body: JSON.stringify({
+          layout_id: layoutId,
+          sbc_kpa: sbc,
+          include_pdf: true,
+          allow_unconfident_grid: allowUnconfidentGrid,
+        }),
       });
+      if (res.status === 409) {
+        const detail = await res.json().catch(() => null);
+        const code = detail?.detail?.code as GateError["code"] | undefined;
+        if (code === "not_approved") {
+          setGateError({
+            code: "not_approved",
+            message:
+              detail?.detail?.help ??
+              "Approve the architectural plan before running structural design.",
+          });
+        } else if (code === "grid_needs_review") {
+          setGateError({
+            code: "grid_needs_review",
+            message: detail?.detail?.help ?? "The extracted column grid is irregular.",
+            notes: detail?.detail?.notes ?? [],
+          });
+        } else {
+          setGateError({ code: null, message: "Request rejected (409)." });
+        }
+        return;
+      }
       if (!res.ok) {
         const detail = await res.json().catch(() => null);
         throw new Error(
@@ -79,16 +156,30 @@ export function StructuralViewer({ projectId, layoutId }: StructuralViewerProps)
         );
       }
       setResult((await res.json()) as StructuralResponse);
+      await onDesignComplete();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Structural design failed");
+      setGateError({
+        code: null,
+        message: e instanceof Error ? e.message : "Structural design failed",
+      });
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleApproveThenRetry() {
+    await onApprove();
+    setGateError(null);
+    await runDesign();
+  }
+
   const failedChecks = result?.checks.filter((c) => !c.ok) ?? [];
   const pdf = result?.artifacts.find((a) => a.content_type === "application/pdf");
   const q = result?.data.quantities;
+
+  // Persisted design from a previous session (no in-session run result yet)
+  // — surface its changelog summary without re-running, per spec.
+  const persistedDesign = !result ? status?.design : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -106,11 +197,11 @@ export function StructuralViewer({ projectId, layoutId }: StructuralViewerProps)
         </label>
         <button
           type="button"
-          onClick={runDesign}
+          onClick={() => runDesign()}
           disabled={loading}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          {loading ? "Designing…" : "Run structural design"}
+          {loading ? "Designing… (can take up to a minute)" : "Run structural design"}
         </button>
         {pdf && (
           <button
@@ -123,7 +214,46 @@ export function StructuralViewer({ projectId, layoutId }: StructuralViewerProps)
         )}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {gateError?.code === "not_approved" && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <p className="font-medium text-amber-700 dark:text-amber-400">
+            Architectural plan not approved yet
+          </p>
+          <p className="mt-1 text-muted-foreground">{gateError.message}</p>
+          <Button size="sm" className="mt-2" onClick={handleApproveThenRetry} disabled={approving}>
+            {approving ? "Approving…" : "Approve plan and run design"}
+          </Button>
+        </div>
+      )}
+
+      {gateError?.code === "grid_needs_review" && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <p className="font-medium text-amber-700 dark:text-amber-400">
+            Structural grid needs review
+          </p>
+          <p className="mt-1 text-muted-foreground">{gateError.message}</p>
+          {gateError.notes && gateError.notes.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-muted-foreground">
+              {gateError.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => runDesign(true)}
+            disabled={loading}
+          >
+            Proceed anyway
+          </Button>
+        </div>
+      )}
+
+      {gateError?.code === null && gateError.message && (
+        <p className="text-sm text-destructive">{gateError.message}</p>
+      )}
 
       {result && (
         <div className="flex flex-col gap-4">
@@ -135,12 +265,27 @@ export function StructuralViewer({ projectId, layoutId }: StructuralViewerProps)
                 {result.grid.y_spacings_m.join(" / ")} m)
               </span>
             </p>
+            <p className="mt-1 text-muted-foreground">
+              {result.iterations_used} iteration{result.iterations_used === 1 ? "" : "s"} used
+              {result.layout_adjusted && " · layout geometry was adjusted to satisfy checks"}
+            </p>
             {!result.grid.confident && (
               <p className="mt-1 text-amber-600">
                 ⚠ Structural grid needs review: {result.grid.notes.join("; ")}
               </p>
             )}
           </div>
+
+          {result.changelog.length > 0 && (
+            <div className="rounded-md border p-3 text-sm">
+              <p className="mb-1 font-medium">Changes from approved plan</p>
+              <ul className="list-disc pl-5 text-muted-foreground">
+                {result.changelog.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {q && (
             <div className="rounded-md border p-3 text-sm">
@@ -194,7 +339,34 @@ export function StructuralViewer({ projectId, layoutId }: StructuralViewerProps)
         </div>
       )}
 
-      {!result && !loading && !error && (
+      {!result && persistedDesign && (
+        <div className="rounded-md border p-3 text-sm">
+          <p className="font-medium">
+            {persistedDesign.status === "designed" ? "✓ Design on file" : "⚠ Design on file"}
+            <span className="ml-2 text-muted-foreground">
+              {persistedDesign.iterations_used} iteration
+              {persistedDesign.iterations_used === 1 ? "" : "s"} ·{" "}
+              {new Date(persistedDesign.created_at).toLocaleString("en-IN")}
+            </span>
+          </p>
+          {changelogCount(persistedDesign.changelog) > 0 && (
+            <div className="mt-2">
+              <p className="mb-1 font-medium">Changes from approved plan</p>
+              <ul className="list-disc pl-5 text-muted-foreground">
+                {(persistedDesign.changelog ?? []).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Showing the last saved design for this approved revision. Run again to refresh artifacts
+            (PDF, quantities).
+          </p>
+        </div>
+      )}
+
+      {!result && !loading && !gateError && !persistedDesign && (
         <p className="text-sm text-muted-foreground">
           Runs an IS-code structural design (slabs, beams, columns, footings) for this layout&apos;s
           column grid via StructAgent — clause-referenced checks, quantities and a PDF report.
