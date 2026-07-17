@@ -4,7 +4,7 @@ import { OrbitControls, Text } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import type { FloorPlanData, Opening, RoomData, WallSegment } from "@/lib/layout-types";
-import { buildRoomLabels, plotDimensionLabel } from "@/lib/render-annotations";
+import { buildRoomLabels, northUnitVector, plotDimensionLabel } from "@/lib/render-annotations";
 
 export interface Plan3DHandle {
   /** Render the current 3D view to a PNG data URL, or null on failure. */
@@ -102,12 +102,14 @@ function SceneContents({
   plotWidth,
   plotLength,
   floorHeight,
+  roadSide,
   annotate = false,
 }: {
   floorPlan: FloorPlanData;
   plotWidth: number;
   plotLength: number;
   floorHeight: number;
+  roadSide?: string;
   annotate?: boolean;
 }) {
   const cx = plotWidth / 2;
@@ -127,6 +129,12 @@ function SceneContents({
     : wallsFromRooms(floorPlan.rooms);
 
   const roomLabels = annotate ? buildRoomLabels(floorPlan.rooms) : [];
+
+  // North-arrow anchor — derived from road_side via the same convention as
+  // backend/app/engine/vastu.py (ZONE_GRIDS), not a fixed page-up assumption.
+  const north = northUnitVector(roadSide);
+  const northPlanX = cx + north.dx * (plotWidth / 2 + plotWidth * 0.08);
+  const northPlanY = cy + north.dy * (plotLength / 2 + plotLength * 0.08);
 
   return (
     <group>
@@ -225,7 +233,7 @@ function SceneContents({
 
       {annotate && (
         <Text
-          position={[0, 0.06, worldZ(-plotLength * 0.06)]}
+          position={[worldX(northPlanX), 0.06, worldZ(northPlanY)]}
           rotation={[-Math.PI / 2, 0, 0]}
           fontSize={Math.max(0.3, Math.min(plotWidth, plotLength) * 0.05)}
           color="#111111"
@@ -238,7 +246,11 @@ function SceneContents({
 
       {annotate && (
         <Text
-          position={[0, 0.06, worldZ(plotLength + plotLength * 0.06)]}
+          // Fixed at the front-left corner margin — the north arrow always
+          // sits at a mid-edge point (front/rear/left/right depending on
+          // road_side), so a corner never collides with it regardless of
+          // orientation.
+          position={[worldX(-plotWidth * 0.08), 0.06, worldZ(-plotLength * 0.08)]}
           rotation={[-Math.PI / 2, 0, 0]}
           fontSize={Math.max(0.25, Math.min(plotWidth, plotLength) * 0.04)}
           color="#111111"
@@ -270,7 +282,7 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
     floorPlan,
     plotWidth,
     plotLength,
-    roadSide: _roadSide,
+    roadSide,
     floorHeight = 3.0,
     className,
     view = "top",
@@ -322,6 +334,7 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
           plotWidth={plotWidth}
           plotLength={plotLength}
           floorHeight={floorHeight}
+          roadSide={roadSide}
           annotate={annotate}
         />
         <OrbitControls target={[0, 0, 0]} makeDefault enablePan={false} />

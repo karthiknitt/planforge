@@ -36,3 +36,26 @@ export function buildRoomLabels(rooms: RoomData[]): RoomLabelEntry[] {
 export function plotDimensionLabel(plotWidth: number, plotLength: number): string {
   return `PLOT ${plotWidth.toFixed(1)}m × ${plotLength.toFixed(1)}m`;
 }
+
+/** Plan-space unit vector pointing toward true north, given which edge faces
+ * the road. Mirrors the road_side -> compass mapping in
+ * backend/app/engine/vastu.py (ZONE_GRIDS) so every view of a layout — the
+ * Vastu zone grid, the PDF, and this R3F capture — agrees on where north is:
+ *   road_side "S" (default/most common): y=0 is South, y=max is North
+ *   road_side "N": y=0 is North, y=max is South
+ *   road_side "E": x=0 is East,  x=max is West   -> North is x=0
+ *   road_side "W": x=0 is West,  x=max is East   -> North is x=max
+ * Unknown/missing road_side falls back to "S", matching vastu.py's
+ * `ZONE_GRIDS.get(road_side.upper(), ZONE_GRID_ROAD_S)`. */
+export function northUnitVector(roadSide: string | undefined): { dx: number; dy: number } {
+  switch ((roadSide ?? "S").toUpperCase()) {
+    case "N":
+      return { dx: 0, dy: -1 };
+    case "E":
+      return { dx: -1, dy: 0 };
+    case "W":
+      return { dx: 1, dy: 0 };
+    default:
+      return { dx: 0, dy: 1 };
+  }
+}

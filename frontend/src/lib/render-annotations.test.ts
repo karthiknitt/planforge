@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { RoomData } from "@/lib/layout-types";
-import { buildRoomLabels, plotDimensionLabel, roomLabel } from "./render-annotations";
+import {
+  buildRoomLabels,
+  northUnitVector,
+  plotDimensionLabel,
+  roomLabel,
+} from "./render-annotations";
 
 const ROOMS: RoomData[] = [
   {
@@ -84,5 +89,34 @@ describe("buildRoomLabels", () => {
 describe("plotDimensionLabel", () => {
   it("formats overall plot footprint to one decimal", () => {
     expect(plotDimensionLabel(9.0, 15.0)).toBe("PLOT 9.0m × 15.0m");
+  });
+});
+
+describe("northUnitVector", () => {
+  // Mirrors backend/app/engine/vastu.py ZONE_GRIDS road_side -> compass mapping.
+  it("road_side S (default/most common): north is y=max", () => {
+    expect(northUnitVector("S")).toEqual({ dx: 0, dy: 1 });
+  });
+
+  it("road_side N: north is y=0", () => {
+    expect(northUnitVector("N")).toEqual({ dx: 0, dy: -1 });
+  });
+
+  it("road_side E: north is x=0", () => {
+    expect(northUnitVector("E")).toEqual({ dx: -1, dy: 0 });
+  });
+
+  it("road_side W: north is x=max", () => {
+    expect(northUnitVector("W")).toEqual({ dx: 1, dy: 0 });
+  });
+
+  it("is case-insensitive", () => {
+    expect(northUnitVector("n")).toEqual({ dx: 0, dy: -1 });
+  });
+
+  it("falls back to road_side S mapping for unknown/missing input", () => {
+    expect(northUnitVector(undefined)).toEqual({ dx: 0, dy: 1 });
+    expect(northUnitVector("")).toEqual({ dx: 0, dy: 1 });
+    expect(northUnitVector("Q")).toEqual({ dx: 0, dy: 1 });
   });
 });
