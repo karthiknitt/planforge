@@ -126,6 +126,38 @@ async def mark_designs_stale(
     return result.rowcount or 0
 
 
+async def design_surface(
+    project_id: str, layout_key: str, geometry: dict, db: AsyncSession
+) -> dict | None:
+    """Latest non-stale StructuralDesign for the layout's CURRENT approved
+    revision, shaped for drawing/BOQ/API consumers. None when unapproved or
+    undesigned -- callers treat that as "no structural set" (preliminary /
+    estimated fallback)."""
+    revision = await find_revision_for_hash(
+        project_id, layout_key, geometry_hash(geometry), db
+    )
+    if revision is None:
+        return None
+    design = await latest_design(revision.id, db)
+    if design is None:
+        return None
+    response = design.structapi_response or {}
+    return {
+        "design_id": design.id,
+        "revision_id": revision.id,
+        "status": design.status,
+        "iterations_used": design.iterations_used,
+        "changelog": design.changelog or [],
+        "final_geometry": design.final_geometry,
+        "structapi": {
+            "checks": response.get("checks"),
+            "data": response.get("data"),
+            "disclaimer": response.get("disclaimer"),
+        },
+        "created_at": design.created_at.isoformat() if design.created_at else None,
+    }
+
+
 async def layout_status(
     project_id: str, layout_key: str, geometry: dict, db: AsyncSession
 ) -> dict:

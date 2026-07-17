@@ -49,6 +49,12 @@ def _supported_cities() -> list[str]:
     return list(data.get("cities", {}).keys())
 
 
+#: "designed" = sourced from an IS-code structural design (structapi
+#: quantities); "estimated" = the geometric rule-of-thumb fallback below.
+BASIS_DESIGNED = "designed"
+BASIS_ESTIMATED = "estimated"
+
+
 @dataclass
 class BOQLineItem:
     item: str
@@ -57,6 +63,7 @@ class BOQLineItem:
     unit: str
     rate: float = 0.0
     amount: float = 0.0
+    basis: str = BASIS_ESTIMATED
 
 
 @dataclass
@@ -69,8 +76,11 @@ class BOQResult:
     generic_total_cost: float = 0.0
     cost_difference: float = 0.0
     line_items: list[BOQLineItem] = field(default_factory=list)
+    preliminary: bool = True
 
     def to_dict(self) -> dict:
+        designed = sum(1 for li in self.line_items if li.basis == BASIS_DESIGNED)
+        estimated = len(self.line_items) - designed
         return {
             "project_name": self.project_name,
             "layout_id": self.layout_id,
@@ -83,6 +93,11 @@ class BOQResult:
             "cost_difference": round(self.cost_difference)
             if self.city != "Generic"
             else None,
+            "preliminary": self.preliminary,
+            "basis_summary": {
+                "designed_items": designed,
+                "estimated_items": estimated,
+            },
             "items": [
                 {
                     "item": li.item,
@@ -91,6 +106,7 @@ class BOQResult:
                     "unit": li.unit,
                     "rate": round(li.rate, 2),
                     "amount": round(li.amount),
+                    "basis": li.basis,
                 }
                 for li in self.line_items
             ],
@@ -106,13 +122,22 @@ class QuantityEngine:
         cfg: PlotConfig,
         project_name: str = "",
         city: str = "Generic",
+        structural_quantities: dict | None = None,
     ) -> BOQResult:
+        """``structural_quantities``: an IS-code-designed quantities surface
+        -- {"quantities": {...structapi data.quantities...}} -- from a
+        persisted StructuralDesign. When present, the RCC slab/beam/column/
+        footing concrete + steel line items are replaced with the designed
+        figures (tagged ``basis="designed"``); masonry/finishes/MEP stay
+        geometric. When absent, every item keeps the rule-of-thumb estimate
+        (``basis="estimated"``) and the result is marked preliminary."""
         rates = _load_rates(city)
         result = BOQResult(
             project_name=project_name,
             layout_id=layout.id,
             city=city,
             rates_note=f"{city} rates (Mar 2026)",
+            preliminary=structural_quantities is None,
         )
         ewt = 0.23  # external wall thickness
         iwt = 0.115  # internal wall thickness
@@ -133,43 +158,96 @@ class QuantityEngine:
             BOQLineItem("2", "Built-up area (First floor)", ff_area, "sqm")
         )
 
-        # ── Concrete slab ───────────────────────────────────────────────────
-        slab_vol = total_area * SLAB_THICKNESS
-        result.line_items.append(
-            BOQLineItem("3", "RCC slab concrete (M20)", round(slab_vol, 3), "cum")
-        )
-
-        # ── Columns ─────────────────────────────────────────────────────────
+        # ── Columns (count needed below regardless of costing basis) ─────────
         unique_cols = set()
         for plan in [gf, ff]:
             for col in plan.columns:
                 unique_cols.add((round(col.x, 2), round(col.y, 2)))
         col_count = len(unique_cols)
         col_vol = col_count * COLUMN_SIZE * COLUMN_SIZE * FLOOR_HEIGHT_M * 2  # G+1
-        col_steel_kg = col_vol * STEEL_PER_M3
-        col_steel_ton = col_steel_kg / _KG_PER_TON
-
         col_steel_rate = rates.get("steel_per_ton", 58000)
-        col_steel_amount = col_steel_ton * col_steel_rate
 
-        result.line_items.append(
-            BOQLineItem(
-                "4",
-                f"RCC columns ({col_count} nos, 300×300 mm)",
-                round(col_vol, 3),
-                "cum",
+        slab_vol = total_area * SLAB_THICKNESS
+
+        if structural_quantities:
+            conc = structural_quantities.get("concrete_m3") or {}
+            steel = structural_quantities.get("steel_kg") or {}
+            steel_total_kg = steel.get("total", 0.0)
+            steel_amount = (steel_total_kg / _KG_PER_TON) * col_steel_rate
+
+            result.line_items.append(
+                BOQLineItem(
+                    "3",
+                    "RCC slab concrete (IS-code designed)",
+                    round(conc.get("slabs", 0.0), 3),
+                    "cum",
+                    basis=BASIS_DESIGNED,
+                )
             )
-        )
-        result.line_items.append(
-            BOQLineItem(
-                "5",
-                "Reinforcement steel in columns (IS 456)",
-                round(col_steel_kg, 1),
-                "kg",
-                rate=col_steel_rate / _KG_PER_TON,
-                amount=col_steel_amount,
+            result.line_items.append(
+                BOQLineItem(
+                    "3b",
+                    "RCC beam concrete (IS-code designed)",
+                    round(conc.get("beams", 0.0), 3),
+                    "cum",
+                    basis=BASIS_DESIGNED,
+                )
             )
-        )
+            result.line_items.append(
+                BOQLineItem(
+                    "4",
+                    f"RCC columns ({col_count} nos, IS-code designed)",
+                    round(conc.get("columns", 0.0), 3),
+                    "cum",
+                    basis=BASIS_DESIGNED,
+                )
+            )
+            result.line_items.append(
+                BOQLineItem(
+                    "4b",
+                    "RCC footing concrete (IS-code designed)",
+                    round(conc.get("footings", 0.0), 3),
+                    "cum",
+                    basis=BASIS_DESIGNED,
+                )
+            )
+            result.line_items.append(
+                BOQLineItem(
+                    "5",
+                    "Reinforcement steel — slabs, beams, columns, footings "
+                    "(IS-code designed, IS 456)",
+                    round(steel_total_kg, 1),
+                    "kg",
+                    rate=col_steel_rate / _KG_PER_TON,
+                    amount=steel_amount,
+                    basis=BASIS_DESIGNED,
+                )
+            )
+        else:
+            result.line_items.append(
+                BOQLineItem("3", "RCC slab concrete (M20)", round(slab_vol, 3), "cum")
+            )
+            col_steel_kg = col_vol * STEEL_PER_M3
+            col_steel_ton = col_steel_kg / _KG_PER_TON
+            col_steel_amount = col_steel_ton * col_steel_rate
+            result.line_items.append(
+                BOQLineItem(
+                    "4",
+                    f"RCC columns ({col_count} nos, 300×300 mm)",
+                    round(col_vol, 3),
+                    "cum",
+                )
+            )
+            result.line_items.append(
+                BOQLineItem(
+                    "5",
+                    "Reinforcement steel in columns (IS 456)",
+                    round(col_steel_kg, 1),
+                    "kg",
+                    rate=col_steel_rate / _KG_PER_TON,
+                    amount=col_steel_amount,
+                )
+            )
 
         # ── Brick masonry walls ─────────────────────────────────────────────
         ext_wall_len = (
@@ -360,7 +438,11 @@ class QuantityEngine:
         # ── City comparison — compute Generic total if city != Generic ────────
         if city != "Generic":
             generic_result = QuantityEngine().calculate(
-                layout, cfg, project_name=project_name, city="Generic"
+                layout,
+                cfg,
+                project_name=project_name,
+                city="Generic",
+                structural_quantities=structural_quantities,
             )
             result.generic_total_cost = generic_result.total_cost
             result.cost_difference = result.total_cost - generic_result.total_cost

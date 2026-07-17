@@ -320,3 +320,106 @@ async def test_mark_designs_stale_scoped_to_project(client_db):
         assert n == 1
         n2 = await structural_store.mark_designs_stale("p1", s)
         assert n2 == 0  # idempotent: already stale
+
+
+async def test_get_design_404_when_not_approved(client_db):
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/design",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "not_approved"
+
+
+async def test_get_design_404_when_approved_but_not_designed(client_db):
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/design",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "not_designed"
+
+
+async def test_get_design_returns_persisted_design(client_db, monkeypatch):
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    monkeypatch.setattr(settings, "structural_api_url", "http://sapi.test")
+    monkeypatch.setattr(settings, "structural_api_key", "k1")
+    monkeypatch.setattr(
+        structagent_client,
+        "_transport_for_tests",
+        httpx.MockTransport(lambda request: httpx.Response(200, json=ENVELOPE)),
+    )
+    await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    design_res = await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+    design_id = design_res.json()["design_id"]
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/design",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["design_id"] == design_id
+    assert body["status"] == "designed"
+    assert body["structapi"]["data"]["quantities"]["steel_kg"]["total"] == 1234.5
+    assert body["structapi"]["disclaimer"] == ENVELOPE["disclaimer"]
+    assert body["changelog"] == []
+    assert body["final_geometry"] is None
+
+
+async def test_get_design_404_after_geometry_edit_invalidates(client_db, monkeypatch):
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    monkeypatch.setattr(settings, "structural_api_url", "http://sapi.test")
+    monkeypatch.setattr(settings, "structural_api_key", "k1")
+    monkeypatch.setattr(
+        structagent_client,
+        "_transport_for_tests",
+        httpx.MockTransport(lambda request: httpx.Response(200, json=ENVELOPE)),
+    )
+    await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+
+    edited = {**GEO_V1, "name": "Layout A (edited)"}
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, edited, s)
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/design",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "not_approved"

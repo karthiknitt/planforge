@@ -106,6 +106,54 @@ async def structural_status(
     return await structural_store.layout_status(project_id, layout_id, row.geometry, db)
 
 
+@router.get("/projects/{project_id}/structural/design")
+async def get_structural_design(
+    project_id: str,
+    layout_id: str = "A",
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Fetch the latest non-stale structural design for the layout's
+    CURRENT approved revision (matching the layout's current geometry
+    hash). Used by drawing/BOQ surfaces to read the structural set."""
+    _, row = await _get_layout_row(project_id, layout_id, user_id, db)
+
+    revision = await structural_store.find_revision_for_hash(
+        project_id,
+        layout_id,
+        structural_store.geometry_hash(row.geometry),
+        db,
+    )
+    if revision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "not_approved",
+                "help": (
+                    "Approve the architectural plan first: "
+                    f"POST /api/projects/{project_id}/structural/approve "
+                    f'{{"layout_id": "{layout_id}"}}'
+                ),
+            },
+        )
+    surface = await structural_store.design_surface(
+        project_id, layout_id, row.geometry, db
+    )
+    if surface is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "not_designed",
+                "help": (
+                    "Run structural design first: "
+                    f"POST /api/projects/{project_id}/structural "
+                    f'{{"layout_id": "{layout_id}"}}'
+                ),
+            },
+        )
+    return surface
+
+
 @router.post("/projects/{project_id}/structural")
 async def structural_design(
     project_id: str,
