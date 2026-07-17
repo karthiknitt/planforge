@@ -249,6 +249,8 @@ def render_pdf(
     cfg: PlotConfig,
     num_bedrooms: int,
     annotations: dict | None = None,
+    structural_design: dict | None = None,
+    watermark_preliminary: bool = False,
 ) -> bytes:
     """Return raw PDF bytes.
 
@@ -259,9 +261,18 @@ def render_pdf(
       4. First Floor structural (beam & column) layout
       5. Section A-A
       6. Front Elevation
+
+    ``structural_design`` (optional): the persisted StructuralDesign surface
+    -- {status, revision_id, changelog, structapi: {data, disclaimer}} --
+    from ``GET /structural/design``. When present, structural pages draw
+    designed member sizes + schedule tables instead of the typ. defaults,
+    and the architectural watermark is suppressed (a design supersedes
+    "preliminary"). When absent and ``watermark_preliminary`` is True, the
+    architectural pages carry a "PRELIMINARY — FOR PLANNING ONLY" watermark.
     """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
+    show_watermark = watermark_preliminary and structural_design is None
 
     # ── Architectural pages ────────────────────────────────────────────────────
     for floor_plan in [layout.ground_floor, layout.first_floor]:
@@ -275,6 +286,7 @@ def render_pdf(
             num_bedrooms,
             floor_label,
             annotations=annotations,
+            watermark_preliminary=show_watermark,
         )
         c.showPage()
 
@@ -282,7 +294,14 @@ def render_pdf(
     for floor_plan in [layout.ground_floor, layout.first_floor]:
         floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
         _draw_structural_floor(
-            c, floor_plan, layout, cfg, project_name, num_bedrooms, floor_label
+            c,
+            floor_plan,
+            layout,
+            cfg,
+            project_name,
+            num_bedrooms,
+            floor_label,
+            structural_design=structural_design,
         )
         c.showPage()
 
@@ -290,7 +309,7 @@ def render_pdf(
     page_w, page_h = A4
     region = (MARGIN, TITLE_H + 30, page_w - 2 * MARGIN, page_h - TITLE_H - 60)
 
-    sd = derive_section(layout, cfg)
+    sd = derive_section(layout, cfg, structural_design=structural_design)
     sd_scale = render_section_view(c, sd, region)
     _draw_title_block(
         c,
@@ -1275,6 +1294,18 @@ def _draw_setback_callouts(
             c.drawCentredString(xp, yp - 2, text)
 
 
+def _draw_preliminary_watermark(c: canvas.Canvas, page_w: float, page_h: float) -> None:
+    """Subtle diagonal watermark for architectural pages that have no
+    designed structural set backing them yet."""
+    c.saveState()
+    c.translate(page_w / 2, page_h / 2)
+    c.rotate(35)
+    c.setFillColor(HexColor("#C8C8C8"))
+    c.setFont("Helvetica-Bold", 26)
+    c.drawCentredString(0, 0, "PRELIMINARY — FOR PLANNING ONLY")
+    c.restoreState()
+
+
 def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
     c.setFillColor(white)
     c.setStrokeColor(HexColor("#808080"))
@@ -1295,6 +1326,114 @@ def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
     c.drawCentredString(cx, cy - r - 7, "NORTH")
 
 
+def _column_class(idx: int, xs_len: int, jdx: int, ys_len: int) -> str:
+    """corner/edge/interior classification matching structapi's own grid
+    classification (extreme index on both axes = corner, one axis = edge)."""
+    x_extreme = idx in (0, xs_len - 1)
+    y_extreme = jdx in (0, ys_len - 1)
+    if x_extreme and y_extreme:
+        return "corner"
+    if x_extreme or y_extreme:
+        return "edge"
+    return "interior"
+
+
+def _nearest_index(vals: list[float], v: float) -> int:
+    return min(range(len(vals)), key=lambda i: abs(vals[i] - v))
+
+
+def _draw_column_schedule_table(
+    c: canvas.Canvas, columns_data: dict, x: float, y_top: float
+) -> float:
+    """COLUMN SCHEDULE: class -> size + bars, from structapi ``data.columns``."""
+    col_ws = (44, 44, 60)
+    headers = ("CLASS", "SIZE (MM)", "BARS")
+    rows = [
+        (cls.upper(), f"{int(v['b_mm'])}x{int(v['D_mm'])}", v.get("bars", "—"))
+        for cls, v in sorted(columns_data.items())
+    ]
+    return _draw_generic_schedule_table(
+        c, "COLUMN SCHEDULE", headers, col_ws, rows, x, y_top
+    )
+
+
+def _draw_beam_schedule_table(
+    c: canvas.Canvas, beams_data: dict, x: float, y_top: float
+) -> float:
+    """BEAM SCHEDULE: unique beam design entries -> size + span/tributary,
+    from structapi ``data.beams`` (worst-span-governed, per direction)."""
+    col_ws = (30, 44, 40, 34)
+    headers = ("DIR", "SIZE (MM)", "SPAN (M)", "SPANS")
+    rows = [
+        (
+            key.split("-")[0].upper(),
+            f"{int(v['b_mm'])}x{int(v['D_mm'])}",
+            f"{v.get('span_m', 0):.1f}",
+            str(v.get("n_spans", "—")),
+        )
+        for key, v in sorted(beams_data.items())
+    ]
+    return _draw_generic_schedule_table(
+        c, "BEAM SCHEDULE", headers, col_ws, rows, x, y_top
+    )
+
+
+def _generic_schedule_height(n_rows: int) -> float:
+    return SCHED_BAND_H + SCHED_ROW_H * (n_rows + 1)
+
+
+def _draw_generic_schedule_table(
+    c: canvas.Canvas,
+    title: str,
+    headers: tuple[str, ...],
+    col_ws: tuple[float, ...],
+    rows: list[tuple],
+    x: float,
+    y_top: float,
+) -> float:
+    """Bordered schedule table, same visual style as the openings/area
+    schedules (title band + header row + data rows). Returns height."""
+    w = sum(col_ws)
+    row_h, band_h = SCHED_ROW_H, SCHED_BAND_H
+    height = _generic_schedule_height(len(rows))
+    y = y_top - height
+
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.7)
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(x, y, w, height, fill=1, stroke=1)
+    c.setFillColor(HexColor("#000000"))
+    c.rect(x, y_top - band_h, w, band_h, fill=1, stroke=0)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 6)
+    c.drawCentredString(x + w / 2, y_top - band_h + 3.5, title)
+
+    hdr_y = y_top - band_h - row_h
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica-Bold", 5)
+    cx_acc = x
+    for cw, hdr in zip(col_ws, headers):
+        c.drawCentredString(cx_acc + cw / 2, hdr_y + 2.5, hdr)
+        cx_acc += cw
+    c.setLineWidth(0.4)
+    c.line(x, hdr_y, x + w, hdr_y)
+    cx_acc = x
+    for cw in col_ws[:-1]:
+        cx_acc += cw
+        c.line(cx_acc, y, cx_acc, y_top - band_h)
+
+    c.setFont("Helvetica", 5)
+    for i, row in enumerate(rows):
+        ry = hdr_y - (i + 1) * row_h
+        cx_acc = x
+        for cw, val in zip(col_ws, row):
+            c.drawCentredString(cx_acc + cw / 2, ry + 2.5, str(val))
+            cx_acc += cw
+        c.setLineWidth(0.25)
+        c.line(x, ry, x + w, ry)
+    return height
+
+
 def _draw_structural_floor(
     c: canvas.Canvas,
     floor_plan: FloorPlan,
@@ -1303,6 +1442,7 @@ def _draw_structural_floor(
     project_name: str,
     num_bedrooms: int,
     floor_label: str,
+    structural_design: dict | None = None,
 ) -> None:
     """Beam & column layout projected from the canonical FloorDrawing — the
     same scale, grid derivation (wall centrelines), and page furniture as
@@ -1447,44 +1587,113 @@ def _draw_structural_floor(
             for a, b in zip(ordered, ordered[1:]):
                 c.line(ox + a.cx * s, oy + a.cy * s, ox + b.cx * s, oy + b.cy * s)
 
+    # Designed column sizes from the persisted structural design (when one
+    # exists): classify each drawn column corner/edge/interior by its grid
+    # position and size it to structapi's data.columns[class].b_mm/D_mm.
+    design_data = None
+    if structural_design and structural_design.get("status") not in (None, "stale"):
+        design_data = (structural_design.get("structapi") or {}).get("data") or {}
+    columns_data = (design_data or {}).get("columns") or {}
+    col_class_by_idx: dict[int, str] = {}
+    if columns_data and v_xs and h_ys:
+        for idx, col in enumerate(cols):
+            ci = _nearest_index(v_xs, col.cx)
+            cj = _nearest_index(h_ys, col.cy)
+            col_class_by_idx[idx] = _column_class(ci, len(v_xs), cj, len(h_ys))
+
     # Column markers with side tags (tags beside the marker, not inside —
     # a 300 mm square at 1:100 is too small for legible inset text)
-    col_sz = max(5.0, 0.3 * s)
+    default_col_sz = max(5.0, 0.3 * s)
     c.setFillColor(HexColor("#000000"))
-    for col in cols:
+    for idx, col in enumerate(cols):
+        cls = col_class_by_idx.get(idx)
+        if cls and cls in columns_data:
+            b_mm, d_mm = columns_data[cls]["b_mm"], columns_data[cls]["D_mm"]
+            col_w, col_h = max(3.0, b_mm / 1000 * s), max(3.0, d_mm / 1000 * s)
+        else:
+            col_w = col_h = default_col_sz
         c.rect(
-            ox + col.cx * s - col_sz / 2,
-            oy + col.cy * s - col_sz / 2,
-            col_sz,
-            col_sz,
+            ox + col.cx * s - col_w / 2,
+            oy + col.cy * s - col_h / 2,
+            col_w,
+            col_h,
             fill=1,
             stroke=0,
         )
     c.setFont("Helvetica", 4.5)
     placed_tags: list[tuple[float, float]] = []
     for idx, col in enumerate(cols):
-        tx = ox + col.cx * s + col_sz / 2 + 1.5
-        ty = oy + col.cy * s + col_sz / 2 - 2
+        cls = col_class_by_idx.get(idx)
+        tag = f"C{idx + 1}" if not cls else f"C{idx + 1} ({cls[0].upper()})"
+        tx = ox + col.cx * s + default_col_sz / 2 + 1.5
+        ty = oy + col.cy * s + default_col_sz / 2 - 2
         if any(abs(tx - px) < 16 and abs(ty - py) < 7 for px, py in placed_tags):
             # neighbour tag would overlap: drop to the lower-left corner
-            tx = ox + col.cx * s - col_sz / 2 - 12
-            ty = oy + col.cy * s - col_sz / 2 - 3
+            tx = ox + col.cx * s - default_col_sz / 2 - 12
+            ty = oy + col.cy * s - default_col_sz / 2 - 3
         placed_tags.append((tx, ty))
-        c.drawString(tx, ty, f"C{idx + 1}")
+        c.drawString(tx, ty, tag)
 
     # Structural notes — same top-left slot the area schedule table uses on
     # the architectural pages
-    notes = [
-        "STRUCTURAL NOTES:",
-        f"1. COLUMNS 300 x 300 MM (TYP.), {len(cols)} NOS — MARKED C1..C{len(cols)}",
-        "2. BEAMS 230 x 380 MM (TYP.) ALONG GRID LINES",
-        "3. GRID LINES AT WALL CENTRELINES",
-        "4. MAX CLEAR BEAM SPAN 4.5 M — VERIFY BEFORE EXECUTION",
-    ]
+    if design_data:
+        beams_typ = design_data.get("beams") or {}
+        beam_D_typ = max((v["D_mm"] for v in beams_typ.values()), default=380)
+        notes = [
+            "STRUCTURAL NOTES (IS-CODE DESIGNED):",
+            f"1. COLUMNS SIZED PER DESIGN — {len(cols)} NOS — MARKED C1..C{len(cols)}",
+            f"2. BEAMS UP TO {int(beam_D_typ)} MM DEEP — SEE BEAM SCHEDULE",
+            "3. GRID LINES AT WALL CENTRELINES",
+            "4. SEE COLUMN/BEAM SCHEDULE TABLES FOR MEMBER SIZES + REINFORCEMENT",
+        ]
+    else:
+        notes = [
+            "STRUCTURAL NOTES:",
+            f"1. COLUMNS 300 x 300 MM (TYP.), {len(cols)} NOS — MARKED C1..C{len(cols)}",
+            "2. BEAMS 230 x 380 MM (TYP.) ALONG GRID LINES",
+            "3. GRID LINES AT WALL CENTRELINES",
+            "4. MAX CLEAR BEAM SPAN 4.5 M — VERIFY BEFORE EXECUTION",
+        ]
     c.setFillColor(HexColor("#000000"))
     for i, note in enumerate(notes):
         c.setFont("Helvetica-Bold" if i == 0 else "Helvetica", 6 if i == 0 else 5.5)
         c.drawString(MARGIN, page_h - MARGIN - 9 * i, note)
+
+    # Column/beam schedule tables + revision notes + disclaimer — reserved
+    # schedule column, same slot the AREA/OPENINGS tables use on the
+    # architectural pages (unused here otherwise)
+    if design_data:
+        sched_x = _schedule_column_x(page_w, MARGIN)
+        top = TITLE_H + SCHED_PAD
+        if columns_data:
+            h = _draw_column_schedule_table(c, columns_data, sched_x, top + 0)
+            top += h + SCHED_PAD
+        beams_data = design_data.get("beams") or {}
+        if beams_data:
+            h = _draw_beam_schedule_table(c, beams_data, sched_x, top)
+            top += h + SCHED_PAD
+
+        rev_id = structural_design.get("revision_id")
+        status_txt = (structural_design.get("status") or "").upper()
+        changelog = structural_design.get("changelog") or []
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica-Bold", 5.5)
+        rev_y = page_h - MARGIN - 9 * 5 - 6
+        c.drawString(MARGIN, rev_y, "REVISION NOTES:")
+        c.setFont("Helvetica", 5)
+        rev_y -= 8
+        c.drawString(
+            MARGIN, rev_y, f"REVISION {rev_id or '—'} — STATUS: {status_txt or '—'}"
+        )
+        for note in changelog[:6]:
+            rev_y -= 7
+            c.drawString(MARGIN, rev_y, f"- {note}"[:110])
+        disclaimer = (structural_design.get("structapi") or {}).get("disclaimer")
+        if disclaimer:
+            rev_y -= 9
+            c.setFont("Helvetica-Oblique", 4.5)
+            c.setFillColor(HexColor("#555555"))
+            c.drawString(MARGIN, rev_y, disclaimer[:130])
 
     # Scale bar + north arrow + title block — shared furniture
     _draw_scale_bar(c, MARGIN, TITLE_H + 2, s, denom)
@@ -1770,6 +1979,7 @@ def _draw_floor_projected(
     num_bedrooms: int,
     floor_label: str,
     annotations: dict | None = None,
+    watermark_preliminary: bool = False,
 ) -> None:
     """Architectural floor page rendered purely from the canonical FloorDrawing."""
     from app.engine.plan_geometry import (
@@ -1864,6 +2074,8 @@ def _draw_floor_projected(
         openings_top = area_top + SCHED_PAD + _openings_schedule_height(opening_rows)
         _draw_openings_schedule_table(c, opening_rows, sched_x, openings_top)
     _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
+    if watermark_preliminary:
+        _draw_preliminary_watermark(c, page_w, page_h)
     _draw_title_block(
         c,
         project_name,

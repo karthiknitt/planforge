@@ -136,8 +136,10 @@ async def get_structural_design(
                 ),
             },
         )
-    design = await structural_store.latest_design(revision.id, db)
-    if design is None:
+    surface = await structural_store.design_surface(
+        project_id, layout_id, row.geometry, db
+    )
+    if surface is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -149,21 +151,7 @@ async def get_structural_design(
                 ),
             },
         )
-    response = design.structapi_response or {}
-    return {
-        "design_id": design.id,
-        "revision_id": revision.id,
-        "status": design.status,
-        "iterations_used": design.iterations_used,
-        "changelog": design.changelog or [],
-        "final_geometry": design.final_geometry,
-        "structapi": {
-            "checks": response.get("checks"),
-            "data": response.get("data"),
-            "disclaimer": response.get("disclaimer"),
-        },
-        "created_at": design.created_at.isoformat() if design.created_at else None,
-    }
+    return surface
 
 
 @router.post("/projects/{project_id}/structural")

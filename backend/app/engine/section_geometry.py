@@ -266,7 +266,10 @@ def derive_elevation(
 
 
 def derive_section(
-    layout: Layout, cfg: PlotConfig, vs: VerticalStandards = VS
+    layout: Layout,
+    cfg: PlotConfig,
+    vs: VerticalStandards = VS,
+    structural_design: dict | None = None,
 ) -> SectionDrawing:
     ftf = vs.floor_to_floor_m
     slab_t = vs.slab_t_m
@@ -432,6 +435,37 @@ def derive_section(
     for k in range(n_floors):
         vdims.append(VDim(z_ffl(k), z_ffl(k + 1), str(round(ftf * 1000))))
     vdims.append(VDim(roof_z, roof_z + parapet_h, str(round(parapet_h * 1000))))
+
+    # Rule 10b — designed member size annotations, when a persisted
+    # structural design is available (additive; no design => unchanged).
+    if structural_design and structural_design.get("status") not in (None, "stale"):
+        data = (structural_design.get("structapi") or {}).get("data") or {}
+        slabs = data.get("slabs") or {}
+        beams = data.get("beams") or {}
+        footings = data.get("footings") or {}
+        if slabs:
+            slab_D_mm = max(v["D_mm"] for v in slabs.values())
+            labels.append(
+                (s_mid, roof_z - slab_t / 2, f"SLAB {int(slab_D_mm)}MM (DESIGNED)")
+            )
+        if beams:
+            beam_D_mm = max(v["D_mm"] for v in beams.values())
+            labels.append(
+                (
+                    s_mid,
+                    z_ffl(0) + lintel_h + 0.1,
+                    f"BEAM {int(beam_D_mm)}MM (DESIGNED)",
+                )
+            )
+        if footings:
+            footing_D_mm = max(f["data"]["D_overall_mm"] for f in footings.values())
+            labels.append(
+                (
+                    s_mid,
+                    gl - fd + footing_t / 2,
+                    f"FOOTING {int(footing_D_mm)}MM (DESIGNED)",
+                )
+            )
 
     # Rule 11 — annotation-padded bounds (union of polys, levels and labels)
     all_s = (
