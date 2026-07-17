@@ -132,3 +132,48 @@ def test_prompt_pins_staircase_position():
 def test_prompt_forbids_unlisted_rooms():
     prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
     assert "NOTHING that is not listed" in prompt
+
+
+def test_prompt_manifest_lists_every_room_with_name_and_dims():
+    prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
+    assert "Room manifest" in prompt
+    manifest = prompt.split("Room manifest")[1].split("Hard constraints")[0]
+    assert "Living Room" in manifest and "4.5m x 3.6m" in manifest
+    assert "Kitchen" in manifest and "2.8m x 3.0m" in manifest
+
+
+def test_prompt_manifest_derives_quadrant_from_plot_midpoints():
+    # Living room at x=1.0,y=1.0 on a 9.0x15.0 plot (mids 4.5/7.5) -> front-left.
+    prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
+    manifest = prompt.split("Room manifest")[1].split("Hard constraints")[0]
+    assert "Living Room: front-left" in manifest
+
+
+def test_prompt_manifest_centers_room_near_plot_midpoint():
+    geometry = {
+        "ground_floor": {
+            "floor": 0,
+            "rooms": [
+                {
+                    "id": "gf-hall",
+                    "name": "Central Hall",
+                    "type": "living",
+                    "x": 4.4,
+                    "y": 7.4,
+                    "width": 2.0,
+                    "depth": 2.0,
+                    "area": 4.0,
+                },
+            ],
+            "columns": [],
+        },
+    }
+    prompt = build_render_prompt(geometry, plot_length_m=15.0, plot_width_m=9.0)
+    manifest = prompt.split("Room manifest")[1].split("Hard constraints")[0]
+    assert "Central Hall: center" in manifest
+
+
+def test_prompt_declares_reference_labels_authoritative():
+    prompt = build_render_prompt(GEOMETRY, plot_length_m=15.0, plot_width_m=9.0)
+    assert "AUTHORITATIVE" in prompt
+    assert "must not move, merge, resize, or" in prompt
