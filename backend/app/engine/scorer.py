@@ -1,11 +1,12 @@
 """Layout quality scorer for PlanForge.
 
-Scores each Layout on 5 components (weighted sum → 0–100):
-  25% Natural light   — % habitable rooms touching plot boundary
+Scores each Layout on 6 components (weighted sum → 0–100):
+  20% Natural light   — % habitable rooms touching plot boundary
   25% Adjacency       — kitchen↔dining, bedroom↔toilet, living↔staircase
-  20% Aspect ratio    — penalty when width/depth > 2:1 for habitable rooms
+  15% Aspect ratio    — penalty when width/depth > 2:1 for habitable rooms
   15% Circulation     — room area / buildable area (fill efficiency)
-  15% Vastu           — reuses check_vastu(); −20/violation, −5/warning
+  10% Vastu           — reuses check_vastu(); −20/violation, −5/warning
+  15% Grid regularity — structural_grid confidence + GF/FF column stacking
 """
 
 from __future__ import annotations
@@ -132,6 +133,29 @@ def _score_vastu(layout: Layout, cfg: PlotConfig) -> float:
     return max(0.0, score)
 
 
+def _score_grid_regularity(layout: Layout) -> float:
+    """Regular, stackable column grids design (and cost) better — this is
+    what structapi's /v1/design/building consumes. Neutral when a layout
+    carries no derived columns (e.g. hand-built test fixtures)."""
+    from app.engine.structural_grid import extract_grid
+
+    gf_cols = layout.ground_floor.columns
+    if not gf_cols:
+        return 100.0
+    grid = extract_grid([{"x": c.x, "y": c.y} for c in gf_cols])
+    base = 100.0 if grid.confident else max(0.0, 70.0 - 10.0 * len(grid.notes))
+
+    ff_cols = layout.first_floor.columns
+    if not ff_cols:
+        return base
+    stacked = sum(
+        1
+        for f in ff_cols
+        if any(abs(f.x - g.x) <= 0.15 and abs(f.y - g.y) <= 0.15 for g in gf_cols)
+    )
+    return 0.7 * base + 30.0 * stacked / len(ff_cols)
+
+
 def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
     """Compute a weighted quality score for a layout."""
     from .compliance import load_rules
@@ -144,8 +168,9 @@ def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
     ar = _score_aspect_ratio(layout)
     cir = _score_circulation(layout, cfg, ewt)
     vas = _score_vastu(layout, cfg)
+    grid = _score_grid_regularity(layout)
 
-    total = 0.25 * nl + 0.25 * adj + 0.20 * ar + 0.15 * cir + 0.15 * vas
+    total = 0.20 * nl + 0.25 * adj + 0.15 * ar + 0.15 * cir + 0.10 * vas + 0.15 * grid
 
     return LayoutScore(
         total=round(total, 1),
@@ -154,6 +179,7 @@ def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
         aspect_ratio=round(ar, 1),
         circulation=round(cir, 1),
         vastu=round(vas, 1),
+        grid_regularity=round(grid, 1),
     )
 
 

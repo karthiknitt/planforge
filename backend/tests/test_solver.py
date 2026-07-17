@@ -132,10 +132,12 @@ def test_solve_columns_use_wall_junction_pipeline_not_room_corners():
             pipeline_total += len(expected_pts)
 
     # Aggregated across all floors of all layouts, the span-aware pipeline
-    # should still come out below the old naive per-room-corner scheme —
-    # even though a single floor can occasionally need a couple more
-    # exterior-ring columns than its rooms happen to touch.
-    assert pipeline_total < naive_corner_total
+    # must not exceed the old naive per-room-corner scheme. A tie is fine:
+    # with the wall-coalignment objective (Phase 1A) room corners dedupe
+    # onto shared grid lines, shrinking the naive count to meet the
+    # pipeline's — the regression guarded here (a column at EVERY corner,
+    # far more than junction-derived) would show as pipeline > naive.
+    assert pipeline_total <= naive_corner_total
 
 
 def test_solve_too_small_plot_returns_empty():

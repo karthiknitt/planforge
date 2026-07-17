@@ -13,7 +13,7 @@ Falls back gracefully — caller should catch all exceptions.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ortools.sat.python import cp_model
@@ -22,8 +22,21 @@ from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
-SOLVE_TIME_S = 5.0  # per-run wall-clock budget
+SOLVE_TIME_S = 8.0  # per-run wall-clock budget (generation runs async)
 MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
+
+# Wall-coalignment bonus (objective units = mm) per exactly-aligned edge
+# pair. Must beat the per-mm size term (so the solver gives up room growth
+# to land partitions on shared grid lines) and typical adjacency-distance
+# trades — popular grid lines earn quadratically (C(n,2) pairs), which is
+# exactly the pressure that consolidates walls onto few lines.
+ALIGN_BONUS = 2500
+# Post-solve wall-line snapping reach. Facing edge pairs (the two faces of
+# one wall) are detected and moved rigidly as a unit, so a large tolerance
+# can never collapse a wall gap — it only merges genuinely distinct wall
+# LINES, i.e. exactly the near-miss offsets that split the column grid.
+SNAP_TOL_M = 0.45
+_IWT_M = 0.115  # internal wall thickness (mirrors plan_geometry.IWT)
 
 _SPECS_PATH = Path(__file__).parent.parent / "config" / "room_specs.json"
 
@@ -51,6 +64,8 @@ class _RoomVar:
     y: cp_model.IntVar
     w: cp_model.IntVar
     d: cp_model.IntVar
+    xe: cp_model.IntVar  # x + w (explicit end var, OR-Tools 9.x affine rule)
+    ye: cp_model.IntVar  # y + d
     ix: cp_model.IntervalVar
     iy: cp_model.IntervalVar
 
@@ -180,6 +195,202 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
     return rooms
 
 
+@dataclass
+class _SnapEdge:
+    key: tuple[int, str, str, str]  # (floor_idx, room_id, axis, "lo"|"hi")
+    coord: float
+    lo: float  # perpendicular interval (for facing detection)
+    hi: float
+    pinned: bool = False
+    unit: int = -1  # union-find root index, -1 = solitary
+    line: float = 0.0  # implied wall-line coordinate used for clustering
+
+
+def snap_rooms_to_shared_grid(
+    floors: list[list[Room]],
+    min_dims: dict[str, dict],
+    tol: float = SNAP_TOL_M,
+    plate_bounds: tuple[tuple[float, float], tuple[float, float]] | None = None,
+) -> list[list[Room]]:
+    """Best-effort post-solve pass: merge near-aligned wall LINES (across
+    ALL floors, so columns stack vertically) onto shared grid lines.
+
+    Facing edge pairs — a room's hi edge and a neighbour's lo edge within
+    one wall thickness, with perpendicular overlap — are the two faces of
+    ONE wall and move rigidly together, so the pass can never collapse a
+    wall gap regardless of tolerance. Edges on the buildable plate boundary
+    are pinned and act as cluster anchors.
+
+    Guarantees, in order:
+    - wall faces keep their gap (rigid units)
+    - no room shrinks below its spec minimums (per-room revert)
+    - no room overlap (participants of an overlap revert)
+
+    Feasibility beyond that (setbacks, compliance) is the caller's problem:
+    _solve_one re-runs the compliance check and falls back to the unsnapped
+    rooms if the snapped layout fails.
+    """
+    originals = {(fi, r.id): r for fi, rooms in enumerate(floors) for r in rooms}
+
+    edges: list[_SnapEdge] = []
+    for fi, rooms in enumerate(floors):
+        for r in rooms:
+            edges.append(_SnapEdge((fi, r.id, "x", "lo"), r.x, r.y, r.y + r.depth))
+            edges.append(
+                _SnapEdge((fi, r.id, "x", "hi"), r.x + r.width, r.y, r.y + r.depth)
+            )
+            edges.append(_SnapEdge((fi, r.id, "y", "lo"), r.y, r.x, r.x + r.width))
+            edges.append(
+                _SnapEdge((fi, r.id, "y", "hi"), r.y + r.depth, r.x, r.x + r.width)
+            )
+
+    if plate_bounds is not None:
+        (px1, px2), (py1, py2) = plate_bounds
+        for e in edges:
+            bounds = (px1, px2) if e.key[2] == "x" else (py1, py2)
+            if any(abs(e.coord - b) <= 0.02 for b in bounds):
+                e.pinned = True
+        # Virtual anchors at the plate bounds themselves: a lone edge that
+        # stops just short of the plate (orphan sliver strip) snaps onto it
+        # even when no real room edge sits there to pin the cluster.
+        for axis, (b1, b2) in (("x", (px1, px2)), ("y", (py1, py2))):
+            for b in (b1, b2):
+                anchor = _SnapEdge((-1, "__plate__", axis, "lo"), b, 0.0, 0.0)
+                anchor.pinned = True
+                edges.append(anchor)
+
+    # Facing pairs (same floor, hi face meets lo face across <= one wall
+    # gap, perpendicular overlap) -> rigid wall units via union-find.
+    parent = list(range(len(edges)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    by_axis_floor: dict[tuple[str, int], list[int]] = {}
+    for idx, e in enumerate(edges):
+        by_axis_floor.setdefault((e.key[2], e.key[0]), []).append(idx)
+    for group in by_axis_floor.values():
+        for i in group:
+            a = edges[i]
+            if a.key[3] != "hi":
+                continue
+            for j in group:
+                b = edges[j]
+                if b.key[3] != "lo" or b.key[1] == a.key[1]:
+                    continue
+                gap = b.coord - a.coord
+                if -0.02 <= gap <= _IWT_M + 0.02 and (
+                    min(a.hi, b.hi) - max(a.lo, b.lo) >= 0.05
+                ):
+                    parent[find(i)] = find(j)
+
+    # Cluster on the wall-unit centre for paired faces, on the raw edge
+    # coordinate for solitary edges. (No +-IWT/2 orphan-wall estimates:
+    # coordinate-level equality already puts DERIVED wall lines within
+    # half a wall thickness of each other — far below any structural bay —
+    # and the micro-shuffles those estimates cause trigger min-dim/overlap
+    # revert cascades that destroy the real merges.)
+    members: dict[int, list[int]] = {}
+    for idx in range(len(edges)):
+        members.setdefault(find(idx), []).append(idx)
+    for root, idxs in members.items():
+        if len(idxs) > 1:
+            line = sum(edges[i].coord for i in idxs) / len(idxs)
+            for i in idxs:
+                edges[i].unit = root
+                edges[i].line = line
+        else:
+            edges[idxs[0]].line = edges[idxs[0]].coord
+
+    # Cluster wall lines per axis (chain gap AND diameter <= tol), then move
+    # every member line to the cluster target — anchored on a pinned edge's
+    # line when one is present. Units translate rigidly (same delta for all
+    # faces), so gaps are preserved exactly.
+    deltas: dict[tuple[int, str, str, str], float] = {}
+
+    def flush(cluster: list[_SnapEdge]) -> None:
+        lines = sorted({round(e.line, 6) for e in cluster})
+        if len(lines) < 2:
+            return  # already one line — nothing to merge
+        pinned = [e for e in cluster if e.pinned]
+        target = pinned[0].line if pinned else sum(lines) / len(lines)
+        for e in cluster:
+            if not e.pinned:
+                deltas[e.key] = target - e.line
+
+    def split(chunk: list[_SnapEdge]) -> list[list[_SnapEdge]]:
+        # Enforce the diameter cap by splitting at the LARGEST internal gap
+        # (greedy left-to-right splitting can separate two near-identical
+        # lines just because an unrelated line started the chain earlier).
+        if chunk[-1].line - chunk[0].line <= tol:
+            return [chunk]
+        gi = max(range(1, len(chunk)), key=lambda i: chunk[i].line - chunk[i - 1].line)
+        return split(chunk[:gi]) + split(chunk[gi:])
+
+    for axis in ("x", "y"):
+        axis_edges = sorted(
+            (e for e in edges if e.key[2] == axis), key=lambda e: e.line
+        )
+        chain: list[_SnapEdge] = []
+        for e in axis_edges:
+            if chain and e.line - chain[-1].line > tol:
+                for cluster in split(chain):
+                    flush(cluster)
+                chain = []
+            chain.append(e)
+        if chain:
+            for cluster in split(chain):
+                flush(cluster)
+
+    def build(fi: int, r: Room) -> Room:
+        x_lo = r.x + deltas.get((fi, r.id, "x", "lo"), 0.0)
+        x_hi = r.x + r.width + deltas.get((fi, r.id, "x", "hi"), 0.0)
+        y_lo = r.y + deltas.get((fi, r.id, "y", "lo"), 0.0)
+        y_hi = r.y + r.depth + deltas.get((fi, r.id, "y", "hi"), 0.0)
+        cand = replace(
+            r,
+            x=round(x_lo, 3),
+            y=round(y_lo, 3),
+            width=round(x_hi - x_lo, 3),
+            depth=round(y_hi - y_lo, 3),
+        )
+        mins = min_dims.get(r.id, {})
+        eps = 1e-9
+        if (
+            cand.width < mins.get("min_width_m", 0.0) - eps
+            or cand.depth < mins.get("min_depth_m", 0.0) - eps
+            or cand.width * cand.depth < mins.get("min_area_sqm", 0.0) - eps
+        ):
+            return r  # revert: snap would violate this room's spec minimums
+        return cand
+
+    result = [[build(fi, r) for r in rooms] for fi, rooms in enumerate(floors)]
+
+    # Overlap guard: revert every participant of an overlap, repeat until
+    # stable (reverting one room can only remove overlaps, never add them,
+    # because originals were overlap-free — but a revert can pair an
+    # original with a still-snapped neighbour, so re-check).
+    for _ in range(3):
+        dirty = False
+        for fi, rooms in enumerate(result):
+            for i, ra in enumerate(rooms):
+                for j in range(i + 1, len(rooms)):
+                    rb = rooms[j]
+                    x_ov = min(ra.x + ra.width, rb.x + rb.width) - max(ra.x, rb.x)
+                    y_ov = min(ra.y + ra.depth, rb.y + rb.depth) - max(ra.y, rb.y)
+                    if x_ov > 1e-6 and y_ov > 1e-6:
+                        rooms[i] = originals[(fi, ra.id)]
+                        rooms[j] = originals[(fi, rb.id)]
+                        ra = rooms[i]
+                        dirty = True
+        if not dirty:
+            break
+    return result
+
+
 def _solve_one(
     cfg: PlotConfig,
     ewt: float,
@@ -267,6 +478,8 @@ def _solve_one(
             y=y,
             w=w,
             d=d,
+            xe=ex,
+            ye=ey,
             ix=ix,
             iy=iy,
         )
@@ -343,8 +556,40 @@ def _solve_one(
     # dumps all slack into leftover space (the "5 sqm Study, 38 sqm Passage"
     # bug). Adjacency terms are points-weighted per mm, so they still dominate.
     size_terms = [rv.w + rv.d for rv in room_vars]
-    if dist_terms or size_terms:
-        model.minimize(sum(dist_terms) - sum(size_terms))
+
+    # Wall-coalignment bonus: reified equalities between room edge
+    # coordinates — same floor (partitions land on shared grid lines, no
+    # mid-span T columns) and cross-floor (GF/FF columns stack). Without
+    # this, size_terms grows every room independently and adjacent rooms
+    # almost never share a wall line (pro-tester regression, 2026-07-16).
+    align_bools = []
+    for i, a in enumerate(room_vars):
+        for b in room_vars[i + 1 :]:
+            if a.room_type == "staircase" and b.room_type == "staircase":
+                continue  # already hard-equal across floors
+            # All 4 end combos per axis: rooms pack with gaps anywhere in
+            # [0, iwt+], so a shared wall line shows up as lo↔lo, hi↔hi or
+            # the mixed hi↔lo forms depending on which side of the gap each
+            # room sits.
+            for e1, e2, tag in (
+                (a.x, b.x, "xll"),
+                (a.xe, b.xe, "xhh"),
+                (a.xe, b.x, "xhl"),
+                (a.x, b.xe, "xlh"),
+                (a.y, b.y, "yll"),
+                (a.ye, b.ye, "yhh"),
+                (a.ye, b.y, "yhl"),
+                (a.y, b.ye, "ylh"),
+            ):
+                bv = model.new_bool_var(f"al_{a.room_id}_{b.room_id}_{tag}")
+                model.add(e1 == e2).only_enforce_if(bv)
+                model.add(e1 != e2).only_enforce_if(bv.Not())
+                align_bools.append(bv)
+
+    if dist_terms or size_terms or align_bools:
+        model.minimize(
+            sum(dist_terms) - sum(size_terms) - ALIGN_BONUS * sum(align_bools)
+        )
 
     # ── Solve ─────────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()
@@ -397,39 +642,63 @@ def _solve_one(
         return [Column(x=c.cx, y=c.cy) for c in columns]
 
     from .compliance import check, load_rules
+    from .models import ComplianceResult
     from .vastu import check_vastu
 
-    gf = FloorPlan(
-        floor=0,
-        floor_type="ground",
-        rooms=gf_rooms,
-        columns=_wall_junction_cols(gf_rooms),
-    )
-    ff = FloorPlan(
-        floor=1,
-        floor_type="first",
-        rooms=ff_rooms,
-        columns=_wall_junction_cols(ff_rooms),
-    )
-
-    from .models import ComplianceResult
-
-    layout = Layout(
-        id=layout_id,
-        name=layout_name,
-        ground_floor=gf,
-        first_floor=ff,
-        compliance=ComplianceResult(passed=True),
-    )
-
     rules = load_rules()
-    layout.compliance = check(layout, cfg, rules)
 
-    if cfg.vastu_enabled:
-        v_viol, v_warn = check_vastu(layout, cfg, road_side=cfg.road_side)
-        layout.compliance.violations.extend(v_viol)
-        layout.compliance.warnings.extend(v_warn)
-        layout.compliance.passed = len(layout.compliance.violations) == 0
+    def _build_layout(gf_list: list[Room], ff_list: list[Room]) -> Layout:
+        layout = Layout(
+            id=layout_id,
+            name=layout_name,
+            ground_floor=FloorPlan(
+                floor=0,
+                floor_type="ground",
+                rooms=gf_list,
+                columns=_wall_junction_cols(gf_list),
+            ),
+            first_floor=FloorPlan(
+                floor=1,
+                floor_type="first",
+                rooms=ff_list,
+                columns=_wall_junction_cols(ff_list),
+            ),
+            compliance=ComplianceResult(passed=True),
+        )
+        layout.compliance = check(layout, cfg, rules)
+        if cfg.vastu_enabled:
+            v_viol, v_warn = check_vastu(layout, cfg, road_side=cfg.road_side)
+            layout.compliance.violations.extend(v_viol)
+            layout.compliance.warnings.extend(v_warn)
+            layout.compliance.passed = len(layout.compliance.violations) == 0
+        return layout
+
+    # Post-solve snap: coalesce residual near-aligned wall lines (the
+    # objective rewards exact alignment, but the solver may stop at a
+    # near-miss under its time budget). Falls back to the unsnapped rooms
+    # if snapping breaks compliance — the snap is best-effort by design.
+    min_dims = {}
+    for rd2 in room_defs:
+        spec2 = specs.get(rd2["type"], specs.get("utility"))
+        min_dims[rd2["id"]] = {
+            "min_width_m": spec2["min_width_m"],
+            "min_depth_m": spec2["min_width_m"],
+            "min_area_sqm": rd2.get("custom_min_area") or spec2["min_area_sqm"],
+        }
+    snapped_gf, snapped_ff = snap_rooms_to_shared_grid(
+        [gf_rooms, ff_rooms],
+        min_dims,
+        plate_bounds=(
+            (ox / SCALE, (ox + bw) / SCALE),
+            (oy / SCALE, (oy + bd) / SCALE),
+        ),
+    )
+
+    layout = _build_layout(snapped_gf, snapped_ff)
+    if not layout.compliance.passed and (
+        snapped_gf != gf_rooms or snapped_ff != ff_rooms
+    ):
+        layout = _build_layout(gf_rooms, ff_rooms)
 
     return layout if layout.compliance.passed else None
 
