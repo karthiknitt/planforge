@@ -34,7 +34,8 @@ import { LayoutCompareView } from "@/components/layout-compare-view";
 import { type Plan3DHandle, Plan3DScene, type Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
-import { StructuralViewer } from "@/components/structural-viewer";
+import { StructuralLifecycleHeader } from "@/components/structural-lifecycle-header";
+import { type StructuralStatusResponse, StructuralViewer } from "@/components/structural-viewer";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -84,6 +85,7 @@ import {
   floorKeyFromIndex,
   type RenderFloorKey,
 } from "@/lib/render-tab";
+import { isPreliminaryStatus } from "@/lib/structural-status";
 import { type TabId, visibleTabs } from "@/lib/tabs";
 
 interface RevisionListItem {
@@ -749,6 +751,53 @@ export function LayoutViewer({
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
   const [liveLayout, setLiveLayout] = useState<LayoutData | null>(null);
 
+  // ── Stage 2 structural lifecycle (approve → design) ───────────────────────
+  // Single fetch feeds both the header badge and the Structural tab, so
+  // approve/design/edit all refresh from one place.
+  const [structStatus, setStructStatus] = useState<StructuralStatusResponse | null>(null);
+  const [approvingStructural, setApprovingStructural] = useState(false);
+  // Render-source toggle (deliverable 6) — only meaningful once a design has
+  // adjusted the geometry in this session; see the r3f tab render below.
+  const [renderSource, setRenderSource] = useState<"architectural" | "structural">("architectural");
+
+  const fetchStructuralStatus = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch(
+        `/api/backend/projects/${projectId}/structural/status?layout_id=${selectedId}`
+      );
+      if (!res.ok) {
+        setStructStatus(null);
+        return;
+      }
+      setStructStatus((await res.json()) as StructuralStatusResponse);
+    } catch {
+      setStructStatus(null);
+    }
+  }, [session, projectId, selectedId]);
+
+  useEffect(() => {
+    setRenderSource("architectural");
+    void fetchStructuralStatus();
+  }, [fetchStructuralStatus]);
+
+  async function handleApproveStructural() {
+    if (!session) return;
+    setApprovingStructural(true);
+    try {
+      const res = await fetch(`/api/backend/projects/${projectId}/structural/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout_id: selectedId }),
+      });
+      if (res.ok) await fetchStructuralStatus();
+    } catch {
+      // silent — the lifecycle header/tab surface stale-status states gracefully
+    } finally {
+      setApprovingStructural(false);
+    }
+  }
+
   // ── R3F 3D engine (geometric conditioning image for the AI render) ───────
   const plan3dApiRef = useRef<Plan3DHandle | null>(null);
   // One captured snapshot per floor index — each floor gets its own render.
@@ -1087,6 +1136,9 @@ export function LayoutViewer({
       // reload agrees with what was just saved.
       if (data.layout) setLiveLayout(data.layout);
       void fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).catch(() => {});
+      // Any geometry edit reverts structural status to draft server-side —
+      // refresh so the lifecycle badge/preliminary notice pick it up.
+      void fetchStructuralStatus();
       setEditMode(false);
       setEditedRooms(null);
       setComplianceIssues({});
@@ -1968,6 +2020,15 @@ export function LayoutViewer({
         )}
       </div>
 
+      {/* Stage 2 structural lifecycle — draft/approved/designed badge + action, per selected layout */}
+      <StructuralLifecycleHeader
+        status={structStatus?.status}
+        changelog={structStatus?.design?.changelog ?? []}
+        approving={approvingStructural}
+        onApprove={handleApproveStructural}
+        onRunDesign={() => setActiveTab("structural")}
+      />
+
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
@@ -1999,6 +2060,11 @@ export function LayoutViewer({
 
       {activeTab === "plan" && (
         <div className="flex flex-col gap-3">
+          {isPreliminaryStatus(structStatus?.status) && (
+            <output className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+              PRELIMINARY — for planning only, not for construction
+            </output>
+          )}
           {/* Dynamic floor toggle + mobile Options sheet trigger side-by-side */}
           <div className="flex items-center gap-2">
             {/* Floor toggle */}
@@ -2421,7 +2487,14 @@ export function LayoutViewer({
       )}
 
       {activeTab === "structural" && (
-        <StructuralViewer projectId={projectId} layoutId={selectedId} />
+        <StructuralViewer
+          projectId={projectId}
+          layoutId={selectedId}
+          status={structStatus}
+          approving={approvingStructural}
+          onApprove={handleApproveStructural}
+          onDesignComplete={fetchStructuralStatus}
+        />
       )}
 
       {activeTab === "compare" && (
@@ -2512,6 +2585,33 @@ export function LayoutViewer({
             Geometric plan view of the selected floor, built from the exact plan dimensions. Use it
             to condition the photorealistic AI render — one render per floor.
           </p>
+          {(structStatus?.status === "designed" ||
+            structStatus?.status === "designed_with_warnings") && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Geometry source:</span>
+              <Button
+                size="sm"
+                variant={renderSource === "architectural" ? "default" : "outline"}
+                onClick={() => setRenderSource("architectural")}
+              >
+                Architectural
+              </Button>
+              <Button
+                size="sm"
+                variant={renderSource === "structural" ? "default" : "outline"}
+                onClick={() => setRenderSource("structural")}
+              >
+                Structural
+              </Button>
+              {renderSource === "structural" && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  The structural design&apos;s adjusted geometry isn&apos;t exposed by the backend
+                  yet — showing the architectural view. Follow-up: expose
+                  StructuralDesign.final_geometry via the status/design endpoints.
+                </span>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {availableFloors.map((f) => (
               <Button
