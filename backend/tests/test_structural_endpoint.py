@@ -138,6 +138,14 @@ async def test_structural_happy_path(client_db, monkeypatch):
         structagent_client, "_transport_for_tests", httpx.MockTransport(handler)
     )
 
+    # Stage 2 gate: architectural plan must be approved before design runs
+    approve = await client.post(
+        f"/api/projects/{project_id}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert approve.status_code == 200, approve.text
+
     res = await client.post(
         f"/api/projects/{project_id}/structural",
         json={"layout_id": "A", "sbc_kpa": 180},
@@ -172,6 +180,13 @@ async def test_structural_502_on_upstream_error(client_db, monkeypatch):
         "_transport_for_tests",
         httpx.MockTransport(lambda r: httpx.Response(500, text="boom")),
     )
+
+    approve = await client.post(
+        f"/api/projects/{project_id}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert approve.status_code == 200, approve.text
 
     res = await client.post(
         f"/api/projects/{project_id}/structural", json={}, headers=HDRS
