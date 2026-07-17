@@ -211,6 +211,7 @@ def snap_rooms_to_shared_grid(
     min_dims: dict[str, dict],
     tol: float = SNAP_TOL_M,
     plate_bounds: tuple[tuple[float, float], tuple[float, float]] | None = None,
+    pin_room_types: set[str] | None = None,
 ) -> list[list[Room]]:
     """Best-effort post-solve pass: merge near-aligned wall LINES (across
     ALL floors, so columns stack vertically) onto shared grid lines.
@@ -231,6 +232,17 @@ def snap_rooms_to_shared_grid(
     rooms if the snapped layout fails.
     """
     originals = {(fi, r.id): r for fi, rooms in enumerate(floors) for r in rooms}
+    # Rooms of pinned types anchor their wall lines: neighbours merge ONTO
+    # them, they never move. Used for the staircase core in the post-fill
+    # snap — per-floor fill rooms cluster the stair with different
+    # neighbours on each floor, and independent deltas broke the exact
+    # GF/FF stair stacking the solver guarantees.
+    pinned_ids = {
+        r.id
+        for rooms in floors
+        for r in rooms
+        if pin_room_types and r.type in pin_room_types
+    }
 
     edges: list[_SnapEdge] = []
     for fi, rooms in enumerate(floors):
@@ -243,6 +255,10 @@ def snap_rooms_to_shared_grid(
             edges.append(
                 _SnapEdge((fi, r.id, "y", "hi"), r.y + r.depth, r.x, r.x + r.width)
             )
+
+    for e in edges:
+        if e.key[1] in pinned_ids:
+            e.pinned = True
 
     if plate_bounds is not None:
         (px1, px2), (py1, py2) = plate_bounds
@@ -311,12 +327,45 @@ def snap_rooms_to_shared_grid(
     # faces), so gaps are preserved exactly.
     deltas: dict[tuple[int, str, str, str], float] = {}
 
+    def cluster_feasible(cluster: list[_SnapEdge], target: float) -> bool:
+        # Per-edge min-dims pre-check (approximate: ignores the room's other
+        # edge moving in a different cluster — build() remains the exact
+        # safety net). Lets flush() pick a target every member can reach
+        # instead of the mean, which one starved room vetoes via revert,
+        # leaving the near-miss lines the merge existed to remove.
+        for e in cluster:
+            if e.pinned:
+                continue
+            fi, rid, axis, side = e.key
+            r = originals.get((fi, rid))
+            if r is None:
+                continue
+            delta = target - e.line
+            dim = r.width if axis == "x" else r.depth
+            new_dim = dim + (delta if side == "hi" else -delta)
+            mins = min_dims.get(rid, {})
+            min_dim = mins.get("min_width_m" if axis == "x" else "min_depth_m", 0.0)
+            other = r.depth if axis == "x" else r.width
+            if (
+                new_dim < min_dim - 1e-9
+                or new_dim * other < mins.get("min_area_sqm", 0.0) - 1e-9
+            ):
+                return False
+        return True
+
     def flush(cluster: list[_SnapEdge]) -> None:
         lines = sorted({round(e.line, 6) for e in cluster})
         if len(lines) < 2:
             return  # already one line — nothing to merge
         pinned = [e for e in cluster if e.pinned]
-        target = pinned[0].line if pinned else sum(lines) / len(lines)
+        if pinned:
+            target = pinned[0].line  # plate lines are immovable
+        else:
+            mean = sum(lines) / len(lines)
+            target = next(
+                (t for t in [mean, *lines] if cluster_feasible(cluster, t)),
+                mean,
+            )
         for e in cluster:
             if not e.pinned:
                 deltas[e.key] = target - e.line
@@ -639,6 +688,13 @@ def _solve_one(
     # ── Solve ─────────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = SOLVE_TIME_S
+    # Machine-independent work budget: on fast machines this binds (~7 s
+    # wall here) so repeated runs return the SAME incumbent; on slow
+    # machines (CI runners, cold Cloud Run) the wall-clock cap above binds
+    # so runtime never grows. Wall-clock-only budgets made solution quality
+    # depend on machine speed — the source of CI-only/dev-only test
+    # failures in the grid-alignment and leftover-gap suites.
+    solver.parameters.max_deterministic_time = 1.5
     solver.parameters.num_search_workers = 1  # deterministic single-thread
 
     status = solver.solve(model)
