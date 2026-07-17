@@ -702,8 +702,23 @@ async def export_boq(
         )
     layout = layout_store.engine_layout_from_geometry(row.geometry)
 
+    design = await _maybe_structural_design(project_id, layout_id, row.geometry, db)
+    structural_quantities = None
+    if design is not None:
+        geom = design.get("final_geometry") or row.geometry
+        layout = layout_store.engine_layout_from_geometry(geom)
+        structural_quantities = ((design.get("structapi") or {}).get("data") or {}).get(
+            "quantities"
+        )
+
     engine = QuantityEngine()
-    boq = engine.calculate(layout, cfg, project_name=project.name, city=city)
+    boq = engine.calculate(
+        layout,
+        cfg,
+        project_name=project.name,
+        city=city,
+        structural_quantities=structural_quantities,
+    )
 
     if fmt == "excel":
         plan = await _get_plan_tier(user_id, db)
@@ -750,7 +765,15 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     ws["A2"].alignment = Alignment(horizontal="center")
 
     # Column headers
-    headers = ["S.No", "Item Description", "Quantity", "Unit", "Rate (₹)", "Amount (₹)"]
+    headers = [
+        "S.No",
+        "Item Description",
+        "Quantity",
+        "Unit",
+        "Rate (₹)",
+        "Amount (₹)",
+        "Basis",
+    ]
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=4, column=col, value=h)
         cell.font = Font(bold=True, color="FFFFFF")
@@ -765,6 +788,7 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
         ws.cell(row=row_idx, column=4, value=item.unit)
         ws.cell(row=row_idx, column=5, value=round(item.rate, 2) if item.rate else "")
         ws.cell(row=row_idx, column=6, value=round(item.amount) if item.amount else "")
+        ws.cell(row=row_idx, column=7, value=item.basis)
 
     # Total row
     total_row = len(boq.line_items) + 6
