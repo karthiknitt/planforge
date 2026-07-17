@@ -399,8 +399,22 @@ def _solve_one(
     stair_zone: str,  # "front" | "mid" | "rear"
     layout_id: str,
     layout_name: str,
+    span_caps: dict[str, float] | None = None,
+    seed_rooms: dict[str, Room] | None = None,
+    deviation_weight: int = 0,
 ) -> Layout | None:
-    """Run a single CP-SAT solve and return a Layout if successful."""
+    """Run a single CP-SAT solve and return a Layout if successful.
+
+    Stage 2 closed-loop knobs:
+    - span_caps: {"x": metres, "y": metres} — cap every room's dimension on
+      that axis (structapi found a beam span the section iteration couldn't
+      satisfy; splitting the span forces an extra aligned wall/grid line).
+      Rooms whose spec minimum exceeds the cap keep their minimum — the
+      loop's cap-exhaustion path reports those instead of going infeasible.
+    - seed_rooms: room_id -> approved Room; adds CP-SAT hints AND a
+      deviation penalty so the re-solve stays as close as possible to the
+      user-approved plan (drift minimisation).
+    """
 
     # Buildable plate dimensions in mm
     quad_planes: list[tuple[int, int, int]] = []
@@ -439,6 +453,12 @@ def _solve_one(
 
         min_d = _mm(spec["min_width_m"])  # use min_width as min depth too
         max_d = min(_mm(spec.get("max_width_m", 8.0)), bd)
+
+        if span_caps:
+            if span_caps.get("x"):
+                max_w = min(max_w, max(_mm(span_caps["x"]), min_w))
+            if span_caps.get("y"):
+                max_d = min(max_d, max(_mm(span_caps["y"]), min_d))
 
         if max_w < min_w or max_d < min_d:
             return None
@@ -586,9 +606,34 @@ def _solve_one(
                 model.add(e1 != e2).only_enforce_if(bv.Not())
                 align_bools.append(bv)
 
-    if dist_terms or size_terms or align_bools:
+    # Drift minimisation (closed-loop re-solve): hint the solver toward the
+    # approved geometry and penalise deviation from it, so a structural
+    # constraint changes as little of the user-approved plan as possible.
+    deviation_terms = []
+    if seed_rooms and deviation_weight > 0:
+        for rv in room_vars:
+            seed = seed_rooms.get(rv.room_id)
+            if seed is None:
+                continue
+            targets = (
+                (rv.x, _mm(seed.x) - ox, bw),
+                (rv.y, _mm(seed.y) - oy, bd),
+                (rv.w, _mm(seed.width), bw),
+                (rv.d, _mm(seed.depth), bd),
+            )
+            for ti, (var, target, cap) in enumerate(targets):
+                clamped = min(max(target, 0), cap)
+                model.add_hint(var, clamped)
+                dv = model.new_int_var(0, cap, f"dev_{rv.room_id}_{ti}")
+                model.add_abs_equality(dv, var - clamped)
+                deviation_terms.append(dv)
+
+    if dist_terms or size_terms or align_bools or deviation_terms:
         model.minimize(
-            sum(dist_terms) - sum(size_terms) - ALIGN_BONUS * sum(align_bools)
+            sum(dist_terms)
+            - sum(size_terms)
+            - ALIGN_BONUS * sum(align_bools)
+            + deviation_weight * sum(deviation_terms)
         )
 
     # ── Solve ─────────────────────────────────────────────────────────────────
@@ -701,6 +746,50 @@ def _solve_one(
         layout = _build_layout(gf_rooms, ff_rooms)
 
     return layout if layout.compliance.passed else None
+
+
+def resolve_with_constraints(
+    cfg: PlotConfig,
+    ewt: float,
+    approved: Layout,
+    span_caps: dict[str, float],
+    deviation_weight: int = 3,
+) -> Layout | None:
+    """Closed-loop re-solve: same room programme as the approved layout,
+    with structural span caps applied and drift from the approved geometry
+    minimised (hints + deviation penalty). Returns None when infeasible."""
+    specs = _load_specs()
+    room_defs = _build_room_list(cfg, specs)
+    seed_rooms = {
+        r.id: r for r in approved.ground_floor.rooms + approved.first_floor.rooms
+    }
+
+    stair_zone = "mid"
+    stair = next(
+        (r for r in approved.ground_floor.rooms if r.type == "staircase"), None
+    )
+    if stair is not None:
+        by1 = cfg.setback_front + ewt
+        bd_m = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+        if bd_m > 0:
+            rel = (stair.y + stair.depth / 2 - by1) / bd_m
+            stair_zone = "front" if rel < 1 / 3 else ("mid" if rel < 2 / 3 else "rear")
+
+    try:
+        return _solve_one(
+            cfg,
+            ewt,
+            room_defs,
+            specs,
+            stair_zone,
+            approved.id,
+            approved.name,
+            span_caps=span_caps,
+            seed_rooms=seed_rooms,
+            deviation_weight=deviation_weight,
+        )
+    except Exception:
+        return None
 
 
 def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:

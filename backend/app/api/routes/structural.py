@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.engine.structural_grid import extract_grid
-from app.services import layout_store, structagent_client, structural_store
+from app.services import (
+    layout_store,
+    structagent_client,
+    structural_loop,
+    structural_store,
+)
 from app.services.access import get_accessible_project
 
 router = APIRouter()
@@ -39,6 +44,9 @@ class StructuralDesignRequest(BaseModel):
     fck: float = Field(default=25.0, description="concrete grade MPa")
     fy: float = Field(default=500.0, description="steel grade MPa")
     include_pdf: bool = True
+    # low-confidence grids (irregular layouts) design badly; the UI shows
+    # the grid-review warning and re-submits with this flag once confirmed
+    allow_unconfident_grid: bool = False
 
 
 class ApproveRequest(BaseModel):
@@ -144,52 +152,54 @@ async def structural_design(
                 "notes": grid.notes,
             },
         )
-
-    city = (project.city or "").lower()
-    payload = {
-        "grid": {"x_spacings_m": grid.x_spacings_m, "y_spacings_m": grid.y_spacings_m},
-        "storeys": max(int(project.num_floors or 1), 1),
-        "occupancy": "residential_room",
-        "location": {
-            "city": city or None,
-            "seismic_zone": CITY_SEISMIC_ZONE.get(city, "III"),
-        },
-        "sbc_kpa": body.sbc_kpa,
-        "materials": {"fck": body.fck, "fy": body.fy},
-        "options": {"pdf_report": body.include_pdf},
-    }
+    if not grid.confident and not body.allow_unconfident_grid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "grid_needs_review",
+                "notes": grid.notes,
+                "help": (
+                    "The extracted column grid is irregular. Review it, then "
+                    "re-submit with allow_unconfident_grid=true to proceed."
+                ),
+            },
+        )
 
     try:
-        result = await structagent_client.design_building(
-            payload, correlation_id=f"{project_id}:{body.layout_id}"
+        design, final_grid, result = await structural_loop.run_design_loop(
+            project,
+            revision,
+            db,
+            sbc_kpa=body.sbc_kpa,
+            fck=body.fck,
+            fy=body.fy,
+            include_pdf=body.include_pdf,
+            city_seismic_zone=CITY_SEISMIC_ZONE,
+        )
+    except structural_loop.GridNotExtractable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Could not extract a structural grid from this layout",
+                "notes": exc.notes,
+            },
         )
     except structagent_client.StructuralAPIError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-
-    design_status = "designed" if result.ok else "designed_with_warnings"
-    design = await structural_store.persist_design(
-        revision,
-        db,
-        status=design_status,
-        structapi_request=payload,
-        structapi_response={
-            "ok": result.ok,
-            "checks": result.checks,
-            "data": result.data,
-            "disclaimer": result.disclaimer,
-        },
-    )
 
     return {
         "ok": result.ok,
         "revision_id": revision.id,
         "design_id": design.id,
-        "status": design_status,
+        "status": design.status,
+        "iterations_used": design.iterations_used,
+        "changelog": design.changelog or [],
+        "layout_adjusted": design.final_geometry is not None,
         "grid": {
-            "x_spacings_m": grid.x_spacings_m,
-            "y_spacings_m": grid.y_spacings_m,
-            "confident": grid.confident,
-            "notes": grid.notes,
+            "x_spacings_m": final_grid.x_spacings_m,
+            "y_spacings_m": final_grid.y_spacings_m,
+            "confident": final_grid.confident,
+            "notes": final_grid.notes,
         },
         "checks": result.checks,
         "data": result.data,
