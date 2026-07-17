@@ -19,7 +19,7 @@ cp ../structapi/python/requirements.txt ../structapi/python/requirements-api.txt
 find structapi-service -name __pycache__ -type d -exec rm -rf {} +
 ```
 
-Vendored at structapi tag: **v0.1.0**.
+Vendored at structapi tag: **v0.2.0**.
 
 ## CI enforcement (drift detection)
 
