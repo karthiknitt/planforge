@@ -750,6 +750,7 @@ export function LayoutViewer({
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const { locale } = useLocale();
+  const router = useRouter();
   const [regenerating, setRegenerating] = useState(false);
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
@@ -1449,9 +1450,16 @@ export function LayoutViewer({
 
   if (!generateData) {
     return (
-      <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-        <p className="font-medium">Layout engine offline</p>
-        <p className="mt-1 text-sm">Start the backend server and refresh to see floor plans.</p>
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
+        <div>
+          <p className="font-medium">Couldn&apos;t load layouts</p>
+          <p className="mt-1 text-sm">
+            The layout service didn&apos;t respond — this is usually temporary.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => router.refresh()}>
+          Retry
+        </Button>
       </div>
     );
   }

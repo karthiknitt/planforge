@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import type { Metadata } from "next";
-import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -10,8 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db";
 import { project as projectTable, teamMember, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
-import { fetchBackend } from "@/lib/backend-fetch";
-import type { GenerateResponse } from "@/lib/layout-types";
+import { fetchLayouts } from "./fetch-layouts";
 import { LayoutViewer } from "./layout-viewer";
 
 export async function generateMetadata({
@@ -31,31 +29,6 @@ export async function generateMetadata({
 
 function metresToFeet(metres: string | number): string {
   return (Math.round((parseFloat(String(metres)) / 0.3048) * 10) / 10).toFixed(1);
-}
-
-async function fetchLayouts(projectId: string, userId: string): Promise<GenerateResponse | null> {
-  // fetchBackend() mints a fresh short-lived signed token on every call, which
-  // would otherwise be part of Next's fetch cache key and defeat caching on
-  // every request (the token never repeats). unstable_cache() caches on
-  // projectId alone — the token minting only happens on an actual cache miss.
-  // Project access is team-widened (owner OR team member), so the cache key
-  // includes userId — a projectId-only key could serve one user's cached
-  // entry to another authorised user, and would become a cross-user leak if
-  // authorisation rules ever drift again.
-  const getCached = unstable_cache(
-    async (): Promise<GenerateResponse | null> => {
-      try {
-        const res = await fetchBackend(userId, `projects/${projectId}/layouts`);
-        if (!res.ok) return null;
-        return res.json();
-      } catch {
-        return null;
-      }
-    },
-    [`project-generate-${projectId}`, userId],
-    { revalidate: 300, tags: [`project-${projectId}`] }
-  );
-  return getCached();
 }
 
 // ── Streaming layout section ────────────────────────────────────────────────
