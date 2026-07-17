@@ -246,6 +246,32 @@ async def test_loop_caps_at_three_iterations(client_db, monkeypatch):
     assert any("Iteration cap" in line for line in body["changelog"])
 
 
+async def test_spanless_resolvable_violation_lands_in_changelog(client_db, monkeypatch):
+    """Regression: a violation with a resolvable remedy_hint (reduce_span)
+    but NO span_m was excluded from the re-solve list AND from the exit
+    changelog (which only recorded non-resolvable hints) — the design was
+    saved with warnings and an empty changelog explaining nothing."""
+    client, SessionLocal = client_db
+    pid = await _setup(client, SessionLocal)
+    spanless = {k: v for k, v in SPAN_VIOLATION.items() if k != "span_m"}
+    envelope = {
+        **FAIL_ENVELOPE,
+        "data": {"quantities": {}, "violations": [spanless]},
+    }
+    calls = _configure(monkeypatch, [envelope])
+
+    res = await client.post(
+        f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert calls["n"] == 1  # nothing actionable — no re-solve loop
+    assert body["status"] == "designed_with_warnings"
+    assert any(spanless["check"] in line for line in body["changelog"]), (
+        f"changelog must name the unactioned violation: {body['changelog']}"
+    )
+
+
 async def test_loop_stops_when_resolve_infeasible(client_db, monkeypatch):
     client, SessionLocal = client_db
     pid = await _setup(client, SessionLocal)

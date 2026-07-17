@@ -91,6 +91,17 @@ async def create_team(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Team:
+    # Team/firm collaboration is the Firm plan's feature — enforce server-side
+    # (the frontend only hints; a direct API call bypassed the paywall).
+    from app.services.plans import get_effective_plan_tier, tier_at_least
+
+    tier = await get_effective_plan_tier(user_id, db)
+    if not tier_at_least(tier, "firm"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Creating a team requires the Firm plan. Upgrade to continue.",
+        )
+
     # One team per user (as owner) — soft guard
     existing = await db.execute(select(Team).where(Team.owner_id == user_id))
     if existing.scalar_one_or_none():

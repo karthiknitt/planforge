@@ -175,8 +175,12 @@ async def run_design_loop(
                     f"Iteration cap ({MAX_ITERATIONS}) reached with unresolved "
                     "span violations — design saved with warnings"
                 )
+            # Log every violation the loop did NOT act on — filtering by
+            # remedy_hint alone silently dropped resolvable hints that
+            # lacked span_m (excluded from the re-solve list too), leaving
+            # a warnings-status design with an empty changelog.
             for v in violations:
-                if v.get("remedy_hint") not in _RESOLVABLE:
+                if v not in resolvable:
                     changelog.append(_violation_line(v, None))
             break
 
