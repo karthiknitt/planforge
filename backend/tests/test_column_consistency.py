@@ -63,9 +63,7 @@ def test_no_twin_columns_and_columns_match_final_rooms():
             )
 
             walls = derive_walls(fp.rooms, buildable)
-            expected = {
-                (round(c.cx, 3), round(c.cy, 3)) for c in derive_columns(walls)
-            }
+            expected = {(round(c.cx, 3), round(c.cy, 3)) for c in derive_columns(walls)}
             stored = {(round(x, 3), round(y, 3)) for x, y in cols}
             assert stored == expected, (
                 f"layout {layout.id} floor {fp.floor}: stored columns diverge "

@@ -15,7 +15,7 @@ import pytest
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig, Room
 from app.engine.plan_geometry import derive_walls
-from app.engine.solver import snap_rooms_to_shared_grid, solve_layouts
+from app.engine.solver import snap_rooms_to_shared_grid
 
 EWT = 0.23
 

@@ -419,8 +419,7 @@ def _merge_adjacent_columns(kept: list[WallJunction]) -> list[ColumnMarker]:
     merged: list[WallJunction] = []
     for j in remaining:
         if any(
-            (j.x - m.x) ** 2 + (j.y - m.y) ** 2 < _COLUMN_MERGE_TOL**2
-            for m in merged
+            (j.x - m.x) ** 2 + (j.y - m.y) ** 2 < _COLUMN_MERGE_TOL**2 for m in merged
         ):
             continue
         merged.append(j)
