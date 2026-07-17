@@ -420,6 +420,113 @@ def draw_structural_grid(
             )
 
 
+def _grid_column_class(idx: int, n: int, jdx: int, m: int) -> str:
+    """corner/edge/interior classification matching structapi's own grid
+    classification: extreme index on both axes = corner, one axis = edge."""
+    x_extreme = idx in (0, n - 1)
+    y_extreme = jdx in (0, m - 1)
+    if x_extreme and y_extreme:
+        return "corner"
+    if x_extreme or y_extreme:
+        return "edge"
+    return "interior"
+
+
+def draw_sized_columns(
+    msp,
+    columns: list,
+    walls: list,
+    columns_data: dict,
+    layer: str,
+    z: float,
+) -> None:
+    """S-COLUMNS-SIZED: designed column rectangles (b_mm x D_mm) at grid
+    intersections, classified corner/edge/interior from wall centrelines and
+    sized per structapi's ``data.columns`` (keyed by class)."""
+    if not columns or not columns_data:
+        return
+
+    def _cluster(vals: list[float], tol: float = 0.3) -> list[float]:
+        groups: list[list[float]] = []
+        for v in sorted(vals):
+            if groups and v - groups[-1][-1] < tol:
+                groups[-1].append(v)
+            else:
+                groups.append([v])
+        return [sum(g) / len(g) for g in groups]
+
+    v_xs = _cluster([w.x1 for w in walls if abs(w.x1 - w.x2) < 1e-9])
+    h_ys = _cluster([w.y1 for w in walls if abs(w.y1 - w.y2) < 1e-9])
+    if not v_xs or not h_ys:
+        return
+
+    def _nearest(vals: list[float], v: float) -> int:
+        return min(range(len(vals)), key=lambda i: abs(vals[i] - v))
+
+    for col in columns:
+        ci = _nearest(v_xs, col.cx)
+        cj = _nearest(h_ys, col.cy)
+        klass = _grid_column_class(ci, len(v_xs), cj, len(h_ys))
+        info = columns_data.get(klass)
+        if not info:
+            continue
+        b, d = info["b_mm"] / 1000, info["D_mm"] / 1000
+        pts = [
+            (col.cx - b / 2, col.cy - d / 2),
+            (col.cx + b / 2, col.cy - d / 2),
+            (col.cx + b / 2, col.cy + d / 2),
+            (col.cx - b / 2, col.cy + d / 2),
+        ]
+        msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": layer, "elevation": z})
+        msp.add_mtext(
+            f"{klass[0].upper()} {int(info['b_mm'])}x{int(info['D_mm'])}",
+            dxfattribs={
+                "layer": layer,
+                "char_height": 0.12,
+                "insert": (col.cx, col.cy + d / 2 + 0.15, z),
+                "attachment_point": 5,
+            },
+        )
+
+
+def draw_structural_schedule(
+    msp,
+    columns_data: dict,
+    beams_data: dict,
+    insert_x: float,
+    insert_y: float,
+    layer: str,
+    z: float,
+) -> None:
+    """S-SCHEDULE: COLUMN SCHEDULE + BEAM SCHEDULE as one MTEXT block, from
+    the persisted structural design's structapi ``data``."""
+    if not columns_data and not beams_data:
+        return
+    lines = ["COLUMN SCHEDULE"]
+    for cls, v in sorted(columns_data.items()):
+        lines.append(
+            f"{cls.upper()}: {int(v['b_mm'])}x{int(v['D_mm'])} mm — "
+            f"{v.get('bars', '—')}"
+        )
+    lines.append("")
+    lines.append("BEAM SCHEDULE")
+    for key, v in sorted(beams_data.items()):
+        direction = key.split("-")[0].upper()
+        lines.append(
+            f"{direction}: {int(v['b_mm'])}x{int(v['D_mm'])} mm — "
+            f"span {v.get('span_m', 0):.1f} m"
+        )
+    msp.add_mtext(
+        "\\P".join(lines),
+        dxfattribs={
+            "layer": layer,
+            "char_height": 0.18,
+            "insert": (insert_x, insert_y, z),
+            "attachment_point": 7,
+        },
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Furniture symbols — one function per room type, strict context separation
 # ─────────────────────────────────────────────────────────────────────────────
