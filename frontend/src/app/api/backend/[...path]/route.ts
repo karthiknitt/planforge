@@ -6,6 +6,12 @@ import { forwardableHeaders } from "@/lib/proxy-headers";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
 
+// The Structural tab's design POST rides through this proxy and structapi
+// is allowed up to 120 s (structagent_client) plus Cloud Run cold starts —
+// Vercel's default function duration killed the request mid-flight with a
+// platform 504. Match the agent route's allowance.
+export const maxDuration = 300;
+
 type Params = Promise<{ path: string[] }>;
 
 async function proxy(
