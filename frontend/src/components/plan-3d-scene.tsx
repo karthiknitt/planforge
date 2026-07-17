@@ -1,9 +1,10 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, Text } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import type { FloorPlanData, Opening, RoomData, WallSegment } from "@/lib/layout-types";
+import { buildRoomLabels, northUnitVector, plotDimensionLabel } from "@/lib/render-annotations";
 
 export interface Plan3DHandle {
   /** Render the current 3D view to a PNG data URL, or null on failure. */
@@ -22,6 +23,12 @@ interface Plan3DSceneProps {
   /** "top" = direct plan view (default — best for viewers and as AI render
    * conditioning); "iso" = 3/4 isometric orbit view. */
   view?: Plan3DView;
+  /** Draw room-name + dimension labels, a north arrow, and overall plot
+   * dimensions directly onto the canvas raster (drei <Text>, not DOM — this
+   * is what makes them survive `gl.domElement.toDataURL()`). Used to make
+   * the captured PNG self-describing when it conditions the AI render, so
+   * the image model has authoritative spatial anchors instead of drifting. */
+  annotate?: boolean;
 }
 
 // Muted per-room floor tints (conditioning hint, not the final look).
@@ -95,11 +102,15 @@ function SceneContents({
   plotWidth,
   plotLength,
   floorHeight,
+  roadSide,
+  annotate = false,
 }: {
   floorPlan: FloorPlanData;
   plotWidth: number;
   plotLength: number;
   floorHeight: number;
+  roadSide?: string;
+  annotate?: boolean;
 }) {
   const cx = plotWidth / 2;
   const cy = plotLength / 2;
@@ -116,6 +127,14 @@ function SceneContents({
         kind: w.kind,
       }))
     : wallsFromRooms(floorPlan.rooms);
+
+  const roomLabels = annotate ? buildRoomLabels(floorPlan.rooms) : [];
+
+  // North-arrow anchor — derived from road_side via the same convention as
+  // backend/app/engine/vastu.py (ZONE_GRIDS), not a fixed page-up assumption.
+  const north = northUnitVector(roadSide);
+  const northPlanX = cx + north.dx * (plotWidth / 2 + plotWidth * 0.08);
+  const northPlanY = cy + north.dy * (plotLength / 2 + plotLength * 0.08);
 
   return (
     <group>
@@ -150,7 +169,13 @@ function SceneContents({
         const midX = worldX((w.x1 + w.x2) / 2);
         const midZ = worldZ((w.y1 + w.y2) / 2);
         const rotY = Math.atan2(dy, dx);
-        const color = w.kind === "external" ? "#cfcfcf" : "#e2e2e2";
+        const color = annotate
+          ? w.kind === "external"
+            ? "#1f2937"
+            : "#4b5563"
+          : w.kind === "external"
+            ? "#cfcfcf"
+            : "#e2e2e2";
         const key = `w${w.x1.toFixed(2)}_${w.y1.toFixed(2)}_${w.x2.toFixed(2)}_${w.y2.toFixed(2)}`;
         return (
           <mesh key={key} position={[midX, floorHeight / 2, midZ]} rotation={[0, rotY, 0]}>
@@ -182,6 +207,59 @@ function SceneContents({
           </mesh>
         );
       })}
+
+      {/* Annotated-mode overlay: room labels, north arrow, overall plot
+       * dimensions — all drei <Text> (SDF meshes rendered into the WebGL
+       * scene), so they are part of the raster captured by
+       * `gl.domElement.toDataURL()`. A DOM <Html> overlay would NOT appear
+       * in that capture, which is why this is not used here. */}
+      {annotate &&
+        roomLabels.map((l) => (
+          <Text
+            key={`lbl-${l.id}`}
+            position={[worldX(l.cx), 0.06, worldZ(l.cy)]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            fontSize={l.fontSize}
+            color="#111111"
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={l.fontSize * 0.04}
+            outlineColor="#ffffff"
+            maxWidth={plotWidth}
+          >
+            {l.text}
+          </Text>
+        ))}
+
+      {annotate && (
+        <Text
+          position={[worldX(northPlanX), 0.06, worldZ(northPlanY)]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={Math.max(0.3, Math.min(plotWidth, plotLength) * 0.05)}
+          color="#111111"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {"▲ N"}
+        </Text>
+      )}
+
+      {annotate && (
+        <Text
+          // Fixed at the front-left corner margin — the north arrow always
+          // sits at a mid-edge point (front/rear/left/right depending on
+          // road_side), so a corner never collides with it regardless of
+          // orientation.
+          position={[worldX(-plotWidth * 0.08), 0.06, worldZ(-plotLength * 0.08)]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={Math.max(0.25, Math.min(plotWidth, plotLength) * 0.04)}
+          color="#111111"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {plotDimensionLabel(plotWidth, plotLength)}
+        </Text>
+      )}
     </group>
   );
 }
@@ -204,10 +282,11 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
     floorPlan,
     plotWidth,
     plotLength,
-    roadSide: _roadSide,
+    roadSide,
     floorHeight = 3.0,
     className,
     view = "top",
+    annotate = false,
   },
   ref
 ) {
@@ -234,13 +313,16 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
   const camDist = span * 1.15;
   // Top-down: camera straight above with a hair of z-offset so lookAt stays
   // stable with the default up vector; distance sized to fit the whole plot.
+  // Annotated captures pull back a little further so the north arrow and
+  // plot-dimension labels drawn just outside the plot stay in frame.
+  const topHeight = annotate ? span * 1.6 : span * 1.45;
   const camPos: [number, number, number] =
-    view === "top" ? [0, span * 1.45, 0.02] : [camDist, camDist * 0.85, camDist];
+    view === "top" ? [0, topHeight, 0.02] : [camDist, camDist * 0.85, camDist];
 
   return (
     <div className={className} style={{ width: "100%", height: "100%" }}>
       <Canvas
-        key={view} // camera props are initial-only — remount on view change
+        key={`${view}-${annotate}`} // camera props are initial-only — remount on view/annotate change
         gl={{ preserveDrawingBuffer: true, antialias: true }}
         camera={{ position: camPos, fov: 45, up: [0, 1, 0] }}
         dpr={[1, 2]}
@@ -252,6 +334,8 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
           plotWidth={plotWidth}
           plotLength={plotLength}
           floorHeight={floorHeight}
+          roadSide={roadSide}
+          annotate={annotate}
         />
         <OrbitControls target={[0, 0, 0]} makeDefault enablePan={false} />
         <CaptureRegistrar register={register} />

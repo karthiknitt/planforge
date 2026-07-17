@@ -1944,7 +1944,12 @@ export function LayoutViewer({
 
       {/* ── Offscreen R3F engine ──────────────────────────────────────────── */}
       {/* Geometric truth that conditions the AI render. Mounted once, offscreen,
-          so its PNG can be captured from any tab (Render or AI Render). */}
+          so its PNG can be captured from any tab (Render or AI Render).
+          Top-down captures are label-annotated (room names + dims, north
+          arrow, plot dimensions) so the conditioning image is self-describing
+          — this is what gets sent as reference_png; if capture ever fails
+          (e.g. font load), reference_png is omitted and the backend falls
+          back to a rasterised PDF page (existing behaviour). */}
       <div
         aria-hidden
         style={{
@@ -1964,6 +1969,7 @@ export function LayoutViewer({
             plotLength={plotLength}
             roadSide={roadSide}
             view={r3fView}
+            annotate={r3fView === "top"}
           />
         )}
       </div>
