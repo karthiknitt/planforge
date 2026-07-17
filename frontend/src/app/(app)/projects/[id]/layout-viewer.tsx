@@ -85,7 +85,11 @@ import {
   floorKeyFromIndex,
   type RenderFloorKey,
 } from "@/lib/render-tab";
-import { isPreliminaryStatus } from "@/lib/structural-status";
+import {
+  isPreliminaryStatus,
+  type RenderSourceFallbackReason,
+  renderSourceFallbackNote,
+} from "@/lib/structural-status";
 import { type TabId, visibleTabs } from "@/lib/tabs";
 
 interface RevisionListItem {
@@ -756,9 +760,15 @@ export function LayoutViewer({
   // approve/design/edit all refresh from one place.
   const [structStatus, setStructStatus] = useState<StructuralStatusResponse | null>(null);
   const [approvingStructural, setApprovingStructural] = useState(false);
-  // Render-source toggle (deliverable 6) — only meaningful once a design has
-  // adjusted the geometry in this session; see the r3f tab render below.
+  // Render-source toggle (deliverable 6) — swaps the geometry fed to the R3F
+  // preview / AI render conditioning image between the stored architectural
+  // layout and the structural design's adjusted geometry (final_geometry
+  // from GET .../structural/design), when one exists.
   const [renderSource, setRenderSource] = useState<"architectural" | "structural">("architectural");
+  const [structuralGeometry, setStructuralGeometry] = useState<LayoutData | null>(null);
+  const [structuralGeometryLoading, setStructuralGeometryLoading] = useState(false);
+  const [structuralGeometryFallback, setStructuralGeometryFallback] =
+    useState<RenderSourceFallbackReason | null>(null);
 
   const fetchStructuralStatus = useCallback(async () => {
     if (!session) return;
@@ -776,8 +786,50 @@ export function LayoutViewer({
     }
   }, [session, projectId, selectedId]);
 
+  const fetchStructuralGeometry = useCallback(async () => {
+    if (!session) return;
+    setStructuralGeometryLoading(true);
+    setStructuralGeometryFallback(null);
+    try {
+      const res = await fetch(
+        `/api/backend/projects/${projectId}/structural/design?layout_id=${selectedId}`
+      );
+      if (res.status === 404) {
+        setStructuralGeometry(null);
+        setStructuralGeometryFallback("no_design");
+        return;
+      }
+      if (!res.ok) {
+        setStructuralGeometry(null);
+        setStructuralGeometryFallback("no_design");
+        return;
+      }
+      const data = (await res.json()) as { final_geometry: LayoutData | null };
+      if (!data.final_geometry) {
+        setStructuralGeometry(null);
+        setStructuralGeometryFallback("no_adjustment");
+        return;
+      }
+      setStructuralGeometry(data.final_geometry);
+    } catch {
+      setStructuralGeometry(null);
+      setStructuralGeometryFallback("no_design");
+    } finally {
+      setStructuralGeometryLoading(false);
+    }
+  }, [session, projectId, selectedId]);
+
+  function handleRenderSourceChange(source: "architectural" | "structural") {
+    setRenderSource(source);
+    if (source === "structural" && !structuralGeometry && !structuralGeometryLoading) {
+      void fetchStructuralGeometry();
+    }
+  }
+
   useEffect(() => {
     setRenderSource("architectural");
+    setStructuralGeometry(null);
+    setStructuralGeometryFallback(null);
     void fetchStructuralStatus();
   }, [fetchStructuralStatus]);
 
@@ -809,11 +861,13 @@ export function LayoutViewer({
     setMounted(true);
   }, []);
   const [floor, setFloor] = useState(0);
-  // Snapshots are per layout — drop them when the viewed layout changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedId is an intentional reset trigger, not read in the body
+  // Snapshots are per layout AND per render source — drop them when the
+  // viewed layout changes, or when the architectural/structural toggle
+  // flips (a cached architectural PNG must not linger under "structural").
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedId/renderSource are intentional reset triggers, not read in the body
   useEffect(() => {
     setR3fPngs({});
-  }, [selectedId]);
+  }, [selectedId, renderSource]);
   const captureR3f = useCallback(() => {
     const png = plan3dApiRef.current?.capture() ?? null;
     if (png) setR3fPngs((prev) => ({ ...prev, [floor]: png }));
@@ -822,15 +876,17 @@ export function LayoutViewer({
   const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
   const tabs = visibleTabs(agentChatEnabled);
   const [activeTab, setActiveTab] = useState<TabId>("plan");
-  // Auto-capture the offscreen R3F view when the Render tab opens or the
-  // viewed floor / camera view changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: r3fView is an intentional re-capture trigger (the Canvas remounts on view change), not read in the body
+  // Auto-capture the offscreen R3F view when the Render tab opens, the
+  // viewed floor / camera view changes, or the architectural/structural
+  // geometry source toggle flips (structuralGeometry is read via the
+  // offscreen Plan3DScene's floorPlan prop, not directly in this body).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: r3fView/renderSource/structuralGeometry are intentional re-capture triggers, not read in the body
   useEffect(() => {
     if (activeTab === "r3f" && mounted) {
       const t = setTimeout(() => captureR3f(), 500);
       return () => clearTimeout(t);
     }
-  }, [activeTab, mounted, captureR3f, r3fView]);
+  }, [activeTab, mounted, captureR3f, r3fView, renderSource, structuralGeometry]);
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -1427,6 +1483,15 @@ export function LayoutViewer({
   const floorPlan = currentFloorEntry.plan;
   const presentTypes = [...new Set(floorPlan.rooms.map((r) => r.type))];
 
+  // R3F / AI render geometry source — the Floor Plan / BOQ / Structural
+  // tabs always show the stored architectural layout above; only the R3F
+  // preview and the AI render conditioning image (fed from the same
+  // offscreen Plan3DScene) swap to the structural design's final_geometry
+  // when the toggle is set and a design with an adjustment is loaded.
+  const r3fSourceLayout =
+    renderSource === "structural" && structuralGeometry ? structuralGeometry : layout;
+  const r3fFloorPlan: FloorPlanData = r3fSourceLayout[floorKeyFromIndex(floor)] ?? floorPlan;
+
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       {/* Layout selector + export buttons */}
@@ -2011,7 +2076,7 @@ export function LayoutViewer({
         {mounted && (
           <Plan3DScene
             ref={plan3dApiRef}
-            floorPlan={floorPlan}
+            floorPlan={r3fFloorPlan}
             plotWidth={plotWidth}
             plotLength={plotLength}
             roadSide={roadSide}
@@ -2592,24 +2657,31 @@ export function LayoutViewer({
               <Button
                 size="sm"
                 variant={renderSource === "architectural" ? "default" : "outline"}
-                onClick={() => setRenderSource("architectural")}
+                onClick={() => handleRenderSourceChange("architectural")}
               >
                 Architectural
               </Button>
               <Button
                 size="sm"
                 variant={renderSource === "structural" ? "default" : "outline"}
-                onClick={() => setRenderSource("structural")}
+                onClick={() => handleRenderSourceChange("structural")}
+                disabled={structuralGeometryLoading}
               >
-                Structural
+                {structuralGeometryLoading ? "Loading…" : "Structural"}
               </Button>
-              {renderSource === "structural" && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  The structural design&apos;s adjusted geometry isn&apos;t exposed by the backend
-                  yet — showing the architectural view. Follow-up: expose
-                  StructuralDesign.final_geometry via the status/design endpoints.
+              {renderSource === "structural" && structuralGeometry && (
+                <span className="text-green-600 dark:text-green-400">
+                  Showing the structural design&apos;s adjusted geometry.
                 </span>
               )}
+              {renderSource === "structural" &&
+                !structuralGeometry &&
+                !structuralGeometryLoading &&
+                structuralGeometryFallback && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {renderSourceFallbackNote(structuralGeometryFallback)}
+                  </span>
+                )}
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">

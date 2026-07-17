@@ -53,3 +53,16 @@ export function isPreliminaryStatus(status: string | null | undefined): boolean 
 export function changelogCount(changelog: readonly string[] | null | undefined): number {
   return changelog?.length ?? 0;
 }
+
+// Render-source toggle (R3F / AI render conditioning) — GET
+// .../structural/design returns 404 when no design exists yet for this
+// approved revision, or 200 with final_geometry: null when the structural
+// loop needed no geometry adjustment. Both cases fall back to the
+// architectural geometry, but with a different explanation.
+export type RenderSourceFallbackReason = "no_design" | "no_adjustment";
+
+export function renderSourceFallbackNote(reason: RenderSourceFallbackReason): string {
+  return reason === "no_adjustment"
+    ? "Structural design made no geometry changes — showing the architectural view."
+    : "No structural design yet for this layout — showing the architectural view.";
+}

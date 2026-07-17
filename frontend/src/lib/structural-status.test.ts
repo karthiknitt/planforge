@@ -3,6 +3,7 @@ import {
   changelogCount,
   isPreliminaryStatus,
   needsApproval,
+  renderSourceFallbackNote,
   statusBadgeInfo,
 } from "./structural-status";
 
@@ -76,5 +77,16 @@ describe("changelogCount", () => {
     expect(changelogCount([])).toBe(0);
     expect(changelogCount(null)).toBe(0);
     expect(changelogCount(undefined)).toBe(0);
+  });
+});
+
+describe("renderSourceFallbackNote", () => {
+  it("distinguishes no-design-yet from design-made-no-changes", () => {
+    expect(renderSourceFallbackNote("no_design")).toBe(
+      "No structural design yet for this layout — showing the architectural view."
+    );
+    expect(renderSourceFallbackNote("no_adjustment")).toBe(
+      "Structural design made no geometry changes — showing the architectural view."
+    );
   });
 });
