@@ -148,6 +148,10 @@ export interface BOQItem {
   unit: string;
   rate: number;
   amount: number;
+  // Stage 2 provenance — "designed" once backed by an IS-code structural
+  // design, "estimated" otherwise. Optional: older/pre-Stage-2 backend
+  // responses won't send it, so callers must treat absence as "estimated".
+  basis?: "designed" | "estimated" | null;
 }
 
 export interface BOQResponse {
@@ -159,6 +163,9 @@ export interface BOQResponse {
   generic_total_cost: number | null;
   cost_difference: number | null;
   items: BOQItem[];
+  // Stage 2 provenance — optional, see BOQItem.basis.
+  preliminary?: boolean | null;
+  basis_summary?: string | null;
 }
 
 export interface CustomRoomSpec {
