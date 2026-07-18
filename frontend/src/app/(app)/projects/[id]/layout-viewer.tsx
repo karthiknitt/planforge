@@ -795,14 +795,15 @@ export function LayoutViewer({
       const res = await fetch(
         `/api/backend/projects/${projectId}/structural/design?layout_id=${selectedId}`
       );
-      if (res.status === 404) {
-        setStructuralGeometry(null);
-        setStructuralGeometryFallback("no_design");
-        return;
-      }
       if (!res.ok) {
+        const code = await res
+          .json()
+          .then((body) => body?.detail?.code as string | undefined)
+          .catch(() => undefined);
         setStructuralGeometry(null);
-        setStructuralGeometryFallback("no_design");
+        setStructuralGeometryFallback(
+          res.status === 409 || code === "not_approved" ? "not_approved" : "no_design"
+        );
         return;
       }
       const data = (await res.json()) as { final_geometry: LayoutData | null };
