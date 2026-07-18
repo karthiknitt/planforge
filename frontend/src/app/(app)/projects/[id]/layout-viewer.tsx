@@ -91,6 +91,7 @@ import {
   renderSourceFallbackNote,
 } from "@/lib/structural-status";
 import { type TabId, visibleTabs } from "@/lib/tabs";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 interface RevisionListItem {
   id: number;
@@ -330,9 +331,11 @@ function FloorRenderSection({
       }
       if (outcome !== "ready") {
         const data = await res.json().catch(() => ({}));
-        setError((data as { detail?: string })?.detail ?? `Render failed (${res.status})`);
+        const message = (data as { detail?: string })?.detail ?? `Render failed (${res.status})`;
+        setError(message);
         setPhase("error");
         setBusy(false);
+        showErrorToast(message);
         return;
       }
       // 200 (inline fallback, already resolved) or 202 (queued) — either way
@@ -343,6 +346,7 @@ function FloorRenderSection({
       setError("Render failed — is the backend running?");
       setPhase("error");
       setBusy(false);
+      showErrorToast("Render failed — is the backend running?");
     }
   }
 
@@ -360,6 +364,7 @@ function FloorRenderSection({
         setError("Render is taking unusually long — try again.");
         setPhase("error");
         setBusy(false);
+        showErrorToast("Render is taking unusually long — try again.");
         clearInterval(t);
         return;
       }
@@ -381,9 +386,11 @@ function FloorRenderSection({
       setPhase("ready");
       setBusy(false);
     } else if (renderJobPhase === "failed") {
-      setError(job?.error ?? "Render failed.");
+      const message = job?.error ?? "Render failed.";
+      setError(message);
       setPhase("error");
       setBusy(false);
+      showErrorToast(message);
     }
   }, [renderJobPhase, job?.error]);
 
@@ -670,12 +677,15 @@ function GenerationPanel({
         method: "POST",
       });
       if (!res.ok) {
-        setError(`Could not start generation (HTTP ${res.status}).`);
+        const message = `Could not start generation (HTTP ${res.status}).`;
+        setError(message);
+        showErrorToast(message);
         return;
       }
       setJob(await res.json());
     } catch {
       setError("Could not reach the layout engine.");
+      showErrorToast("Could not reach the layout engine.");
     }
   }, [projectId]);
 
@@ -695,6 +705,7 @@ function GenerationPanel({
       pollCountRef.current += 1;
       if (pollCountRef.current > MAX_POLLS) {
         setError("Generation is taking unusually long — try refreshing the page.");
+        showErrorToast("Generation is taking unusually long — try refreshing the page.");
         clearInterval(t);
         return;
       }
@@ -1250,8 +1261,11 @@ export function LayoutViewer({
       setEditMode(false);
       setEditedRooms(null);
       setComplianceIssues({});
+      showToast("success", "Changes saved");
     } catch (err) {
-      setEditSaveError(err instanceof Error ? err.message : "Could not save changes");
+      const message = err instanceof Error ? err.message : "Could not save changes";
+      setEditSaveError(message);
+      showErrorToast(message);
     } finally {
       setEditSaving(false);
     }
@@ -1272,7 +1286,9 @@ export function LayoutViewer({
       setApprovalShareUrl(fullUrl);
       setSendForApprovalOpen(true);
     } catch (err) {
-      setApprovalShareError(err instanceof Error ? err.message : "Could not generate share link");
+      const message = err instanceof Error ? err.message : "Could not generate share link";
+      setApprovalShareError(message);
+      showErrorToast(message);
     } finally {
       setApprovalShareLoading(false);
     }
@@ -1330,7 +1346,9 @@ export function LayoutViewer({
       const data = (await res.json()) as RevisionListItem[];
       setRevisions(data);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not load revision history");
+      const message = err instanceof Error ? err.message : "Could not load revision history";
+      setRevisionsError(message);
+      showErrorToast(message);
     } finally {
       setRevisionsLoading(false);
     }
@@ -1358,8 +1376,11 @@ export function LayoutViewer({
       setSnapshotLabel("");
       setShowSnapshotInput(false);
       await fetchRevisions();
+      showToast("success", "Snapshot saved");
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not save snapshot");
+      const message = err instanceof Error ? err.message : "Could not save snapshot";
+      setRevisionsError(message);
+      showErrorToast(message);
     } finally {
       setSavingSnapshot(false);
     }
@@ -1376,8 +1397,11 @@ export function LayoutViewer({
       setSelectedId(detail.snapshot.layouts[0]?.id ?? selectedId);
       setLiveLayout(null);
       setFloor(0);
+      showToast("success", `Restored version ${version}`);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not restore revision");
+      const message = err instanceof Error ? err.message : "Could not restore revision";
+      setRevisionsError(message);
+      showErrorToast(message);
     } finally {
       setRestoringVersion(null);
     }
@@ -1398,8 +1422,11 @@ export function LayoutViewer({
       });
       if (!res.ok) throw new Error(`Failed to delete revision (${res.status})`);
       await fetchRevisions();
+      showToast("success", `Deleted version ${version}`);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not delete revision");
+      const message = err instanceof Error ? err.message : "Could not delete revision";
+      setRevisionsError(message);
+      showErrorToast(message);
     }
   }
 
@@ -1418,7 +1445,9 @@ export function LayoutViewer({
       setShareUrl(fullUrl);
       setShareOpen(true);
     } catch (err) {
-      setShareError(err instanceof Error ? err.message : "Could not generate share link");
+      const message = err instanceof Error ? err.message : "Could not generate share link";
+      setShareError(message);
+      showErrorToast(message);
     } finally {
       setShareLoading(false);
     }
@@ -1463,8 +1492,11 @@ export function LayoutViewer({
       a.click();
       URL.revokeObjectURL(url);
       setApprovalDialogOpen(false);
+      showToast("success", "Approval PDF downloaded");
     } catch (err) {
-      setApprovalPdfError(err instanceof Error ? err.message : "Approval PDF download failed");
+      const message = err instanceof Error ? err.message : "Approval PDF download failed";
+      setApprovalPdfError(message);
+      showErrorToast(message);
     } finally {
       setDownloadingApprovalPdf(false);
     }
@@ -1490,10 +1522,12 @@ export function LayoutViewer({
       a.download = `planforge-layout-${selectedId}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast("success", `${format.toUpperCase()} downloaded`);
     } catch (err) {
-      setDownloadError(
-        err instanceof Error ? err.message : "Download failed — is the backend running?"
-      );
+      const message =
+        err instanceof Error ? err.message : "Download failed — is the backend running?";
+      setDownloadError(message);
+      showErrorToast(message);
     } finally {
       setter(false);
     }
