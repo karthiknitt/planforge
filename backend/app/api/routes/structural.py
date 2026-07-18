@@ -224,6 +224,14 @@ async def structural_design(
             include_pdf=body.include_pdf,
             city_seismic_zone=CITY_SEISMIC_ZONE,
         )
+    except structural_loop.DesignRunInProgress:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "design_in_progress",
+                "help": "A structural design run is already in progress for this layout — wait for it to finish.",
+            },
+        )
     except structural_loop.GridNotExtractable as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -6,7 +6,10 @@ and the stored layout is never overwritten — adjusted geometry lands in
 StructuralDesign.final_geometry with a deterministic changelog.
 """
 
+import asyncio
+
 import httpx
+import pytest
 
 from app.config.settings import settings
 from app.engine.models import Column, ComplianceResult, FloorPlan, Layout, Room
@@ -352,3 +355,133 @@ def test_resolve_with_constraints_respects_span_cap():
             )
     # identity preserved — same layout, structurally adjusted
     assert adjusted.id == approved.id
+
+
+# ── concurrency guard: inflight design runs ────────────────────────────────────
+
+
+def test_guard_rejects_concurrent_run_for_same_layout():
+    """The guard raises DesignRunInProgress on the second call for the same layout."""
+    project_id = "test-project-1"
+    layout_key = "A"
+
+    # First call: should succeed (registers the run)
+    try:
+        asyncio.run(
+            structural_loop._check_and_register_inflight(project_id, layout_key)
+        )
+    except structural_loop.DesignRunInProgress:
+        pytest.fail("First call should not raise DesignRunInProgress")
+
+    # Second call for same layout: should raise
+    with pytest.raises(structural_loop.DesignRunInProgress):
+        asyncio.run(
+            structural_loop._check_and_register_inflight(project_id, layout_key)
+        )
+
+    # Clean up
+    structural_loop._unregister_inflight(project_id, layout_key)
+
+
+def test_guard_allows_different_layouts():
+    """The guard allows concurrent runs for different layouts of the same project."""
+    project_id = "test-project-2"
+
+    # First layout
+    try:
+        asyncio.run(structural_loop._check_and_register_inflight(project_id, "A"))
+    except structural_loop.DesignRunInProgress:
+        pytest.fail("First layout should not raise")
+
+    # Different layout: should NOT raise (different layout_key)
+    try:
+        asyncio.run(structural_loop._check_and_register_inflight(project_id, "B"))
+    except structural_loop.DesignRunInProgress:
+        pytest.fail("Second layout should not raise (different key)")
+
+    # Clean up
+    structural_loop._unregister_inflight(project_id, "A")
+    structural_loop._unregister_inflight(project_id, "B")
+
+
+def test_guard_allows_rerun_after_unregister():
+    """After unregistering, a new run for the same layout is allowed."""
+    project_id = "test-project-3"
+    layout_key = "A"
+
+    # First run
+    try:
+        asyncio.run(
+            structural_loop._check_and_register_inflight(project_id, layout_key)
+        )
+    except structural_loop.DesignRunInProgress:
+        pytest.fail("First run should succeed")
+
+    # Unregister
+    structural_loop._unregister_inflight(project_id, layout_key)
+
+    # Second run: should now be allowed
+    try:
+        asyncio.run(
+            structural_loop._check_and_register_inflight(project_id, layout_key)
+        )
+    except structural_loop.DesignRunInProgress:
+        pytest.fail("Second run after unregister should succeed")
+
+    # Clean up
+    structural_loop._unregister_inflight(project_id, layout_key)
+
+
+async def test_design_endpoint_returns_409_on_concurrent_run(client_db, monkeypatch):
+    """POST /structural returns 409 when a design is already in progress."""
+    client, SessionLocal = client_db
+    pid = await _setup(client, SessionLocal)
+
+    # Configure the structural API
+    monkeypatch.setattr(settings, "structural_api_url", "http://sapi.test")
+    monkeypatch.setattr(settings, "structural_api_key", "k1")
+
+    # Mock design_building to block forever (simulating a long-running call)
+    wait_event = asyncio.Event()
+
+    async def blocking_design_building(payload, *, correlation_id="", timeout=120.0):
+        # Signal that we entered, then wait forever
+        wait_event.set()
+        await asyncio.sleep(10)  # Wait a long time
+        return structagent_client.StructuralResult(
+            ok=True, checks=[{"name": "all pass", "ok": True}], data={"violations": []}
+        )
+
+    monkeypatch.setattr(structagent_client, "design_building", blocking_design_building)
+
+    # Start first request in background
+    task1 = asyncio.create_task(
+        client.post(
+            f"/api/projects/{pid}/structural",
+            json={"layout_id": "A"},
+            headers=HDRS,
+        )
+    )
+
+    # Wait a bit for it to get into the design_building call
+    await asyncio.sleep(0.5)
+
+    # Try second request while first is still running
+    res2 = await client.post(
+        f"/api/projects/{pid}/structural",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+
+    # Should get 409
+    assert res2.status_code == 409, f"Expected 409, got {res2.status_code}: {res2.text}"
+    body2 = res2.json()
+    assert body2["detail"]["code"] == "design_in_progress"
+    assert "help" in body2["detail"]
+
+    # Cancel the first task (it was going to hang forever)
+    task1.cancel()
+    try:
+        await task1
+    except asyncio.CancelledError:
+        pass
