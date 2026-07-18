@@ -126,7 +126,7 @@ async def get_structural_design(
     )
     if revision is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "not_approved",
                 "help": (

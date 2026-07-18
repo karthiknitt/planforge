@@ -275,6 +275,11 @@ function FloorRenderSection({
   const [error, setError] = useState("");
   const [job, setJob] = useState<JobStatus | null>(null);
   const pollCountRef = useRef(0);
+  // Always-current layout key, so an in-flight poll dispatched for the
+  // previously-viewed layout can detect it resolved late (after a layout
+  // switch) and drop its stale setJob instead of flipping phase to "ready".
+  const layoutKeyRef = useRef(layoutKey);
+  layoutKeyRef.current = layoutKey;
 
   // Latest generate fn, so the parent's trigger always calls the current closure.
   const handleGenRef = useRef<(png?: string | null) => void>(() => {});
@@ -343,9 +348,12 @@ function FloorRenderSection({
 
   const renderJobPhase = jobPhase(job);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s (layoutKey is a legitimate re-arm trigger and stays in the deps)
   useEffect(() => {
     if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
+    // This poll belongs to the layout viewed when it was armed; if the user
+    // switches layouts, a late-resolving fetch must not setJob for the wrong one.
+    const dispatchKey = layoutKey;
     const t = setInterval(async () => {
       pollCountRef.current += 1;
       if (pollCountRef.current > MAX_POLLS) {
@@ -357,13 +365,15 @@ function FloorRenderSection({
       }
       try {
         const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+        // Ignore a response that resolved after a layout switch.
+        if (layoutKeyRef.current !== dispatchKey) return;
         if (res.ok) setJob(await res.json());
       } catch {
         /* transient poll failure — keep polling */
       }
     }, POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [job?.id, renderJobPhase, projectId]);
+  }, [job?.id, renderJobPhase, projectId, layoutKey]);
 
   useEffect(() => {
     if (renderJobPhase === "done") {
@@ -761,6 +771,9 @@ export function LayoutViewer({
   // approve/design/edit all refresh from one place.
   const [structStatus, setStructStatus] = useState<StructuralStatusResponse | null>(null);
   const [approvingStructural, setApprovingStructural] = useState(false);
+  // Transient notice when a re-approve is a no-op (backend returns
+  // created: false) — the geometry was already frozen as a revision.
+  const [alreadyApprovedNotice, setAlreadyApprovedNotice] = useState(false);
   // Render-source toggle (deliverable 6) — swaps the geometry fed to the R3F
   // preview / AI render conditioning image between the stored architectural
   // layout and the structural design's adjusted geometry (final_geometry
@@ -795,14 +808,15 @@ export function LayoutViewer({
       const res = await fetch(
         `/api/backend/projects/${projectId}/structural/design?layout_id=${selectedId}`
       );
-      if (res.status === 404) {
-        setStructuralGeometry(null);
-        setStructuralGeometryFallback("no_design");
-        return;
-      }
       if (!res.ok) {
+        const code = await res
+          .json()
+          .then((body) => body?.detail?.code as string | undefined)
+          .catch(() => undefined);
         setStructuralGeometry(null);
-        setStructuralGeometryFallback("no_design");
+        setStructuralGeometryFallback(
+          res.status === 409 || code === "not_approved" ? "not_approved" : "no_design"
+        );
         return;
       }
       const data = (await res.json()) as { final_geometry: LayoutData | null };
@@ -831,19 +845,28 @@ export function LayoutViewer({
     setRenderSource("architectural");
     setStructuralGeometry(null);
     setStructuralGeometryFallback(null);
+    setAlreadyApprovedNotice(false);
     void fetchStructuralStatus();
   }, [fetchStructuralStatus]);
 
   async function handleApproveStructural() {
     if (!session) return;
     setApprovingStructural(true);
+    setAlreadyApprovedNotice(false);
     try {
       const res = await fetch(`/api/backend/projects/${projectId}/structural/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ layout_id: selectedId }),
       });
-      if (res.ok) await fetchStructuralStatus();
+      if (res.ok) {
+        // created === false means the current geometry was already frozen
+        // as an approved revision — surface it so the click isn't a silent
+        // no-op, but still refetch status to stay consistent.
+        const body = (await res.json().catch(() => null)) as { created?: boolean } | null;
+        if (body?.created === false) setAlreadyApprovedNotice(true);
+        await fetchStructuralStatus();
+      }
     } catch {
       // silent — the lifecycle header/tab surface stale-status states gracefully
     } finally {
@@ -2135,6 +2158,9 @@ export function LayoutViewer({
         onApprove={handleApproveStructural}
         onRunDesign={() => setActiveTab("structural")}
       />
+      {alreadyApprovedNotice && (
+        <p className="text-xs text-muted-foreground">Plan was already approved.</p>
+      )}
 
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}

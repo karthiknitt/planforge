@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { project as projectTable } from "@/db/schema";
+import { project as projectTable, teamMember } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { EditProjectForm } from "./edit-form";
 
@@ -16,7 +16,18 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
   const rows = await db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1);
   const project = rows[0];
 
-  if (!project || project.userId !== session.user.id) notFound();
+  if (!project) notFound();
+
+  let canAccess = project.userId === session.user.id;
+  if (!canAccess && project.teamId != null) {
+    const membership = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(and(eq(teamMember.teamId, project.teamId), eq(teamMember.userId, session.user.id)))
+      .limit(1);
+    canAccess = membership.length > 0;
+  }
+  if (!canAccess) notFound();
 
   return (
     <EditProjectForm

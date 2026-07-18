@@ -387,7 +387,7 @@ async def test_mark_designs_stale_scoped_to_project(client_db):
         assert n2 == 0  # idempotent: already stale
 
 
-async def test_get_design_404_when_not_approved(client_db):
+async def test_get_design_409_when_not_approved(client_db):
     client, SessionLocal = client_db
     pid = await _make_project(client)
     await _seed_layout(SessionLocal, pid, GEO_V1)
@@ -397,7 +397,7 @@ async def test_get_design_404_when_not_approved(client_db):
         params={"layout_id": "A"},
         headers=HDRS,
     )
-    assert res.status_code == 404
+    assert res.status_code == 409
     assert res.json()["detail"]["code"] == "not_approved"
 
 
@@ -456,7 +456,7 @@ async def test_get_design_returns_persisted_design(client_db, monkeypatch):
     assert body["final_geometry"] is None
 
 
-async def test_get_design_404_after_geometry_edit_invalidates(client_db, monkeypatch):
+async def test_get_design_409_after_geometry_edit_invalidates(client_db, monkeypatch):
     client, SessionLocal = client_db
     pid = await _make_project(client)
     await _seed_layout(SessionLocal, pid, GEO_V1)
@@ -486,7 +486,7 @@ async def test_get_design_404_after_geometry_edit_invalidates(client_db, monkeyp
         params={"layout_id": "A"},
         headers=HDRS,
     )
-    assert res.status_code == 404
+    assert res.status_code == 409
     assert res.json()["detail"]["code"] == "not_approved"
 
 
