@@ -28,4 +28,16 @@ describe("signInternalAuthToken", () => {
   test("throws when secret is empty", async () => {
     await expect(signInternalAuthToken("user-123", "")).rejects.toThrow("secret must not be empty");
   });
+
+  test("includes an email claim when an email is provided", async () => {
+    const token = await signInternalAuthToken("user-123", SECRET, "person@example.com");
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(SECRET));
+    expect(payload.email).toBe("person@example.com");
+  });
+
+  test("omits the email claim when no email is provided", async () => {
+    const token = await signInternalAuthToken("user-123", SECRET);
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(SECRET));
+    expect(payload.email).toBeUndefined();
+  });
 });

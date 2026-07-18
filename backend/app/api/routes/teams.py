@@ -2,11 +2,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.dependencies.auth import get_current_user_id
+from app.dependencies.auth import get_current_user_email, get_current_user_id
 from app.models.project import Project
 from app.models.team import Team, TeamMember
 from app.schemas.project import ProjectRead
@@ -48,6 +48,10 @@ class InviteMemberRequest(BaseModel):
     role: str = "member"  # "admin" | "member"
 
 
+class ClaimResponse(BaseModel):
+    claimed: int
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -68,6 +72,7 @@ async def _get_membership(
         select(TeamMember).where(
             TeamMember.team_id == team_id,
             TeamMember.user_id == user_id,
+            TeamMember.user_id != "",
         )
     )
     return result.scalar_one_or_none()
@@ -134,6 +139,64 @@ async def get_my_team(
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+@router.post("/teams/claim", response_model=ClaimResponse)
+async def claim_invites(
+    user_id: str = Depends(get_current_user_id),
+    email: str | None = Depends(get_current_user_email),
+    db: AsyncSession = Depends(get_db),
+) -> ClaimResponse:
+    """Convert any pending invite rows addressed to the caller's verified email
+    into real membership. The email is NEVER taken from the request body —
+    only from the `email` claim on the signed internal auth token, which the
+    frontend mints from the verified Better Auth session.
+
+    Idempotent: 200 with claimed=0 (not an error) when there's nothing to
+    claim, so the frontend can fire this unconditionally on every page load.
+    """
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No verified email available for this session — cannot claim "
+                "team invites."
+            ),
+        )
+    normalized_email = email.strip().lower()
+
+    # Teams the caller is already a real member of — never claim invite rows
+    # for those, to avoid duplicate membership rows for the same team.
+    existing = await db.execute(
+        select(TeamMember.team_id).where(
+            TeamMember.user_id == user_id,
+            TeamMember.user_id != "",
+        )
+    )
+    already_member_team_ids = {row[0] for row in existing.all()}
+
+    pending = await db.execute(
+        select(TeamMember).where(
+            TeamMember.user_id == "",
+            func.lower(TeamMember.invited_email) == normalized_email,
+        )
+    )
+
+    claimed_team_ids: set[int] = set()
+    for member in pending.scalars().all():
+        if member.team_id in already_member_team_ids:
+            continue
+        if member.team_id in claimed_team_ids:
+            # A second pending invite row for a team already claimed in this
+            # same call — skip it rather than create a duplicate membership.
+            continue
+        member.user_id = user_id
+        claimed_team_ids.add(member.team_id)
+
+    if claimed_team_ids:
+        await db.commit()
+
+    return ClaimResponse(claimed=len(claimed_team_ids))
 
 
 @router.get("/teams/{team_id}/members", response_model=list[TeamMemberRead])

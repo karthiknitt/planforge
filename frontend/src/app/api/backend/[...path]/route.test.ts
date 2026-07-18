@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { jwtVerify } from "jose";
 import { NextRequest } from "next/server";
 
 import { getSessionMock } from "@/test/setup";
@@ -80,6 +81,27 @@ describe("backend proxy route", () => {
     await GET(req, ctx(["projects"]));
 
     expect(capturedHeaders?.get("x-internal-auth")).not.toBe("attacker-forged-token");
+  });
+
+  test("mints the internal auth token with the session's email claim", async () => {
+    getSessionMock.mockImplementation(async () => ({
+      user: { id: "user-42", email: "person@example.com" },
+    }));
+    let capturedHeaders: Headers | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedHeaders = new Headers(init?.headers as HeadersInit);
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    const req = new NextRequest("http://localhost:3001/api/backend/teams/claim");
+    await POST(req, ctx(["teams", "claim"]));
+
+    const token = capturedHeaders?.get("x-internal-auth") ?? "";
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(process.env.INTERNAL_AUTH_SECRET)
+    );
+    expect(payload.email).toBe("person@example.com");
   });
 
   test("returns 503 without leaking details when the backend is unreachable", async () => {

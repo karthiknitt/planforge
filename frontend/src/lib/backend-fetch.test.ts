@@ -209,6 +209,35 @@ describe("fetchBackend", () => {
     expect(delays.at(-1)).toBe(45_000);
   });
 
+  test("includes the email claim in the token when init.email is passed", async () => {
+    let capturedHeaders: Headers | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedHeaders = new Headers(init?.headers);
+      return new Response("{}");
+    }) as typeof fetch;
+
+    await fetchBackend("user-1", "teams/claim", { method: "POST", email: "person@example.com" });
+
+    const token = capturedHeaders?.get("x-internal-auth") ?? "";
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(process.env.INTERNAL_AUTH_SECRET)
+    );
+    expect(payload.email).toBe("person@example.com");
+  });
+
+  test("does not forward email into the fetch RequestInit", async () => {
+    let capturedInit: RequestInit | undefined;
+    global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response("{}");
+    }) as typeof fetch;
+
+    await fetchBackend("user-1", "projects", { email: "person@example.com" });
+
+    expect((capturedInit as Record<string, unknown>)?.email).toBeUndefined();
+  });
+
   test("does not forward timeoutMs into the fetch RequestInit", async () => {
     let capturedInit: RequestInit | undefined;
     global.fetch = mock(async (_url: string | URL, init?: RequestInit) => {
