@@ -2,6 +2,9 @@
 
 import type { RoomData } from "@/lib/layout-types";
 
+// Renders a bare <g>, not its own <svg> — a11y is handled by the parent
+// FloorPlanSVG's aria-label (floor-plan-svg.tsx), which mentions plumbing
+// when this overlay is active. Don't add aria attributes here.
 interface PlumbingOverlayProps {
   rooms: RoomData[];
   scale: number; // metres → SVG pixels

@@ -320,7 +320,16 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
     view === "top" ? [0, topHeight, 0.02] : [camDist, camDist * 0.85, camDist];
 
   return (
-    <div className={className} style={{ width: "100%", height: "100%" }}>
+    <div
+      className={className}
+      style={{ width: "100%", height: "100%" }}
+      role="img"
+      aria-label={`3D ${view === "top" ? "top-down" : "isometric"} view of the floor plan`}
+    >
+      <span className="sr-only">
+        Interactive 3D floor plan viewer. Visual content only — use the 2D plan tab for a
+        text-navigable layout.
+      </span>
       <Canvas
         key={`${view}-${annotate}`} // camera props are initial-only — remount on view/annotate change
         gl={{ preserveDrawingBuffer: true, antialias: true }}

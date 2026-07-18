@@ -1471,7 +1471,11 @@ export function FloorPlanSVG({
         viewBox={`0 0 ${VP_W} ${VP_H}`}
         className={["floor-plan-svg", className].filter(Boolean).join(" ")}
         style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
-        aria-label="Floor plan diagram"
+        aria-label={
+          showFurniture || showPlumbing
+            ? "Floor plan diagram with furniture and fixture layout"
+            : "Floor plan diagram"
+        }
         onMouseMove={editMode ? handleSVGMouseMove : undefined}
         onMouseUp={editMode ? handleSVGMouseUp : undefined}
         onMouseLeave={editMode ? handleSVGMouseLeave : undefined}
