@@ -21,7 +21,13 @@
     "approved": "அனுமதிக்கப்பட்டது",
     "changesRequested": "மாற்றங்கள் கோரப்பட்டன",
     "upgradeForFeatures": "தரம் உயர்த்து",
-    "upgradeHint": "DXF + BOQ க்காக"
+    "upgradeHint": "DXF + BOQ க்காக",
+    "onboardingTitle": "PlanForge-க்கு வரவேற்கிறோம்",
+    "onboardingStep1": "உங்கள் மனை அளவுகளையும் அறை விருப்பங்களையும் உள்ளிடவும்",
+    "onboardingStep2": "உடனடியாக 3 NBC-இணக்க தளவமைப்பு விருப்பங்களை உருவாக்கவும்",
+    "onboardingStep3": "நிலையான அல்லது ஒப்புதல்-தயார் PDF, DXF, BOQ ஏற்றுமதி செய்யவும்",
+    "onboardingBrowseTemplates": "வார்ப்புருக்களைப் பார்க்கவும்",
+    "onboardingStartProject": "திட்டத்தைத் தொடங்கவும்"
   },
   "project": {
     "newProject": "புதிய திட்டம்",

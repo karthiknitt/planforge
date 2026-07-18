@@ -1,8 +1,8 @@
 "use client";
 
 import { Minus, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { PlotPreview } from "@/components/plot-preview";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,6 +30,18 @@ const FLOOR_PREFS = [
 
 function feetToMetres(feet: string): number {
   return Math.round(parseFloat(feet) * 0.3048 * 1000) / 1000;
+}
+
+// Fields consumed from GET /api/gallery/plans/{preset_id} (backend/app/api/routes/gallery.py)
+interface GalleryPresetPlan {
+  name: string;
+  plot_length_ft: number;
+  plot_width_ft: number;
+  num_bedrooms: number;
+  num_toilets: number;
+  parking: boolean;
+  city: string;
+  municipality: string | null;
 }
 
 /* ── Live plot compass ─────────────────────────────────────────────────────── */
@@ -281,6 +293,37 @@ export default function NewProjectPage() {
   function set(field: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
+
+  // Prefill from a gallery "Use this template" CTA (?template=<preset-id>)
+  const searchParams = useSearchParams();
+  const template = searchParams.get("template");
+
+  useEffect(() => {
+    if (!template) return;
+    let cancelled = false;
+    fetch(`/api/backend/gallery/plans/${template}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((plan: GalleryPresetPlan | null) => {
+        if (cancelled || !plan) return;
+        setForm((prev) => ({
+          ...prev,
+          name: plan.name,
+          plot_length: String(plan.plot_length_ft),
+          plot_width: String(plan.plot_width_ft),
+          num_bedrooms: String(plan.num_bedrooms),
+          toilets: String(plan.num_toilets),
+          parking: plan.parking,
+          city: plan.city === "Generic" ? "other" : plan.city.toLowerCase(),
+          municipality: plan.municipality ?? "",
+        }));
+      })
+      .catch(() => {
+        // Template not found or backend unreachable — leave the form at its defaults.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [template]);
 
   function switchToAdvanced() {
     // Pre-populate with standard rooms from basic config

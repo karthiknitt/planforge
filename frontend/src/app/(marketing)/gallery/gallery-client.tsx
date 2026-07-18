@@ -53,13 +53,6 @@ function plotSizeCategory(sqft: number): "small" | "medium" | "large" {
   return "large";
 }
 
-function templateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 // ── Filter bar ────────────────────────────────────────────────────────────────
 
 type BhkFilter = "all" | "2bhk" | "3bhk" | "4bhk";
@@ -172,7 +165,6 @@ function PlanCard({ plan }: { plan: GalleryPlan }) {
     needs_mech_ventilation: plan.needs_mech_ventilation,
   };
 
-  const slug = templateSlug(plan.name);
   const costLow = formatCrore(plan.estimated_cost_low);
   const costHigh = formatCrore(plan.estimated_cost_high);
 
@@ -257,7 +249,7 @@ function PlanCard({ plan }: { plan: GalleryPlan }) {
 
         {/* CTA */}
         <div className="mt-auto pt-1">
-          <Link href={`/sign-up?template=${slug}`}>
+          <Link href={`/sign-up?template=${plan.id}`}>
             <Button
               size="sm"
               className="w-full bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/25 hover:border-primary font-semibold text-xs h-8 transition-all"

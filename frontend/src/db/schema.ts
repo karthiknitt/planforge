@@ -21,6 +21,7 @@ export const user = pgTable("user", {
   planTier: text("plan_tier").default("free").notNull(),
   planExpiresAt: timestamp("plan_expires_at"),
   projectCredits: integer("project_credits").default(0).notNull(),
+  hasSeenOnboarding: boolean("has_seen_onboarding").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
