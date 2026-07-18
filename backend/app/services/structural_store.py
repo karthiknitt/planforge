@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.structural import ArchitecturalRevision, StructuralDesign
@@ -170,8 +170,14 @@ async def mark_designs_stale(
     project_id: str, db: AsyncSession, layout_key: str | None = None
 ) -> int:
     """Mark every live design under this project (optionally one layout)
-    stale. Does NOT commit — callers own the transaction (layout_store's
-    edit paths commit once for the edit + invalidation together)."""
+    stale, recording the prior status in pre_stale_status so a later revert
+    to the same geometry can resurrect it. Does NOT commit — callers own the
+    transaction (layout_store's edit paths commit once for the edit +
+    invalidation together).
+
+    `superseded` designs are intentionally left untouched (they are already
+    retired and must stay that way), as are rows already `stale`.
+    """
     rev_ids = select(ArchitecturalRevision.id).where(
         ArchitecturalRevision.project_id == project_id
     )
@@ -181,9 +187,38 @@ async def mark_designs_stale(
         update(StructuralDesign)
         .where(
             StructuralDesign.revision_id.in_(rev_ids),
-            StructuralDesign.status != "stale",
+            StructuralDesign.status.not_in(("stale", "superseded")),
         )
-        .values(status="stale")
+        # pre_stale_status references the OLD status value (standard SQL
+        # UPDATE semantics — every SET reads the pre-update row).
+        .values(pre_stale_status=StructuralDesign.status, status="stale")
+    )
+    return result.rowcount or 0
+
+
+async def resurrect_designs_for_revision(revision_id: str, db: AsyncSession) -> int:
+    """Un-stale designs tied to `revision_id`, restoring each to its recorded
+    pre_stale_status. Called when a geometry edit lands back on a
+    previously-approved revision's hash, so an identical geometry never forces
+    a re-run of an expensive structural design. Does NOT commit — the caller
+    owns the edit transaction.
+
+    Only rows currently `stale` are affected; `superseded` rows are never
+    touched. Rows staled before pre_stale_status existed (null) fall back to
+    the conservative `designed_with_warnings`.
+    """
+    result = await db.execute(
+        update(StructuralDesign)
+        .where(
+            StructuralDesign.revision_id == revision_id,
+            StructuralDesign.status == "stale",
+        )
+        .values(
+            status=func.coalesce(
+                StructuralDesign.pre_stale_status, "designed_with_warnings"
+            ),
+            pre_stale_status=None,
+        )
     )
     return result.rowcount or 0
 
