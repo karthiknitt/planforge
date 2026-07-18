@@ -31,6 +31,7 @@ import { ChatPanel } from "@/components/chat-panel";
 import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { LayoutCompareView } from "@/components/layout-compare-view";
+import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
 import { type Plan3DHandle, Plan3DScene, type Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
@@ -984,6 +985,8 @@ export function LayoutViewer({
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [approvalPdfPreviewOpen, setApprovalPdfPreviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
@@ -1468,23 +1471,7 @@ export function LayoutViewer({
     setDownloadingApprovalPdf(true);
     setApprovalPdfError("");
     try {
-      const res = await fetch(
-        `/api/backend/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(approvalForm),
-        }
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          (data as { detail?: string })?.detail ?? `Approval PDF export failed (${res.status})`
-        );
-      }
-      const blob = await res.blob();
+      const blob = await fetchApprovalPdfBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1502,20 +1489,48 @@ export function LayoutViewer({
     }
   }
 
+  // Fetch-only helper (no download side effect) shared by the download
+  // button and the inline preview dialog.
+  async function fetchApprovalPdfBlob(): Promise<Blob> {
+    const res = await fetch(
+      `/api/backend/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(approvalForm),
+      }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(
+        (data as { detail?: string })?.detail ?? `Approval PDF export failed (${res.status})`
+      );
+    }
+    return res.blob();
+  }
+
+  // Fetch-only helper (no download side effect) shared by the download
+  // button and the inline preview dialog.
+  async function fetchExportBlob(format: "pdf" | "dxf"): Promise<Blob> {
+    const res = await fetch(
+      `/api/backend/projects/${projectId}/export/${format}?layout_id=${selectedId}`
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.detail ?? `Export failed (${res.status})`);
+    }
+    return res.blob();
+  }
+
   async function handleDownload(format: "pdf" | "dxf") {
     if (!session) return;
     const setter = format === "pdf" ? setDownloadingPdf : setDownloadingDxf;
     setter(true);
     setDownloadError("");
     try {
-      const res = await fetch(
-        `/api/backend/projects/${projectId}/export/${format}?layout_id=${selectedId}`
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail ?? `Export failed (${res.status})`);
-      }
-      const blob = await res.blob();
+      const blob = await fetchExportBlob(format);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1654,6 +1669,15 @@ export function LayoutViewer({
             disabled={downloadingPdf || !session}
           >
             {downloadingPdf ? "…" : "⬇ PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+            onClick={() => setPdfPreviewOpen(true)}
+            disabled={!session}
+          >
+            Preview
           </Button>
           {planTier === "free" ? (
             <Button
@@ -2035,6 +2059,13 @@ export function LayoutViewer({
               Cancel
             </Button>
             <Button
+              variant="outline"
+              onClick={() => setApprovalPdfPreviewOpen(true)}
+              disabled={!session}
+            >
+              Preview
+            </Button>
+            <Button
               onClick={handleDownloadApprovalPdf}
               disabled={downloadingApprovalPdf || !session}
             >
@@ -2043,6 +2074,23 @@ export function LayoutViewer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PdfPreviewDialog
+        open={pdfPreviewOpen}
+        onOpenChange={setPdfPreviewOpen}
+        title="Standard PDF preview"
+        fetchPdf={() => fetchExportBlob("pdf")}
+        onDownload={() => handleDownload("pdf")}
+        downloading={downloadingPdf}
+      />
+      <PdfPreviewDialog
+        open={approvalPdfPreviewOpen}
+        onOpenChange={setApprovalPdfPreviewOpen}
+        title="Approval PDF preview"
+        fetchPdf={fetchApprovalPdfBlob}
+        onDownload={handleDownloadApprovalPdf}
+        downloading={downloadingApprovalPdf}
+      />
 
       {/* Download error */}
       {downloadError && (
