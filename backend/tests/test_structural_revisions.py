@@ -39,6 +39,29 @@ GEO_V1 = {
     "first_floor": {"floor": 1, "rooms": [], "columns": []},
 }
 
+# Geometry edit that actually moves a room — the geometry_hash is scoped to
+# room fields only, so an edit that just touches metadata (e.g. `name`) is
+# no longer expected to invalidate a design; it must change a room.
+EDITED_GEO_V1 = {
+    **GEO_V1,
+    "ground_floor": {
+        "floor": 0,
+        "rooms": [
+            {
+                "id": "r1",
+                "name": "Living",
+                "type": "living",
+                "x": 1.0,
+                "y": 0.0,
+                "width": 4.0,
+                "depth": 3.5,
+                "area": 14.0,
+            }
+        ],
+        "columns": GRID_COLUMNS,
+    },
+}
+
 ENVELOPE = {
     "api_version": "1",
     "ok": True,
@@ -72,10 +95,30 @@ async def _seed_layout(SessionLocal, project_id: str, geometry: dict) -> str:
 
 
 def test_geometry_hash_deterministic_and_key_order_insensitive():
-    h1 = structural_store.geometry_hash({"a": 1, "b": {"c": 2}})
-    h2 = structural_store.geometry_hash({"b": {"c": 2}, "a": 1})
+    h1 = structural_store.geometry_hash(GEO_V1)
+    h2 = structural_store.geometry_hash(
+        {"b": {"nested": True}, **GEO_V1}
+    )  # extra unrelated top-level key
     assert h1 == h2
-    assert h1 != structural_store.geometry_hash({"a": 1, "b": {"c": 3}})
+    moved = {
+        **GEO_V1,
+        "ground_floor": {
+            **GEO_V1["ground_floor"],
+            "rooms": [
+                {
+                    "id": "r1",
+                    "name": "Living",
+                    "type": "living",
+                    "x": 1.0,
+                    "y": 0.0,
+                    "width": 4.0,
+                    "depth": 3.5,
+                    "area": 14.0,
+                }
+            ],
+        },
+    }
+    assert h1 != structural_store.geometry_hash(moved)
 
 
 async def test_approve_creates_revision(client_db):
@@ -239,7 +282,7 @@ async def test_geometry_edit_invalidates_design(client_db, monkeypatch):
     design_id = res.json()["design_id"]
 
     # edit the geometry through the canonical edit path
-    edited = {**GEO_V1, "name": "Layout A (edited)"}
+    edited = EDITED_GEO_V1
     async with SessionLocal() as s:
         row = await layout_store.get_stored_layout(pid, "A", s)
         await layout_store.save_edited_geometry(row, edited, s)
@@ -411,7 +454,7 @@ async def test_get_design_404_after_geometry_edit_invalidates(client_db, monkeyp
         f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
     )
 
-    edited = {**GEO_V1, "name": "Layout A (edited)"}
+    edited = EDITED_GEO_V1
     async with SessionLocal() as s:
         row = await layout_store.get_stored_layout(pid, "A", s)
         await layout_store.save_edited_geometry(row, edited, s)
