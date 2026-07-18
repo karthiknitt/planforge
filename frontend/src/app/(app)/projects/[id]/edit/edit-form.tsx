@@ -60,7 +60,6 @@ interface ProjectData {
 
 /* ── Live plot compass ─────────────────────────────────────────────────────── */
 function PlotCompass({ roadSide }: { roadSide: string }) {
-  const arrowAngles: Record<string, number> = { N: 0, E: 90, S: 180, W: 270 };
   const roadLines: Record<string, { x1: number; y1: number; x2: number; y2: number }> = {
     N: { x1: 20, y1: 20, x2: 100, y2: 20 },
     S: { x1: 20, y1: 100, x2: 100, y2: 100 },
@@ -76,7 +75,8 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
 
   const road = roadLines[roadSide] ?? roadLines.S;
   const label = roadLabel[roadSide] ?? roadLabel.S;
-  const northAngle = arrowAngles[OPPOSITE[roadSide]] ?? 0;
+  // The diagram frame is fixed north-up (N=top, S=bottom, E=right, W=left);
+  // only the ROAD line moves to the selected edge. The arrow always points up.
 
   return (
     <svg viewBox="0 0 120 120" className="w-full h-full" aria-label="Plot orientation compass">
@@ -104,30 +104,23 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
       >
         ROAD
       </text>
-      <g transform={`translate(60,60) rotate(${northAngle})`}>
+      <g transform="translate(60,60)">
         <polygon points="0,-16 -4,0 0,-4 4,0" fill="currentColor" className="text-foreground" />
         <polygon points="0,16 -4,0 0,4 4,0" fill="#CBD5E1" />
       </g>
-      {(() => {
-        const angle = (northAngle * Math.PI) / 180;
-        const nx = 60 + Math.sin(angle) * -24;
-        const ny = 60 + Math.cos(angle) * -24;
-        return (
-          <text
-            x={nx}
-            y={ny}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize="8"
-            fontWeight="700"
-            fill="currentColor"
-            className="text-foreground"
-            fontFamily="sans-serif"
-          >
-            N
-          </text>
-        );
-      })()}
+      <text
+        x={60}
+        y={36}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="700"
+        fill="currentColor"
+        className="text-foreground"
+        fontFamily="sans-serif"
+      >
+        N
+      </text>
     </svg>
   );
 }
