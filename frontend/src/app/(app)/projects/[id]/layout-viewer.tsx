@@ -1590,7 +1590,7 @@ export function LayoutViewer({
       {/* Layout selector + export buttons */}
       <div className="flex flex-col gap-3">
         {/* Layout buttons — horizontal scroll on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:[mask-image:none]">
           {activeData.layouts.map((l) => (
             <button
               key={l.id}
@@ -1645,7 +1645,7 @@ export function LayoutViewer({
         </div>
 
         {/* Export + share buttons — horizontal scroll on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:items-center">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:items-center md:[mask-image:none]">
           {/* PDF — primary action, prominent on mobile */}
           <Button
             size="sm"
@@ -2201,7 +2201,7 @@ export function LayoutViewer({
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList
           variant="line"
-          className="w-full justify-start overflow-x-auto scrollbar-none md:w-fit"
+          className="w-full justify-start overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)] md:w-fit md:[mask-image:none]"
         >
           {tabs.map((tab) => (
             <TabsTrigger key={tab} value={tab} className="min-h-[40px] shrink-0 flex-none px-4">
@@ -2240,7 +2240,10 @@ export function LayoutViewer({
               onValueChange={(v) => setFloor(Number(v))}
               className="flex-1 min-w-0"
             >
-              <TabsList variant="line" className="w-full overflow-x-auto scrollbar-none">
+              <TabsList
+                variant="line"
+                className="w-full overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)]"
+              >
                 {availableFloors.map((f) => (
                   <TabsTrigger
                     key={f.index}
