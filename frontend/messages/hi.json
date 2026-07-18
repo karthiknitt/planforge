@@ -21,7 +21,13 @@
     "approved": "स्वीकृत",
     "changesRequested": "बदलाव का अनुरोध",
     "upgradeForFeatures": "अपग्रेड करें",
-    "upgradeHint": "DXF + BOQ के लिए"
+    "upgradeHint": "DXF + BOQ के लिए",
+    "onboardingTitle": "PlanForge में आपका स्वागत है",
+    "onboardingStep1": "अपने प्लॉट का आकार और कमरों की प्राथमिकताएं दर्ज करें",
+    "onboardingStep2": "तुरंत 3 NBC-अनुरूप लेआउट विकल्प बनाएं",
+    "onboardingStep3": "मानक या अनुमोदन-तैयार PDF, DXF और BOQ एक्सपोर्ट करें",
+    "onboardingBrowseTemplates": "टेम्पलेट देखें",
+    "onboardingStartProject": "प्रोजेक्ट शुरू करें"
   },
   "project": {
     "newProject": "नया प्रोजेक्ट",

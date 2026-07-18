@@ -22,6 +22,7 @@ import {
   ProjectCardBuilding2Icon,
   ProjectCardViewLink,
 } from "./dashboard-strings";
+import { OnboardingModal } from "./onboarding-modal";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
       .where(eq(projectTable.userId, session.user.id))
       .orderBy(desc(projectTable.createdAt)),
     db
-      .select({ planTier: userTable.planTier })
+      .select({ planTier: userTable.planTier, hasSeenOnboarding: userTable.hasSeenOnboarding })
       .from(userTable)
       .where(eq(userTable.id, session.user.id))
       .limit(1),
@@ -83,11 +84,13 @@ export default async function DashboardPage() {
   const projects = myProjects;
   const planTier = userRows[0]?.planTier ?? "free";
   const badge = TIER_BADGE[planTier] ?? TIER_BADGE.free;
+  const showOnboarding = projects.length === 0 && !userRows[0]?.hasSeenOnboarding;
 
   const firstName = session.user.name.split(" ")[0];
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
+      {showOnboarding && <OnboardingModal />}
       {/* Header */}
       <div className="animate-fade-up">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">

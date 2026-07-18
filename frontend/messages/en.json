@@ -21,7 +21,13 @@
     "approved": "Approved",
     "changesRequested": "Changes requested",
     "upgradeForFeatures": "Upgrade",
-    "upgradeHint": "for DXF + BOQ"
+    "upgradeHint": "for DXF + BOQ",
+    "onboardingTitle": "Welcome to PlanForge",
+    "onboardingStep1": "Enter your plot dimensions and room preferences",
+    "onboardingStep2": "Generate 3 NBC-compliant layout variations instantly",
+    "onboardingStep3": "Export standard or approval-ready PDF, DXF, and BOQ",
+    "onboardingBrowseTemplates": "Browse templates",
+    "onboardingStartProject": "Start a project"
   },
   "project": {
     "newProject": "New Project",
