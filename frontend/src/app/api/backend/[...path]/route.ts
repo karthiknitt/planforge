@@ -34,7 +34,7 @@ async function proxy(
   if (!secret) {
     throw new Error("INTERNAL_AUTH_SECRET is not set");
   }
-  const token = await signInternalAuthToken(session.user.id, secret);
+  const token = await signInternalAuthToken(session.user.id, secret, session.user.email);
 
   const { path } = await params;
   const search = req.nextUrl.search;

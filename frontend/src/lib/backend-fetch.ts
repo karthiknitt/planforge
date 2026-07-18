@@ -7,7 +7,12 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 // Extends RequestInit with an optional per-call timeout. Callers that hit a
 // path known to be slow (e.g. the agent tool endpoints stacked on a Cloud Run
 // cold start) can raise it above the 15s default.
-export type FetchBackendInit = RequestInit & { timeoutMs?: number };
+//
+// `email` (optional, non-breaking) carries the caller's verified session
+// email into the internal auth token's `email` claim — used by backend
+// endpoints (e.g. team-invite claim) that must trust an email but never
+// accept one from a request body.
+export type FetchBackendInit = RequestInit & { timeoutMs?: number; email?: string };
 
 export async function fetchBackend(
   userId: string,
@@ -18,7 +23,7 @@ export async function fetchBackend(
   if (!secret) {
     throw new Error("INTERNAL_AUTH_SECRET is not set");
   }
-  const token = await signInternalAuthToken(userId, secret);
+  const token = await signInternalAuthToken(userId, secret, init?.email);
   // Normalize via Headers() first — init.headers may legitimately be a plain
   // object, a Headers instance, or a [string, string][] tuple array, and
   // object-spreading only handles the first of those correctly.
@@ -28,7 +33,7 @@ export async function fetchBackend(
   }
   headers.set("X-Internal-Auth", token);
 
-  const { timeoutMs, ...requestInit } = init ?? {};
+  const { timeoutMs, email: _email, ...requestInit } = init ?? {};
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
   // Combine the caller's signal (if any) with the timeout signal so BOTH can

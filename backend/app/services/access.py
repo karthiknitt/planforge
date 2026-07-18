@@ -34,6 +34,7 @@ async def get_accessible_project(
             select(TeamMember.id).where(
                 TeamMember.team_id == project.team_id,
                 TeamMember.user_id == user_id,
+                TeamMember.user_id != "",
             )
         )
         if member.scalar_one_or_none() is not None:

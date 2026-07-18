@@ -4,7 +4,7 @@ import jwt
 import pytest
 from fastapi import HTTPException
 
-from app.dependencies.auth import get_current_user_id
+from app.dependencies.auth import get_current_user_email, get_current_user_id
 
 SECRET = "test-secret-value-at-least-32-bytes-long-for-pyjwt"
 
@@ -70,4 +70,32 @@ def test_empty_configured_secret_raises_401_not_500(monkeypatch):
     token = _token("user-123")
     with pytest.raises(HTTPException) as exc_info:
         get_current_user_id(x_internal_auth=token)
+    assert exc_info.value.status_code == 401
+
+
+def _token_with_email(
+    user_id: str, email: str | None, exp_offset_seconds: int = 60, secret: str = SECRET
+) -> str:
+    payload: dict = {"user_id": user_id, "exp": time.time() + exp_offset_seconds}
+    if email is not None:
+        payload["email"] = email
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def test_get_current_user_email_returns_email_claim(monkeypatch):
+    monkeypatch.setattr("app.dependencies.auth.settings.internal_auth_secret", SECRET)
+    token = _token_with_email("user-123", "person@example.com")
+    assert get_current_user_email(x_internal_auth=token) == "person@example.com"
+
+
+def test_get_current_user_email_returns_none_when_absent(monkeypatch):
+    monkeypatch.setattr("app.dependencies.auth.settings.internal_auth_secret", SECRET)
+    token = _token_with_email("user-123", None)
+    assert get_current_user_email(x_internal_auth=token) is None
+
+
+def test_get_current_user_email_raises_401_for_invalid_token(monkeypatch):
+    monkeypatch.setattr("app.dependencies.auth.settings.internal_auth_secret", SECRET)
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user_email(x_internal_auth="not-a-jwt")
     assert exc_info.value.status_code == 401

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import { InviteClaimer } from "@/components/invite-claimer";
 import { LanguageToggle } from "@/components/language-toggle";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -12,6 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <InviteClaimer />
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 h-14 md:h-16">
           {/* Logo */}
