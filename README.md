@@ -182,7 +182,7 @@ PlanForge/
 │   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, pdf, approval_pdf, BOQ
 │   │   ├── models/            # SQLAlchemy ORM models
 │   │   └── schemas/           # Pydantic I/O schemas
-│   └── tests/                 # 413 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD, openings, section)
+│   └── tests/                 # 547 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD, openings, section)
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -211,7 +211,7 @@ PlanForge/
 ```bash
 # Backend
 cd backend
-uv run pytest tests/ -v          # run 413 tests (in-memory SQLite, no Neon needed)
+uv run pytest tests/ -v          # run 547 tests (in-memory SQLite, no Neon needed)
 uv run ruff check . && uv run ruff format .
 docker build -t planforge-backend .   # validate the Dockerfile only
 

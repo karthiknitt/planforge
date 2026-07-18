@@ -33,21 +33,29 @@ Complete technical documentation for contributors and maintainers.
 Browser (Next.js 16)
   └── App Router (Server + Client Components)
         ├── /api/auth/*         ← Better Auth handler
-        ├── /api/agent/*        ← Agentic chat (Vercel AI SDK + Claude)
+        ├── /api/agent/*        ← Agentic chat (Vercel AI SDK + Claude, provider-fallback chain)
         ├── /api/transcribe     ← OpenAI Whisper voice input
-        └── proxy.ts            ← Session-based route protection
+        └── proxy.ts            ← Session-based route protection; mints X-Internal-Auth JWT
+                                   for every backend call (never forwards a raw user id)
 
-FastAPI (Python 3.12)
+FastAPI (Python 3.12) — every route depends on X-Internal-Auth JWT (see Backend API Reference)
   └── /api/*
-        ├── /projects           ← CRUD
-        ├── /projects/{id}/generate     ← Layout generation
-        ├── /projects/{id}/export/*     ← PDF / DXF / BOQ
-        ├── /payments/*         ← Razorpay
-        └── /rooms/*            ← In-memory room editor (agentic, Pro)
+        ├── /projects, /projects/{id}/annotations       ← CRUD
+        ├── /projects/{id}/generate                     ← Layout generation (sync)
+        ├── /projects/{id}/generate-jobs, /jobs/{id}     ← Layout generation (async, Inngest-backed)
+        ├── /projects/{id}/layouts/{id}/render(-jobs)    ← AI floor-plan render (Pro, geometry-hash cached)
+        ├── /projects/{id}/structural, /structural/*     ← StructAgent IS-code design (optional)
+        ├── /projects/{id}/export/*                      ← PDF / approval-PDF / DXF / BOQ
+        ├── /projects/{id}/share, /share/{token}          ← Client approval workflow
+        ├── /projects/{id}/revisions                      ← v1/v2/v3 auto + manual snapshots
+        ├── /teams/*                                      ← Firm plan, shared project pool
+        ├── /gallery/plans(/{id})                         ← Public SEO template gallery
+        ├── /payments/*                                   ← Razorpay
+        └── /projects/{id}/rooms/*                        ← Canvas room editor (agentic, Pro)
 
 PostgreSQL 16
-  ├── Better Auth tables (Drizzle)  ← user, session, account, verification
-  └── Backend tables (SQLAlchemy)   ← projects, users (plan_tier)
+  ├── Better Auth tables (Drizzle)  ← user (+ hasSeenOnboarding), session, account, verification
+  └── Backend tables (SQLAlchemy)   ← projects, revisions, teams, jobs, structural designs, renders
 ```
 
 ---
@@ -59,12 +67,26 @@ PlanForge/
 ├── backend/
 │   ├── app/
 │   │   ├── api/routes/
-│   │   │   ├── export.py        # PDF + DXF + BOQ exports
-│   │   │   ├── generate.py      # GET /projects/{id}/generate
+│   │   │   ├── export.py        # PDF + approval-PDF + DXF + BOQ exports
+│   │   │   ├── generate.py      # GET /projects/{id}/generate (sync)
+│   │   │   ├── jobs.py          # Async layout-generation + render jobs (Inngest-backed)
+│   │   │   ├── render.py        # Cached AI floor-plan renders (Pro, geometry-hash keyed)
+│   │   │   ├── structural.py    # StructAgent IS-code structural design (optional feature)
+│   │   │   ├── share.py         # Share token + public view + client approval workflow
+│   │   │   ├── revisions.py     # Revision snapshot CRUD
+│   │   │   ├── teams.py         # Team/firm plan CRUD
+│   │   │   ├── gallery.py       # Public template gallery
 │   │   │   ├── health.py        # GET /api/health
-│   │   │   ├── payments.py      # POST /payments/order + /verify
-│   │   │   ├── projects.py      # CRUD /projects
-│   │   │   └── rooms.py         # In-memory room editor + undo stack
+│   │   │   ├── payments.py      # POST /payments/order + /verify (project + credit purchases)
+│   │   │   ├── projects.py      # CRUD /projects + annotations
+│   │   │   └── rooms.py         # In-memory canvas room editor + undo stack
+│   │   ├── dependencies/
+│   │   │   └── auth.py          # get_current_user_id/email — decodes the X-Internal-Auth JWT
+│   │   ├── services/
+│   │   │   ├── jobs.py, layout_store.py, render_runner.py   # Job execution + layout state + render provider calls
+│   │   │   ├── structagent_client.py   # StructAgent HTTP client
+│   │   │   └── access.py, plans.py     # Project access control, plan-tier gating
+│   │   ├── inngest_app.py       # Inngest client + event handlers (layout/generate.requested, render)
 │   │   ├── config/
 │   │   │   ├── compliance_rules.json   # Editable rule thresholds
 │   │   │   └── room_specs.json         # 19 room type specs for CP-SAT solver
@@ -117,23 +139,28 @@ PlanForge/
 │       │       ├── agent/[projectId]/ # Agentic chat (streamText, 10 tools)
 │       │       └── transcribe/        # Whisper transcription
 │       ├── components/
-│       │   ├── floor-plan-svg.tsx     # SVG renderer
-│       │   ├── section-view-svg.tsx   # Section renderer
+│       │   ├── floor-plan-svg.tsx     # SVG renderer (walls, doors, Vastu/furniture/electrical/plumbing overlays)
+│       │   ├── section-view-svg.tsx   # SECTION A-A + FRONT ELEVATION renderer
+│       │   ├── plan-3d-scene.tsx      # React Three Fiber 3D canvas (parity with solver's room/column grid)
+│       │   ├── dxf-preview-canvas.tsx # Inline DXF preview (Phase 4)
 │       │   ├── boq-viewer.tsx         # BOQ table + Excel export
-│       │   ├── chat-panel.tsx         # Agentic chat UI
+│       │   ├── chat-panel.tsx         # Agentic chat UI (AI SDK v6 tool-part parsing via chat-parts.ts)
 │       │   ├── pricing-checkout-button.tsx  # Razorpay client
 │       │   └── ui/                    # ShadCN components
 │       ├── db/
 │       │   ├── index.ts               # Drizzle client
-│       │   └── schema.ts              # Better Auth tables + project columns
+│       │   └── schema.ts              # Better Auth tables (+ hasSeenOnboarding) + project columns
 │       ├── hooks/
 │       │   └── use-voice-input.ts     # MediaRecorder + Whisper integration
 │       ├── lib/
 │       │   ├── auth.ts                # Better Auth server config
 │       │   ├── auth-client.ts         # Better Auth browser client
 │       │   ├── layout-types.ts        # TypeScript types mirroring backend schemas
+│       │   ├── agent-model-chain.ts   # Provider fallback chain (Anthropic → OpenAI → OpenRouter)
+│       │   ├── agent-errors.ts        # shouldFallback() — 401/402/404/429/5xx/network → advance chain
+│       │   ├── chat-parts.ts          # AI SDK v6 tool-part helpers (isToolUIPart/getToolName)
 │       │   └── utils.ts               # cn() + misc
-│       └── proxy.ts                   # Session-based middleware redirect
+│       └── proxy.ts                   # Session-based middleware redirect; mints X-Internal-Auth JWT
 │
 ├── docs/                        # This file lives here
 ├── scripts/
@@ -213,7 +240,12 @@ Set via `gh secret set <NAME> --repo karthiknitt/planforge`, injected into Cloud
 
 ## Backend — API Reference
 
-All routes are prefixed with `/api`. Authenticated routes expect `X-User-Id: <user_id>` header.
+All routes are prefixed with `/api`. Authenticated routes depend on `get_current_user_id`
+(`backend/app/dependencies/auth.py`), which expects an **`X-Internal-Auth` JWT** — a
+short-lived HS256 token minted server-side by the frontend from the verified Better Auth
+session (`user_id` + optional `email` claims, `INTERNAL_AUTH_SECRET` shared between
+frontend/backend), not the old raw `X-User-Id` header. Never trust a client-supplied
+user id or email directly; only the JWT claim.
 
 ### Health
 
@@ -316,14 +348,87 @@ Returns up to 3 layouts scored and ranked by the layout scorer. Layout IDs are *
 | POST | `/api/payments/order` | Create Razorpay order `{ "plan": "basic" \| "pro" }` |
 | POST | `/api/payments/verify` | HMAC verify + activate plan tier |
 
-### Rooms (Agentic Editor — Pro only)
+### Rooms (Canvas Editor — Pro only)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/rooms/{project_id}/state` | Get current in-memory layout state |
-| POST | `/api/rooms/{project_id}/move` | Move a room (Shapely validated) |
-| POST | `/api/rooms/{project_id}/resize` | Resize a room |
-| POST | `/api/rooms/{project_id}/undo` | Undo last action (deque, maxlen=10) |
+| GET | `/api/projects/{project_id}/rooms` | List rooms for the current layout state |
+| GET | `/api/projects/{project_id}/rooms/layout-state` | Full in-memory layout state (agent-tool source of truth) |
+| GET | `/api/projects/{project_id}/rooms/{room_id}` | Get a single room |
+| POST | `/api/projects/{project_id}/rooms/{room_id}/move` | Move a room (Shapely validated) |
+| POST | `/api/projects/{project_id}/rooms/{room_id}/resize` | Resize a room |
+| POST | `/api/projects/{project_id}/rooms/swap` | Swap two rooms' positions |
+| POST | `/api/projects/{project_id}/rooms` | Add a room to the current layout |
+| DELETE | `/api/projects/{project_id}/rooms/{room_id}` | Remove a room |
+| GET | `/api/projects/{project_id}/available-space` | Unallocated floor area, for the "add room" picker |
+| GET | `/api/projects/{project_id}/compliance` | Re-run compliance against current in-memory state |
+| POST | `/api/layouts/{layout_id}/compliance-check` | Stateless compliance check against a posted `{ rooms: Room[] }` (used during manual drag, debounced) |
+| POST | `/api/projects/{project_id}/rooms/undo` | Undo last action (deque, maxlen=10) |
+
+### Async Jobs (Inngest-backed layout generation & renders)
+
+`backend/app/api/routes/jobs.py` — generation and AI-render are queued as durable jobs via
+the Python `inngest` SDK (`app/inngest_app.py`) rather than solved synchronously in the
+request, avoiding Cloud Run's request timeout on cold-start CP-SAT solves.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/projects/{project_id}/generate-jobs` | Enqueue a layout-generation job (`layout/generate.requested` event); `202` when Inngest is configured |
+| POST | `/api/projects/{project_id}/layouts/{layout_id}/render-jobs` | Enqueue an AI floor-plan render job; accepts an optional multipart `reference` PNG (R3F 3D snapshot) to condition the render on exact geometry |
+| GET | `/api/projects/{project_id}/jobs/{job_id}` | Poll job status/result |
+
+**Fallback behaviour:** when `inngest_app.inngest_enabled()` is false (dev/CI, or Inngest
+not yet provisioned in an environment), `create_generate_job` solves inline within the same
+request/DB session instead of enqueueing — same endpoint, no separate code path for callers.
+
+### Structural Design (StructAgent)
+
+`backend/app/api/routes/structural.py` — IS-code structural design (columns, beams,
+footings) generated per layout via the external `structapi` service
+(`app/services/structagent_client.py`). Disabled (all endpoints 404/503) when no
+`structagent` API key/endpoint is configured — layout generation and export work fully
+without it.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/projects/{project_id}/structural` | Request a structural design run for a layout |
+| GET | `/api/projects/{project_id}/structural/status` | Poll design-run status |
+| GET | `/api/projects/{project_id}/structural/design` | Fetch the latest non-stale design for the layout's current approved revision (matched by geometry hash) |
+| POST | `/api/projects/{project_id}/structural/approve` | Freeze the current layout geometry as an immutable approved revision |
+
+### AI Render Cache
+
+`backend/app/api/routes/render.py` — AI-generated floor-plan renders (photoreal preview),
+persisted per layout **geometry-hash** so an unchanged layout never re-hits the paid render
+provider. Pro plan required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/projects/{project_id}/layouts/{layout_id}/render` | Generate (or return cached) AI render for a floor |
+| GET | `/api/projects/{project_id}/layouts/{layout_id}/render` | Fetch the persisted render image |
+
+### Share, Revisions, Teams, Gallery
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/projects/{project_id}/share` | Create a read-only share token |
+| DELETE | `/api/projects/{project_id}/share` | Revoke the share token |
+| GET | `/api/share/{token}` | Public read-only layout view (no auth) |
+| POST | `/api/share/{token}/approve` | Client approves the shared layout |
+| POST | `/api/share/{token}/request-changes` | Client requests changes |
+| GET | `/api/projects/{project_id}/revisions` | List revision snapshots (v1/v2/v3...) |
+| POST | `/api/projects/{project_id}/revisions` | Create a manual revision snapshot |
+| GET | `/api/projects/{project_id}/revisions/{revision_id}` | Get a single revision |
+| DELETE | `/api/projects/{project_id}/revisions/{revision_id}` | Delete a revision |
+| POST | `/api/teams` | Create a team (firm plan) |
+| GET | `/api/teams/mine` | Get the caller's team |
+| POST | `/api/teams/claim` | Claim/join a team via invite |
+| GET | `/api/teams/{team_id}/members` | List team members |
+| GET | `/api/teams/{team_id}/projects` | List a team's shared project pool |
+| GET | `/api/gallery/plans` | Public SEO template gallery listing |
+| GET | `/api/gallery/plans/{preset_id}` | Fetch one gallery preset's full plan (used by the gallery "use this template" CTA) |
+| GET | `/api/projects/{project_id}/annotations` | Get room sticky-note annotations |
+| PUT | `/api/projects/{project_id}/annotations` | Save room annotations |
 
 ---
 
@@ -1096,3 +1201,100 @@ Backend deployed to Google Cloud Run for the first time; local dev-server workfl
 - No local dev server, no local Playwright/e2e — real end-to-end checks happen against a Vercel preview deploy (frontend) or Cloud Run (backend)
 
 **Key files changed:** `scripts/gcp-cloud-run-setup.sh` (new), `backend/.env.example`, `frontend/.env.example`, `frontend/.env.local.example`, `CLAUDE.md`, `README.md`, this file.
+
+---
+
+### 2026-07-04 → 2026-07-18 — Structural Design, Async Jobs, CAD v2, PDF Parity, UX Overhaul (consolidated)
+
+**What was built** (spans ~15 sessions and PRs #9–#37, all merged to `main`; grouped here by
+theme rather than session — see per-topic memory notes referenced in commit messages for
+full blow-by-blow detail):
+
+**Async job architecture:**
+- Layout generation and AI rendering moved from synchronous in-request solving to
+  **Inngest-backed durable jobs** (`backend/app/api/routes/jobs.py`, `app/inngest_app.py`) —
+  root cause was Cloud Run cold starts (~23s measured) blowing past the frontend's original
+  15s fetch timeout. Falls back to inline solving when Inngest isn't configured (dev/CI).
+- `fetchBackend` (frontend) now accepts a per-call `timeoutMs`; agent tools pass 45s.
+- **Gotcha hit in production:** `main` and the `v2` staging lane shared the same Inngest
+  `app_id: "planforge"` — jobs from one deployment silently no-op'd against the other's
+  event stream. Fixed by giving each its own app id.
+
+**Structural design (StructAgent):**
+- New `backend/app/api/routes/structural.py` + `app/services/structagent_client.py` call an
+  external IS-code structural design service (`structapi`), gated behind `approve` (freezes
+  layout geometry as an immutable revision) → `POST /structural` (design run) →
+  `GET /structural/design` (latest non-stale result, matched by geometry hash). Entirely
+  optional — off with a clear message when no API key is configured.
+- CI byte-diffs the vendored/pinned `structapi` tag on every push/PR and files a weekly
+  freshness issue if it drifts.
+
+**CAD & PDF quality (Lane A/B → "v2" → merged to main):**
+- Both PDF generators (standard + approval) matched to a reference architectural drawing set
+  across all pages: dual-unit dimension labels, area + openings schedule tables, setback
+  callouts, scale bars, canonical structural pages.
+- New **`SECTION A-A`** (cross-section) and **`FRONT ELEVATION`** pages in both PDFs, built
+  from `backend/app/engine/section_geometry.py` → `section_render.py` (IS 962 hatching,
+  `vertical_standards.py` dimensions). Front elevation always uses the road-facing (y-min)
+  wall regardless of `road_side`, so the correct facade is drawn; main door shown full height.
+  A-A cut markers are drawn on the plan pages themselves.
+- **Main entrance door (MD)** now a dedicated GF-only pass in `plan_geometry.py`: entry room
+  priority living > passage > dining (never parking/stair/wet), door centred toward the
+  facade midpoint to align with the compound gate. `Opening.is_main` flag +
+  `OpeningStandards.main_door_width_m` (1070mm leaf, NBC min clear 900mm) from
+  `compliance_rules.json`.
+- R3F 3D canvas labels (solver-produced room/column grid) brought to parity with the solver's
+  actual grid — Stage 2 Phase 1A of the structural-automation roadmap.
+
+**Agent chat / AI SDK v6 hardening (recurring source of "connection error" reports):**
+- Fixed invalid Anthropic model IDs (`claude-sonnet-4-6`/`claude-opus-4-6` never existed →
+  404s) and a fallback predicate that only matched billing/quota errors, not 404s. Provider
+  chain now advances on 401/402/404/429/5xx/network errors, with human-readable final
+  messages (`frontend/src/lib/agent-errors.ts`, `agent-model-chain.ts`).
+- **Gotcha:** AI SDK v6 emits provider failures as stream **error chunks**, not thrown
+  exceptions — a `try/catch` around the stream call is dead code for this; fallback must
+  inspect stream chunks.
+- Fixed v4→v6 tool-part parsing in `chat-panel.tsx` (`part.type === "tool-invocation"` no
+  longer exists in v6) via `frontend/src/lib/chat-parts.ts`, built on the SDK's
+  `isToolUIPart`/`getToolName` helpers — this is why AI-driven room edits stopped updating
+  the canvas preview until fixed.
+
+**Bug-hunt rounds (production-reported issues, fixed via parallel tiered subagents):**
+- Solver growth pressure, overlap-safe blank-area fill, per-floor render caching keyed
+  correctly, wet-zone (kitchen/toilet) adjacency rule added to the compliance/scorer engine,
+  column-grid alignment fix between the solver and the R3F structural overlay. 21 bugs closed
+  across PRs #30–#35 in the largest single round (Phase 3 bug hunt, closed 2026-07-18).
+
+**UX / accessibility / platform:**
+- Toasts, error boundaries, `not-found` pages, skeleton loading states, inline PDF/DXF
+  preview (react-pdf / a dxf-viewer), a11y pass (Phase 4, PR #36).
+- Vastu engine test coverage completed (22 new tests covering zone rotation × 4 road sides,
+  prohibit/avoid rules), `VASTU_RULES` externalized into `compliance_rules.json`'s
+  `vastu_zones` key (was hardcoded Python), dead-code cleanup, a real gallery "use this
+  template" CTA bug fixed (was slugifying the display name instead of using the stable
+  `plan.id`), 3-step onboarding modal with a `hasSeenOnboarding` DB column (Phase 5, PR #37).
+
+**Deployment:**
+- `main` reached parity with the `v2` staging lane (PR #15) and became the sole
+  production-deployed branch. A missing `NEXT_PUBLIC_BETTER_AUTH_URL` was found and fixed —
+  production auth had been silently posting to `localhost` since launch.
+- `v2` staging lane and all its associated branches/worktrees were fully decommissioned on
+  2026-07-18 after PR #36 + #37 merged and CI went green — `main` is now the only branch,
+  locally and on GitHub.
+
+**Known repo-hygiene gotcha (unresolved, flag before any future schema change):**
+`frontend/src/db/migrations/meta/_journal.json` has always had empty `entries` — no real
+Drizzle migration history has ever existed for this project. `drizzle-kit generate` therefore
+can't produce incremental `ALTER TABLE` migrations; it emits a full baseline `CREATE TABLE`
+for all 7 tables every time. The `hasSeenOnboarding` column (Phase 5) had to be applied by
+hand via the Neon SQL console instead. Fix this properly (seed the journal against an empty
+DB, or hand-write a scoped migration) before the next schema change, rather than repeating
+the manual-console workaround.
+
+**Patterns established:**
+- Async job endpoints must offer an inline-fallback code path for dev/CI where the job queue
+  isn't provisioned — never make Inngest a hard dependency of the endpoint's happy path.
+- Any shared infrastructure identifier (Inngest `app_id`, cron names, webhook paths) that two
+  deployments of the same codebase both reference must be deployment-scoped, not hardcoded.
+- AI SDK v6 provider fallback must be implemented at the stream-chunk level, not via
+  `try/catch` around the initial call.
