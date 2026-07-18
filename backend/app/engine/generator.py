@@ -8,7 +8,7 @@ from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; hist
     compute_l_shaped_polygon,
 )
 from .compliance import check, load_rules
-from .models import FloorPlan, Layout, PlotConfig, Room
+from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
 from .solver import solve_layouts
 from .vastu import check_vastu
@@ -139,9 +139,22 @@ def _fill_blank_areas(
     return notes
 
 
-def _largest_inscribed_rect(piece):
+_USABLE_EROSION_R = 1.2 / 2 + 0.05
+_RELAXED_MIN_SIDE = 0.9
+
+
+def _region_is_usable(piece) -> bool:
+    """Mirror of the "usable leftover" criterion the quality checks apply:
+    a ~1.3 m pocket fits inside the region after erosion."""
+    eroded = piece.buffer(-_USABLE_EROSION_R)
+    return not eroded.is_empty and eroded.area > 1e-4
+
+
+def _largest_inscribed_rect(piece, min_side: float = 1.2 - 1e-3):
     """Largest axis-aligned rectangle inside ``piece`` whose corners lie on
-    the polygon's own coordinate grid."""
+    the polygon's own coordinate grid. ``min_side`` default carries a float
+    tolerance: grid coords are differences of 3-dp values, so an intended
+    1.2 m leg can measure 1.1989999…."""
     from shapely.geometry import box
 
     # Raw coords — rounding here can push a candidate past the true boundary
@@ -153,7 +166,6 @@ def _largest_inscribed_rect(piece):
     ys = sorted({c[1] for c in coords})
     best = None
     best_area = 0.5
-    min_side = 1.2 - 1e-3  # tolerance: grid coords carry float noise
     for i, x0 in enumerate(xs[:-1]):
         for x1 in xs[i + 1 :]:
             w = x1 - x0
@@ -205,6 +217,15 @@ def _rect_fill_remainder(
             rect = _largest_inscribed_rect(piece)
             if rect is not None and rect.area >= 1.5:
                 break
+            # A usable pocket can exist with no ≥1.2 m rectangle at all (an
+            # L whose legs are ~1.19 m — the CI gap of 2026-07-17). The fill
+            # must be at least as inclusive as the usability criterion, so
+            # reclaim it as a niche room: erosion-usable regions always
+            # contain a ≥0.92 m square, hence 0.9 always finds a candidate.
+            if _region_is_usable(piece):
+                rect = _largest_inscribed_rect(piece, min_side=_RELAXED_MIN_SIDE)
+                if rect is not None and rect.area >= 0.8:
+                    break
             rect = None
         if rect is None:
             break
@@ -620,8 +641,59 @@ def generate(cfg: PlotConfig) -> list[Layout]:
     archetype_layouts: list[Layout] = []
     generators = [layout_a, layout_b, layout_c, layout_d, layout_e]
 
+    def _snap_layout_floors(layout: Layout) -> None:
+        """Run the shared-grid snap pass (PR #26) on a layout's floors.
+
+        The solver snaps inside solve(), but archetype layouts skipped it
+        entirely, and the fill/absorb/wet-split passes reintroduce edges at
+        wall FACES (±iwt/2 off the centreline another room pairs on), so
+        near-aligned partitions reappear post-fill and every such pair
+        produced adjacent twin columns. Called on archetype admission and
+        again after the fill passes for every layout. Best-effort like the
+        solver: revert to the unsnapped rooms on compliance failure.
+        """
+        from .geometry import buildable_polygon
+        from .solver import _load_specs, snap_rooms_to_shared_grid
+
+        floor_plans = [
+            fp
+            for fp in (
+                layout.ground_floor,
+                layout.first_floor,
+                layout.second_floor,
+                layout.basement_floor,
+            )
+            if fp is not None and fp.rooms
+        ]
+        if not floor_plans:
+            return
+        specs = _load_specs()
+        min_dims: dict[str, dict] = {}
+        for fp in floor_plans:
+            for r in fp.rooms:
+                spec = specs.get(r.type, specs.get("utility"))
+                min_dims[r.id] = {
+                    "min_width_m": spec["min_width_m"],
+                    "min_depth_m": spec["min_width_m"],
+                    "min_area_sqm": spec["min_area_sqm"],
+                }
+        bx1, by1, bx2, by2 = buildable_polygon(cfg, wall_clearance=ewt).bounds
+        originals = [list(fp.rooms) for fp in floor_plans]
+        snapped = snap_rooms_to_shared_grid(
+            [fp.rooms for fp in floor_plans],
+            min_dims,
+            plate_bounds=((bx1, bx2), (by1, by2)),
+            pin_room_types={"staircase"},
+        )
+        for fp, rooms in zip(floor_plans, snapped):
+            fp.rooms = rooms
+        if not check(layout, cfg, rules).passed:
+            for fp, rooms in zip(floor_plans, originals):
+                fp.rooms = rooms
+
     for fn in generators:
         layout = fn(cfg, ewt=ewt, iwt=iwt)
+        _snap_layout_floors(layout)
         layout.compliance = check(layout, cfg, rules)
 
         if cfg.vastu_enabled:
@@ -638,6 +710,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
     if plot_area >= 150:
         lf = layout_f(cfg, ewt=ewt, iwt=iwt)
         if lf is not None:
+            _snap_layout_floors(lf)
             lf.compliance = check(lf, cfg, rules)
             if cfg.vastu_enabled:
                 v_violations, v_warnings = check_vastu(lf, cfg, road_side=cfg.road_side)
@@ -706,6 +779,35 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             _trim_micro_overlaps(fp)
 
         layout.space_notes = list(layout.space_notes) + space_notes
+
+    # ── Re-snap + recompute columns from the FINAL rooms ─────────────────────
+    # Two historical defects converge here: archetype layouts carried
+    # _columns_from_rooms' edge-line cross-product (a column on BOTH faces of
+    # every 115 mm partition — the "twin columns" bug), and both paths
+    # computed columns before the fill/split/trim passes mutated rooms. The
+    # fill passes also grow rooms to wall FACES, reintroducing near-aligned
+    # partitions after the solver's snap — so snap again on the final
+    # geometry, then derive columns from wall junctions, keeping the stored
+    # columns identical to what the PDF/DXF pipeline draws and what
+    # structural grid extraction consumes.
+    from app.engine.plan_geometry import derive_columns, derive_walls
+
+    buildable = buildable_polygon(cfg)
+    for layout in all_layouts:
+        _snap_layout_floors(layout)
+        for fp in [
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+            layout.basement_floor,
+        ]:
+            if fp is None or not fp.rooms:
+                continue
+            walls = derive_walls(fp.rooms, buildable)
+            fp.columns = [
+                Column(x=round(c.cx, 3), y=round(c.cy, 3))
+                for c in derive_columns(walls)
+            ]
 
     # ── Score and select top 3 ────────────────────────────────────────────────
     top = rank_and_select(all_layouts, cfg, top_n=3)

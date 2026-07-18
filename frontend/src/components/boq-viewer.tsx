@@ -2,7 +2,7 @@
 
 import { Lock } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { useSession } from "@/lib/auth-client";
@@ -49,6 +49,16 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [city, setCity] = useState<SupportedCity>("Generic");
+
+  // Reset the loaded BOQ when the viewed layout changes — the component
+  // stays mounted across layout switches, so Layout A's table (and its
+  // provenance badges/totals) lingered under Layout B's header while the
+  // Excel export already targeted B. Mirrors StructuralViewer's guard.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: layoutId is an intentional reset trigger, not read in the body
+  useEffect(() => {
+    setBOQ(null);
+    setError("");
+  }, [layoutId]);
 
   async function loadBOQ(selectedCity: SupportedCity = city) {
     if (!session) return;

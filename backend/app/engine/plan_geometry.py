@@ -399,7 +399,32 @@ def derive_columns(
         if exceeds:
             kept.append(cand)
 
-    return [ColumnMarker(cx=j.x, cy=j.y) for j in kept]
+    return _merge_adjacent_columns(kept)
+
+
+_COLUMN_MERGE_TOL = 0.3  # m — junctions closer than this are one physical column
+
+
+def _merge_adjacent_columns(kept: list[WallJunction]) -> list[ColumnMarker]:
+    """Collapse junction clusters into single columns.
+
+    Mixed wall conventions (zero-gap room tiling vs iwt gaps, orphan walls
+    hugging a face at ±iwt/2) can put two junctions half a wall thickness
+    apart; drawing a column on each reads as a detailing error ("twin
+    columns") and skews structural grid extraction. Anything under one
+    column width apart is a single physical column — keep the
+    highest-degree junction of each cluster (best beam anchoring).
+    """
+    remaining = sorted(kept, key=lambda j: (-j.degree, j.x, j.y))
+    merged: list[WallJunction] = []
+    for j in remaining:
+        if any(
+            (j.x - m.x) ** 2 + (j.y - m.y) ** 2 < _COLUMN_MERGE_TOL**2 for m in merged
+        ):
+            continue
+        merged.append(j)
+    merged.sort(key=lambda j: (j.x, j.y))
+    return [ColumnMarker(cx=j.x, cy=j.y) for j in merged]
 
 
 def wall_polygons(

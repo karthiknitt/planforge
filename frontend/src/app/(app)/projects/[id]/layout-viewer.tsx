@@ -750,6 +750,7 @@ export function LayoutViewer({
 }: LayoutViewerProps) {
   const { data: session } = useSession();
   const { locale } = useLocale();
+  const router = useRouter();
   const [regenerating, setRegenerating] = useState(false);
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
   const [selectedId, setSelectedId] = useState(() => generateData?.layouts[0]?.id ?? "A");
@@ -873,6 +874,37 @@ export function LayoutViewer({
     if (png) setR3fPngs((prev) => ({ ...prev, [floor]: png }));
     return png;
   }, [floor]);
+
+  // Single invalidation routine for every geometry-mutating action (manual
+  // room edit, AI chat edit). The backend reverts Approved→Draft and marks
+  // designs stale on any geometry change; the UI must drop every derived
+  // artifact with it — lifecycle status, cached structural geometry, the
+  // render-source selection, captured R3F reference snapshots — and bust
+  // the server-side layout cache so a reload agrees with the edit. Each
+  // edit path previously did a different subset (the AI-chat path did
+  // none), leaving a stale "DESIGNED" badge and pre-edit conditioning
+  // images after edits.
+  const invalidateAfterGeometryEdit = useCallback(() => {
+    setRenderSource("architectural");
+    setStructuralGeometry(null);
+    setStructuralGeometryFallback(null);
+    setR3fPngs({});
+    void fetchStructuralStatus();
+    void fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).catch(() => {});
+  }, [fetchStructuralStatus, projectId]);
+
+  // After a design run completes the architectural layout is untouched, but
+  // the structural artifacts are new: refresh status and re-fetch the
+  // designed geometry if the render source is showing it (a re-run with,
+  // e.g., a different SBC previously kept serving the OLD design's
+  // final_geometry to the R3F preview and AI-render conditioning image).
+  const handleDesignComplete = useCallback(() => {
+    setStructuralGeometry(null);
+    setStructuralGeometryFallback(null);
+    setR3fPngs({});
+    void fetchStructuralStatus();
+    if (renderSource === "structural") void fetchStructuralGeometry();
+  }, [fetchStructuralStatus, fetchStructuralGeometry, renderSource]);
   const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
   const tabs = visibleTabs(agentChatEnabled);
   const [activeTab, setActiveTab] = useState<TabId>("plan");
@@ -1191,10 +1223,7 @@ export function LayoutViewer({
       // stale pre-edit prop, and bust the server-side layout cache so a
       // reload agrees with what was just saved.
       if (data.layout) setLiveLayout(data.layout);
-      void fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).catch(() => {});
-      // Any geometry edit reverts structural status to draft server-side —
-      // refresh so the lifecycle badge/preliminary notice pick it up.
-      void fetchStructuralStatus();
+      invalidateAfterGeometryEdit();
       setEditMode(false);
       setEditedRooms(null);
       setComplianceIssues({});
@@ -1449,9 +1478,16 @@ export function LayoutViewer({
 
   if (!generateData) {
     return (
-      <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-        <p className="font-medium">Layout engine offline</p>
-        <p className="mt-1 text-sm">Start the backend server and refresh to see floor plans.</p>
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
+        <div>
+          <p className="font-medium">Couldn&apos;t load layouts</p>
+          <p className="mt-1 text-sm">
+            The layout service didn&apos;t respond — this is usually temporary.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => router.refresh()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -2564,7 +2600,7 @@ export function LayoutViewer({
           status={structStatus}
           approving={approvingStructural}
           onApprove={handleApproveStructural}
-          onDesignComplete={fetchStructuralStatus}
+          onDesignComplete={handleDesignComplete}
         />
       )}
 
@@ -2621,7 +2657,10 @@ export function LayoutViewer({
             <ChatPanel
               projectId={projectId}
               currentLayout={layout}
-              onLayoutUpdate={(updated) => setLiveLayout(updated)}
+              onLayoutUpdate={(updated) => {
+                setLiveLayout(updated);
+                invalidateAfterGeometryEdit();
+              }}
             />
           </div>
         ) : (

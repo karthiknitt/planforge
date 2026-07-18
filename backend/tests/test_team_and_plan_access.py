@@ -144,3 +144,34 @@ class TestPlanExpiry:
             f"/api/projects/{pid}/rooms", headers={"X-Test-User-Id": OWNER}
         )
         assert res.status_code == 403
+
+
+class TestTeamCreationTierGate:
+    """Regression: POST /api/teams had no plan-tier check — any free user
+    could create a 'firm' and use the multi-seat collaboration feature
+    (priced as the Firm plan) via direct API call."""
+
+    async def test_free_user_cannot_create_team(self, client_db):
+        client, sf = client_db
+        async with sf() as session:
+            session.add(User(id="free-user-1", plan_tier="free"))
+            await session.commit()
+        res = await client.post(
+            "/api/teams",
+            json={"name": "Freeloaders LLP"},
+            headers={"X-Test-User-Id": "free-user-1"},
+        )
+        assert res.status_code == 403, res.text
+        assert "firm" in res.json()["detail"].lower()
+
+    async def test_firm_user_can_create_team(self, client_db):
+        client, sf = client_db
+        async with sf() as session:
+            session.add(User(id="firm-user-1", plan_tier="firm"))
+            await session.commit()
+        res = await client.post(
+            "/api/teams",
+            json={"name": "Real Firm"},
+            headers={"X-Test-User-Id": "firm-user-1"},
+        )
+        assert res.status_code == 201, res.text
