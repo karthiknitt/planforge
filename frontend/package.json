@@ -29,6 +29,8 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "drizzle-orm": "^0.45.1",
+    "dxf-parser": "^1.1.2",
+    "dxf-viewer": "^1.0.48",
     "framer-motion": "^12.34.3",
     "jose": "^6.2.3",
     "lucide-react": "^0.574.0",

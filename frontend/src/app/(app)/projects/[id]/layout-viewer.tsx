@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
 import { ChatPanel } from "@/components/chat-panel";
+import { DxfPreviewDialog } from "@/components/dxf-preview-dialog";
 import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { LayoutCompareView } from "@/components/layout-compare-view";
@@ -987,6 +988,7 @@ export function LayoutViewer({
   const [downloadError, setDownloadError] = useState("");
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [approvalPdfPreviewOpen, setApprovalPdfPreviewOpen] = useState(false);
+  const [dxfPreviewOpen, setDxfPreviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
@@ -1704,6 +1706,17 @@ export function LayoutViewer({
               {downloadingDxf ? "…" : "DXF"}
             </Button>
           )}
+          {planTier !== "free" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+              onClick={() => setDxfPreviewOpen(true)}
+              disabled={!session}
+            >
+              Preview DXF
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -2090,6 +2103,13 @@ export function LayoutViewer({
         fetchPdf={fetchApprovalPdfBlob}
         onDownload={handleDownloadApprovalPdf}
         downloading={downloadingApprovalPdf}
+      />
+      <DxfPreviewDialog
+        open={dxfPreviewOpen}
+        onOpenChange={setDxfPreviewOpen}
+        fetchDxf={() => fetchExportBlob("dxf")}
+        onDownload={() => handleDownload("dxf")}
+        downloading={downloadingDxf}
       />
 
       {/* Download error */}
