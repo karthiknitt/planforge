@@ -16,6 +16,7 @@ export default function PdfDocumentViewer({ blob }: { blob: Blob }) {
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageError, setPageError] = useState(false);
+  const [pageLoadError, setPageLoadError] = useState<string | null>(null);
 
   if (pageError) {
     return (
@@ -36,8 +37,28 @@ export default function PdfDocumentViewer({ blob }: { blob: Blob }) {
         onLoadError={() => setPageError(true)}
         loading={<Skeleton className="h-[70vh] w-full" />}
       >
-        <Page pageNumber={pageNumber} width={640} />
+        <Page
+          pageNumber={pageNumber}
+          width={640}
+          onLoadSuccess={() => setPageLoadError(null)}
+          onLoadError={(err) => {
+            // react-pdf's own warning() is a no-op in production builds, so
+            // without this the failure is otherwise completely silent.
+            console.error(`PDF page ${pageNumber} failed to load:`, err);
+            setPageLoadError(err.message);
+          }}
+          onRenderError={(err) => {
+            console.error(`PDF page ${pageNumber} failed to render:`, err);
+            setPageLoadError(err.message);
+          }}
+        />
       </Document>
+
+      {pageLoadError && (
+        <p className="text-sm text-destructive">
+          Couldn't load page {pageNumber}: {pageLoadError}
+        </p>
+      )}
 
       {numPages > 1 && (
         <div className="flex items-center gap-3 text-sm">
