@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.engine.boq import QuantityEngine
 from app.engine.generator import generate
@@ -247,3 +247,24 @@ def _get_all_plans() -> list[dict[str, Any]]:
 async def list_gallery_plans() -> list[dict[str, Any]]:
     """Return all pre-generated sample plans for the public gallery."""
     return _get_all_plans()
+
+
+@router.get("/gallery/plans/{preset_id}")
+async def get_gallery_plan(preset_id: str) -> dict[str, Any]:
+    """Return a single gallery preset's plan — used to prefill the new-project
+    form when a visitor arrives via a "Use this template" CTA."""
+    preset = next((p for p in GALLERY_PRESETS if p["id"] == preset_id), None)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Unknown gallery preset")
+
+    if preset_id not in _cache:
+        result = _build_plan(preset)
+        if result:
+            _cache[preset_id] = result
+
+    plan = _cache.get(preset_id)
+    if plan is None:
+        raise HTTPException(
+            status_code=404, detail="Gallery preset could not be generated"
+        )
+    return plan

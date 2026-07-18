@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signIn } from "@/lib/auth-client";
 
-export default function SignInPage() {
+function SignInForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const template = searchParams.get("template");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -29,7 +31,7 @@ export default function SignInPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(template ? `/projects/new?template=${template}` : "/dashboard");
   }
 
   return (
@@ -102,12 +104,20 @@ export default function SignInPage() {
       <p className="mt-6 text-center text-sm text-muted-foreground animate-fade-up delay-200">
         No account?{" "}
         <Link
-          href="/sign-up"
+          href={template ? `/sign-up?template=${template}` : "/sign-up"}
           className="text-primary font-semibold hover:underline underline-offset-4"
         >
           Sign up free &rarr;
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInForm />
+    </Suspense>
   );
 }
