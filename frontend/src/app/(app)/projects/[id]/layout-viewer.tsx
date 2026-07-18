@@ -275,6 +275,11 @@ function FloorRenderSection({
   const [error, setError] = useState("");
   const [job, setJob] = useState<JobStatus | null>(null);
   const pollCountRef = useRef(0);
+  // Always-current layout key, so an in-flight poll dispatched for the
+  // previously-viewed layout can detect it resolved late (after a layout
+  // switch) and drop its stale setJob instead of flipping phase to "ready".
+  const layoutKeyRef = useRef(layoutKey);
+  layoutKeyRef.current = layoutKey;
 
   // Latest generate fn, so the parent's trigger always calls the current closure.
   const handleGenRef = useRef<(png?: string | null) => void>(() => {});
@@ -343,9 +348,12 @@ function FloorRenderSection({
 
   const renderJobPhase = jobPhase(job);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s (layoutKey is a legitimate re-arm trigger and stays in the deps)
   useEffect(() => {
     if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
+    // This poll belongs to the layout viewed when it was armed; if the user
+    // switches layouts, a late-resolving fetch must not setJob for the wrong one.
+    const dispatchKey = layoutKey;
     const t = setInterval(async () => {
       pollCountRef.current += 1;
       if (pollCountRef.current > MAX_POLLS) {
@@ -357,13 +365,15 @@ function FloorRenderSection({
       }
       try {
         const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+        // Ignore a response that resolved after a layout switch.
+        if (layoutKeyRef.current !== dispatchKey) return;
         if (res.ok) setJob(await res.json());
       } catch {
         /* transient poll failure — keep polling */
       }
     }, POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [job?.id, renderJobPhase, projectId]);
+  }, [job?.id, renderJobPhase, projectId, layoutKey]);
 
   useEffect(() => {
     if (renderJobPhase === "done") {
