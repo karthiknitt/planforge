@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signUp } from "@/lib/auth-client";
+import { showErrorToast } from "@/lib/toast";
 
 function SignUpForm() {
   const router = useRouter();
@@ -27,7 +28,9 @@ function SignUpForm() {
     const { error } = await signUp.email({ name, email, password });
 
     if (error) {
-      setError(error.message ?? "Could not create account. Please try again.");
+      const message = error.message ?? "Could not create account. Please try again.";
+      setError(message);
+      showErrorToast(message);
       setLoading(false);
       return;
     }

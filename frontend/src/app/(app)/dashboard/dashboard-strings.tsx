@@ -2,8 +2,32 @@
 
 import { Building2, Plus } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/locale-context";
+import { showToast } from "@/lib/toast";
+
+// Confirms a Razorpay checkout that redirected back here — the checkout
+// buttons themselves unmount on navigation, so success can only be
+// acknowledged after landing on this page. Strips the query param so a
+// refresh doesn't re-toast.
+export function DashboardPaymentToast() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (searchParams.get("credits_added")) {
+      showToast("success", "Credits added to your account");
+      router.replace("/dashboard");
+    } else if (searchParams.get("upgraded")) {
+      showToast("success", "Plan upgraded");
+      router.replace("/dashboard");
+    }
+  }, [searchParams, router]);
+
+  return null;
+}
 
 export function DashboardNewProjectButton() {
   const { t } = useLocale();

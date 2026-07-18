@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { showErrorToast } from "@/lib/toast";
 
 // dxf-viewer touches WebGL/DOM APIs unavailable during SSR.
 const DxfPreviewCanvas = dynamic(() => import("./dxf-preview-canvas"), {
@@ -47,7 +48,9 @@ export function DxfPreviewDialog({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load preview");
+          const message = err instanceof Error ? err.message : "Could not load preview";
+          setError(message);
+          showErrorToast(message);
         }
       })
       .finally(() => {

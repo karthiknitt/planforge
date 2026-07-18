@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
 import { db } from "@/db";
 import {
@@ -16,6 +17,7 @@ import {
   DashboardEmptyState,
   DashboardMobileFAB,
   DashboardNewProjectButton,
+  DashboardPaymentToast,
   DashboardProjectCount,
   DashboardTitle,
   ProjectCardApprovalBadge,
@@ -90,6 +92,9 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
+      <Suspense fallback={null}>
+        <DashboardPaymentToast />
+      </Suspense>
       {showOnboarding && <OnboardingModal />}
       {/* Header */}
       <div className="animate-fade-up">

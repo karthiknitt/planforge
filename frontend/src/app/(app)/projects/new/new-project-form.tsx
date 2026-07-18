@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import { CITIES, type CustomRoomSpec, MUNICIPALITIES, ROOM_TYPES } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 const DIRECTIONS = ["N", "S", "E", "W"] as const;
 const DIRECTION_LABELS: Record<string, string> = { N: "North", S: "South", E: "East", W: "West" };
@@ -491,9 +492,12 @@ export default function NewProjectPage() {
         throw new Error(data?.detail ?? "Failed to create project.");
       }
 
+      showToast("success", "Project created");
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setError(message);
+      showErrorToast(message);
       setLoading(false);
     }
   }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 interface InviteMemberFormProps {
   teamId: number;
@@ -43,9 +44,12 @@ export function InviteMemberForm({ teamId }: InviteMemberFormProps) {
 
       setSuccess(true);
       setEmail("");
+      showToast("success", "Invite recorded");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setLoading(false);
     }

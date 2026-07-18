@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signIn } from "@/lib/auth-client";
+import { showErrorToast } from "@/lib/toast";
 
 function SignInForm() {
   const router = useRouter();
@@ -26,7 +27,9 @@ function SignInForm() {
     const { error } = await signIn.email({ email, password });
 
     if (error) {
-      setError(error.message ?? "Invalid email or password.");
+      const message = error.message ?? "Invalid email or password.";
+      setError(message);
+      showErrorToast(message);
       setLoading(false);
       return;
     }

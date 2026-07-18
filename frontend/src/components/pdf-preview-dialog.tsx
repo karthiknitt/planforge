@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { showErrorToast } from "@/lib/toast";
 
 // react-pdf touches DOM/canvas APIs that don't exist during SSR, and its
 // pdf.js worker must be configured in the same module that renders
@@ -52,7 +53,9 @@ export function PdfPreviewDialog({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load preview");
+          const message = err instanceof Error ? err.message : "Could not load preview";
+          setError(message);
+          showErrorToast(message);
         }
       })
       .finally(() => {

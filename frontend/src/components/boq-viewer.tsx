@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/select";
 import { useSession } from "@/lib/auth-client";
 import { boqBasisLabel, shouldShowPreliminaryBanner } from "@/lib/boq-provenance";
 import type { BOQResponse } from "@/lib/layout-types";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 const SUPPORTED_CITIES = [
   "Generic",
@@ -71,7 +72,9 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
       if (!res.ok) throw new Error("Failed to load BOQ");
       setBOQ(await res.json());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      const message = e instanceof Error ? e.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setLoading(false);
     }
@@ -101,16 +104,23 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
         a.download = `planforge-boq-layout-${layoutId}.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
+        showToast("success", "BOQ Excel downloaded");
       } else {
         try {
           const errData = await res.json();
-          setError(errData.detail || "Failed to download Excel file");
+          const message = errData.detail || "Failed to download Excel file";
+          setError(message);
+          showErrorToast(message);
         } catch {
-          setError(`Download failed: ${res.statusText}`);
+          const message = `Download failed: ${res.statusText}`;
+          setError(message);
+          showErrorToast(message);
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed");
+      const message = e instanceof Error ? e.message : "Download failed";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setDownloading(false);
     }

@@ -5,6 +5,7 @@ import Script from "next/script";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
+import { showErrorToast } from "@/lib/toast";
 
 interface PricingCheckoutButtonProps {
   plan: "basic" | "pro" | "firm";
@@ -78,7 +79,9 @@ export function PricingCheckoutButton({ plan, label, highlight }: PricingCheckou
 
       rzp.open();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
       setLoading(false);
     }
   }

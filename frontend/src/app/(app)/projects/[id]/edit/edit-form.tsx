@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import { CITIES, MUNICIPALITIES } from "@/lib/layout-types";
+import { showErrorToast, showToast } from "@/lib/toast";
 import { invalidateProjectLayouts } from "./actions";
 
 const DIRECTIONS = ["N", "S", "E", "W"] as const;
@@ -341,10 +342,13 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
       }
 
       await invalidateProjectLayouts(project.id);
+      showToast("success", "Project updated");
       router.push(`/projects/${project.id}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setError(message);
+      showErrorToast(message);
       setLoading(false);
     }
   }

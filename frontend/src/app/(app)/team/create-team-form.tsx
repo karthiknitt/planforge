@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 export function CreateTeamForm() {
   const router = useRouter();
@@ -33,9 +34,12 @@ export function CreateTeamForm() {
         throw new Error(data.detail ?? "Failed to create team");
       }
 
+      showToast("success", "Firm created");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setLoading(false);
     }

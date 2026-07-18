@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/auth-client";
 import { changelogCount } from "@/lib/structural-status";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 export interface StructuralDesignInfo {
   id: string;
@@ -157,12 +158,12 @@ export function StructuralViewer({
         );
       }
       setResult((await res.json()) as StructuralResponse);
+      showToast("success", "Structural design complete");
       await onDesignComplete();
     } catch (e) {
-      setGateError({
-        code: null,
-        message: e instanceof Error ? e.message : "Structural design failed",
-      });
+      const message = e instanceof Error ? e.message : "Structural design failed";
+      setGateError({ code: null, message });
+      showErrorToast(message);
     } finally {
       setLoading(false);
     }

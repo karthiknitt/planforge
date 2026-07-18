@@ -5,6 +5,7 @@ import Script from "next/script";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
+import { showErrorToast } from "@/lib/toast";
 
 interface CreditPackButtonProps {
   packId: "pack_1" | "pack_3" | "pack_7";
@@ -83,7 +84,9 @@ export function CreditPackButton({ packId, label, highlight }: CreditPackButtonP
 
       rzp.open();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
       setLoading(false);
     }
   }

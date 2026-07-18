@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 type ApprovalStatus = "approved" | "changes_requested" | "pending" | null;
 
@@ -71,8 +72,11 @@ export function ApprovalActions({
       setStatus("approved");
       setNote(null);
       setUpdatedAt(new Date().toISOString());
+      showToast("success", "Approval submitted");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setLoading(null);
     }
@@ -93,8 +97,11 @@ export function ApprovalActions({
       setUpdatedAt(new Date().toISOString());
       setShowNoteInput(false);
       setNoteInput("");
+      showToast("success", "Change request sent");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setLoading(null);
     }
