@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/auth-client";
 import { changelogCount } from "@/lib/structural-status";
 
@@ -253,6 +254,14 @@ export function StructuralViewer({
 
       {gateError?.code === null && gateError.message && (
         <p className="text-sm text-destructive">{gateError.message}</p>
+      )}
+
+      {loading && !result && (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
       )}
 
       {result && (
