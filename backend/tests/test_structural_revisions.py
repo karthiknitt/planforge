@@ -62,6 +62,28 @@ EDITED_GEO_V1 = {
     },
 }
 
+# A third, distinct geometry (different room width) — used to prove that an
+# edit that never returns to the approved hash keeps the design stale.
+EDITED_GEO_V2 = {
+    **GEO_V1,
+    "ground_floor": {
+        "floor": 0,
+        "rooms": [
+            {
+                "id": "r1",
+                "name": "Living",
+                "type": "living",
+                "x": 1.0,
+                "y": 0.0,
+                "width": 5.0,
+                "depth": 3.5,
+                "area": 17.5,
+            }
+        ],
+        "columns": GRID_COLUMNS,
+    },
+}
+
 ENVELOPE = {
     "api_version": "1",
     "ok": True,
@@ -466,3 +488,187 @@ async def test_get_design_404_after_geometry_edit_invalidates(client_db, monkeyp
     )
     assert res.status_code == 404
     assert res.json()["detail"]["code"] == "not_approved"
+
+
+def _mock_structapi(monkeypatch, envelope=ENVELOPE):
+    monkeypatch.setattr(settings, "structural_api_url", "http://sapi.test")
+    monkeypatch.setattr(settings, "structural_api_key", "k1")
+    monkeypatch.setattr(
+        structagent_client,
+        "_transport_for_tests",
+        httpx.MockTransport(lambda request: httpx.Response(200, json=envelope)),
+    )
+
+
+async def test_revert_to_approved_hash_resurrects_design(client_db, monkeypatch):
+    """approve G1 -> design D1 -> edit to G2 (D1 stale) -> edit back to G1:
+    the reverted geometry matches R1 again, so D1 must be resurrected — status
+    reports designed and GET .../design returns the design (not 404)."""
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    _mock_structapi(monkeypatch)
+    await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    design_id = (
+        await client.post(
+            f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+        )
+    ).json()["design_id"]
+
+    # edit away — design goes stale (existing behaviour)
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, EDITED_GEO_V1, s)
+    async with SessionLocal() as s:
+        assert (await s.get(StructuralDesign, design_id)).status == "stale"
+    res = await client.get(
+        f"/api/projects/{pid}/structural/status",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.json()["status"] == "draft"
+
+    # edit back to the approved geometry — resurrect
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, GEO_V1, s)
+
+    async with SessionLocal() as s:
+        design = await s.get(StructuralDesign, design_id)
+        assert design.status == "designed"
+        assert design.pre_stale_status is None
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/status",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.json()["status"] == "designed"
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/design",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["design_id"] == design_id
+
+
+async def test_edit_never_returning_keeps_design_stale(client_db, monkeypatch):
+    """Edit to G2 then G3 (never back to G1): the design stays stale."""
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    _mock_structapi(monkeypatch)
+    await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    design_id = (
+        await client.post(
+            f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+        )
+    ).json()["design_id"]
+
+    for geo in (EDITED_GEO_V1, EDITED_GEO_V2):
+        async with SessionLocal() as s:
+            row = await layout_store.get_stored_layout(pid, "A", s)
+            await layout_store.save_edited_geometry(row, geo, s)
+
+    async with SessionLocal() as s:
+        design = await s.get(StructuralDesign, design_id)
+        assert design.status == "stale"
+        # first edit recorded the pre-stale status; the second edit is a no-op
+        # for staling (already stale) and must not clobber it.
+        assert design.pre_stale_status == "designed"
+
+    res = await client.get(
+        f"/api/projects/{pid}/structural/status",
+        params={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.json()["status"] == "draft"
+
+
+async def test_superseded_design_not_resurrected(client_db, monkeypatch):
+    """A superseded design is never staled nor resurrected by the edit path."""
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    _mock_structapi(monkeypatch)
+    approve = (
+        await client.post(
+            f"/api/projects/{pid}/structural/approve",
+            json={"layout_id": "A"},
+            headers=HDRS,
+        )
+    ).json()
+    revision_id = approve["revision_id"]
+
+    async with SessionLocal() as s:
+        s.add(StructuralDesign(revision_id=revision_id, status="superseded"))
+        await s.commit()
+
+    # edit away and back
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, EDITED_GEO_V1, s)
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, GEO_V1, s)
+
+    async with SessionLocal() as s:
+        result = await s.execute(
+            StructuralDesign.__table__.select().where(
+                StructuralDesign.revision_id == revision_id
+            )
+        )
+        rows = result.fetchall()
+        assert len(rows) == 1
+        assert rows[0].status == "superseded"
+        assert rows[0].pre_stale_status is None
+
+
+async def test_pre_stale_status_round_trip(client_db, monkeypatch):
+    """pre_stale_status captures the prior status on staling and clears on
+    resurrection (round-trip for the approach-(a) column)."""
+    client, SessionLocal = client_db
+    pid = await _make_project(client)
+    await _seed_layout(SessionLocal, pid, GEO_V1)
+    _mock_structapi(monkeypatch)
+    await client.post(
+        f"/api/projects/{pid}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    design_id = (
+        await client.post(
+            f"/api/projects/{pid}/structural", json={"layout_id": "A"}, headers=HDRS
+        )
+    ).json()["design_id"]
+
+    async with SessionLocal() as s:
+        design = await s.get(StructuralDesign, design_id)
+        assert design.status == "designed"
+        assert design.pre_stale_status is None
+
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, EDITED_GEO_V1, s)
+    async with SessionLocal() as s:
+        design = await s.get(StructuralDesign, design_id)
+        assert design.status == "stale"
+        assert design.pre_stale_status == "designed"
+
+    async with SessionLocal() as s:
+        row = await layout_store.get_stored_layout(pid, "A", s)
+        await layout_store.save_edited_geometry(row, GEO_V1, s)
+    async with SessionLocal() as s:
+        design = await s.get(StructuralDesign, design_id)
+        assert design.status == "designed"
+        assert design.pre_stale_status is None

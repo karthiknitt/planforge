@@ -172,6 +172,10 @@ async def save_edited_geometry(
         await structural_store.mark_designs_stale(
             stored.project_id, db, layout_key=stored.layout_key
         )
+    else:
+        # Edit landed back on a previously-approved revision — resurrect its
+        # stale designs so identical geometry never re-runs a costly design.
+        await structural_store.resurrect_designs_for_revision(rev.id, db)
     await db.commit()
     await db.refresh(stored)
     return stored

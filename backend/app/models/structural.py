@@ -66,8 +66,13 @@ class StructuralDesign(Base):
         nullable=False,
         index=True,
     )
-    # "designed" | "designed_with_warnings" | "stale"
+    # "designed" | "designed_with_warnings" | "stale" | "superseded"
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="designed")
+    # Snapshot of `status` taken the moment a geometry edit staled this design,
+    # so reverting the geometry back to a previously-approved revision can
+    # resurrect the design to exactly its pre-stale state. Null when live or
+    # when staled before this column existed (auto-migrate adds it nullable).
+    pre_stale_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     iterations_used: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # Post-loop geometry when the design loop adjusted the layout (2.4);
     # null when the approved geometry designed as-is.
