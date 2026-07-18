@@ -23,8 +23,9 @@ from app.api.routes import (
 )
 from app.config.cors import parse_allowed_origins
 from app.config.settings import settings
-from app.db import Base, engine
+from app.db import Base, SessionLocal, engine
 from app.auto_migrate import auto_migrate_missing_columns
+from app.services.structural_store import rehash_architectural_revisions
 
 # Import all models so SQLAlchemy knows about them before create_all
 import app.models.job  # noqa: F401
@@ -44,6 +45,8 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await auto_migrate_missing_columns(engine)
+    async with SessionLocal() as session:
+        await rehash_architectural_revisions(session)
     yield
 
 

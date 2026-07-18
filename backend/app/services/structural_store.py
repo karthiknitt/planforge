@@ -10,15 +10,77 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.structural import ArchitecturalRevision, StructuralDesign
 
+logger = logging.getLogger(__name__)
+
+_FLOOR_KEYS = ("ground_floor", "first_floor", "second_floor", "basement_floor")
+_ROOM_FIELDS = ("id", "type", "x", "y", "width", "depth")
+
+
+def _canonical_room(room: dict) -> dict:
+    return {field: room.get(field) for field in _ROOM_FIELDS}
+
+
+def _canonical_geometry(geometry: dict) -> dict:
+    """Rooms-only canonical structure for hashing.
+
+    Deliberately excludes everything except (id, type, x, y, width, depth)
+    per room, keyed by floor number. Derived fields (compliance, score,
+    space_notes) and columns (derived from rooms) are excluded on purpose:
+    including them re-breaks approvals whenever the scorer, compliance
+    engine, or column-derivation logic changes without the rooms actually
+    moving.
+    """
+    floors = []
+    for key in _FLOOR_KEYS:
+        floor_data = geometry.get(key) if isinstance(geometry, dict) else None
+        if not floor_data:
+            continue
+        rooms = floor_data.get("rooms") or []
+        canonical_rooms = sorted(
+            (_canonical_room(r) for r in rooms if isinstance(r, dict)),
+            key=lambda r: str(r.get("id")),
+        )
+        floors.append({"floor": floor_data.get("floor"), "rooms": canonical_rooms})
+    floors.sort(key=lambda f: (f["floor"] is None, f["floor"]))
+    return {"floors": floors}
+
 
 def geometry_hash(geometry: dict) -> str:
-    return hashlib.sha256(json.dumps(geometry, sort_keys=True).encode()).hexdigest()
+    canonical = _canonical_geometry(geometry or {})
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+
+
+async def rehash_architectural_revisions(db: AsyncSession) -> int:
+    """One-time (idempotent) startup migration: recompute every stored
+    geometry_hash with the current rooms-only algorithm and update rows
+    whose hash has drifted (e.g. rows hashed under the old whole-dict
+    algorithm). Safe to run on every boot — a no-op once all rows match."""
+    result = await db.execute(select(ArchitecturalRevision))
+    revisions = list(result.scalars().all())
+    updated = 0
+    for rev in revisions:
+        try:
+            new_hash = geometry_hash(rev.geometry)
+        except Exception:
+            logger.warning(
+                "rehash_architectural_revisions: skipping revision %s — "
+                "malformed geometry",
+                rev.id,
+            )
+            continue
+        if new_hash != rev.geometry_hash:
+            rev.geometry_hash = new_hash
+            updated += 1
+    if updated:
+        await db.commit()
+    return updated
 
 
 async def find_revision_for_hash(
