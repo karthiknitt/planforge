@@ -2,7 +2,7 @@
 
 import { RouteError } from "@/components/route-error";
 
-export default function ProjectError({
+export default function ShareError({
   error,
   reset,
 }: {
@@ -13,7 +13,8 @@ export default function ProjectError({
     <RouteError
       error={error}
       reset={reset}
-      message="Could not load this project. Please try again."
+      message="Could not load this shared plan. Please try again."
+      fullScreen
     />
   );
 }

@@ -29,6 +29,8 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "drizzle-orm": "^0.45.1",
+    "dxf-parser": "^1.1.2",
+    "dxf-viewer": "^1.0.48",
     "framer-motion": "^12.34.3",
     "jose": "^6.2.3",
     "lucide-react": "^0.574.0",
@@ -40,6 +42,8 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-pdf": "^10.4.1",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.1",
     "three": "^0.185.1",
     "zod": "^4.3.6"

@@ -28,9 +28,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BOQViewer } from "@/components/boq-viewer";
 import { ChatPanel } from "@/components/chat-panel";
+import { DxfPreviewDialog } from "@/components/dxf-preview-dialog";
 import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { LayoutCompareView } from "@/components/layout-compare-view";
+import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
 import { type Plan3DHandle, Plan3DScene, type Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
@@ -91,6 +93,7 @@ import {
   renderSourceFallbackNote,
 } from "@/lib/structural-status";
 import { type TabId, visibleTabs } from "@/lib/tabs";
+import { showErrorToast, showToast } from "@/lib/toast";
 
 interface RevisionListItem {
   id: number;
@@ -330,9 +333,11 @@ function FloorRenderSection({
       }
       if (outcome !== "ready") {
         const data = await res.json().catch(() => ({}));
-        setError((data as { detail?: string })?.detail ?? `Render failed (${res.status})`);
+        const message = (data as { detail?: string })?.detail ?? `Render failed (${res.status})`;
+        setError(message);
         setPhase("error");
         setBusy(false);
+        showErrorToast(message);
         return;
       }
       // 200 (inline fallback, already resolved) or 202 (queued) — either way
@@ -343,6 +348,7 @@ function FloorRenderSection({
       setError("Render failed — is the backend running?");
       setPhase("error");
       setBusy(false);
+      showErrorToast("Render failed — is the backend running?");
     }
   }
 
@@ -360,6 +366,7 @@ function FloorRenderSection({
         setError("Render is taking unusually long — try again.");
         setPhase("error");
         setBusy(false);
+        showErrorToast("Render is taking unusually long — try again.");
         clearInterval(t);
         return;
       }
@@ -381,9 +388,11 @@ function FloorRenderSection({
       setPhase("ready");
       setBusy(false);
     } else if (renderJobPhase === "failed") {
-      setError(job?.error ?? "Render failed.");
+      const message = job?.error ?? "Render failed.";
+      setError(message);
       setPhase("error");
       setBusy(false);
+      showErrorToast(message);
     }
   }, [renderJobPhase, job?.error]);
 
@@ -670,12 +679,15 @@ function GenerationPanel({
         method: "POST",
       });
       if (!res.ok) {
-        setError(`Could not start generation (HTTP ${res.status}).`);
+        const message = `Could not start generation (HTTP ${res.status}).`;
+        setError(message);
+        showErrorToast(message);
         return;
       }
       setJob(await res.json());
     } catch {
       setError("Could not reach the layout engine.");
+      showErrorToast("Could not reach the layout engine.");
     }
   }, [projectId]);
 
@@ -695,6 +707,7 @@ function GenerationPanel({
       pollCountRef.current += 1;
       if (pollCountRef.current > MAX_POLLS) {
         setError("Generation is taking unusually long — try refreshing the page.");
+        showErrorToast("Generation is taking unusually long — try refreshing the page.");
         clearInterval(t);
         return;
       }
@@ -973,6 +986,9 @@ export function LayoutViewer({
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
   const [downloadError, setDownloadError] = useState("");
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [approvalPdfPreviewOpen, setApprovalPdfPreviewOpen] = useState(false);
+  const [dxfPreviewOpen, setDxfPreviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
@@ -1250,8 +1266,11 @@ export function LayoutViewer({
       setEditMode(false);
       setEditedRooms(null);
       setComplianceIssues({});
+      showToast("success", "Changes saved");
     } catch (err) {
-      setEditSaveError(err instanceof Error ? err.message : "Could not save changes");
+      const message = err instanceof Error ? err.message : "Could not save changes";
+      setEditSaveError(message);
+      showErrorToast(message);
     } finally {
       setEditSaving(false);
     }
@@ -1272,7 +1291,9 @@ export function LayoutViewer({
       setApprovalShareUrl(fullUrl);
       setSendForApprovalOpen(true);
     } catch (err) {
-      setApprovalShareError(err instanceof Error ? err.message : "Could not generate share link");
+      const message = err instanceof Error ? err.message : "Could not generate share link";
+      setApprovalShareError(message);
+      showErrorToast(message);
     } finally {
       setApprovalShareLoading(false);
     }
@@ -1330,7 +1351,9 @@ export function LayoutViewer({
       const data = (await res.json()) as RevisionListItem[];
       setRevisions(data);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not load revision history");
+      const message = err instanceof Error ? err.message : "Could not load revision history";
+      setRevisionsError(message);
+      showErrorToast(message);
     } finally {
       setRevisionsLoading(false);
     }
@@ -1358,8 +1381,11 @@ export function LayoutViewer({
       setSnapshotLabel("");
       setShowSnapshotInput(false);
       await fetchRevisions();
+      showToast("success", "Snapshot saved");
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not save snapshot");
+      const message = err instanceof Error ? err.message : "Could not save snapshot";
+      setRevisionsError(message);
+      showErrorToast(message);
     } finally {
       setSavingSnapshot(false);
     }
@@ -1376,8 +1402,11 @@ export function LayoutViewer({
       setSelectedId(detail.snapshot.layouts[0]?.id ?? selectedId);
       setLiveLayout(null);
       setFloor(0);
+      showToast("success", `Restored version ${version}`);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not restore revision");
+      const message = err instanceof Error ? err.message : "Could not restore revision";
+      setRevisionsError(message);
+      showErrorToast(message);
     } finally {
       setRestoringVersion(null);
     }
@@ -1398,8 +1427,11 @@ export function LayoutViewer({
       });
       if (!res.ok) throw new Error(`Failed to delete revision (${res.status})`);
       await fetchRevisions();
+      showToast("success", `Deleted version ${version}`);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Could not delete revision");
+      const message = err instanceof Error ? err.message : "Could not delete revision";
+      setRevisionsError(message);
+      showErrorToast(message);
     }
   }
 
@@ -1418,7 +1450,9 @@ export function LayoutViewer({
       setShareUrl(fullUrl);
       setShareOpen(true);
     } catch (err) {
-      setShareError(err instanceof Error ? err.message : "Could not generate share link");
+      const message = err instanceof Error ? err.message : "Could not generate share link";
+      setShareError(message);
+      showErrorToast(message);
     } finally {
       setShareLoading(false);
     }
@@ -1439,23 +1473,7 @@ export function LayoutViewer({
     setDownloadingApprovalPdf(true);
     setApprovalPdfError("");
     try {
-      const res = await fetch(
-        `/api/backend/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(approvalForm),
-        }
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          (data as { detail?: string })?.detail ?? `Approval PDF export failed (${res.status})`
-        );
-      }
-      const blob = await res.blob();
+      const blob = await fetchApprovalPdfBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1463,11 +1481,49 @@ export function LayoutViewer({
       a.click();
       URL.revokeObjectURL(url);
       setApprovalDialogOpen(false);
+      showToast("success", "Approval PDF downloaded");
     } catch (err) {
-      setApprovalPdfError(err instanceof Error ? err.message : "Approval PDF download failed");
+      const message = err instanceof Error ? err.message : "Approval PDF download failed";
+      setApprovalPdfError(message);
+      showErrorToast(message);
     } finally {
       setDownloadingApprovalPdf(false);
     }
+  }
+
+  // Fetch-only helper (no download side effect) shared by the download
+  // button and the inline preview dialog.
+  async function fetchApprovalPdfBlob(): Promise<Blob> {
+    const res = await fetch(
+      `/api/backend/projects/${projectId}/export/approval-pdf?layout_id=${selectedId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(approvalForm),
+      }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(
+        (data as { detail?: string })?.detail ?? `Approval PDF export failed (${res.status})`
+      );
+    }
+    return res.blob();
+  }
+
+  // Fetch-only helper (no download side effect) shared by the download
+  // button and the inline preview dialog.
+  async function fetchExportBlob(format: "pdf" | "dxf"): Promise<Blob> {
+    const res = await fetch(
+      `/api/backend/projects/${projectId}/export/${format}?layout_id=${selectedId}`
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.detail ?? `Export failed (${res.status})`);
+    }
+    return res.blob();
   }
 
   async function handleDownload(format: "pdf" | "dxf") {
@@ -1476,24 +1532,19 @@ export function LayoutViewer({
     setter(true);
     setDownloadError("");
     try {
-      const res = await fetch(
-        `/api/backend/projects/${projectId}/export/${format}?layout_id=${selectedId}`
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail ?? `Export failed (${res.status})`);
-      }
-      const blob = await res.blob();
+      const blob = await fetchExportBlob(format);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `planforge-layout-${selectedId}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast("success", `${format.toUpperCase()} downloaded`);
     } catch (err) {
-      setDownloadError(
-        err instanceof Error ? err.message : "Download failed — is the backend running?"
-      );
+      const message =
+        err instanceof Error ? err.message : "Download failed — is the backend running?";
+      setDownloadError(message);
+      showErrorToast(message);
     } finally {
       setter(false);
     }
@@ -1556,7 +1607,7 @@ export function LayoutViewer({
       {/* Layout selector + export buttons */}
       <div className="flex flex-col gap-3">
         {/* Layout buttons — horizontal scroll on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:[mask-image:none]">
           {activeData.layouts.map((l) => (
             <button
               key={l.id}
@@ -1611,7 +1662,7 @@ export function LayoutViewer({
         </div>
 
         {/* Export + share buttons — horizontal scroll on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:items-center">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:items-center md:[mask-image:none]">
           {/* PDF — primary action, prominent on mobile */}
           <Button
             size="sm"
@@ -1620,6 +1671,15 @@ export function LayoutViewer({
             disabled={downloadingPdf || !session}
           >
             {downloadingPdf ? "…" : "⬇ PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+            onClick={() => setPdfPreviewOpen(true)}
+            disabled={!session}
+          >
+            Preview
           </Button>
           {planTier === "free" ? (
             <Button
@@ -1644,6 +1704,17 @@ export function LayoutViewer({
               title="DXF for AutoCAD / DraftSight"
             >
               {downloadingDxf ? "…" : "DXF"}
+            </Button>
+          )}
+          {planTier !== "free" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+              onClick={() => setDxfPreviewOpen(true)}
+              disabled={!session}
+            >
+              Preview DXF
             </Button>
           )}
           <Button
@@ -2001,6 +2072,13 @@ export function LayoutViewer({
               Cancel
             </Button>
             <Button
+              variant="outline"
+              onClick={() => setApprovalPdfPreviewOpen(true)}
+              disabled={!session}
+            >
+              Preview
+            </Button>
+            <Button
               onClick={handleDownloadApprovalPdf}
               disabled={downloadingApprovalPdf || !session}
             >
@@ -2009,6 +2087,30 @@ export function LayoutViewer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PdfPreviewDialog
+        open={pdfPreviewOpen}
+        onOpenChange={setPdfPreviewOpen}
+        title="Standard PDF preview"
+        fetchPdf={() => fetchExportBlob("pdf")}
+        onDownload={() => handleDownload("pdf")}
+        downloading={downloadingPdf}
+      />
+      <PdfPreviewDialog
+        open={approvalPdfPreviewOpen}
+        onOpenChange={setApprovalPdfPreviewOpen}
+        title="Approval PDF preview"
+        fetchPdf={fetchApprovalPdfBlob}
+        onDownload={handleDownloadApprovalPdf}
+        downloading={downloadingApprovalPdf}
+      />
+      <DxfPreviewDialog
+        open={dxfPreviewOpen}
+        onOpenChange={setDxfPreviewOpen}
+        fetchDxf={() => fetchExportBlob("dxf")}
+        onDownload={() => handleDownload("dxf")}
+        downloading={downloadingDxf}
+      />
 
       {/* Download error */}
       {downloadError && (
@@ -2167,7 +2269,7 @@ export function LayoutViewer({
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList
           variant="line"
-          className="w-full justify-start overflow-x-auto scrollbar-none md:w-fit"
+          className="w-full justify-start overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)] md:w-fit md:[mask-image:none]"
         >
           {tabs.map((tab) => (
             <TabsTrigger key={tab} value={tab} className="min-h-[40px] shrink-0 flex-none px-4">
@@ -2206,7 +2308,10 @@ export function LayoutViewer({
               onValueChange={(v) => setFloor(Number(v))}
               className="flex-1 min-w-0"
             >
-              <TabsList variant="line" className="w-full overflow-x-auto scrollbar-none">
+              <TabsList
+                variant="line"
+                className="w-full overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)]"
+              >
                 {availableFloors.map((f) => (
                   <TabsTrigger
                     key={f.index}
