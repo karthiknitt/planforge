@@ -102,7 +102,11 @@ PlanForge/
 - Scale: 1:100 nominal (section/elevation pages fit-to-region with computed `SCALE 1:N`)
 
 ### Vastu
-- **NOT in Lean MVP** — deferred to post-launch
+- Implemented: 8-zone (+ Brahmasthan centre) compliance engine, `backend/app/engine/vastu.py`
+- Zone rules configurable in `backend/app/config/compliance_rules.json` under `vastu_zones` (preferred/avoid/prohibit per zone), rotated per `road_side` (N/S/E/W)
+- Wired into `generator.py`, `solver.py`, and `scorer.py` — `_score_vastu` is a 10%-weighted layout score component
+- Opt-in per project via `PlotConfig.vastu_enabled`; a no-op (returns no findings, neutral 100 score) when disabled
+- Tested in `backend/tests/test_vastu.py`
 
 ### Auth & Projects
 - Users register/login via Better Auth
@@ -182,11 +186,10 @@ cd frontend && bunx drizzle-kit migrate
 ## Feature Roadmap (Post-MVP)
 
 1. Quadrilateral plot support
-2. Vastu toggle
-3. Advanced compliance rules
-4. Arbitrary room counts
-5. Dynamic constraint solver
-6. Smarter layout engine
+2. Advanced compliance rules
+3. Arbitrary room counts
+4. Dynamic constraint solver
+5. Smarter layout engine
 
 ---
 
