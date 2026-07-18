@@ -761,6 +761,9 @@ export function LayoutViewer({
   // approve/design/edit all refresh from one place.
   const [structStatus, setStructStatus] = useState<StructuralStatusResponse | null>(null);
   const [approvingStructural, setApprovingStructural] = useState(false);
+  // Transient notice when a re-approve is a no-op (backend returns
+  // created: false) — the geometry was already frozen as a revision.
+  const [alreadyApprovedNotice, setAlreadyApprovedNotice] = useState(false);
   // Render-source toggle (deliverable 6) — swaps the geometry fed to the R3F
   // preview / AI render conditioning image between the stored architectural
   // layout and the structural design's adjusted geometry (final_geometry
@@ -832,19 +835,28 @@ export function LayoutViewer({
     setRenderSource("architectural");
     setStructuralGeometry(null);
     setStructuralGeometryFallback(null);
+    setAlreadyApprovedNotice(false);
     void fetchStructuralStatus();
   }, [fetchStructuralStatus]);
 
   async function handleApproveStructural() {
     if (!session) return;
     setApprovingStructural(true);
+    setAlreadyApprovedNotice(false);
     try {
       const res = await fetch(`/api/backend/projects/${projectId}/structural/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ layout_id: selectedId }),
       });
-      if (res.ok) await fetchStructuralStatus();
+      if (res.ok) {
+        // created === false means the current geometry was already frozen
+        // as an approved revision — surface it so the click isn't a silent
+        // no-op, but still refetch status to stay consistent.
+        const body = (await res.json().catch(() => null)) as { created?: boolean } | null;
+        if (body?.created === false) setAlreadyApprovedNotice(true);
+        await fetchStructuralStatus();
+      }
     } catch {
       // silent — the lifecycle header/tab surface stale-status states gracefully
     } finally {
@@ -2136,6 +2148,9 @@ export function LayoutViewer({
         onApprove={handleApproveStructural}
         onRunDesign={() => setActiveTab("structural")}
       />
+      {alreadyApprovedNotice && (
+        <p className="text-xs text-muted-foreground">Plan was already approved.</p>
+      )}
 
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
