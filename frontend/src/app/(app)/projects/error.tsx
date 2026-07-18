@@ -2,7 +2,7 @@
 
 import { RouteError } from "@/components/route-error";
 
-export default function ProjectError({
+export default function ProjectsListError({
   error,
   reset,
 }: {
@@ -13,7 +13,7 @@ export default function ProjectError({
     <RouteError
       error={error}
       reset={reset}
-      message="Could not load this project. Please try again."
+      message="Could not load your projects. Please try again."
     />
   );
 }

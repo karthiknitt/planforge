@@ -2,7 +2,7 @@
 
 import { RouteError } from "@/components/route-error";
 
-export default function ProjectError({
+export default function TeamError({
   error,
   reset,
 }: {
@@ -10,10 +10,6 @@ export default function ProjectError({
   reset: () => void;
 }) {
   return (
-    <RouteError
-      error={error}
-      reset={reset}
-      message="Could not load this project. Please try again."
-    />
+    <RouteError error={error} reset={reset} message="Could not load your team. Please try again." />
   );
 }
