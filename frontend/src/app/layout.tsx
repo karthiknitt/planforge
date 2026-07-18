@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { LocaleProvider } from "@/lib/locale-context";
 import "./globals.css";
 
@@ -94,6 +95,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <LocaleProvider>{children}</LocaleProvider>
+          <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
     </html>
