@@ -28,6 +28,7 @@ Zone mapping depends on which compass direction the road faces (roadSide):
 
 from __future__ import annotations
 
+from .compliance import load_rules
 from .models import Layout, PlotConfig
 
 # ── Zone labels (compass + centre) ──────────────────────────────────────────
@@ -78,72 +79,10 @@ ZONE_GRIDS: dict[str, list[list[str]]] = {
 # "preferred" rooms for each zone (informational)
 # "avoid"    rooms that are inauspicious in this zone (flagged as warnings)
 # "prohibit" hard Vastu violations (flagged as violations)
-
-VASTU_RULES: dict[str, dict] = {
-    "NE": {
-        "preferred": ["pooja", "utility", "balcony", "staircase"],
-        "avoid": ["bedroom", "parking"],
-        "prohibit": ["kitchen", "toilet"],
-        "name": "Ishanya (NE)",
-        "notes": "Sacred zone — ideal for Pooja, open space, water",
-    },
-    "E": {
-        "preferred": ["bedroom", "dining", "bathroom", "toilet"],
-        "avoid": [],
-        "prohibit": [],
-        "name": "Purva (E)",
-        "notes": "East — sunrise zone, good for bedrooms and dining",
-    },
-    "SE": {
-        "preferred": ["kitchen"],
-        "avoid": ["bedroom", "pooja"],
-        "prohibit": ["toilet"],
-        "name": "Agni (SE)",
-        "notes": "Fire zone — kitchen must be here or NW",
-    },
-    "S": {
-        "preferred": ["bedroom", "parking"],
-        "avoid": ["pooja", "living"],
-        "prohibit": [],
-        "name": "Yama (S)",
-        "notes": "South — guest bedroom, parking; avoid main entrance",
-    },
-    "SW": {
-        "preferred": ["bedroom"],
-        "avoid": ["pooja", "balcony"],
-        "prohibit": ["toilet", "kitchen"],
-        "name": "Nairutya (SW)",
-        "notes": "Most stable corner — master bedroom, heavy storage",
-    },
-    "W": {
-        "preferred": ["bedroom", "study", "dining"],
-        "avoid": [],
-        "prohibit": [],
-        "name": "Varuna (W)",
-        "notes": "West — children's bedroom, study",
-    },
-    "NW": {
-        "preferred": ["bedroom", "toilet", "utility", "parking"],
-        "avoid": [],
-        "prohibit": [],
-        "name": "Vayu (NW)",
-        "notes": "Air zone — guest room, toilet, storage acceptable",
-    },
-    "N": {
-        "preferred": ["living", "study", "dining"],
-        "avoid": ["kitchen", "toilet"],
-        "prohibit": [],
-        "name": "Kubera (N)",
-        "notes": "Wealth direction — living, study, treasury",
-    },
-    "C": {
-        "preferred": ["utility"],
-        "avoid": ["bedroom", "kitchen"],
-        "prohibit": ["toilet"],
-        "name": "Brahmasthan (Centre)",
-        "notes": "Sacred centre — should remain open or light use only",
-    },
-}
+#
+# Sourced from compliance_rules.json's "vastu_zones" key, alongside the
+# project's other configurable compliance thresholds.
+VASTU_RULES: dict[str, dict] = load_rules()["vastu_zones"]
 
 
 def _get_zone(
