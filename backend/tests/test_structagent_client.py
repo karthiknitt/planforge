@@ -1,4 +1,4 @@
-"""Client for StructAgent structapi service — tests for design_building and calc_beam."""
+"""Tests for structagent_client.calc_beam."""
 
 import httpx
 import pytest
