@@ -23,6 +23,10 @@ from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
 SOLVE_TIME_S = 8.0  # per-run wall-clock budget (generation runs async)
+# Wall cap for the penalty-free phase-1 warm start: it only needs A feasible
+# solution to hint phase 2, not a good one, so it doesn't get the full
+# SOLVE_TIME_S (which would let one zone double to ~16 s worst case).
+PHASE1_TIME_S = 3.0
 MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 
 # Wall-coalignment bonus (objective units = mm) per exactly-aligned edge
@@ -894,9 +898,11 @@ def _solve_one(
     )
 
     # ── Solve ─────────────────────────────────────────────────────────────────
-    def _make_solver(det_budget: float) -> cp_model.CpSolver:
+    def _make_solver(
+        det_budget: float, wall_budget: float = SOLVE_TIME_S
+    ) -> cp_model.CpSolver:
         s = cp_model.CpSolver()
-        s.parameters.max_time_in_seconds = SOLVE_TIME_S
+        s.parameters.max_time_in_seconds = wall_budget
         # Machine-independent work budget: on fast machines this binds so
         # repeated runs return the SAME incumbent; on slow machines (CI
         # runners, cold Cloud Run) the wall-clock cap above binds so runtime
@@ -916,7 +922,7 @@ def _solve_one(
     # then spends its entire budget relocating toilets out of penalty zones.
     if penalty_terms and not seed_rooms:
         model.minimize(base_objective)
-        pre = _make_solver(det_budget=0.7)
+        pre = _make_solver(det_budget=0.7, wall_budget=PHASE1_TIME_S)
         pre_status = pre.solve(model)
         if pre_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             # Hint everything EXCEPT the common toilets' positions: with the
