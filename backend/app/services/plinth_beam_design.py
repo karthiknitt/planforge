@@ -2,6 +2,11 @@
 structapi's generic /v1/calc/beam (NOT the slab-driven /v1/design/building
 chain -- see app/engine/plinth_loads.py for why plinth beams need a
 different load case than roof beams).
+
+`calc_beam()` can raise `StructuralAPIError` (network/HTTP failure); it is
+intentionally left unhandled here -- the caller (the structural export
+route, a later task) is expected to map it to an HTTP 502, mirroring the
+existing pattern in app/api/routes/structural.py.
 """
 
 from __future__ import annotations
@@ -18,6 +23,11 @@ CEILING_HEIGHT_M = 2.75  # compliance_rules.json min_habitable_ceiling_m proxy
 
 
 def _group_key(w: WallSegment) -> tuple[str, float]:
+    # Grouped by (kind, rounded length) -- NOT by w.thickness. Wall thickness
+    # is standardized by kind (230mm external / 115mm internal, matching
+    # compliance_rules.json) rather than read per-instance from geometry, so
+    # two walls of the same kind and span always share one beam design even
+    # if their drawn thickness differs slightly.
     return (w.kind, round(w.length, 1))
 
 
@@ -36,10 +46,12 @@ async def design_plinth_beams(
 ) -> dict[str, dict]:
     """Group wall spans, design one beam per unique (kind, span) group.
 
-    Returns {"plinth-span{span_m:.2f}": {..calc_beam data.., "span_m":,
-    "kind":, "b_mm":, "D_mm":}} -- same key-per-unique-span shape as
-    structapi's roof-beam `data.beams`, so the drawing renderer can treat
-    both uniformly.
+    Returns {"plinth-{kind}-span{span_m:.2f}": {..calc_beam data.., "span_m":,
+    "kind":, "b_mm":, "D_mm":}} -- keyed by kind AND span (not span alone) so
+    an external wall and an internal wall that happen to share the same
+    rounded length don't collide on the same output key -- same
+    key-per-unique-group shape as structapi's roof-beam `data.beams`, so the
+    drawing renderer can treat both uniformly.
     """
     groups: dict[tuple[str, float], list[WallSegment]] = {}
     for w in walls:
@@ -66,7 +78,7 @@ async def design_plinth_beams(
                 "support": "ss",
             }
         )
-        key = f"plinth-span{span_m:.2f}"
+        key = f"plinth-{kind}-span{span_m:.2f}"
         out[key] = {
             "b_mm": thickness_mm,
             "D_mm": D,
