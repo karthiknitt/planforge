@@ -7,13 +7,18 @@ from app.engine.models import (
     PlotConfig,
     Room,
 )
+from app.engine.compliance import load_rules
 from app.engine.scorer import (
+    _WEIGHTS,
     _score_adjacency,
     _score_aspect_ratio,
+    _score_toilet_placement,
     _shares_wall,
     rank_and_select,
     score_layout,
 )
+
+_EWT = load_rules()["external_wall_thickness_mm"] / 1000
 
 
 def _make_room(id, type, x, y, w, d, name=None):
@@ -108,6 +113,7 @@ def test_score_layout_returns_all_components():
     assert 0 <= s.aspect_ratio <= 100
     assert 0 <= s.circulation <= 100
     assert 0 <= s.vastu <= 100
+    assert 0 <= s.toilet_placement <= 100
 
 
 def test_rank_and_select_top_n():
@@ -122,3 +128,69 @@ def test_rank_and_select_top_n():
     # Verify scores attached
     for lay in ranked:
         assert lay.score is not None
+
+
+def test_scorer_weights_sum_to_one():
+    assert abs(sum(_WEIGHTS.values()) - 1.0) < 1e-9
+
+
+def test_score_toilet_placement_no_wet_rooms_neutral():
+    layout = _make_layout([_make_room("l", "living", 1.13, 1.73, 3.5, 4.0)])
+    assert _score_toilet_placement(layout, _basic_cfg(), _EWT) == 100.0
+
+
+def test_score_toilet_placement_front_band_penalized():
+    cfg = _basic_cfg()
+    front_toilet = _make_room("t1", "toilet", 1.13, 1.73, 1.5, 2.0)
+    back_toilet = _make_room("t2", "toilet", 1.13, 8.0, 1.5, 2.0)
+    front_score = _score_toilet_placement(_make_layout([front_toilet]), cfg, _EWT)
+    back_score = _score_toilet_placement(_make_layout([back_toilet]), cfg, _EWT)
+    assert front_score < back_score
+
+
+def test_score_toilet_placement_middle_third_heavier_penalty():
+    cfg = _basic_cfg()
+    # Both in the front band; one centred under the main door (middle third), one to the side.
+    middle_toilet = _make_room("t1", "toilet", 4.0, 1.73, 1.5, 2.0)
+    side_toilet = _make_room("t2", "toilet", 1.13, 1.73, 1.5, 2.0)
+    middle_score = _score_toilet_placement(_make_layout([middle_toilet]), cfg, _EWT)
+    side_score = _score_toilet_placement(_make_layout([side_toilet]), cfg, _EWT)
+    assert middle_score < side_score
+
+
+def test_score_toilet_placement_stair_adjacency_penalized():
+    cfg = _basic_cfg()
+    stair = _make_room("s", "staircase", 4.87, 5.0, 1.5, 1.5)
+    toilet_adjacent = _make_room("ta", "toilet", 6.37, 5.0, 1.5, 2.0)
+    toilet_far = _make_room("tf", "toilet", 1.13, 5.0, 1.5, 2.0)
+    adjacent_score = _score_toilet_placement(
+        _make_layout([stair, toilet_adjacent]), cfg, _EWT
+    )
+    far_score = _score_toilet_placement(_make_layout([stair, toilet_far]), cfg, _EWT)
+    assert adjacent_score < far_score
+
+
+def test_score_toilet_placement_ensuite_exempt_from_adjacency_penalty():
+    cfg = _basic_cfg()
+    stair = _make_room("s", "staircase", 4.87, 5.0, 1.5, 1.5)
+    bath = _make_room("b", "bathroom_master", 6.37, 5.0, 1.5, 2.0)
+    bedroom = _make_room("mb", "master_bedroom", 6.37, 7.0, 1.5, 3.0)
+    # Non-ensuite toilet in the same stair-adjacent spot, no bedroom neighbour.
+    plain_toilet = _make_room("t", "toilet", 6.37, 5.0, 1.5, 2.0)
+
+    ensuite_score = _score_toilet_placement(
+        _make_layout([stair, bath, bedroom]), cfg, _EWT
+    )
+    plain_score = _score_toilet_placement(
+        _make_layout([stair, plain_toilet]), cfg, _EWT
+    )
+    assert ensuite_score > plain_score
+
+
+def test_score_toilet_placement_no_external_wall_penalized():
+    cfg = _basic_cfg()
+    interior_toilet = _make_room("ti", "toilet", 3.13, 5.0, 1.5, 2.0)
+    boundary_toilet = _make_room("tb", "toilet", 1.13, 5.0, 1.5, 2.0)
+    interior_score = _score_toilet_placement(_make_layout([interior_toilet]), cfg, _EWT)
+    boundary_score = _score_toilet_placement(_make_layout([boundary_toilet]), cfg, _EWT)
+    assert interior_score < boundary_score

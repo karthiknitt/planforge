@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .models import ComplianceResult, Layout, PlotConfig
+from .models import ComplianceResult, Layout, PlotConfig, Room
 
 _RULES_PATH = Path(__file__).parent.parent / "config" / "compliance_rules.json"
 _CITY_PATH = Path(__file__).parent.parent / "config" / "city_rules.json"
@@ -323,26 +323,35 @@ def check(
                     f"{room.name}: width {min(room.width, room.depth):.2f} m < {min_p2w_w} m minimum (2-wheeler)"
                 )
 
-    # --- Master bedroom attached bathroom check ---
+    # --- Attached bathroom check (master bedroom only by default; every
+    # bedroom when the plot config opts into attached_toilets) ---
     tol = 0.15  # 15 cm adjacency tolerance
-    for mb in master_beds:
+    attached_toilets_on = getattr(cfg, "attached_toilets", False)
+    bedrooms_to_check = (
+        [r for r in all_rooms if r.type in ("bedroom", "master_bedroom")]
+        if attached_toilets_on
+        else master_beds
+    )
+    for bed in bedrooms_to_check:
         has_attached = False
         for b in bath_rooms:
             # Rooms are adjacent if they share an edge (within tol)
-            x_overlap = mb.x < b.x + b.width + tol and b.x < mb.x + mb.width + tol
-            y_overlap = mb.y < b.y + b.depth + tol and b.y < mb.y + mb.depth + tol
+            x_overlap = bed.x < b.x + b.width + tol and b.x < bed.x + bed.width + tol
+            y_overlap = bed.y < b.y + b.depth + tol and b.y < bed.y + bed.depth + tol
             x_touch = (
-                abs(mb.x - (b.x + b.width)) < tol or abs(b.x - (mb.x + mb.width)) < tol
+                abs(bed.x - (b.x + b.width)) < tol
+                or abs(b.x - (bed.x + bed.width)) < tol
             )
             y_touch = (
-                abs(mb.y - (b.y + b.depth)) < tol or abs(b.y - (mb.y + mb.depth)) < tol
+                abs(bed.y - (b.y + b.depth)) < tol
+                or abs(b.y - (bed.y + bed.depth)) < tol
             )
             if (x_touch and y_overlap) or (y_touch and x_overlap):
                 has_attached = True
                 break
         if not has_attached:
             warnings.append(
-                f"{mb.name}: no attached toilet/bathroom detected — Indian practice recommends an en-suite bath"
+                f"{bed.name}: no attached toilet/bathroom detected — Indian practice recommends an en-suite bath"
             )
 
     # --- Staircase width ---
@@ -429,6 +438,61 @@ def check(
         room_poly = _box(room.x, room.y, room.x + room.width, room.y + room.depth)
         if not boundary_tol.contains(room_poly):
             violations.append(f"{room.name} extends outside the setback boundary")
+
+    # --- Toilet placement warnings (front-facade, stair/parking adjacency,
+    # ventilation) — shares the front-band/adjacency/boundary geometry with
+    # app/engine/scorer.py's _score_toilet_placement (duplicated locally, not
+    # imported, to avoid a compliance<->scorer module coupling; scorer already
+    # lazily imports load_rules from here). Intentionally diverges on
+    # severity: the scorer weights a front-band toilet more heavily when it
+    # also falls in the middle third (main-door zone) vs the sides, but
+    # compliance has no such split — every front-band toilet gets the same
+    # single flat "faces the front facade" warning regardless of x-position. ---
+    by_min = cfg.setback_front + ewt
+    by_max = cfg.plot_length - cfg.setback_rear - ewt
+    bx_min = cfg.setback_left + ewt
+    bx_max = cfg.plot_width - cfg.setback_right - ewt
+    _front_band_y = by_min + 0.25 * max(by_max - by_min, 0.01)
+    _adjacency_block_types = {"staircase", "parking_4w", "parking_2w"}
+
+    def _toilet_shares_wall(a: Room, b: Room, tol: float = 0.05) -> bool:
+        x_ov = max(0.0, min(a.x + a.width, b.x + b.width) - max(a.x, b.x))
+        y_ov = max(0.0, min(a.y + a.depth, b.y + b.depth) - max(a.y, b.y))
+        abuts_x = abs(a.x + a.width - b.x) < 0.2 or abs(b.x + b.width - a.x) < 0.2
+        abuts_y = abs(a.y + a.depth - b.y) < 0.2 or abs(b.y + b.depth - a.y) < 0.2
+        return (abuts_x and y_ov > tol) or (abuts_y and x_ov > tol)
+
+    def _toilet_has_external_wall(room: Room, tol: float = 0.1) -> bool:
+        return (
+            abs(room.x - bx_min) < tol
+            or abs(room.x + room.width - bx_max) < tol
+            or abs(room.y - by_min) < tol
+            or abs(room.y + room.depth - by_max) < tol
+        )
+
+    for room in bath_rooms:
+        is_ensuite = "_ens_" in room.id or (
+            room.type == "bathroom_master"
+            and any(
+                _toilet_shares_wall(room, b)
+                for b in all_rooms
+                if b.type in ("bedroom", "master_bedroom")
+            )
+        )
+        if room.y + room.depth / 2.0 < _front_band_y:
+            warnings.append(
+                f"{room.name}: faces the front facade — consider relocating away from the main entrance"
+            )
+        if not is_ensuite and any(
+            other.type in _adjacency_block_types and _toilet_shares_wall(room, other)
+            for other in all_rooms
+            if other is not room
+        ):
+            warnings.append(
+                f"{room.name}: adjacent to staircase/parking — consider relocating for privacy and hygiene"
+            )
+        if not _toilet_has_external_wall(room):
+            warnings.append(f"{room.name}: lacks external wall for ventilation")
 
     # --- Study/dining ventilation warnings ---
     for room in all_rooms:
