@@ -71,3 +71,36 @@ async def design_building(
         artifacts=body.get("artifacts", []),
         disclaimer=body.get("disclaimer", ""),
     )
+
+
+async def calc_beam(
+    payload: dict, *, correlation_id: str = "", timeout: float = 30.0
+) -> StructuralResult:
+    """POST /v1/calc/beam on structapi — generic single-member beam design
+    (arbitrary UDL in), used for plinth beams (wall load, not slab-driven).
+    """
+    if not settings.structural_api_url:
+        raise StructuralAPIError("STRUCTURAL_API_URL is not configured")
+    url = settings.structural_api_url.rstrip("/") + "/v1/calc/beam"
+    headers = {"Content-Type": "application/json"}
+    if settings.structural_api_key:
+        headers["x-api-key"] = settings.structural_api_key
+    if correlation_id:
+        headers["x-correlation-id"] = correlation_id
+    async with _client(timeout) as client:
+        try:
+            resp = await client.post(url, json=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            raise StructuralAPIError(f"structapi unreachable: {exc}") from exc
+    if resp.status_code != 200:
+        raise StructuralAPIError(
+            f"structapi HTTP {resp.status_code}: {resp.text[:300]}"
+        )
+    body = resp.json()
+    return StructuralResult(
+        ok=bool(body.get("ok")),
+        checks=body.get("checks", []),
+        data=body.get("data", {}),
+        artifacts=body.get("artifacts", []),
+        disclaimer=body.get("disclaimer", ""),
+    )
