@@ -37,6 +37,48 @@ ALIGN_BONUS = 2500
 # LINES, i.e. exactly the near-miss offsets that split the column grid.
 SNAP_TOL_M = 0.45
 _IWT_M = 0.115  # internal wall thickness (mirrors plan_geometry.IWT)
+_IWT_MM = 115
+
+# Wet rooms are excluded from the size-growth objective: they should settle
+# at min-compliant size, not balloon toward spec max (mirrors
+# plan_geometry._WET_TYPES, including "utility").
+_WET_TYPES = {"toilet", "wc_only", "bathroom_master", "utility"}
+
+# En-suite ↔ bedroom shared wall must fit a door (900 mm min clear width).
+_ENSUITE_MIN_OVERLAP_MM = 900
+# Repulsion guard bands: the solver otherwise games hard thresholds (parks a
+# toilet 1 mm past the wall gap) and post-solve snapping (±SNAP_TOL_M) can
+# close a raw clearance into real contact. Penalise anything within a
+# 600 mm moat with >= 100 mm of facing overlap, so the snapped result can
+# never end up genuinely wall-sharing.
+_REPULSION_GAP_MM = 600
+_MIN_SHARE_OVERLAP_MM = 100
+
+# In-model area cap for wet rooms, aligned with generator._WET_CAP_SQM (4.6):
+# anything larger would be split into toilet+passage post-solve anyway.
+_WET_AREA_CAP_MM2 = 4_600_000
+
+# Soft toilet-placement penalties (objective units). Must dominate not just
+# ALIGN_BONUS (2500) but realistic adjacency-distance trades: bedroom↔toilet
+# is 12 pts on DOUBLED centre distance (~24 units/mm), so relocating a
+# toilet ~1-2 m costs 24k-48k — penalties below that get ignored. Soft so
+# tight plots stay feasible (a boolean penalty can never go infeasible).
+TOILET_FRONT_PENALTY = 150_000
+TOILET_FRONT_MID_PENALTY = 100_000  # extra when centre-x faces the gate axis
+# Stair/parking repulsion needs to be large enough to pull the search out of
+# the packed-next-to-stair basin even when the incumbent is only FEASIBLE
+# (measured: at 60k the mid-zone solve kept both toilets on the stair wall).
+TOILET_STAIR_PENALTY = 200_000
+TOILET_PARKING_PENALTY = 200_000
+# Per-mm shrink pressure on wet rooms. Must beat BOTH the alignment bonus a
+# stretch can buy (2500 per edge) and the adjacency centre-pull: growing a
+# toilet toward its bedroom/kitchen partner moves its centre at half the
+# growth rate against ~24 units/mm pair weights (~12-20/mm effective gain,
+# measured ballooning at weight 8). 30/mm makes growth strictly unprofitable
+# so wet rooms settle at their min-compliant size.
+WET_SHRINK_WEIGHT = 30
+
+_PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 
 _SPECS_PATH = Path(__file__).parent.parent / "config" / "room_specs.json"
 
@@ -114,6 +156,20 @@ def _plate_and_planes_from_polygon(
     return bw, bd, ox, oy, planes
 
 
+def ensuite_attachment(room_id: str) -> str | None:
+    """Map an en-suite room id (``toilet_ens_<i>``) to its bedroom id.
+
+    The Room dataclass has no metadata field, so en-suite attachment is
+    encoded in the id convention; later pipeline stages import this helper
+    instead of re-parsing ids.
+    """
+    if room_id.startswith("toilet_ens_"):
+        suffix = room_id.removeprefix("toilet_ens_")
+        if suffix.isdigit():
+            return f"bedroom_{suffix}"
+    return None
+
+
 def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
     """Determine which rooms to solve for based on PlotConfig."""
     rooms = []
@@ -126,9 +182,14 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
     # Kitchen (always, GF)
     rooms.append({"id": "kitchen_0", "type": "kitchen", "name": "Kitchen", "floor": 0})
 
-    # Bedrooms — distribute across GF and FF
+    # Bedrooms — distribute across GF and FF. With attached_toilets each
+    # bedroom gets an en-suite on its own floor (bathroom_master for the
+    # master, i.e. bedroom 0); en-suites are ADDITIVE to cfg.toilets, which
+    # then counts common toilets only.
+    bedroom_floors: set[int] = set()
     for i in range(cfg.num_bedrooms):
         floor = 0 if i == 0 else 1
+        bedroom_floors.add(floor)
         rooms.append(
             {
                 "id": f"bedroom_{i}",
@@ -137,10 +198,29 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
                 "floor": floor,
             }
         )
+        if cfg.attached_toilets:
+            rooms.append(
+                {
+                    "id": f"toilet_ens_{i}",
+                    "type": "bathroom_master" if i == 0 else "toilet",
+                    "name": "Master Bath" if i == 0 else f"Toilet (Bed {i + 1})",
+                    "floor": floor,
+                    "attached_to": f"bedroom_{i}",
+                }
+            )
 
-    # Toilets — distribute across floors
-    for i in range(cfg.toilets):
-        floor = 0 if i < max(1, cfg.num_bedrooms // 2) else 1
+    # Common toilets — distribute across floors, then guarantee every floor
+    # that has rooms but no bedroom gets >= 1 (the solver always populates
+    # floors 0 and 1 via the staircase). Redistribute, never add: pull one
+    # toilet from the most-served floor.
+    toilet_floors = [
+        0 if i < max(1, cfg.num_bedrooms // 2) else 1 for i in range(cfg.toilets)
+    ]
+    for f in (0, 1):
+        if f not in bedroom_floors and toilet_floors and f not in toilet_floors:
+            donor = max(set(toilet_floors), key=toilet_floors.count)
+            toilet_floors[toilet_floors.index(donor)] = f
+    for i, floor in enumerate(toilet_floors):
         rooms.append(
             {
                 "id": f"toilet_{i}",
@@ -349,6 +429,7 @@ def snap_rooms_to_shared_grid(
             if (
                 new_dim < min_dim - 1e-9
                 or new_dim * other < mins.get("min_area_sqm", 0.0) - 1e-9
+                or new_dim * other > mins.get("max_area_sqm", float("inf")) + 1e-9
             ):
                 return False
         return True
@@ -412,8 +493,9 @@ def snap_rooms_to_shared_grid(
             cand.width < mins.get("min_width_m", 0.0) - eps
             or cand.depth < mins.get("min_depth_m", 0.0) - eps
             or cand.width * cand.depth < mins.get("min_area_sqm", 0.0) - eps
+            or cand.width * cand.depth > mins.get("max_area_sqm", float("inf")) + eps
         ):
-            return r  # revert: snap would violate this room's spec minimums
+            return r  # revert: snap would violate this room's spec min/max
         return cand
 
     result = [[build(fi, r) for r in rooms] for fi, rooms in enumerate(floors)]
@@ -499,6 +581,11 @@ def _solve_one(
         # 1 sqm = SCALE*SCALE mm² = 1_000_000 mm²
         min_area_mm2 = int(raw_min_area * SCALE * SCALE)
         max_area_mm2 = int(spec["max_area_sqm"] * SCALE * SCALE)
+        # Wet rooms are capped at the generator's wet cap (4.6 sqm — rooms
+        # above it get split into toilet+passage anyway) so the solver never
+        # emits ballooned toilets; guard against custom minima above the cap.
+        if rtype in _WET_TYPES:
+            max_area_mm2 = max(min(max_area_mm2, _WET_AREA_CAP_MM2), min_area_mm2)
 
         min_d = _mm(spec["min_width_m"])  # use min_width as min depth too
         max_d = min(_mm(spec.get("max_width_m", 8.0)), bd)
@@ -595,6 +682,37 @@ def _solve_one(
             model.add(stair.y >= third)
             model.add(stair.y + stair.d <= 2 * third)
 
+    # Hard en-suite adjacency: each en-suite must share a wall segment with
+    # its bedroom — facing edges within one internal wall thickness AND
+    # perpendicular overlap >= 900 mm (door width), OR'd over the four side
+    # cases (mirrors the reified align_bools pattern below).
+    by_id = {rv.room_id: rv for rv in room_vars}
+    for rd in room_defs:
+        bed_id = rd.get("attached_to")
+        if not bed_id:
+            continue
+        ens = by_id.get(rd["id"])
+        bed = by_id.get(bed_id)
+        if ens is None or bed is None or ens.floor != bed.floor:
+            continue
+        side_bools = []
+        # (gap, a_lo, a_hi, b_lo, b_hi): gap between the facing edges, then
+        # the two rooms' extents on the perpendicular axis.
+        cases = (
+            (bed.x - ens.xe, ens.y, ens.ye, bed.y, bed.ye),  # ens left of bed
+            (ens.x - bed.xe, ens.y, ens.ye, bed.y, bed.ye),  # ens right of bed
+            (bed.y - ens.ye, ens.x, ens.xe, bed.x, bed.xe),  # ens in front
+            (ens.y - bed.ye, ens.x, ens.xe, bed.x, bed.xe),  # ens behind
+        )
+        for ci, (gap, a_lo, a_hi, b_lo, b_hi) in enumerate(cases):
+            sb = model.new_bool_var(f"ens_{ens.room_id}_{ci}")
+            model.add(gap >= 0).only_enforce_if(sb)
+            model.add(gap <= _IWT_MM).only_enforce_if(sb)
+            model.add(a_hi - b_lo >= _ENSUITE_MIN_OVERLAP_MM).only_enforce_if(sb)
+            model.add(b_hi - a_lo >= _ENSUITE_MIN_OVERLAP_MM).only_enforce_if(sb)
+            side_bools.append(sb)
+        model.add_bool_or(side_bools)
+
     # ── Objective: pull preferred-adjacency pairs together ───────────────────
     # The previous "objective" forced adj==1 and maximized a constant — the
     # solver returned the first feasible packing with zero optimization
@@ -624,7 +742,97 @@ def _solve_one(
     # size proxy). Without this the solver returns minimum-area rooms and
     # dumps all slack into leftover space (the "5 sqm Study, 38 sqm Passage"
     # bug). Adjacency terms are points-weighted per mm, so they still dominate.
-    size_terms = [rv.w + rv.d for rv in room_vars]
+    # Wet rooms are excluded — growth pressure ballooned toilets to their
+    # 6 sqm spec max; they get the opposite (shrink) pressure instead so
+    # they settle at min-compliant size.
+    size_terms = [rv.w + rv.d for rv in room_vars if rv.room_type not in _WET_TYPES]
+    wet_shrink_terms = [
+        WET_SHRINK_WEIGHT * (rv.w + rv.d)
+        for rv in room_vars
+        if rv.room_type in _WET_TYPES
+    ]
+
+    # ── Soft toilet-placement penalties ──────────────────────────────────────
+    # Common (non-en-suite) toilets/WCs: penalise the front band facing the
+    # road (heavier opposite the gate/main door) and sharing a wall with the
+    # staircase or parking. Soft terms only — hard versions go infeasible on
+    # small plots. En-suites are exempt: their position follows the bedroom.
+    penalty_terms = []
+    ensuite_ids = {rd["id"] for rd in room_defs if rd.get("attached_to")}
+    common_wet = [
+        rv
+        for rv in room_vars
+        if rv.room_type in ("toilet", "wc_only") and rv.room_id not in ensuite_ids
+    ]
+    repel_targets = [
+        rv
+        for rv in room_vars
+        if rv.room_type == "staircase" or rv.room_type in _PARKING_TYPES
+    ]
+    for rv in common_wet:
+        # (a) front band: toilet within the front 25% of the plate depth
+        # (road side is y-min post-rotation). Tested on the FRONT EDGE, not
+        # the centre — a centre test is gameable by growing the room until
+        # the centre escapes the band (measured: toilets inflated to 6 sqm
+        # to dodge the penalty). Band at 30% so post-solve snap jitter
+        # (±SNAP_TOL_M) can't push a compliant room back under 25%.
+        fb = model.new_bool_var(f"front_{rv.room_id}")
+        model.add(10 * rv.y <= 3 * bd).only_enforce_if(fb)
+        model.add(10 * rv.y > 3 * bd).only_enforce_if(fb.Not())
+        penalty_terms.append(TOILET_FRONT_PENALTY * fb)
+
+        # heavier when centre-x also sits in the middle third of the plate
+        # width — straight opposite the compound gate / main door axis
+        m1 = model.new_bool_var(f"midx1_{rv.room_id}")
+        model.add(3 * (2 * rv.x + rv.w) >= 2 * bw).only_enforce_if(m1)
+        model.add(3 * (2 * rv.x + rv.w) < 2 * bw).only_enforce_if(m1.Not())
+        m2 = model.new_bool_var(f"midx2_{rv.room_id}")
+        model.add(3 * (2 * rv.x + rv.w) <= 4 * bw).only_enforce_if(m2)
+        model.add(3 * (2 * rv.x + rv.w) > 4 * bw).only_enforce_if(m2.Not())
+        fbm = model.new_bool_var(f"frontmid_{rv.room_id}")
+        model.add_bool_and([fb, m1, m2]).only_enforce_if(fbm)
+        model.add_bool_or([fb.Not(), m1.Not(), m2.Not()]).only_enforce_if(fbm.Not())
+        penalty_terms.append(TOILET_FRONT_MID_PENALTY * fbm)
+
+        # (b)+(c) repulsion: reified "shares a wall with staircase/parking"
+        for other in repel_targets:
+            if other.floor != rv.floor:
+                continue
+            weight = (
+                TOILET_STAIR_PENALTY
+                if other.room_type == "staircase"
+                else TOILET_PARKING_PENALTY
+            )
+            share = model.new_bool_var(f"rep_{rv.room_id}_{other.room_id}")
+            rep_cases = (
+                (other.x - rv.xe, rv.y, rv.ye, other.y, other.ye),
+                (rv.x - other.xe, rv.y, rv.ye, other.y, other.ye),
+                (other.y - rv.ye, rv.x, rv.xe, other.x, other.xe),
+                (rv.y - other.ye, rv.x, rv.xe, other.x, other.xe),
+            )
+            # One-direction encoding (exact under minimization): each literal
+            # is only forced TRUE when its inequality holds (lb=0 ⇒ inequality
+            # violated), and the clause forces `share` when all four hold.
+            # The solver zeroes any free literal to dodge the penalty, so no
+            # spurious payment — at half the enforcement cost of full
+            # reification (which measurably starved the search budget).
+            for ci, (gap, a_lo, a_hi, b_lo, b_hi) in enumerate(rep_cases):
+                lits = []
+                for li, (expr, lo) in enumerate(
+                    (
+                        (gap, 0),
+                        (_REPULSION_GAP_MM - gap, 0),
+                        (a_hi - b_lo, _MIN_SHARE_OVERLAP_MM),
+                        (b_hi - a_lo, _MIN_SHARE_OVERLAP_MM),
+                    )
+                ):
+                    lb = model.new_bool_var(
+                        f"repl_{rv.room_id}_{other.room_id}_{ci}_{li}"
+                    )
+                    model.add(expr < lo).only_enforce_if(lb.Not())
+                    lits.append(lb)
+                model.add_bool_or([lb.Not() for lb in lits] + [share])
+            penalty_terms.append(weight * share)
 
     # Wall-coalignment bonus: reified equalities between room edge
     # coordinates — same floor (partitions land on shared grid lines, no
@@ -677,25 +885,56 @@ def _solve_one(
                 model.add_abs_equality(dv, var - clamped)
                 deviation_terms.append(dv)
 
-    if dist_terms or size_terms or align_bools or deviation_terms:
-        model.minimize(
-            sum(dist_terms)
-            - sum(size_terms)
-            - ALIGN_BONUS * sum(align_bools)
-            + deviation_weight * sum(deviation_terms)
-        )
+    base_objective = (
+        sum(dist_terms)
+        - sum(size_terms)
+        - ALIGN_BONUS * sum(align_bools)
+        + sum(wet_shrink_terms)
+        + deviation_weight * sum(deviation_terms)
+    )
 
     # ── Solve ─────────────────────────────────────────────────────────────────
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = SOLVE_TIME_S
-    # Machine-independent work budget: on fast machines this binds (~7 s
-    # wall here) so repeated runs return the SAME incumbent; on slow
-    # machines (CI runners, cold Cloud Run) the wall-clock cap above binds
-    # so runtime never grows. Wall-clock-only budgets made solution quality
-    # depend on machine speed — the source of CI-only/dev-only test
-    # failures in the grid-alignment and leftover-gap suites.
-    solver.parameters.max_deterministic_time = 1.5
-    solver.parameters.num_search_workers = 1  # deterministic single-thread
+    def _make_solver(det_budget: float) -> cp_model.CpSolver:
+        s = cp_model.CpSolver()
+        s.parameters.max_time_in_seconds = SOLVE_TIME_S
+        # Machine-independent work budget: on fast machines this binds so
+        # repeated runs return the SAME incumbent; on slow machines (CI
+        # runners, cold Cloud Run) the wall-clock cap above binds so runtime
+        # never grows. Wall-clock-only budgets made solution quality depend
+        # on machine speed — the source of CI-only/dev-only test failures in
+        # the grid-alignment and leftover-gap suites.
+        s.parameters.max_deterministic_time = det_budget
+        s.parameters.num_search_workers = 1  # deterministic single-thread
+        return s
+
+    # Two-phase solve when placement penalties are active: the single-thread
+    # deterministic budget is too small to escape a first incumbent that
+    # pays the (huge) penalties — measured: 450k of penalties stayed paid,
+    # or hint-repair burned the whole budget (status UNKNOWN) when guessed
+    # partial hints didn't fit. Phase 1 solves the well-behaved penalty-free
+    # model; its solution is a complete, feasible hint for phase 2, which
+    # then spends its entire budget relocating toilets out of penalty zones.
+    if penalty_terms and not seed_rooms:
+        model.minimize(base_objective)
+        pre = _make_solver(det_budget=0.7)
+        pre_status = pre.solve(model)
+        if pre_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            # Hint everything EXCEPT the common toilets' positions: with the
+            # rest of the plan anchored, phase 2 reduces to re-placing the
+            # toilets — a subproblem small enough to escape the penalty
+            # zones inside the budget (fully-hinted runs kept the toilet
+            # glued to its penalised phase-1 spot).
+            free_ids = {rv.room_id for rv in common_wet}
+            model.clear_hints()
+            for rv in room_vars:
+                hinted = (
+                    (rv.w, rv.d) if rv.room_id in free_ids else (rv.x, rv.y, rv.w, rv.d)
+                )
+                for var in hinted:
+                    model.add_hint(var, pre.value(var))
+
+    model.minimize(base_objective + sum(penalty_terms))
+    solver = _make_solver(det_budget=1.5)
 
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -779,6 +1018,7 @@ def _solve_one(
     # near-miss under its time budget). Falls back to the unsnapped rooms
     # if snapping breaks compliance — the snap is best-effort by design.
     min_dims = {}
+    solved_areas = {r.id: r.area for r in gf_rooms + ff_rooms}
     for rd2 in room_defs:
         spec2 = specs.get(rd2["type"], specs.get("utility"))
         min_dims[rd2["id"]] = {
@@ -786,6 +1026,18 @@ def _solve_one(
             "min_depth_m": spec2["min_width_m"],
             "min_area_sqm": rd2.get("custom_min_area") or spec2["min_area_sqm"],
         }
+        # Wet rooms leave the solve at min-compliant size (WET_SHRINK_WEIGHT)
+        # but snapping has no size objective and can inflate them by up to
+        # SNAP_TOL_M per edge — cap snap growth so they stay toilet-sized.
+        if rd2["type"] in _WET_TYPES:
+            min_dims[rd2["id"]]["max_area_sqm"] = round(
+                min(
+                    spec2["max_area_sqm"],
+                    _WET_AREA_CAP_MM2 / (SCALE * SCALE),
+                    solved_areas.get(rd2["id"], 1e9) * 1.35,
+                ),
+                3,
+            )
     snapped_gf, snapped_ff = snap_rooms_to_shared_grid(
         [gf_rooms, ff_rooms],
         min_dims,

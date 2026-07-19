@@ -118,6 +118,9 @@ class PlotConfig:
     municipality: str | None = None
     # Custom room config (arbitrary rooms, Phase C)
     custom_room_config: list | None = None  # list of dicts from CustomRoomSpec
+    # En-suite toilets: one attached bath per bedroom, additive to `toilets`
+    # (which then counts COMMON toilets only)
+    attached_toilets: bool = False
 
     @property
     def bhk(self) -> int:
