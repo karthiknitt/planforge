@@ -440,9 +440,14 @@ def check(
             violations.append(f"{room.name} extends outside the setback boundary")
 
     # --- Toilet placement warnings (front-facade, stair/parking adjacency,
-    # ventilation) — mirrors app/engine/scorer.py's _score_toilet_placement,
-    # duplicated locally (not imported) to avoid a compliance<->scorer
-    # module coupling; scorer already lazily imports load_rules from here. ---
+    # ventilation) — shares the front-band/adjacency/boundary geometry with
+    # app/engine/scorer.py's _score_toilet_placement (duplicated locally, not
+    # imported, to avoid a compliance<->scorer module coupling; scorer already
+    # lazily imports load_rules from here). Intentionally diverges on
+    # severity: the scorer weights a front-band toilet more heavily when it
+    # also falls in the middle third (main-door zone) vs the sides, but
+    # compliance has no such split — every front-band toilet gets the same
+    # single flat "faces the front facade" warning regardless of x-position. ---
     by_min = cfg.setback_front + ewt
     by_max = cfg.plot_length - cfg.setback_rear - ewt
     bx_min = cfg.setback_left + ewt
