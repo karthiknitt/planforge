@@ -1,12 +1,13 @@
 """Layout quality scorer for PlanForge.
 
-Scores each Layout on 6 components (weighted sum → 0–100):
-  20% Natural light   — % habitable rooms touching plot boundary
-  25% Adjacency       — kitchen↔dining, bedroom↔toilet, living↔staircase
-  15% Aspect ratio    — penalty when width/depth > 2:1 for habitable rooms
-  15% Circulation     — room area / buildable area (fill efficiency)
-  10% Vastu           — reuses check_vastu(); −20/violation, −5/warning
-  15% Grid regularity — structural_grid confidence + GF/FF column stacking
+Scores each Layout on 7 components (weighted sum → 0–100), see _WEIGHTS:
+  20% Natural light    — % habitable rooms touching plot boundary
+  25% Adjacency        — kitchen↔dining, bedroom↔toilet, living↔staircase
+  10% Aspect ratio     — penalty when width/depth > 2:1 for habitable rooms
+  15% Circulation      — room area / buildable area (fill efficiency)
+  10% Vastu            — reuses check_vastu(); −20/violation, −5/warning
+  10% Grid regularity  — structural_grid confidence + GF/FF column stacking
+  10% Toilet placement — penalizes front-facade/stair-parking/no-ventilation toilets
 """
 
 from __future__ import annotations
@@ -34,6 +35,21 @@ _HABITABLE = frozenset(
 
 _ADJACENCY_PAIRS: list[tuple[str, str, float]] = list(load_adjacency_pairs())
 _MAX_ADJACENCY = sum(pts for _, _, pts in _ADJACENCY_PAIRS)
+
+# ── Component weights (must sum to 1.0 — see test_scorer_weights_sum_to_one) ──
+_WEIGHTS: dict[str, float] = {
+    "natural_light": 0.20,
+    "adjacency": 0.25,
+    "aspect_ratio": 0.10,
+    "circulation": 0.15,
+    "vastu": 0.10,
+    "grid_regularity": 0.10,
+    "toilet_placement": 0.10,
+}
+
+# ── Toilet placement scoring ───────────────────────────────────────────────────
+_WET_TYPES = frozenset(["toilet", "wc_only", "bathroom_master"])
+_ADJACENCY_PENALTY_TYPES = frozenset(["staircase", "parking_4w", "parking_2w"])
 
 
 def _shares_wall(a: Room, b: Room, tol: float = 0.05) -> bool:
@@ -156,6 +172,59 @@ def _score_grid_regularity(layout: Layout) -> float:
     return 0.7 * base + 30.0 * stacked / len(ff_cols)
 
 
+def _is_ensuite(room: Room, all_rooms: list[Room]) -> bool:
+    """En-suite toilets are exempt from the stair/parking-adjacency penalty:
+    a solver-tagged en-suite id, or a master bathroom that shares a wall
+    with a bedroom (its owning bedroom)."""
+    if "_ens_" in room.id:
+        return True
+    if room.type == "bathroom_master":
+        bedrooms = [r for r in all_rooms if r.type in ("bedroom", "master_bedroom")]
+        return any(_shares_wall(room, b) for b in bedrooms)
+    return False
+
+
+def _score_toilet_placement(layout: Layout, cfg: PlotConfig, ewt: float) -> float:
+    """Penalize toilets facing the front facade (heavier near the main-door
+    zone), adjacent to the staircase/parking (unless en-suite), or without
+    an external wall for ventilation."""
+    all_rooms = layout.ground_floor.rooms + layout.first_floor.rooms
+    wet_rooms = [r for r in all_rooms if r.type in _WET_TYPES]
+    if not wet_rooms:
+        return 100.0
+
+    by_min = cfg.setback_front + ewt
+    by_max = cfg.plot_length - cfg.setback_rear - ewt
+    bx_min = cfg.setback_left + ewt
+    bx_max = cfg.plot_width - cfg.setback_right - ewt
+    depth = max(by_max - by_min, 0.01)
+    width = max(bx_max - bx_min, 0.01)
+    front_band_y = by_min + 0.25 * depth
+    mid_x_lo = bx_min + width / 3.0
+    mid_x_hi = bx_min + 2.0 * width / 3.0
+
+    penalty = 0.0
+    for room in wet_rooms:
+        cx = room.x + room.width / 2.0
+        cy = room.y + room.depth / 2.0
+        ensuite = _is_ensuite(room, all_rooms)
+
+        if cy < front_band_y:
+            penalty += 25.0 if mid_x_lo <= cx <= mid_x_hi else 15.0
+
+        if not ensuite and any(
+            other.type in _ADJACENCY_PENALTY_TYPES and _shares_wall(room, other)
+            for other in all_rooms
+            if other is not room
+        ):
+            penalty += 20.0
+
+        if not _touches_boundary(room, cfg, ewt):
+            penalty += 15.0
+
+    return max(0.0, 100.0 - penalty / len(wet_rooms))
+
+
 def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
     """Compute a weighted quality score for a layout."""
     from .compliance import load_rules
@@ -169,8 +238,17 @@ def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
     cir = _score_circulation(layout, cfg, ewt)
     vas = _score_vastu(layout, cfg)
     grid = _score_grid_regularity(layout)
+    tp = _score_toilet_placement(layout, cfg, ewt)
 
-    total = 0.20 * nl + 0.25 * adj + 0.15 * ar + 0.15 * cir + 0.10 * vas + 0.15 * grid
+    total = (
+        _WEIGHTS["natural_light"] * nl
+        + _WEIGHTS["adjacency"] * adj
+        + _WEIGHTS["aspect_ratio"] * ar
+        + _WEIGHTS["circulation"] * cir
+        + _WEIGHTS["vastu"] * vas
+        + _WEIGHTS["grid_regularity"] * grid
+        + _WEIGHTS["toilet_placement"] * tp
+    )
 
     return LayoutScore(
         total=round(total, 1),
@@ -180,6 +258,7 @@ def score_layout(layout: Layout, cfg: PlotConfig) -> LayoutScore:
         circulation=round(cir, 1),
         vastu=round(vas, 1),
         grid_regularity=round(grid, 1),
+        toilet_placement=round(tp, 1),
     )
 
 
