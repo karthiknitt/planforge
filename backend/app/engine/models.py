@@ -97,6 +97,7 @@ class PlotConfig:
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
+    attached_toilets: bool = False
     plot_shape: str = (
         "rectangular"  # "rectangular" | "trapezoid" | "quadrilateral" | "l_shaped"
     )

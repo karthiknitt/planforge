@@ -118,6 +118,7 @@ export const project = pgTable(
     hasPooja: boolean("has_pooja").default(false).notNull(),
     hasStudy: boolean("has_study").default(false).notNull(),
     hasBalcony: boolean("has_balcony").default(false).notNull(),
+    attachedToilets: boolean("attached_toilets").default(false).notNull(),
     // Trapezoid plot support
     plotShape: text("plot_shape").default("rectangular").notNull(),
     plotFrontWidth: numeric("plot_front_width", { precision: 8, scale: 3 }),

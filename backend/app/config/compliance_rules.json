@@ -14,16 +14,16 @@
 
   "min_toilet_sqm": 2.8,
   "min_toilet_width_m": 1.2,
-  "max_toilet_sqm": 6.0,
-  "max_toilet_width_m": 2.5,
+  "max_toilet_sqm": 4.5,
+  "max_toilet_width_m": 2.1,
 
   "min_wc_only_sqm": 1.1,
   "min_wc_only_width_m": 0.9,
-  "max_wc_only_sqm": 2.5,
+  "max_wc_only_sqm": 2.0,
 
-  "min_bathroom_master_sqm": 4.5,
-  "min_bathroom_master_width_m": 1.8,
-  "max_bathroom_master_sqm": 9.0,
+  "min_bathroom_master_sqm": 3.2,
+  "min_bathroom_master_width_m": 1.5,
+  "max_bathroom_master_sqm": 4.5,
 
   "min_corridor_width_m": 0.9,
 
