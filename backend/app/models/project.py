@@ -68,6 +68,9 @@ class Project(Base):
     has_balcony: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false")
     )
+    attached_toilets: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false")
+    )
 
     # Trapezoid plot support
     plot_shape: Mapped[str] = mapped_column(

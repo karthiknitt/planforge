@@ -26,20 +26,20 @@
   },
   "toilet": {
     "comment": "Combined WC + wash basin + shower — standard Indian bathroom",
-    "min_area_sqm": 2.8,  "max_area_sqm": 6.0,
-    "min_width_m": 1.2,   "max_width_m": 2.5,
+    "min_area_sqm": 2.8,  "max_area_sqm": 4.5,
+    "min_width_m": 1.2,   "max_width_m": 2.1,
     "floor_pref": "either","mandatory": true
   },
   "wc_only": {
     "comment": "WC + wash basin only — no shower/bath — toilet pod or guest WC",
-    "min_area_sqm": 1.1,  "max_area_sqm": 2.5,
+    "min_area_sqm": 1.1,  "max_area_sqm": 2.0,
     "min_width_m": 0.9,   "max_width_m": 1.5,
     "floor_pref": "either","mandatory": false
   },
   "bathroom_master": {
     "comment": "Attached master bathroom — WC + basin + shower + optional bathtub",
-    "min_area_sqm": 4.5,  "max_area_sqm": 9.0,
-    "min_width_m": 1.8,   "max_width_m": 3.0,
+    "min_area_sqm": 3.2,  "max_area_sqm": 4.5,
+    "min_width_m": 1.5,   "max_width_m": 3.0,
     "floor_pref": "either","mandatory": false
   },
   "staircase": {

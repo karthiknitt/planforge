@@ -77,6 +77,8 @@
     "bhkWarning": "4BHK requires minimum 200 sqm (≈ 2,150 sq ft) plot area",
     "toilets": "Toilets",
     "parking": "Parking",
+    "attachedToilets": "Attached toilet in every bedroom",
+    "attachedToiletsDesc": "Adds an en-suite toilet to each bedroom automatically. The toilets count above then means COMMON toilets only.",
     "poojaRoom": "Pooja room",
     "studyRoom": "Study room",
     "balcony": "Balcony",

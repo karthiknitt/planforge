@@ -53,6 +53,7 @@ def plot_config_from_project(project: Project) -> PlotConfig:
         has_pooja=project.has_pooja or False,
         has_study=project.has_study or False,
         has_balcony=project.has_balcony or False,
+        attached_toilets=project.attached_toilets or False,
         plot_shape=project.plot_shape or "rectangular",
         plot_front_width=_f(project.plot_front_width),
         plot_rear_width=_f(project.plot_rear_width),

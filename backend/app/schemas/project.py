@@ -61,6 +61,13 @@ class ProjectCreate(BaseModel):
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
+    attached_toilets: bool = Field(
+        default=False,
+        description=(
+            "Attach an en-suite toilet to every bedroom automatically; "
+            "the `toilets` field then means COMMON toilets only"
+        ),
+    )
     plot_shape: PlotShape = "rectangular"
     plot_front_width: float | None = Field(
         default=None, gt=0, le=100.0, allow_inf_nan=False
@@ -145,6 +152,7 @@ class ProjectUpdate(BaseModel):
     has_pooja: bool | None = None
     has_study: bool | None = None
     has_balcony: bool | None = None
+    attached_toilets: bool | None = None
     plot_shape: PlotShape | None = None
     plot_front_width: float | None = Field(
         default=None, gt=0, le=100.0, allow_inf_nan=False
@@ -192,6 +200,7 @@ class ProjectRead(BaseModel):
     has_pooja: bool
     has_study: bool
     has_balcony: bool
+    attached_toilets: bool = False
     plot_shape: str = "rectangular"
     plot_front_width: float | None = None
     plot_rear_width: float | None = None

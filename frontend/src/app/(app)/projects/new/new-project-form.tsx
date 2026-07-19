@@ -265,6 +265,7 @@ export default function NewProjectPage() {
     num_bedrooms: "2",
     toilets: "2",
     parking: false,
+    attached_toilets: false,
     city: "other",
     municipality: "",
     municipality_other: "",
@@ -479,6 +480,7 @@ export default function NewProjectPage() {
         payload.has_pooja = form.has_pooja;
         payload.has_study = form.has_study;
         payload.has_balcony = form.has_balcony;
+        payload.attached_toilets = form.attached_toilets;
       }
 
       const res = await fetch(`/api/backend/projects`, {
@@ -1026,6 +1028,23 @@ export default function NewProjectPage() {
                     </Label>
                   </div>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+                <div>
+                  <Label htmlFor="attached_toilets" className="font-medium">
+                    {t("project.attachedToilets")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("project.attachedToiletsDesc")}
+                  </p>
+                </div>
+                <Checkbox
+                  id="attached_toilets"
+                  checked={form.attached_toilets}
+                  onCheckedChange={(v) => set("attached_toilets", !!v)}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-3">

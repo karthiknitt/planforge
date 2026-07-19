@@ -45,6 +45,7 @@ interface ProjectData {
   hasPooja?: boolean;
   hasStudy?: boolean;
   hasBalcony?: boolean;
+  attachedToilets?: boolean;
   plotShape?: string;
   plotFrontWidth?: string | null;
   plotRearWidth?: string | null;
@@ -218,6 +219,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
     has_pooja: project.hasPooja ?? false,
     has_study: project.hasStudy ?? false,
     has_balcony: project.hasBalcony ?? false,
+    attached_toilets: project.attachedToilets ?? false,
     num_floors: String(project.numFloors ?? 1),
     has_stilt: project.hasStilt ?? false,
     has_basement: project.hasBasement ?? false,
@@ -327,6 +329,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               has_pooja: form.has_pooja,
               has_study: form.has_study,
               has_balcony: form.has_balcony,
+              attached_toilets: form.attached_toilets,
               num_floors: parseInt(form.num_floors, 10),
               has_stilt: form.has_stilt,
               has_basement: form.has_basement,
@@ -743,6 +746,23 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                 </Label>
               </div>
             </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+            <div>
+              <Label htmlFor="attached_toilets" className="font-medium">
+                Attached toilet in every bedroom
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Adds an en-suite toilet to each bedroom automatically. The toilets count above then
+                means COMMON toilets only.
+              </p>
+            </div>
+            <Checkbox
+              id="attached_toilets"
+              checked={form.attached_toilets}
+              onCheckedChange={(v) => set("attached_toilets", !!v)}
+              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
           </div>
         </div>
 
