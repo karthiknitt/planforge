@@ -2,7 +2,12 @@
 
 import pytest
 from app.engine.models import PlotConfig
-from app.engine.solver import solve_layouts, _load_specs, _build_room_list
+from app.engine.solver import (
+    solve_layouts,
+    _load_specs,
+    _build_room_list,
+    ensuite_attachment,
+)
 
 
 def _basic_cfg(**kwargs) -> PlotConfig:
@@ -153,6 +158,150 @@ def test_solve_too_small_plot_returns_empty():
     layouts = solve_layouts(cfg, ewt)
     # Very small buildable area — should return no solver layouts (graceful)
     assert isinstance(layouts, list)
+
+
+# ── Attached (en-suite) toilets + toilet placement ───────────────────────────
+
+
+def _shares_wall(a, b, min_overlap: float, max_gap: float = 0.12) -> bool:
+    """True when rooms a/b share a wall segment: facing edges within max_gap
+    and perpendicular overlap >= min_overlap (metres, post-solve floats)."""
+    for lo, hi in ((a, b), (b, a)):
+        gap = hi.x - (lo.x + lo.width)
+        if -0.01 <= gap <= max_gap:
+            ov = min(a.y + a.depth, b.y + b.depth) - max(a.y, b.y)
+            if ov >= min_overlap:
+                return True
+        gap = hi.y - (lo.y + lo.depth)
+        if -0.01 <= gap <= max_gap:
+            ov = min(a.x + a.width, b.x + b.width) - max(a.x, b.x)
+            if ov >= min_overlap:
+                return True
+    return False
+
+
+def test_plotconfig_attached_toilets_defaults_off():
+    cfg = _basic_cfg()
+    assert cfg.attached_toilets is False
+
+
+def test_ensuite_attachment_helper():
+    assert ensuite_attachment("toilet_ens_0") == "bedroom_0"
+    assert ensuite_attachment("toilet_ens_2") == "bedroom_2"
+    assert ensuite_attachment("toilet_0") is None
+    assert ensuite_attachment("bedroom_1") is None
+
+
+def test_room_list_ensuites_added_per_bedroom():
+    cfg = _basic_cfg(num_bedrooms=3, toilets=2, attached_toilets=True)
+    rooms = _build_room_list(cfg, _load_specs())
+    by_id = {r["id"]: r for r in rooms}
+
+    # bedroom 0 (GF) gets a bathroom_master en-suite; others get toilet type
+    assert by_id["toilet_ens_0"]["type"] == "bathroom_master"
+    assert by_id["toilet_ens_0"]["floor"] == by_id["bedroom_0"]["floor"] == 0
+    assert by_id["toilet_ens_0"]["attached_to"] == "bedroom_0"
+    for i in (1, 2):
+        assert by_id[f"toilet_ens_{i}"]["type"] == "toilet"
+        assert by_id[f"toilet_ens_{i}"]["floor"] == by_id[f"bedroom_{i}"]["floor"] == 1
+        assert by_id[f"toilet_ens_{i}"]["attached_to"] == f"bedroom_{i}"
+
+    # cfg.toilets counts COMMON toilets — en-suites are additive
+    common = [r for r in rooms if r["type"] == "toilet" and "attached_to" not in r]
+    assert len(common) == 2
+
+
+def test_room_list_no_ensuites_when_flag_off():
+    cfg = _basic_cfg(num_bedrooms=3, toilets=2)
+    rooms = _build_room_list(cfg, _load_specs())
+    assert not any("_ens_" in r["id"] for r in rooms)
+    assert sum(1 for r in rooms if r["type"] == "toilet") == 2
+
+
+@pytest.mark.parametrize("attached", [False, True])
+def test_room_list_bedroomless_floor_gets_common_toilet(attached):
+    # num_bedrooms=1 → floor 1 has rooms (staircase) but no bedroom, so it
+    # must get >= 1 common toilet even with only one toilet configured
+    # (redistributed, not added).
+    cfg = _basic_cfg(num_bedrooms=1, toilets=1, attached_toilets=attached)
+    rooms = _build_room_list(cfg, _load_specs())
+    common = [r for r in rooms if r["type"] == "toilet" and "attached_to" not in r]
+    assert len(common) == 1
+    assert any(r["floor"] == 1 for r in common)
+
+
+def test_solved_ensuite_shares_wall_with_bedroom():
+    cfg = _basic_cfg(
+        plot_length=15.0,
+        plot_width=9.0,
+        num_bedrooms=2,
+        toilets=1,
+        attached_toilets=True,
+    )
+    layouts = solve_layouts(cfg, 0.23)
+    assert layouts, "expected at least one layout with attached toilets"
+    for layout in layouts:
+        for fp in (layout.ground_floor, layout.first_floor):
+            rooms = {r.id: r for r in fp.rooms}
+            for r in fp.rooms:
+                bed_id = ensuite_attachment(r.id)
+                if bed_id is None:
+                    continue
+                bed = rooms.get(bed_id)
+                assert bed is not None, (
+                    f"{layout.id}: {r.id} on floor {fp.floor} without {bed_id}"
+                )
+                # solver enforces >= 0.9 m shared-wall overlap; post-solve
+                # grid snapping may shift perpendicular edges slightly
+                assert _shares_wall(r, bed, min_overlap=0.85), (
+                    f"{layout.id}: {r.id} does not share a wall with {bed_id}"
+                )
+
+
+def test_solved_toilets_do_not_balloon():
+    # Regression: size_terms grew toilets to their 6.0 sqm spec max. With wet
+    # types excluded from the growth objective they settle near min size.
+    cfg = _basic_cfg(plot_length=15.0, plot_width=9.0, num_bedrooms=2, toilets=2)
+    layouts = solve_layouts(cfg, 0.23)
+    assert layouts
+    for layout in layouts:
+        for fp in (layout.ground_floor, layout.first_floor):
+            for r in fp.rooms:
+                if r.type == "toilet":
+                    assert r.area <= 4.5, (
+                        f"{layout.id}: {r.name} ballooned to {r.area} sqm"
+                    )
+
+
+def test_solved_toilet_placement_common_sense():
+    # Standard 9×15 config: common toilets should avoid the front band
+    # (road side, y-min) and should not share a wall with the staircase.
+    cfg = _basic_cfg(plot_length=15.0, plot_width=9.0, num_bedrooms=2, toilets=2)
+    ewt = 0.23
+    layouts = solve_layouts(cfg, ewt)
+    assert layouts
+    plate_y0 = cfg.setback_front + ewt
+    plate_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    for layout in layouts:
+        for fp in (layout.ground_floor, layout.first_floor):
+            stair = next((r for r in fp.rooms if r.type == "staircase"), None)
+            for r in fp.rooms:
+                if r.type not in ("toilet", "wc_only") or ensuite_attachment(r.id):
+                    continue
+                cy_rel = (r.y + r.depth / 2 - plate_y0) / plate_d
+                assert cy_rel > 0.25, (
+                    f"{layout.id}: {r.name} centre in front band (rel y {cy_rel:.2f})"
+                )
+                if stair is not None:
+                    assert not _shares_wall(r, stair, min_overlap=0.3), (
+                        f"{layout.id}: {r.name} shares a wall with the staircase"
+                    )
+
+
+def test_wet_cap_tightened():
+    from app.engine.generator import _WET_CAP_SQM
+
+    assert _WET_CAP_SQM == 4.6
 
 
 def test_solve_does_not_raise_on_bad_input():

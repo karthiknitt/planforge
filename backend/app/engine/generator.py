@@ -415,7 +415,7 @@ _NO_ABSORB_TYPES = {
     "pooja",
 }
 _WET_SPLIT_TYPES = {"toilet", "wc_only", "bathroom_master"}
-_WET_CAP_SQM = 6.0
+_WET_CAP_SQM = 4.6
 _WET_MAX_ASPECT = 3.5
 _IWT_GAP = 0.115
 
