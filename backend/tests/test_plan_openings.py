@@ -277,3 +277,118 @@ def test_no_main_door_when_only_parking_faces_front():
     columns = derive_columns(walls)
     openings = derive_openings(rooms, walls, columns, STD, buildable, floor=0)
     assert not [o for o in openings if o.is_main]
+
+
+# ── Door-graph navigability (Task 2) ─────────────────────────────────────────
+
+
+def _doors_on_room(room, doors, tol=0.13):
+    """Doors whose cut sits on one of `room`'s four wall lines."""
+    out = []
+    for d in doors:
+        if d.is_horizontal:
+            on_edge = (
+                abs(d.cy - room.y) < tol or abs(d.cy - (room.y + room.depth)) < tol
+            )
+            inside = room.x - tol <= d.cx <= room.x + room.width + tol
+        else:
+            on_edge = (
+                abs(d.cx - room.x) < tol or abs(d.cx - (room.x + room.width)) < tol
+            )
+            inside = room.y - tol <= d.cy <= room.y + room.depth + tol
+        if on_edge and inside:
+            out.append(d)
+    return out
+
+
+def _ensuite_rooms():
+    """FF-style plate: front passage, a master bedroom, its en-suite bath.
+
+    The en-suite (`toilet_ens_0`) also borders the passage, so only the
+    Task-1 attachment convention forces its door into `bedroom_0`.
+    """
+    return [
+        _room("passage", 1.23, 1.73, 6.54, 1.5, rtype="passage"),
+        _room("bedroom_0", 1.23, 3.345, 2.77, 10.425),
+        _room("toilet_ens_0", 4.115, 3.345, 3.655, 3.655, rtype="bathroom_master"),
+    ]
+
+
+def test_ensuite_door_opens_into_attached_bedroom():
+    openings, _walls = _openings_for(_ensuite_rooms(), _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    # the en-suite/bedroom partition is the vertical wall at x≈4.0575
+    partition = [d for d in doors if not d.is_horizontal and abs(d.cx - 4.0575) < 0.13]
+    assert partition, "no door on the en-suite/bedroom partition"
+    assert all(d.swing_into_room_id == "bedroom_0" for d in partition)
+
+
+def test_toilet_has_exactly_one_door():
+    rooms = _ensuite_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    toilet = next(r for r in rooms if r.id == "toilet_ens_0")
+    assert len(_doors_on_room(toilet, doors)) == 1
+
+
+def test_bedroom_has_one_entry_from_circulation():
+    rooms = _ensuite_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    bedroom = next(r for r in rooms if r.id == "bedroom_0")
+    passage = next(r for r in rooms if r.id == "passage")
+    # a door on the bedroom/passage wall (horizontal, y≈3.2875) = the entry
+    entry = [
+        d
+        for d in _doors_on_room(bedroom, doors)
+        if d.is_horizontal and abs(d.cy - 3.2875) < 0.13
+    ]
+    assert len(entry) == 1
+    assert _doors_on_room(passage, doors)  # passage is reached by the entry door
+
+
+def test_every_room_reachable_on_golden_floors():
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    for floor in (0, 1):
+        openings, fp, _buildable = _golden_openings(floor=floor)
+        problems = validate_floor_connectivity(fp.rooms, openings, floor)
+        assert problems == [], f"floor {floor} unreachable rooms: {problems}"
+
+
+def test_staircase_has_a_door_on_every_floor():
+    for floor in (0, 1):
+        openings, fp, _buildable = _golden_openings(floor=floor)
+        doors = [o for o in openings if o.kind == "door"]
+        stair = next(r for r in fp.rooms if r.type == "staircase")
+        assert _doors_on_room(stair, doors), f"staircase on floor {floor} has no door"
+
+
+def test_unreachable_room_gets_a_repair_door():
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    # living (entry, front) → toilet (wet) → bedroom (rear). The bedroom only
+    # borders the wet room, so without a repair pass it is reachable only by
+    # passing through the toilet — a navigability violation.
+    rooms = [
+        _room("living", 1.23, 1.73, 6.54, 2.27, rtype="living"),
+        _room("toilet", 1.23, 4.115, 6.54, 1.885, rtype="toilet"),
+        _room("bedroom", 1.23, 6.115, 6.54, 7.655),
+    ]
+    walls = derive_walls(rooms, buildable)
+    columns = derive_columns(walls)
+    openings = derive_openings(rooms, walls, columns, STD, buildable, floor=0)
+    problems = validate_floor_connectivity(rooms, openings, 0)
+    assert problems == [], f"repair failed to connect: {problems}"
+    # the repair door is an exterior door on the bedroom (only escape from the
+    # wet-room dead-end), so the bedroom no longer depends on the toilet path
+    ext_doors = [
+        d
+        for d in openings
+        if d.kind == "door"
+        and d.swing_into_room_id == "bedroom"
+        and math.isclose(d.wall_thickness, EWT, abs_tol=1e-6)
+    ]
+    assert ext_doors, "bedroom got no repair door"
