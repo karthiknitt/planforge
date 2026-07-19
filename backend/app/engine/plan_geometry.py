@@ -70,6 +70,16 @@ _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 _NO_TRANSIT_TYPES = _WET_TYPES | _PARKING_TYPES
 
 
+def _faces_main_door(adj: "_Adjacency", main_door: "Opening | None") -> bool:
+    """True if a door on this adjacency would sit directly opposite the main
+    entrance — i.e. a wall parallel to the front (a horizontal adjacency) whose
+    span crosses the main door's x. Perpendicular (vertical) walls never face
+    the entrance head-on, so they are always fine."""
+    if main_door is None or adj.vertical:
+        return False
+    return adj.lo - 1e-9 <= main_door.cx <= adj.hi + 1e-9
+
+
 def _ensuite_bedroom_id(room_id: str) -> str | None:
     """Bedroom id an en-suite (``toilet_ens_<i>``) is attached to, or None.
 
@@ -717,11 +727,19 @@ def derive_openings(
         if bed_id is not None and bed_id in id_to_index:
             ens_bed_index[k] = id_to_index[bed_id]
 
+    main_door = next((o for o in openings if o.is_main), None)
     for idx, room in sorted(enumerate(rooms), key=lambda t: t[1].id):
         if room.type == "passage":
             continue
         width = _WET_DOOR if room.type in _WET_TYPES else std.door_width_m
         bed_idx = ens_bed_index.get(idx)  # set only for en-suite toilets
+        # a common (non-en-suite) toilet/WC should not open directly opposite
+        # the main entrance when another doorable wall is available
+        is_common_toilet = bed_idx is None and room.type in {
+            "toilet",
+            "wc_only",
+            "bathroom_master",
+        }
         cands = []
         already_served = False
         for adj in adjs:
@@ -736,7 +754,7 @@ def derive_openings(
                     continue
                 if adj.hi - adj.lo < width + 2 * _JAMB:
                     continue
-                cands.append((0, other.id, adj))
+                cands.append((0, 0, 0, other.id, adj))
                 continue
             # a shared door serves this room too — unless it leads through
             # a wet room (a bedroom must not be reachable only via a toilet)
@@ -746,13 +764,23 @@ def derive_openings(
             if adj.hi - adj.lo < width + 2 * _JAMB:
                 continue
             prio = _DOOR_NEIGHBOUR_PRIORITY.get(other.type, 4)
-            cands.append((prio, other.id, adj))
+            # non-circulation stays below circulation; the main-door-facing
+            # penalty only ever re-orders equally-ranked circulation walls
+            if is_common_toilet:
+                is_noncirc = 1 if prio >= 4 else 0
+                avoid = 1 if _faces_main_door(adj, main_door) else 0
+            else:
+                is_noncirc = 0
+                avoid = 0
+            cands.append((is_noncirc, avoid, prio, other.id, adj))
         if already_served:
             continue
         # en-suite doors swing into the bedroom; all others into the room itself
         swing_room = rooms[bed_idx] if bed_idx is not None else room
         placed = False
-        for _prio, _oid, adj in sorted(cands, key=lambda t: (t[0], t[1])):
+        for _nc, _av, _prio, _oid, adj in sorted(
+            cands, key=lambda t: (t[0], t[1], t[2], t[3])
+        ):
             desired = adj.lo + _JAMB + width / 2  # hinge near the jamb, not centred
             centre = _fit_along(
                 desired,
@@ -872,6 +900,8 @@ def derive_openings(
         tol,
         floor,
     )
+    # repair never doors into a wet room, but re-assert the invariant defensively
+    _enforce_single_wet_door(rooms, openings, obstacles, adjs, tol)
     return openings
 
 
@@ -938,11 +968,16 @@ def _entry_seed(rooms: list[Room], openings: list[Opening], floor: int) -> int |
 def _reachable_rooms(
     rooms: list[Room], graph: dict[object, set], floor: int, openings: list[Opening]
 ) -> set[int]:
-    """Room indices reachable from the entrance/stair (+ the exterior ring)
-    without transiting a wet room or parking (those may only be endpoints)."""
+    """Room indices reachable from the entrance (GF) / staircase (upper floors)
+    without transiting a wet room or parking (those may only be endpoints).
+
+    The exterior ring ("outside") is a valid corridor ONLY on the ground floor:
+    upper floors have no street access, so a room reachable only via its own
+    exterior door (open air) must NOT count as reachable there."""
     from collections import deque
 
-    start: set = {"outside"}
+    ground = floor == 0
+    start: set = {"outside"} if ground else set()
     seed = _entry_seed(rooms, openings, floor)
     if seed is not None:
         start.add(seed)
@@ -950,7 +985,10 @@ def _reachable_rooms(
     queue = deque(start)
     while queue:
         node = queue.popleft()
-        if node != "outside" and rooms[node].type in _NO_TRANSIT_TYPES:
+        if node == "outside":
+            if not ground:
+                continue  # not a corridor above the ground floor
+        elif rooms[node].type in _NO_TRANSIT_TYPES:
             continue  # reachable, but not a through-route
         for nbr in graph.get(node, ()):
             if nbr not in visited:
@@ -1064,6 +1102,7 @@ def _repair_connectivity(
                 ewt,
                 iwt,
                 tol,
+                floor,
             ):
                 progressed = True
                 break  # rebuild the graph after each new door
@@ -1084,9 +1123,16 @@ def _add_repair_door(
     ewt: float,
     iwt: float,
     tol: float,
+    floor: int,
 ) -> bool:
     room = rooms[i]
-    width = _WET_DOOR if room.type in _WET_TYPES else std.door_width_m
+    # never repair a wet room directly (it keeps its single door — its
+    # reachability must come via that door's non-wet neighbour), and never
+    # route a repair door INTO a wet room (that both breaks the one-wet-door
+    # invariant and cannot help, since wet rooms are not through-routes)
+    if room.type in _WET_TYPES:
+        return False
+    width = std.door_width_m
     cands = []
     for adj in adjs:
         if i not in (adj.a, adj.b):
@@ -1098,7 +1144,9 @@ def _add_repair_door(
         if adj.hi - adj.lo < width + 2 * _JAMB:
             continue
         other = rooms[other_idx]
-        pref = 0 if (other_idx in reachable and other.type not in _WET_TYPES) else 1
+        if other.type in _WET_TYPES:
+            continue
+        pref = 0 if other_idx in reachable else 1
         prio = _DOOR_NEIGHBOUR_PRIORITY.get(other.type, 4)
         cands.append((pref, prio, other.id, adj))
     for _pref, _prio, _oid, adj in sorted(cands, key=lambda t: (t[0], t[1], t[2])):
@@ -1118,7 +1166,10 @@ def _add_repair_door(
         openings.append(door)
         doored_gaps.add((min(adj.a, adj.b), max(adj.a, adj.b)))
         return True
-    # exterior fallback: an entrance door on the plot boundary
+    # exterior fallback: an entrance door on the plot boundary — ground floor
+    # only (upper floors have no street access; "outside" is not a corridor)
+    if floor != 0:
+        return False
     for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
         if hi - lo < width + 2 * _JAMB:
             continue

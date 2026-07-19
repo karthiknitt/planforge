@@ -19,11 +19,11 @@ STD = OpeningStandards()
 IWT = 0.115
 
 
-def _openings_for(rooms, cfg, std=STD):
+def _openings_for(rooms, cfg, std=STD, floor=0):
     buildable = buildable_polygon(cfg)
     walls = derive_walls(rooms, buildable)
     columns = derive_columns(walls)
-    return derive_openings(rooms, walls, columns, std, buildable), walls
+    return derive_openings(rooms, walls, columns, std, buildable, floor=floor), walls
 
 
 def _two_bedrooms():
@@ -347,13 +347,26 @@ def test_bedroom_has_one_entry_from_circulation():
     assert _doors_on_room(passage, doors)  # passage is reached by the entry door
 
 
-def test_every_room_reachable_on_golden_floors():
+def test_ground_floor_fully_reachable_on_golden():
     from app.engine.plan_geometry import validate_floor_connectivity
 
-    for floor in (0, 1):
-        openings, fp, _buildable = _golden_openings(floor=floor)
-        problems = validate_floor_connectivity(fp.rooms, openings, floor)
-        assert problems == [], f"floor {floor} unreachable rooms: {problems}"
+    openings, fp, _buildable = _golden_openings(floor=0)
+    problems = validate_floor_connectivity(fp.rooms, openings, 0)
+    assert problems == [], f"GF unreachable rooms: {problems}"
+
+
+def test_upper_floor_flags_rooms_reachable_only_via_wet_room():
+    # the frozen golden fixture's FF bedrooms sit behind the full-width toilet
+    # (the stair↔bedroom wall is too narrow for a door). With "outside" barred
+    # as a corridor on upper floors, they are correctly flagged as reachable
+    # only through the wet room — the exact defect this task guards against.
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    openings, fp, _buildable = _golden_openings(floor=1)
+    problems = validate_floor_connectivity(fp.rooms, openings, 1)
+    flagged = {p.split()[0] for p in problems}
+    beds = {r.id for r in fp.rooms if r.type == "bedroom"}
+    assert flagged == beds, f"expected the FF bedrooms flagged, got {problems}"
 
 
 def test_staircase_has_a_door_on_every_floor():
@@ -392,3 +405,89 @@ def test_unreachable_room_gets_a_repair_door():
         and math.isclose(d.wall_thickness, EWT, abs_tol=1e-6)
     ]
     assert ext_doors, "bedroom got no repair door"
+
+
+def _deadend_rooms():
+    """stair (front) → toilet (wet) → bedroom (rear, touches exterior).
+
+    The bedroom's only interior neighbour is the wet room, so it is a
+    navigability dead-end that only an exterior door could 'fix'.
+    """
+    return [
+        _room("st", 1.23, 1.73, 6.54, 1.27, rtype="staircase"),
+        _room("wc", 1.23, 3.115, 6.54, 1.885, rtype="toilet"),
+        _room("bed", 1.23, 5.115, 6.54, 8.655),
+    ]
+
+
+def test_ff_deadend_not_repaired_with_open_air_door():
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    rooms = _deadend_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=1)
+    # on an upper floor "outside" is not a corridor: the dead-end bedroom must
+    # stay flagged, and repair must NOT punch an exterior door to open air
+    assert validate_floor_connectivity(rooms, openings, 1), (
+        "FF dead-end bedroom should be unreachable"
+    )
+    assert not [
+        o
+        for o in openings
+        if o.kind == "door"
+        and o.swing_into_room_id == "bed"
+        and math.isclose(o.wall_thickness, EWT, abs_tol=1e-6)
+    ], "FF repair wrongly added an exterior (open-air) door"
+
+
+def test_gf_deadend_repaired_via_exterior():
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    rooms = _deadend_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=0)
+    # same geometry on the ground floor: the exterior ring is a valid escape
+    assert validate_floor_connectivity(rooms, openings, 0) == []
+
+
+def test_repair_preserves_single_wet_door():
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    # living (entry) + full-width toilet; behind them a dead-end passage +
+    # bedroom island. The bedroom doors into the (unreachable) passage, so its
+    # bedroom↔toilet wall stays undoored — the wall repair is tempted to use.
+    # Adding a door there would give the single-door toilet a SECOND door
+    # (and would not even help, since the toilet cannot be transited).
+    rooms = [
+        _room("living", 1.23, 1.73, 6.54, 1.27, rtype="living"),
+        _room("toilet", 1.23, 3.115, 6.54, 1.385, rtype="toilet"),
+        _room("pass_dead", 1.23, 4.615, 2.77, 1.385, rtype="passage"),
+        _room("bedroom", 4.115, 4.615, 3.655, 9.155),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=0)
+    doors = [o for o in openings if o.kind == "door"]
+    toilet = next(r for r in rooms if r.id == "toilet")
+    assert len(_doors_on_room(toilet, doors)) == 1
+    assert validate_floor_connectivity(rooms, openings, 0) == []
+
+
+def test_common_toilet_door_avoids_main_door_wall_when_alternative():
+    # main door lands near plot-centre x≈4.5. The toilet borders one passage on
+    # the wall the entrance faces (horizontal, spanning x≈4.5) and another
+    # passage on its side (vertical). Both are equal-priority circulation, so
+    # only the "avoid the main-door-facing wall" heuristic can break the tie —
+    # the door must take the SIDE passage.
+    rooms = [
+        _room("z_entry", 1.23, 1.73, 6.54, 1.27, rtype="living"),
+        _room("p_a", 3.5, 3.115, 2.0, 1.385, rtype="passage"),
+        _room("toilet_c", 3.5, 4.615, 2.0, 1.885, rtype="toilet"),
+        _room("p_b", 5.615, 4.615, 2.155, 1.885, rtype="passage"),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=0)
+    doors = [o for o in openings if o.kind == "door"]
+    toilet = next(r for r in rooms if r.id == "toilet_c")
+    tdoors = _doors_on_room(toilet, doors)
+    assert len(tdoors) == 1
+    d = tdoors[0]
+    # the side passage wall is vertical (x≈5.5575); the main-door-facing wall is
+    # horizontal at y≈4.5575 — the toilet must use the side wall
+    assert not d.is_horizontal, "toilet door sits on the main-door-facing wall"
+    assert abs(d.cx - 5.5575) < 0.13
