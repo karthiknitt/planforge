@@ -23,17 +23,18 @@ member design (footings, columns, beams) but has never rendered CAD drawing shee
    mat rebar, column dowel/starter bars).
 3. **Plinth Beam Plan** — plan view of plinth-level beams over the same column grid, each segment
    labeled (PB1, PB2, …) by unique size/reinforcement group.
-4. **Plinth Beam Details** — per-mark cross-section schedule, midspan vs. support, top/bottom bar
-   count+dia, stirrup spacing.
+4. **Plinth Beam Details** — per-mark cross-section pictorial (one section per mark — see
+   simplification #7 below) with tension bar count+dia, compression bars if doubly reinforced,
+   and stirrup spacing.
 5. **Roof Beam & Slab Plan** — extends the existing GF/FF structural floor page with floating-column
    markers and slab-panel labels (S1/S2/…) alongside the beam/column layout already drawn today.
-6. **Roof Beam Details** — same cross-section-schedule renderer as sheet 4, fed from the
-   building-chain's slab-driven beam design instead of wall-UDL beams. Includes cantilever beams
-   and BIT-lintel-for-openings tables.
+6. **Roof Beam Details** — same cross-section-pictorial renderer as sheet 4, fed from the
+   building-chain's slab-driven beam design instead of wall-UDL beams.
 
-Sheets 4 and 6 share one new renderer (midspan/support box pictorials with bar callouts),
-parameterized by which beam-design source feeds it. Everything else (title block, scale, north
-arrow, schedule tables, column classification) reuses helpers already in `app/engine/pdf.py`.
+Sheets 4 and 6 share one new renderer (one dimensioned box pictorial per beam mark with bar
+callouts), parameterized by which beam-design source feeds it. Everything else (title block,
+scale, north arrow, schedule tables, column classification) reuses helpers already in
+`app/engine/pdf.py`.
 
 ## Why plinth beams need separate design (not a reuse of roof beam sizing)
 
@@ -124,6 +125,17 @@ responses) — not just documented here:
    only," not a substitute for a signed structural drawing set. This is explicitly a decision-
    support / preliminary-design tool, not a replacement for the structural consultant who signs
    off on a real construction drawing.
+7. **One reinforcement schedule per beam mark, not a midspan-vs-support split.** `structapi`'s
+   `design_beam()` (both the building-chain roof beams and the new plinth-beam calls) returns a
+   single tension-steel bar count/dia sized for the worst moment on the span
+   (`max(|Mu_sagging|, |Mu_hogging|)`), plus a single stirrup spacing — it does not compute
+   distinct top-steel-at-support vs. bottom-steel-at-midspan bar counts the way the reference
+   drawings show (e.g. PB4's "+1no-16mmø(ckd)" curtailment detail at support only).
+   Sheets 4/6 in v1 draw **one cross-section pictorial per beam mark** (tension bars + stirrup
+   spacing + compression bars if doubly reinforced), not two side-by-side midspan/support boxes.
+   This is conservative (same steel run the full span, nothing under-designed) but won't match
+   the reference set's curtailment-level detail — extending `structapi`'s beam design to emit a
+   proper midspan/support split is a real follow-up, not attempted in v1.
 
 ## Testing
 
