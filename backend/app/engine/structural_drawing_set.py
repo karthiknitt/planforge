@@ -25,6 +25,7 @@ from app.engine.pdf import (
     ROAD_H,
     TITLE_H,
     _centered_plot_oy,
+    _draw_generic_schedule_table,
     _draw_north_arrow,
     _draw_title_block,
     _standard_scale,
@@ -155,4 +156,111 @@ def render_column_footing_plan(
         s,
         page_w,
         scale_denom=denom,
+    )
+
+
+def render_footing_details(
+    c: canvas.Canvas,
+    footings_data: dict[str, Any],
+    cfg: PlotConfig,
+    project_name: str,
+) -> None:
+    """Render the "FOOTING DETAILS" sheet: a schedule table (one row per
+    footing type) plus a single dimensioned "typical section" schematic of
+    the largest footing (by plan area).
+
+    Unlike `render_column_footing_plan`, this sheet has no plan-view content
+    tied to model-space column positions -- its content is a data table and
+    one representative pictorial. `_draw_sheet_frame` is still called (for
+    heading/road-strip/plot-boundary/north-arrow furniture consistency across
+    the drawing set, per the design doc), but the schedule and typical
+    section are positioned at fixed page-relative offsets rather than
+    projected through the returned `(ox, oy, s)` -- they simply overlay the
+    (purely decorative, dashed) plot-boundary guide box near the top of the
+    page. See docs/plans/2026-07-19-structural-drawing-set-design.md.
+    """
+    page_w, page_h = A4
+    _ox, _oy, s, denom = _draw_sheet_frame(c, cfg, "FOOTING DETAILS")
+
+    headers = ("TYPE", "SIZE (L×B m)", "DEPTH (mm)", "BARS-X", "BARS-Y")
+    col_ws = (40.0, 80.0, 55.0, 100.0, 100.0)
+    rows: list[tuple[str, str, str, str, str]] = []
+    for ftype, f in sorted(footings_data.items()):
+        d = f.get("data", {})
+        bars_x, bars_y = d.get("bars_x", {}), d.get("bars_y", {})
+        rows.append(
+            (
+                _FOOTING_MARK.get(ftype, "T?"),
+                f"{d.get('L_m', 0):.2f}x{d.get('B_m', 0):.2f}",
+                f"{d.get('D_overall_mm', 0):.0f}",
+                f"{bars_x.get('dia', '-')}mmø@{bars_x.get('spacing', '-')}c/c",
+                f"{bars_y.get('dia', '-')}mmø@{bars_y.get('spacing', '-')}c/c",
+            )
+        )
+    _draw_generic_schedule_table(
+        c, "FOOTING SCHEDULE", headers, col_ws, rows, MARGIN, page_h - MARGIN - 30
+    )
+
+    if footings_data:
+        largest_type, largest = max(
+            footings_data.items(),
+            key=lambda kv: (
+                kv[1].get("data", {}).get("L_m", 0)
+                * kv[1].get("data", {}).get("B_m", 0)
+            ),
+        )
+        _draw_typical_footing_section(c, largest.get("data", {}), MARGIN, page_h - 320)
+
+    _draw_title_block(
+        c,
+        project_name,
+        "A",
+        "Footing Details",
+        "Footing Details",
+        cfg,
+        _NUM_BEDROOMS_NA,
+        s,
+        page_w,
+        scale_denom=denom,
+    )
+
+
+def _draw_typical_footing_section(
+    c: canvas.Canvas, data: dict[str, Any], x: float, y: float
+) -> None:
+    """Schematic dimensioned cross-section of one representative footing:
+    PCC bed, footing slab with schematic mat-reinforcement hatch lines, and
+    a column stub on top. Simplified pictorial, not a precise CAD drawing --
+    see docs/plans/2026-07-19-structural-drawing-set-design.md.
+    """
+    l_mm = data.get("L_m", 1.0) * 1000
+    d_mm = data.get("D_overall_mm", 450)
+    px_per_mm = 0.15
+    fw, fh = l_mm * px_per_mm, d_mm * px_per_mm
+
+    c.setFont("Helvetica-Bold", 7)
+    c.setFillColor(HexColor("#000000"))
+    c.drawString(x, y + fh + 40, "TYPICAL FOOTING SECTION")
+
+    c.setFillColor(HexColor("#DDDDDD"))
+    c.rect(x, y - 10, fw, 10, fill=1, stroke=1)
+    c.setFillColor(HexColor("#EEEEEE"))
+    c.rect(x, y, fw, fh, fill=1, stroke=1)
+
+    c.setStrokeColor(HexColor("#AA0000"))
+    c.setLineWidth(0.5)
+    for i in range(1, 6):
+        xi = x + fw * i / 6
+        c.line(xi, y + 3, xi, y + fh - 3)
+
+    col_w = fw * 0.25
+    c.setFillColor(HexColor("#CCCCCC"))
+    c.rect(x + fw / 2 - col_w / 2, y + fh, col_w, 40, fill=1, stroke=1)
+
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica", 6)
+    c.drawCentredString(
+        x + fw / 2,
+        y - 20,
+        f"{data.get('L_m', 0):.2f} x {data.get('B_m', 0):.2f} m, D={d_mm:.0f}mm",
     )

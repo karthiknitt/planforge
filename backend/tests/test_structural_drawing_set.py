@@ -5,7 +5,10 @@ from reportlab.pdfgen import canvas
 
 from app.engine.cad_elements import ColumnMarker, WallSegment
 from app.engine.models import PlotConfig
-from app.engine.structural_drawing_set import render_column_footing_plan
+from app.engine.structural_drawing_set import (
+    render_column_footing_plan,
+    render_footing_details,
+)
 from tests.helpers.pdf_png import pdf_page_text
 
 CFG = PlotConfig(
@@ -51,3 +54,36 @@ def test_column_footing_plan_renders_footing_labels():
     assert "COLUMN & FOOTING PLAN" in text.upper()
     assert "T1" in text
     assert "T2" in text
+
+
+def test_footing_details_renders_schedule_and_typical_section():
+    footings_data = {
+        "corner": {
+            "data": {
+                "L_m": 1.35,
+                "B_m": 1.35,
+                "D_overall_mm": 450,
+                "bars_x": {"dia": 12, "spacing": 150},
+                "bars_y": {"dia": 12, "spacing": 150},
+            }
+        },
+        "interior": {
+            "data": {
+                "L_m": 1.65,
+                "B_m": 1.65,
+                "D_overall_mm": 500,
+                "bars_x": {"dia": 16, "spacing": 125},
+                "bars_y": {"dia": 16, "spacing": 125},
+            }
+        },
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_footing_details(c, footings_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "FOOTING" in text.upper()
+    assert "T1" in text  # corner
+    assert "T3" in text  # interior
