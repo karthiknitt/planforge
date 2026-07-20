@@ -18,6 +18,7 @@ from app.engine.structural_drawing_set import (
     _assign_marks_by_span,
     _assign_plinth_beam_marks,
     _draw_beam_detail_box,
+    generate_structural_drawing_set,
     render_column_footing_plan,
     render_footing_details,
     render_plinth_beam_details,
@@ -25,7 +26,7 @@ from app.engine.structural_drawing_set import (
     render_roof_beam_details,
     render_roof_beam_slab_plan,
 )
-from tests.helpers.pdf_png import pdf_page_text
+from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 
 CFG = PlotConfig(
     plot_length=9.0,
@@ -600,3 +601,110 @@ def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing(monkey
         f"expected overflow guard to truncate box-stacking below 10 beams, "
         f"got {call_count} detail boxes drawn"
     )
+
+
+def test_generate_structural_drawing_set_produces_6_pages():
+    columns = [ColumnMarker(cx=0.0, cy=0.0), ColumnMarker(cx=4.0, cy=0.0)]
+    walls = [
+        WallSegment(x1=0, y1=0, x2=4, y2=0, thickness=0.23, kind="external"),
+        WallSegment(x1=0, y1=0, x2=0, y2=3, thickness=0.115, kind="internal"),
+    ]
+    plinth_beams_data = {
+        "plinth-external-span4.00": {
+            "b_mm": 230,
+            "D_mm": 300,
+            "span_m": 4.0,
+            "kind": "external",
+            "count": 1,
+            "ok": True,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+            "checks": [],
+        },
+    }
+    structural_design = {
+        "structapi": {
+            "data": {
+                "footings": {
+                    "corner": {
+                        "data": {
+                            "L_m": 1.35,
+                            "B_m": 1.35,
+                            "D_overall_mm": 450,
+                            "bars_x": {"dia": 12, "spacing": 150},
+                            "bars_y": {"dia": 12, "spacing": 150},
+                        }
+                    },
+                },
+                "beams": {
+                    "x-span4.00-trib2.25": {
+                        "b_mm": 230,
+                        "D_mm": 450,
+                        "span_m": 4.0,
+                        "trib_width_m": 2.25,
+                        "n_spans": 2,
+                        "design": {
+                            "n_bars": 3,
+                            "bar_dia": 16,
+                            "doubly_reinforced": False,
+                            "stirrups": {"sv_provided": 150},
+                        },
+                    },
+                },
+            },
+        },
+    }
+    rooms = [
+        Room(id="r1", name="Living", type="living", x=0.5, y=0.5, width=3.0, depth=3.5)
+    ]
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=rooms)
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+
+    pdf_bytes = generate_structural_drawing_set(
+        project_name="Test Project",
+        cfg=CFG,
+        columns=columns,
+        walls=walls,
+        plinth_beams_data=plinth_beams_data,
+        structural_design=structural_design,
+        floor_plan=floor_plan,
+        layout=layout,
+        num_bedrooms=2,
+    )
+
+    assert pdf_bytes[:5] == b"%PDF-"
+    assert pdf_pages(pdf_bytes) == 6
+
+
+def test_generate_structural_drawing_set_handles_missing_structapi_data():
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=[])
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+    pdf_bytes = generate_structural_drawing_set(
+        project_name="Test Project",
+        cfg=CFG,
+        columns=[],
+        walls=[],
+        plinth_beams_data={},
+        structural_design={},  # no "structapi" key at all
+        floor_plan=floor_plan,
+        layout=layout,
+        num_bedrooms=2,
+    )
+    assert pdf_bytes[:5] == b"%PDF-"
+    assert pdf_pages(pdf_bytes) == 6

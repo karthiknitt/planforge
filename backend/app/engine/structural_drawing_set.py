@@ -10,6 +10,7 @@ reinforcement schedule per beam mark rather than midspan/support split).
 
 from __future__ import annotations
 
+from io import BytesIO
 from typing import Any
 
 from reportlab.lib.colors import HexColor, white
@@ -703,3 +704,64 @@ def render_roof_beam_slab_plan(
         cx = ox + (room.x + room.width / 2) * s
         cy = oy + (room.y + room.depth / 2) * s
         c.drawCentredString(cx, cy, f"S{i}")
+
+
+def generate_structural_drawing_set(
+    *,
+    project_name: str,
+    cfg: PlotConfig,
+    columns: list[ColumnMarker],
+    walls: list[WallSegment],
+    plinth_beams_data: dict[str, Any],
+    structural_design: dict[str, Any],
+    floor_plan: FloorPlan,
+    layout: Layout,
+    num_bedrooms: int,
+) -> bytes:
+    """Orchestrator for the 6-sheet Structural Drawing Set PDF.
+
+    Calls each of the 6 page renderers in sequence (Column & Footing Plan,
+    Footing Details, Plinth Beam Plan, Plinth Beam Details, Roof Beam & Slab
+    Plan, Roof Beam Details), mirroring `render_pdf`'s canvas-open/save pattern.
+    Extracts footings_data and beams_data from `structural_design["structapi"]["data"]`,
+    the same nested dict structure that the architectural PDF's structural pages
+    already consume. Degrades gracefully if either key is missing (empty dicts).
+    """
+    # Defensive extraction: structural_design is always expected to have this shape
+    # when called for real (per design: "requires structapi, gated on approved+designed"),
+    # but we don't let a missing/malformed key raise AttributeError/KeyError here.
+    structapi_data = (structural_design.get("structapi") or {}).get("data") or {}
+    footings_data = structapi_data.get("footings") or {}
+    beams_data = structapi_data.get("beams") or {}
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+
+    # Page 1: Column & Footing Plan
+    render_column_footing_plan(c, columns, walls, footings_data, cfg, project_name)
+    c.showPage()
+
+    # Page 2: Footing Details
+    render_footing_details(c, footings_data, cfg, project_name)
+    c.showPage()
+
+    # Page 3: Plinth Beam Plan
+    render_plinth_beam_plan(c, walls, plinth_beams_data, cfg, project_name)
+    c.showPage()
+
+    # Page 4: Plinth Beam Details
+    render_plinth_beam_details(c, plinth_beams_data, cfg, project_name)
+    c.showPage()
+
+    # Page 5: Roof Beam & Slab Plan
+    render_roof_beam_slab_plan(
+        c, floor_plan, layout, cfg, project_name, num_bedrooms, structural_design
+    )
+    c.showPage()
+
+    # Page 6: Roof Beam Details
+    render_roof_beam_details(c, beams_data, cfg, project_name)
+    c.showPage()
+
+    c.save()
+    return buf.getvalue()
