@@ -154,7 +154,6 @@ uv run pytest
 # Lint + format
 uv run ruff check .
 uv run ruff format .
-# ⚠️ NEVER run ruff format on *.json files — it corrupts them (known gotcha)
 
 # Validate the Dockerfile builds (the only supported local Docker action)
 docker build -t planforge-backend ./backend
@@ -162,6 +161,8 @@ docker build -t planforge-backend ./backend
 # Add a package
 uv add shapely
 ```
+
+**⚠️ Gotcha:** Never run `ruff format` on `*.json` files — it corrupts them.
 
 ### Next.js dev
 No local dev server / manual testing — see Deployment & Testing Workflow above.

@@ -511,20 +511,20 @@ Layouts failing any violation are returned with `compliance.passed = false`. The
 ### En-Suite Toilets
 
 When `attached_toilets=True` per PlotConfig, the solver enforces:
-- **One attached bath per bedroom** — master bedroom gets `bathroom_master` (3.2–4.5 m²), other bedrooms get en-suite toilet (2.8–4.0 m²)
+- **One attached bath per bedroom** — master bedroom gets `bathroom_master` (3.2–4.5 m²), other bedrooms get en-suite toilet (2.8–4.5 m², standard toilet spec)
 - **Hard wall-adjacency constraint** — shared wall between bedroom and attached toilet ≥ 900 mm (allows door opening + minimum wall span)
-- **Per-floor common toilet** — at least one ground-floor common toilet guaranteed (wet-zone only)
+- **Per-floor common toilet** — every occupied floor without a bedroom gets ≥1 common toilet (redistribution of user's toilet count; wet-zone only)
 - **Soft placement penalties** — front band preference avoided; staircase/parking adjacency penalised
 - **Wet-room exclusion** — wet rooms excluded from size-growth objective (soft constraint)
 
 Room sizing per NBC 2016 + Indian conventions:
 - `bathroom_master`: 3.2–4.5 m² (typical 5'×7' ≈ 3.25 m²)
-- `toilet` (standard): 2.8–4.0 m² (typical 3' × 9' ≈ 2.7 m²)
-- `wc`: 1.1–2.0 m² (water-closet only, no bathing)
+- `toilet` (standard): 2.8–4.5 m² (typical 5'×7' ≈ 3.25 m²)
+- `wc_only`: 1.1–2.0 m² (water-closet only, no bathing)
 
 ### Door-Graph Navigability
 
-Generator runs a repair pass (`generator.py`) + gate (`solver.py`) after layout generation to ensure:
+Generator enforces navigability via a repair pass (`plan_geometry.py` inside `derive_openings`) + gate (`generator.py`) after layout generation:
 - **BFS reachability** — all rooms reachable from entrance/staircase via door traversal (no dead-end room chains)
 - **Wet rooms exact-one-door** — bathrooms/toilets accessible via exactly one door (no corridor isolation)
 - **Bedrooms one circulation entry** — each bedroom entered via one primary door from circulation (no isolated bedrooms)

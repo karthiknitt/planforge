@@ -149,17 +149,17 @@ Executed per `docs/superpowers/plans/2026-07-11-section-elevation-views.md` (sub
 
 | PR | Task | Merged |
 |---|---|---|
-| #40 | En-suite toilets (attached_toilets flag, master bathroom_master, hard wall-adjacency ≥900mm) | ✓ main |
-| #41 | Door-graph navigability (BFS reachability, wet-room one-door, staircase doored per floor, repair pass + generator gate) | ✓ main |
-| #42 | Sizing recalibration (toilet 2.8–4.5 sqm, WC 1.1–2.0, master bath 3.2–4.5; NBC 2016 + Indian convention) | ✓ main |
-| #43 | Scorer toilet_placement (10%) + grid_regularity (10%) + aspect_ratio reduced to 10% (was 20%) | ✓ main |
+| #40 | Solver: en-suite toilets (attached_toilets, hard wall-adjacency ≥900mm), per-floor common-toilet guarantee, wet-size objective fix, placement penalties | ✓ main |
+| #41 | Config plumbing end-to-end (attached_toilets field: DB/schemas/mapper/forms/i18n) + sizing recalibration (toilet max 4.5, WC max 2.0, master bath 3.2–4.5) | ✓ main |
+| #42 | Scorer toilet_placement component (10%; grid_regularity 15%→10%, aspect_ratio 15%→10%) + compliance placement warnings | ✓ main |
+| #43 | Door-graph navigability (BFS reachability, wet-room one-door, staircase doored per floor, repair pass + generator gate) | ✓ main |
 
 **Follow-up from current session:**
-- Gallery build hotfix merged to main (build-time PDF fetch timeout fixed).
+- Gallery PLANS fetch hotfix merged to main (`/api/gallery/plans` fetch timeout fixed).
 
 **Known open items (do not block):**
 - De-flake work running as Task 5a (test determinism on solver + RNG seeding).
-- Golden CCQS fixture (FF only, test_engine.py) is non-navigable and should eventually be regenerated via Task 5 hunt.
+- Golden CCQS fixture (`ccqs_fixture.json`, tests in `test_plan_openings.py`) is non-navigable and should eventually be regenerated via Task 5 hunt.
 - 3BHK/3T+attached yields only 1 layout — UX watch (acceptable for MVP; soft constraint tuning deferred).
 
 **Test count:** Backend now ~593 passing (was 413 at session start).
