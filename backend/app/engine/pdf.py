@@ -1326,6 +1326,16 @@ def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
     c.drawCentredString(cx, cy - r - 7, "NORTH")
 
 
+def _cluster(vals: list[float], tol: float = 0.3) -> list[float]:
+    groups: list[list[float]] = []
+    for v in sorted(vals):
+        if groups and v - groups[-1][-1] < tol:
+            groups[-1].append(v)
+        else:
+            groups.append([v])
+    return [sum(g) / len(g) for g in groups]
+
+
 def _column_class(idx: int, xs_len: int, jdx: int, ys_len: int) -> str:
     """corner/edge/interior classification matching structapi's own grid
     classification (extreme index on both axes = corner, one axis = edge)."""
@@ -1521,16 +1531,8 @@ def _draw_structural_floor(
 
     # Structural grid at wall CENTRELINES, clustered so closely spaced lines
     # share one grid line and one bubble (fixes the overlapping-bubble mess
-    # the raw room-edge grid produced)
-    def _cluster(vals: list[float], tol: float = 0.3) -> list[float]:
-        groups: list[list[float]] = []
-        for v in sorted(vals):
-            if groups and v - groups[-1][-1] < tol:
-                groups[-1].append(v)
-            else:
-                groups.append([v])
-        return [sum(g) / len(g) for g in groups]
-
+    # the raw room-edge grid produced). _cluster is module-level (shared
+    # with app.engine.footing_placement).
     v_xs = _cluster([w.x1 for w in drawing.walls if abs(w.x1 - w.x2) < 1e-9])
     h_ys = _cluster([w.y1 for w in drawing.walls if abs(w.y1 - w.y2) < 1e-9])
 
