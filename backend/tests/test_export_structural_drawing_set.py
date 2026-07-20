@@ -447,13 +447,42 @@ async def test_export_structural_drawing_set_happy_path_all_sheets_populated(
 
     assert pdf_pages(pdf_bytes) == 6
 
-    all_text = " ".join(pdf_page_text(pdf_bytes, i).upper() for i in range(6))
-    assert "COLUMN & FOOTING PLAN" in all_text
-    assert "FOOTING DETAILS" in all_text
-    assert "PLINTH BEAM PLAN" in all_text
-    assert "PLINTH BEAM DETAILS" in all_text
-    assert "ROOF BEAM & SLAB PLAN" in all_text
-    assert "ROOF BEAM DETAILS" in all_text
+    # Sheet order is fixed by generate_structural_drawing_set's call sequence
+    # (structural_drawing_set.py) -- pin each heading to its own page rather
+    # than only checking the joined text, so a page ever landing out of order
+    # would be caught here.
+    pages = [pdf_page_text(pdf_bytes, i).upper() for i in range(6)]
+    assert "COLUMN & FOOTING PLAN" in pages[0]
+    assert "FOOTING DETAILS" in pages[1]
+    assert "PLINTH BEAM PLAN" in pages[2]
+    assert "PLINTH BEAM DETAILS" in pages[3]
+    assert "ROOF BEAM & SLAB PLAN" in pages[4]
+    assert "ROOF BEAM DETAILS" in pages[5]
+
+    all_text = " ".join(pages)
     # At least one footing mark and one beam-schedule mark rendered from real data.
     assert "T1" in all_text  # corner footing mark (GEO_V1 has a corner column)
     assert "PB1" in all_text  # smallest-span plinth beam mark (1.60 m internal)
+
+    # Assertions derived from the ACTUAL reinforcement fields seeded above --
+    # every renderer reads these via silent `.get(key, default)`, so a
+    # renamed/missing key would otherwise render a placeholder (0, "-",
+    # "-mmø@-c/c") instead of crashing, and mark/heading-only assertions
+    # wouldn't catch it. These pin the real values through to rendered text.
+
+    # FULL_STRUCTAPI_DATA["footings"]["corner"]["data"]: D_overall_mm=400,
+    # bars_x={"dia": 12, "spacing": 150} -> render_footing_details's
+    # f"{d.get('D_overall_mm',0):.0f}" / f"{bars_x['dia']}mmø@{bars_x['spacing']}c/c"
+    # cells on the FOOTING DETAILS page (page 1).
+    assert "400" in pages[1]
+    assert "12MMØ@150C/C" in pages[1]
+
+    # FULL_STRUCTAPI_DATA["beams"]["x-span4.00-trib2.25"]["design"]:
+    # n_bars=3, bar_dia=16 -> _draw_beam_detail_box's
+    # f"Bot {n_bars}nos-{bar_dia:.0f}mmø" on the ROOF BEAM DETAILS page (page 5).
+    assert "3NOS-16MMØ" in pages[5]
+
+    # FULL_PLINTH_BEAMS_DATA's PB1 group (span 1.60, smallest -> mark PB1):
+    # n_bars=2, bar_dia=12 -> same _draw_beam_detail_box format on the
+    # PLINTH BEAM DETAILS page (page 3).
+    assert "2NOS-12MMØ" in pages[3]
