@@ -38,6 +38,10 @@ async function fetchGalleryPlans(): Promise<GalleryPlan[]> {
     const res = await fetch(`${backendUrl}/api/gallery/plans`, {
       // Revalidate every 24 h — plans are stable but we want fresh data after deploys
       next: { revalidate: 86400 },
+      // Never let a slow/cold backend block build-time prerender: layout
+      // generation can exceed Vercel's 60s static-export budget, which fails
+      // the whole deploy. Fail fast to the [] fallback; ISR fills in later.
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return [];
     return (await res.json()) as GalleryPlan[];
