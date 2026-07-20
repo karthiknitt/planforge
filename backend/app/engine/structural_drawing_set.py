@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -301,3 +301,79 @@ def _draw_typical_footing_section(
         y - 20,
         f"{data.get('L_m', 0):.2f} x {data.get('B_m', 0):.2f} m, D={d_mm:.0f}mm",
     )
+
+
+def _draw_beam_detail_box(
+    c: canvas.Canvas,
+    mark: str,
+    b_mm: float,
+    D_mm: float,
+    design: dict[str, Any],
+    x: float,
+    y: float,
+    px_per_mm: float = 0.12,
+) -> float:
+    """Dimensioned rectangular beam cross-section pictorial (b x D, scaled by
+    `px_per_mm`) showing the envelope reinforcement: tension bars along the
+    bottom edge, compression bars along the top when doubly reinforced, and a
+    stirrup-spacing note. structapi returns ONE envelope schedule per beam
+    mark (worst-case moment over the whole span), so a single section is
+    drawn -- never a midspan/support split. See
+    docs/plans/2026-07-19-structural-drawing-set-design.md simplification #7.
+
+    Returns the vertical height in points consumed (box + heading + margin),
+    so callers stacking boxes down a page know how far to advance `y`.
+    """
+    bw = b_mm * px_per_mm
+    bh = D_mm * px_per_mm
+
+    c.setFont("Helvetica-Bold", 7)
+    c.setFillColor(HexColor("#000000"))
+    c.drawString(x, y + bh + 24, f"{mark}-{b_mm:.0f}x{D_mm:.0f}mm")
+
+    c.setFillColor(white)
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.75)
+    c.rect(x, y, bw, bh, fill=1, stroke=1)
+
+    cover = 6.0
+    radius = 1.5
+    label_x = x + bw + 6
+    bar_dia = design.get("bar_dia", 0)
+
+    c.setFillColor(HexColor("#AA0000"))
+    n_bars = design.get("n_bars", 0)
+    if n_bars > 0:
+        by = y + cover
+        if n_bars == 1:
+            xs = [x + bw / 2]
+        else:
+            span = bw - 2 * cover
+            xs = [x + cover + span * i / (n_bars - 1) for i in range(n_bars)]
+        for bx in xs:
+            c.circle(bx, by, radius, fill=1, stroke=0)
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica", 5.5)
+        c.drawString(label_x, y + cover - 2, f"Bot {n_bars}nos-{bar_dia:.0f}mmø")
+
+    n_comp = design.get("n_bars_comp", 0)
+    if design.get("doubly_reinforced") and n_comp > 0:
+        c.setFillColor(HexColor("#AA0000"))
+        by = y + bh - cover
+        if n_comp == 1:
+            xs = [x + bw / 2]
+        else:
+            span = bw - 2 * cover
+            xs = [x + cover + span * i / (n_comp - 1) for i in range(n_comp)]
+        for bx in xs:
+            c.circle(bx, by, radius, fill=1, stroke=0)
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica", 5.5)
+        c.drawString(label_x, y + bh - cover - 2, f"Top {n_comp}nos-{bar_dia:.0f}mmø")
+
+    sv = (design.get("stirrups") or {}).get("sv_provided", "-")
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica", 5.5)
+    c.drawString(label_x, y + bh / 2 - 2, f"stirrups@{sv}c/c")
+
+    return bh + 40

@@ -15,6 +15,7 @@ from app.engine.pdf import (
     _standard_scale,
 )
 from app.engine.structural_drawing_set import (
+    _draw_beam_detail_box,
     render_column_footing_plan,
     render_footing_details,
 )
@@ -96,6 +97,47 @@ def test_footing_details_renders_schedule_and_typical_section():
     assert "FOOTING" in text.upper()
     assert "T1" in text  # corner
     assert "T3" in text  # interior
+
+
+def test_beam_detail_box_renders_mark_and_bar_count():
+    design = {
+        "n_bars": 3,
+        "bar_dia": 12,
+        "doubly_reinforced": False,
+        "stirrups": {"sv_provided": 150},
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    _draw_beam_detail_box(
+        c, mark="PB1", b_mm=230, D_mm=300, design=design, x=100, y=500
+    )
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PB1" in text
+    assert "3-12" in text.replace(" ", "") or "3nos-12" in text.replace(" ", "")
+
+
+def test_beam_detail_box_renders_top_steel_when_doubly_reinforced():
+    design = {
+        "n_bars": 3,
+        "bar_dia": 12,
+        "doubly_reinforced": True,
+        "n_bars_comp": 2,
+        "stirrups": {"sv_provided": 150},
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    _draw_beam_detail_box(
+        c, mark="PB2", b_mm=230, D_mm=300, design=design, x=100, y=500
+    )
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PB2" in text
+    assert "Top" in text
 
 
 def _footing_schedule_top_clears_heading(cfg: PlotConfig, n_rows: int) -> None:
