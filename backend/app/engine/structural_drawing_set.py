@@ -18,15 +18,17 @@ from reportlab.pdfgen import canvas
 
 from app.engine.cad_elements import ColumnMarker, WallSegment
 from app.engine.footing_placement import place_footings
-from app.engine.models import PlotConfig
+from app.engine.models import FloorPlan, Layout, PlotConfig
 from app.engine.pdf import (
     MARGIN,
     ROAD_GAP,
     ROAD_H,
+    SCHED_RESERVE,
     TITLE_H,
     _centered_plot_oy,
     _draw_generic_schedule_table,
     _draw_north_arrow,
+    _draw_structural_floor,
     _draw_title_block,
     _generic_schedule_height,
     _standard_scale,
@@ -545,3 +547,65 @@ def render_plinth_beam_details(
         page_w,
         scale_denom=denom,
     )
+
+
+def render_roof_beam_slab_plan(
+    c: canvas.Canvas,
+    floor_plan: FloorPlan,
+    layout: Layout,
+    cfg: PlotConfig,
+    project_name: str,
+    num_bedrooms: int,
+    structural_design: dict[str, Any] | None,
+) -> None:
+    """Render the "ROOF BEAM & SLAB PLAN" sheet by delegating the entire
+    beam/column layout drawing (grid, room outlines, road strip, plot
+    boundary, title block) to `_draw_structural_floor` -- the same
+    battle-tested renderer already used for the architectural PDF's GF/FF
+    structural pages -- and overlaying slab-panel labels on top.
+
+    Slab labels are derived from `floor_plan.rooms` (one label per room, in
+    iteration order: S1, S2, ...) rather than from structapi's
+    `data.slabs`, because that data is keyed by slab-group name with only
+    `{"D_mm": ...}` values -- no per-panel plan-position geometry to place a
+    label from. Treating one room as one slab panel is the documented v1
+    fallback for ordinary residential construction.
+
+    Note: PlanForge's column model (`ColumnMarker` in `cad_elements.py`) has
+    no floating/grounded distinction (verified via codebase search -- no
+    "floating column" concept exists anywhere in the engine). All columns
+    render via `_draw_structural_floor`'s existing beam/column drawing; there
+    is no separate floating-column overlay in v1.
+    """
+    _draw_structural_floor(
+        c,
+        floor_plan,
+        layout,
+        cfg,
+        project_name,
+        num_bedrooms,
+        "ROOF BEAM & SLAB PLAN",
+        structural_design=structural_design,
+    )
+
+    if not floor_plan.rooms:
+        return
+
+    # Recompute the SAME (ox, oy, s) frame `_draw_structural_floor` used
+    # internally (it doesn't return them) so slab labels land in the exact
+    # coordinate space as the beam/column drawing underneath.
+    page_w, page_h = A4
+    s, _denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
+    plot_px = cfg.plot_width * s
+    plot_py = cfg.plot_length * s
+    ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
+    oy = _centered_plot_oy(
+        page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
+    )
+
+    c.setFont("Helvetica-Bold", 6)
+    c.setFillColor(HexColor("#0066CC"))
+    for i, room in enumerate(floor_plan.rooms, start=1):
+        cx = ox + (room.x + room.width / 2) * s
+        cy = oy + (room.y + room.depth / 2) * s
+        c.drawCentredString(cx, cy, f"S{i}")

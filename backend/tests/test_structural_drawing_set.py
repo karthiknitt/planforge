@@ -4,7 +4,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_elements import ColumnMarker, WallSegment
-from app.engine.models import PlotConfig
+from app.engine.models import ComplianceResult, FloorPlan, Layout, PlotConfig, Room
 from app.engine.pdf import (
     MARGIN,
     ROAD_GAP,
@@ -21,6 +21,7 @@ from app.engine.structural_drawing_set import (
     render_footing_details,
     render_plinth_beam_details,
     render_plinth_beam_plan,
+    render_roof_beam_slab_plan,
 )
 from tests.helpers.pdf_png import pdf_page_text
 
@@ -434,3 +435,49 @@ def test_plinth_beam_details_truncates_excess_detail_boxes_without_crashing():
     assert "PLINTH BEAM DETAILS" in text.upper()
     # First mark should appear in both schedule and detail boxes.
     assert "PB1" in text
+
+
+def test_roof_beam_slab_plan_renders_beam_layout_and_slab_labels():
+    rooms = [
+        Room(id="r1", name="Living", type="living", x=0.5, y=0.5, width=3.0, depth=3.5),
+        Room(
+            id="r2", name="Bedroom", type="bedroom", x=4.0, y=0.5, width=3.0, depth=3.5
+        ),
+    ]
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=rooms)
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_slab_plan(c, floor_plan, layout, CFG, "Test Project", 2, None)
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "S1" in text
+    assert "S2" in text
+
+
+def test_roof_beam_slab_plan_renders_without_crashing_when_no_rooms():
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=[])
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_slab_plan(c, floor_plan, layout, CFG, "Test Project", 2, None)
+    c.showPage()
+    c.save()
+    # Should not raise; page should still have been created (has some content).
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert isinstance(text, str)
