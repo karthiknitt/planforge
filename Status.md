@@ -140,3 +140,26 @@ Executed per `docs/superpowers/plans/2026-07-11-section-elevation-views.md` (sub
 ## Review debt (clear before merge)
 - Task 5 renderer + Tasks 6/7 wiring reviews died on the session limit (resets 3:30pm IST) — covered by the final whole-branch review before PR.
 - Adjudications: stair label keeps true riser count (`n_r`); `ewt_m` stays literal (function deleted in Task 7).
+
+---
+
+# Solver-Navigability Series & Follow-ups (2026-07-20)
+
+**Status:** Tasks 1–4 merged to main (PRs #40–#43); docs wrap-up + verification complete.
+
+| PR | Task | Merged |
+|---|---|---|
+| #40 | Solver: en-suite toilets (attached_toilets, hard wall-adjacency ≥900mm), per-floor common-toilet guarantee, wet-size objective fix, placement penalties | ✓ main |
+| #41 | Config plumbing end-to-end (attached_toilets field: DB/schemas/mapper/forms/i18n) + sizing recalibration (toilet max 4.5, WC max 2.0, master bath 3.2–4.5) | ✓ main |
+| #42 | Scorer toilet_placement component (10%; grid_regularity 15%→10%, aspect_ratio 15%→10%) + compliance placement warnings | ✓ main |
+| #43 | Door-graph navigability (BFS reachability, wet-room one-door, staircase doored per floor, repair pass + generator gate) | ✓ main |
+
+**Follow-up from current session:**
+- Gallery PLANS fetch hotfix merged to main (`/api/gallery/plans` fetch timeout fixed).
+
+**Known open items (do not block):**
+- De-flake work running as Task 5a (test determinism on solver + RNG seeding).
+- Golden CCQS fixture (`ccqs_fixture.json`, tests in `test_plan_openings.py`) is non-navigable and should eventually be regenerated via Task 5 hunt.
+- 3BHK/3T+attached yields only 1 layout — UX watch (acceptable for MVP; soft constraint tuning deferred).
+
+**Test count:** Backend now ~593 passing (was 413 at session start).

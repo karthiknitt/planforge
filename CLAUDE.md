@@ -80,13 +80,16 @@ PlanForge/
 ### Compliance Rules (Essential Only)
 - Bedroom ≥ 9.5 sqm
 - Kitchen ≥ 7 sqm
-- Toilet ≥ 3 sqm
+- Toilet ≥ 2.8 sqm / max 4.5 sqm (per NBC 2016 + Indian convention)
+- WC (water-closet only) ≥ 1.1 sqm
 - Stair width ≥ 900 mm
 - Main entrance door ≥ 900 mm (default 1070 mm leaf), road-facing
 - External wall: 230 mm
 - Internal wall: 115 mm
 - Floor coverage % (FAR)
 - Setback enforcement
+- En-suite toilets: hard wall-adjacency ≥ 900 mm when `attached_toilets=True`
+- Door-graph navigability: BFS reachability, wet rooms one-door, bedrooms one circulation entry, staircase doored per floor
 - Rules stored in configurable JSON
 
 ### Structural Awareness
@@ -158,6 +161,8 @@ docker build -t planforge-backend ./backend
 # Add a package
 uv add shapely
 ```
+
+**⚠️ Gotcha:** Never run `ruff format` on `*.json` files — it corrupts them.
 
 ### Next.js dev
 No local dev server / manual testing — see Deployment & Testing Workflow above.
@@ -257,7 +262,7 @@ cd frontend && bunx drizzle-kit migrate
 
 ## Testing
 
-- Backend: pytest (via `uv run pytest`) — 413 passing
+- Backend: pytest (via `uv run pytest`) — ~593 passing
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts
 
