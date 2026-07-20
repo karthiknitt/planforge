@@ -23,7 +23,6 @@ from app.engine.pdf import (
     MARGIN,
     ROAD_GAP,
     ROAD_H,
-    SCHED_RESERVE,
     TITLE_H,
     _centered_plot_oy,
     _draw_generic_schedule_table,
@@ -577,7 +576,7 @@ def render_roof_beam_slab_plan(
     render via `_draw_structural_floor`'s existing beam/column drawing; there
     is no separate floating-column overlay in v1.
     """
-    _draw_structural_floor(
+    ox, oy, s, _denom = _draw_structural_floor(
         c,
         floor_plan,
         layout,
@@ -591,18 +590,10 @@ def render_roof_beam_slab_plan(
     if not floor_plan.rooms:
         return
 
-    # Recompute the SAME (ox, oy, s) frame `_draw_structural_floor` used
-    # internally (it doesn't return them) so slab labels land in the exact
-    # coordinate space as the beam/column drawing underneath.
-    page_w, page_h = A4
-    s, _denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
-    plot_px = cfg.plot_width * s
-    plot_py = cfg.plot_length * s
-    ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
-    oy = _centered_plot_oy(
-        page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
-    )
-
+    # (ox, oy, s) above is the exact frame `_draw_structural_floor` used
+    # internally -- returned by that function rather than recomputed here,
+    # so slab labels can never drift from the beam/column drawing underneath
+    # even if that function's scale/offset math changes later.
     c.setFont("Helvetica-Bold", 6)
     c.setFillColor(HexColor("#0066CC"))
     for i, room in enumerate(floor_plan.rooms, start=1):
