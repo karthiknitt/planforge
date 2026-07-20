@@ -145,12 +145,12 @@ def check(
     max_kit = rules.get("max_kitchen_sqm", 15.0)
     min_wc = rules["min_toilet_sqm"]
     min_wc_w = rules["min_toilet_width_m"]
-    max_wc = rules.get("max_toilet_sqm", 6.0)
+    max_wc = rules.get("max_toilet_sqm", 4.5)
     min_wc_only = rules.get("min_wc_only_sqm", 1.1)
-    max_wc_only = rules.get("max_wc_only_sqm", 2.5)
+    max_wc_only = rules.get("max_wc_only_sqm", 2.0)
     min_wc_only_w = rules.get("min_wc_only_width_m", 0.9)
     min_bath_m = rules.get("min_bathroom_master_sqm", 4.5)
-    max_bath_m = rules.get("max_bathroom_master_sqm", 9.0)
+    max_bath_m = rules.get("max_bathroom_master_sqm", 4.5)
     min_bath_m_w = rules.get("min_bathroom_master_width_m", 1.8)
     max_pooja = rules.get("max_pooja_sqm", 4.5)
     min_pooja_w = rules.get("min_pooja_width_m", 0.9)

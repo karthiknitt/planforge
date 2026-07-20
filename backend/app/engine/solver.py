@@ -22,11 +22,29 @@ from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
-SOLVE_TIME_S = 8.0  # per-run wall-clock budget (generation runs async)
+SOLVE_TIME_S = 14.0  # per-run wall-clock budget (generation runs async)
 # Wall cap for the penalty-free phase-1 warm start: it only needs A feasible
 # solution to hint phase 2, not a good one, so it doesn't get the full
-# SOLVE_TIME_S (which would let one zone double to ~16 s worst case).
-PHASE1_TIME_S = 3.0
+# SOLVE_TIME_S (which would let one zone double to ~28 s worst case).
+#
+# Both budgets were widened from 8.0/3.0 (2026-07-19, Task 5a): the wall
+# clock cap is meant to be a pure safety net for pathologically slow
+# machines — max_deterministic_time=1.5/0.7 is the value that's supposed to
+# bind on any normal machine, which is what makes repeated solves return the
+# SAME incumbent. Measured directly (debug instrumentation on this task):
+# under ordinary CPU contention (a handful of concurrent local processes),
+# a single zone's 1.5 deterministic-time-unit solve took 6.7-8.0+ real
+# seconds, i.e. the OLD 8.0 s cap was already binding before the
+# deterministic budget finished — non-deterministically truncating the
+# incumbent depending on machine load. Because generate() ranks solver AND
+# archetype layouts together and relabels the top 3 "A"/"B"/"C" purely by
+# rank, a truncated solver layout can land in any of those slots and
+# intermittently fail downstream geometry invariants (e.g.
+# test_cross_floor_columns_stack) that assume a fully-worked incumbent.
+# Widening the caps doesn't make the search itself faster, it just gives
+# the deterministic budget more real-world headroom to actually be the
+# thing that binds, which is what restores reproducibility.
+PHASE1_TIME_S = 5.0
 MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 
 # Wall-coalignment bonus (objective units = mm) per exactly-aligned edge
