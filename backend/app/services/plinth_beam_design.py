@@ -36,6 +36,14 @@ def _trial_depth_mm(span_m: float) -> int:
     return int(math.ceil((span_m * 1000.0 / 12.0) / 25.0)) * 25
 
 
+def plinth_group_key(kind: str, span_m: float) -> str:
+    """Single source of truth for the design_plinth_beams() output-dict key
+    format -- also used by structural_drawing_set.py to look up a wall's
+    beam design without duplicating the format string.
+    """
+    return f"plinth-{kind}-span{span_m:.2f}"
+
+
 async def design_plinth_beams(
     walls: list[WallSegment],
     *,
@@ -78,7 +86,7 @@ async def design_plinth_beams(
                 "support": "ss",
             }
         )
-        key = f"plinth-{kind}-span{span_m:.2f}"
+        key = plinth_group_key(kind, span_m)
         out[key] = {
             "b_mm": thickness_mm,
             "D_mm": D,

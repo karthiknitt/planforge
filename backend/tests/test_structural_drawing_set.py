@@ -15,6 +15,7 @@ from app.engine.pdf import (
     _standard_scale,
 )
 from app.engine.structural_drawing_set import (
+    _assign_plinth_beam_marks,
     _draw_beam_detail_box,
     render_column_footing_plan,
     render_footing_details,
@@ -289,6 +290,23 @@ def test_plinth_beam_plan_renders_beam_marks():
     assert "PLINTH BEAM PLAN" in text.upper()
     assert "PB1" in text
     assert "PB2" in text
+
+
+def test_assign_plinth_beam_marks_orders_by_ascending_span():
+    # 3 groups, deliberately inserted out of span order, to lock down that
+    # PB1 always lands on the smallest span and PB<n> on the largest --
+    # not just "both marks appear somewhere" (test gap flagged in review).
+    plinth_beams_data = {
+        "plinth-external-span4.00": {"span_m": 4.0},
+        "plinth-internal-span2.00": {"span_m": 2.0},
+        "plinth-external-span3.00": {"span_m": 3.0},
+    }
+    marks = _assign_plinth_beam_marks(plinth_beams_data)
+    assert marks == {
+        "plinth-internal-span2.00": "PB1",
+        "plinth-external-span3.00": "PB2",
+        "plinth-external-span4.00": "PB3",
+    }
 
 
 def test_plinth_beam_plan_skips_label_for_unmatched_wall_without_crashing():

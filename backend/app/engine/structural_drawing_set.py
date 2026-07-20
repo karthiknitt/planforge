@@ -31,6 +31,7 @@ from app.engine.pdf import (
     _generic_schedule_height,
     _standard_scale,
 )
+from app.services.plinth_beam_design import plinth_group_key
 
 #: footing type -> reference-style mnemonic. Mapping follows the same
 #: corner/edge/interior classification `place_footings()` (Task 4) derives
@@ -267,6 +268,20 @@ def render_footing_details(
     )
 
 
+def _assign_plinth_beam_marks(plinth_beams_data: dict[str, Any]) -> dict[str, str]:
+    """Assign each `plinth_beams_data` group a short `PB<n>` mark by sorting
+    groups by span (ascending) and numbering them in that order -- unlike
+    `_FOOTING_MARK`, plinth-beam groups aren't a fixed small set (they depend
+    on the actual wall layout), so the mapping is built dynamically per call
+    rather than as a module constant. Extracted as its own function so the
+    ordering can be tested directly without rendering a full PDF page.
+    """
+    sorted_keys = sorted(
+        plinth_beams_data.keys(), key=lambda k: plinth_beams_data[k]["span_m"]
+    )
+    return {k: f"PB{i + 1}" for i, k in enumerate(sorted_keys)}
+
+
 def render_plinth_beam_plan(
     c: canvas.Canvas,
     walls: list[WallSegment],
@@ -275,11 +290,8 @@ def render_plinth_beam_plan(
     project_name: str,
 ) -> None:
     """Render the "PLINTH BEAM PLAN" sheet: each wall centreline drawn as a
-    beam line, labelled with a short `PB<n>` mark. Marks are assigned by
-    sorting `plinth_beams_data`'s groups by span (ascending) and numbering
-    them in that order -- unlike `_FOOTING_MARK`, plinth-beam groups aren't a
-    fixed small set (they depend on the actual wall layout), so the mapping
-    is built dynamically per call rather than as a module constant.
+    beam line, labelled with a short `PB<n>` mark (see
+    `_assign_plinth_beam_marks`).
 
     A wall segment whose recomputed `(kind, round(length, 1))` group key has
     no entry in `plinth_beams_data` (e.g. stale/mismatched input) is drawn
@@ -289,10 +301,7 @@ def render_plinth_beam_plan(
     page_w, _page_h = A4
     ox, oy, s, denom = _draw_sheet_frame(c, cfg, "PLINTH BEAM PLAN")
 
-    sorted_keys = sorted(
-        plinth_beams_data.keys(), key=lambda k: plinth_beams_data[k]["span_m"]
-    )
-    mark_by_key = {k: f"PB{i + 1}" for i, k in enumerate(sorted_keys)}
+    mark_by_key = _assign_plinth_beam_marks(plinth_beams_data)
 
     # Two passes, same convention as render_column_footing_plan: draw every
     # beam line first with one color/width state, reset, then draw labels.
@@ -303,7 +312,7 @@ def render_plinth_beam_plan(
         x1, y1 = ox + w.x1 * s, oy + w.y1 * s
         x2, y2 = ox + w.x2 * s, oy + w.y2 * s
         c.line(x1, y1, x2, y2)
-        key = f"plinth-{w.kind}-span{round(w.length, 1):.2f}"
+        key = plinth_group_key(w.kind, round(w.length, 1))
         mark = mark_by_key.get(key)
         if mark is not None:
             labels.append(((x1 + x2) / 2, (y1 + y2) / 2, mark))
