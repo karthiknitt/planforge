@@ -5,6 +5,15 @@ from reportlab.pdfgen import canvas
 
 from app.engine.cad_elements import ColumnMarker, WallSegment
 from app.engine.models import PlotConfig
+from app.engine.pdf import (
+    MARGIN,
+    ROAD_GAP,
+    ROAD_H,
+    TITLE_H,
+    _centered_plot_oy,
+    _generic_schedule_height,
+    _standard_scale,
+)
 from app.engine.structural_drawing_set import (
     render_column_footing_plan,
     render_footing_details,
@@ -87,3 +96,65 @@ def test_footing_details_renders_schedule_and_typical_section():
     assert "FOOTING" in text.upper()
     assert "T1" in text  # corner
     assert "T3" in text  # interior
+
+
+def _footing_schedule_top_clears_heading(cfg: PlotConfig, n_rows: int) -> None:
+    """Coordinate-based regression for the z-order occlusion bug found in
+    code review (commit b4032a6): `_draw_sheet_frame` draws the sheet
+    heading at `(page_w / 2, oy + plot_py + 20)`, and
+    `_draw_generic_schedule_table` paints an OPAQUE white background as its
+    first draw op. If the table's top ever landed at/above the heading's
+    glyph band, the white box would silently erase the heading in the
+    rendered PDF -- something the text-extraction assertions above can't
+    catch, since glyphs stay in the content stream regardless of paint
+    order.
+
+    This recomputes the same geometry `render_footing_details` uses
+    internally (mirroring its `table_y_top = min(page_h - MARGIN - 30,
+    heading_y - 20)` clamp) and asserts the table's top sits strictly below
+    the heading's approximate glyph band (heading font size 9 -> glyphs span
+    roughly [heading_y - 2, heading_y + 7]), for the given plot geometry.
+    """
+    page_w, page_h = A4
+    s, _denom = _standard_scale(cfg, page_w, page_h)
+    plot_py = cfg.plot_length * s
+    oy = _centered_plot_oy(
+        page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
+    )
+    heading_y = oy + plot_py + 20
+    table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
+
+    assert table_y_top <= heading_y - 20, (
+        f"schedule table top ({table_y_top}) must sit at least 20pt below "
+        f"the heading position ({heading_y}) for plot "
+        f"{cfg.plot_length}x{cfg.plot_width}"
+    )
+    # And the table's own bottom edge must not run into the title block.
+    table_bottom = table_y_top - _generic_schedule_height(n_rows)
+    assert table_bottom > TITLE_H, (
+        f"schedule table bottom ({table_bottom}) must clear the title block "
+        f"(top at y={TITLE_H}) for plot {cfg.plot_length}x{cfg.plot_width}"
+    )
+
+
+def test_footing_details_schedule_position_clears_heading_default_plot():
+    _footing_schedule_top_clears_heading(CFG, n_rows=2)
+
+
+def test_footing_details_schedule_position_clears_heading_tall_narrow_plot():
+    # Tall/narrow frontage (common for Indian plots) pushes the plot
+    # boundary -- and therefore the heading -- higher up the page than the
+    # default near-square CFG does, which is exactly the case that exposed
+    # the occlusion bug during review.
+    tall_narrow_cfg = PlotConfig(
+        plot_length=20.0,
+        plot_width=6.0,
+        setback_front=3.0,
+        setback_rear=1.5,
+        setback_left=1.0,
+        setback_right=1.0,
+        num_bedrooms=2,
+        toilets=2,
+        parking=True,
+    )
+    _footing_schedule_top_clears_heading(tall_narrow_cfg, n_rows=2)

@@ -28,6 +28,7 @@ from app.engine.pdf import (
     _draw_generic_schedule_table,
     _draw_north_arrow,
     _draw_title_block,
+    _generic_schedule_height,
     _standard_scale,
 )
 
@@ -46,6 +47,11 @@ _FOOTING_MARK = {"corner": "T1", "edge": "T2", "interior": "T3"}
 #: callers, since that helper is shared with the 4 architectural/structural
 #: floor-plan pages where the BHK count *is* meaningful.
 _NUM_BEDROOMS_NA = 0
+
+#: scale for `_draw_typical_footing_section`'s schematic (points per mm of
+#: real-world footing dimension) -- shared with `render_footing_details`'s
+#: vertical-space budgeting so the two stay in sync.
+_FOOTING_SECTION_PX_PER_MM = 0.15
 
 
 def _draw_sheet_frame(
@@ -180,7 +186,23 @@ def render_footing_details(
     page. See docs/plans/2026-07-19-structural-drawing-set-design.md.
     """
     page_w, page_h = A4
-    _ox, _oy, s, denom = _draw_sheet_frame(c, cfg, "FOOTING DETAILS")
+    _ox, oy, s, denom = _draw_sheet_frame(c, cfg, "FOOTING DETAILS")
+
+    # `_draw_sheet_frame` draws the sheet heading at (page_w/2, oy + plot_py +
+    # 20) -- a position that scales with the plot's footprint (`plot_py =
+    # cfg.plot_length * s`), so it lands higher on the page for small/narrow
+    # plots. `_draw_generic_schedule_table` paints an OPAQUE white background
+    # as its first draw op; if the table's fixed `page_h - MARGIN - 30` top
+    # ever landed above (or too close to) that heading position, the white
+    # box would paint over and visually erase the heading -- a real z-order
+    # occlusion bug even though text-extraction tests can't detect it (the
+    # heading's glyphs remain in the content stream regardless of paint
+    # order). Fix: always clamp the table's top to at least 20pt below
+    # wherever the heading actually landed for *this* plot's geometry, so
+    # the invariant holds for any plot size without hardcoding a bound.
+    plot_py = cfg.plot_length * s
+    heading_y = oy + plot_py + 20
+    table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
 
     headers = ("TYPE", "SIZE (L×B m)", "DEPTH (mm)", "BARS-X", "BARS-Y")
     col_ws = (40.0, 80.0, 55.0, 100.0, 100.0)
@@ -188,6 +210,9 @@ def render_footing_details(
     for ftype, f in sorted(footings_data.items()):
         d = f.get("data", {})
         bars_x, bars_y = d.get("bars_x", {}), d.get("bars_y", {})
+        # `.get(..., "-")` renders as e.g. "-mmø@-c/c" when bar data is
+        # missing for a footing type -- accepted display quirk for
+        # incomplete input data, not worth a bigger reformat for.
         rows.append(
             (
                 _FOOTING_MARK.get(ftype, "T?"),
@@ -198,18 +223,30 @@ def render_footing_details(
             )
         )
     _draw_generic_schedule_table(
-        c, "FOOTING SCHEDULE", headers, col_ws, rows, MARGIN, page_h - MARGIN - 30
+        c, "FOOTING SCHEDULE", headers, col_ws, rows, MARGIN, table_y_top
     )
+    table_bottom = table_y_top - _generic_schedule_height(len(rows))
 
     if footings_data:
-        largest_type, largest = max(
+        _largest_type, largest = max(
             footings_data.items(),
             key=lambda kv: (
                 kv[1].get("data", {}).get("L_m", 0)
                 * kv[1].get("data", {}).get("B_m", 0)
             ),
         )
-        _draw_typical_footing_section(c, largest.get("data", {}), MARGIN, page_h - 320)
+        largest_data = largest.get("data", {})
+        # Vertical span the typical-section schematic needs *above* its own
+        # y-origin: column stub (40pt) + heading-text gap (40pt) + the
+        # footing slab's own height in points. Same invariant as the table
+        # clamp above -- never let the (fixed-target) typical section climb
+        # high enough to collide with the schedule table sitting above it,
+        # regardless of plot size or footing depth.
+        fh_pts = largest_data.get("D_overall_mm", 450) * _FOOTING_SECTION_PX_PER_MM
+        section_span_above_y = fh_pts + 80
+        typical_y = min(page_h - 320, table_bottom - section_span_above_y - 20)
+        typical_y = max(typical_y, TITLE_H + 40)
+        _draw_typical_footing_section(c, largest_data, MARGIN, typical_y)
 
     _draw_title_block(
         c,
@@ -235,8 +272,8 @@ def _draw_typical_footing_section(
     """
     l_mm = data.get("L_m", 1.0) * 1000
     d_mm = data.get("D_overall_mm", 450)
-    px_per_mm = 0.15
-    fw, fh = l_mm * px_per_mm, d_mm * px_per_mm
+    fw = l_mm * _FOOTING_SECTION_PX_PER_MM
+    fh = d_mm * _FOOTING_SECTION_PX_PER_MM
 
     c.setFont("Helvetica-Bold", 7)
     c.setFillColor(HexColor("#000000"))
