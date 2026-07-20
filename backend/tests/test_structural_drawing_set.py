@@ -15,12 +15,14 @@ from app.engine.pdf import (
     _standard_scale,
 )
 from app.engine.structural_drawing_set import (
+    _assign_marks_by_span,
     _assign_plinth_beam_marks,
     _draw_beam_detail_box,
     render_column_footing_plan,
     render_footing_details,
     render_plinth_beam_details,
     render_plinth_beam_plan,
+    render_roof_beam_details,
     render_roof_beam_slab_plan,
 )
 from tests.helpers.pdf_png import pdf_page_text
@@ -481,3 +483,99 @@ def test_roof_beam_slab_plan_renders_without_crashing_when_no_rooms():
     # Should not raise; page should still have been created (has some content).
     text = pdf_page_text(buf.getvalue(), 0)
     assert isinstance(text, str)
+
+
+def test_assign_marks_by_span_orders_ascending_and_uses_prefix():
+    # Generic mark-assignment helper test: sorts by span ascending and uses
+    # the provided prefix (e.g., "B" for roof beams, "PB" for plinth beams).
+    data = {
+        "k-big": {"span_m": 5.0},
+        "k-small": {"span_m": 2.0},
+        "k-mid": {"span_m": 3.5},
+    }
+    result = _assign_marks_by_span(data, "B")
+    assert result == {"k-small": "B1", "k-mid": "B2", "k-big": "B3"}
+
+
+def test_roof_beam_details_renders_schedule_and_detail_boxes():
+    beams_data = {
+        "x-span4.00-trib2.25": {
+            "b_mm": 230,
+            "D_mm": 450,
+            "span_m": 4.0,
+            "trib_width_m": 2.25,
+            "n_spans": 2,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 16,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+                "Ast_prov_mm2": 603,
+            },
+        },
+        "y-span3.00-trib2.00": {
+            "b_mm": 230,
+            "D_mm": 375,
+            "span_m": 3.0,
+            "trib_width_m": 2.0,
+            "n_spans": 1,
+            "design": {
+                "n_bars": 2,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 175},
+                "Ast_prov_mm2": 226,
+            },
+        },
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_details(c, beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "ROOF BEAM DETAILS" in text.upper()
+    assert "B1" in text
+    assert "B2" in text
+
+
+def test_roof_beam_details_renders_without_crashing_when_empty():
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_details(c, {}, CFG, "Test Project")
+    c.showPage()
+    c.save()
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "ROOF BEAM DETAILS" in text.upper()
+
+
+def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing():
+    # Create 10 roof-beam groups to force space exhaustion and truncation
+    # of detail boxes. The schedule table remains complete, but only early
+    # detail boxes are rendered.
+    beams_data = {}
+    for i in range(10):
+        span_m = 2.0 + i * 0.5
+        D_mm = 250 + i * 10
+        beams_data[f"x-span{span_m:.2f}-trib2.00"] = {
+            "b_mm": 230,
+            "D_mm": D_mm,
+            "span_m": span_m,
+            "trib_width_m": 2.0,
+            "n_spans": 1,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+        }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_details(c, beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "ROOF BEAM DETAILS" in text.upper()
+    assert "B1" in text
