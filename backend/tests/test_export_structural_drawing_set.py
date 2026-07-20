@@ -1,8 +1,9 @@
 """Structural Drawing Set export route (GET /projects/{id}/export/structural-drawing-set).
 
-Tests the error-path gates: checks approval + design requirements before export.
-Happy-path (complete export with PDF verification) deferred to Task 14 due to
-external structapi HTTP call requirements.
+Tests the error-path gates (approval + design requirements before export) plus
+a happy-path end-to-end integration test (Task 14) that proves the full
+routes -> orchestrator -> 6 sheet renderers pipeline consumes realistic
+columns/beams/footings data correctly.
 """
 
 from app.models.layout import StoredLayout
@@ -10,6 +11,191 @@ from app.models.structural import StructuralDesign
 from app.services import plinth_beam_design, structagent_client
 
 HDRS = {"X-Test-User-Id": "export-owner"}
+
+# Realistic structapi response["data"] shape (columns/beams/footings), matching
+# what Tasks 2-4's unit tests already exercise in isolation. Keyed by column
+# classification ("corner"/"edge"/"interior") for columns/footings, matching
+# `_FOOTING_MARK` in structural_drawing_set.py; beam key format matches
+# structapi's tributary-width naming convention.
+FULL_STRUCTAPI_DATA = {
+    "columns": {
+        "corner": {
+            "b_mm": 230,
+            "D_mm": 300,
+            "bars": "6-16 dia",
+            "n_bars": 6,
+            "bar_dia": 16,
+            "data": {"p_percent": 1.2, "tie_dia": 8, "tie_pitch_max": 200},
+        },
+        "edge": {
+            "b_mm": 230,
+            "D_mm": 350,
+            "bars": "8-16 dia",
+            "n_bars": 8,
+            "bar_dia": 16,
+            "data": {"p_percent": 1.5, "tie_dia": 8, "tie_pitch_max": 200},
+        },
+        "interior": {
+            "b_mm": 300,
+            "D_mm": 300,
+            "bars": "8-20 dia",
+            "n_bars": 8,
+            "bar_dia": 20,
+            "data": {"p_percent": 1.8, "tie_dia": 8, "tie_pitch_max": 175},
+        },
+    },
+    "beams": {
+        "x-span4.00-trib2.25": {
+            "b_mm": 230,
+            "D_mm": 450,
+            "span_m": 4.0,
+            "trib_width_m": 2.25,
+            "n_spans": 2,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 16,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+                "Ast_prov_mm2": 603,
+            },
+        },
+    },
+    "footings": {
+        "corner": {
+            "data": {
+                "L_m": 1.3,
+                "B_m": 1.3,
+                "D_overall_mm": 400,
+                "bars_x": {"dia": 12, "spacing": 150},
+                "bars_y": {"dia": 12, "spacing": 150},
+            }
+        },
+        "edge": {
+            "data": {
+                "L_m": 1.4,
+                "B_m": 1.3,
+                "D_overall_mm": 400,
+                "bars_x": {"dia": 12, "spacing": 150},
+                "bars_y": {"dia": 12, "spacing": 150},
+            }
+        },
+        "interior": {
+            "data": {
+                "L_m": 1.6,
+                "B_m": 1.6,
+                "D_overall_mm": 450,
+                "bars_x": {"dia": 12, "spacing": 125},
+                "bars_y": {"dia": 12, "spacing": 125},
+            }
+        },
+    },
+}
+
+# Realistic plinth-beam design keyed by the ACTUAL group keys
+# `plinth_group_key(kind, round(length, 1))` produces for GEO_V1's ground-floor
+# walls (verified by direct inspection of build_floor_drawing(GEO_V1) output --
+# 2 external groups + 6 internal groups). Using fabricated keys that don't match
+# any real wall would leave every beam mark undrawn on the Plinth Beam Plan
+# sheet (render_plinth_beam_plan only labels a wall when its recomputed group
+# key has a matching entry -- see its docstring).
+FULL_PLINTH_BEAMS_DATA = {
+    "plinth-internal-span1.60": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 1.60,
+        "kind": "internal",
+        "design": {
+            "n_bars": 2,
+            "bar_dia": 12,
+            "doubly_reinforced": False,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-internal-span2.10": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 2.10,
+        "kind": "internal",
+        "design": {
+            "n_bars": 2,
+            "bar_dia": 12,
+            "doubly_reinforced": False,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-internal-span2.60": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 2.60,
+        "kind": "internal",
+        "design": {
+            "n_bars": 3,
+            "bar_dia": 12,
+            "doubly_reinforced": False,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-internal-span3.60": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 3.60,
+        "kind": "internal",
+        "design": {
+            "n_bars": 3,
+            "bar_dia": 12,
+            "doubly_reinforced": False,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-internal-span4.10": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 4.10,
+        "kind": "internal",
+        "design": {
+            "n_bars": 3,
+            "bar_dia": 12,
+            "doubly_reinforced": False,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-internal-span6.60": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 6.60,
+        "kind": "internal",
+        "design": {
+            "n_bars": 4,
+            "bar_dia": 12,
+            "doubly_reinforced": True,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-external-span7.80": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 7.80,
+        "kind": "external",
+        "design": {
+            "n_bars": 4,
+            "bar_dia": 12,
+            "doubly_reinforced": True,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+    "plinth-external-span12.30": {
+        "b_mm": 230,
+        "D_mm": 300,
+        "span_m": 12.30,
+        "kind": "external",
+        "design": {
+            "n_bars": 5,
+            "bar_dia": 12,
+            "doubly_reinforced": True,
+            "stirrups": {"sv_provided": 150},
+        },
+    },
+}
 
 PROJECT_BODY = {
     "name": "Export Test",
@@ -201,3 +387,73 @@ async def test_export_structural_drawing_set_502_on_structapi_error(
     )
     assert res.status_code == 502, res.text
     assert "structapi unreachable" in res.json()["detail"]
+
+
+# ──────────────────────────────────── Happy path ─────────────────────────────────
+
+
+async def test_export_structural_drawing_set_happy_path_all_sheets_populated(
+    client_db, monkeypatch
+):
+    """Full happy path: approved + designed layout with realistic
+    columns/beams/footings data, plus a realistic plinth-beam design (via
+    monkeypatch, avoiding a real structapi HTTP call for the plinth pass) ->
+    200, valid 6-page PDF, every sheet's schedule table has real content.
+    """
+    client, SessionLocal = client_db
+    project_id = await _make_project(client)
+    await _seed_layout(SessionLocal, project_id, GEO_V1)
+
+    res = await client.post(
+        f"/api/projects/{project_id}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 200, res.text
+    revision_id = res.json()["revision_id"]
+
+    async with SessionLocal() as s:
+        design = StructuralDesign(
+            revision_id=revision_id,
+            status="designed",
+            structapi_response={
+                "api_version": "1",
+                "ok": True,
+                "checks": [],
+                "data": FULL_STRUCTAPI_DATA,
+            },
+        )
+        s.add(design)
+        await s.commit()
+
+    async def _fake_design_plinth_beams(walls, **kwargs):
+        return FULL_PLINTH_BEAMS_DATA
+
+    monkeypatch.setattr(
+        plinth_beam_design, "design_plinth_beams", _fake_design_plinth_beams
+    )
+
+    res = await client.get(
+        f"/api/projects/{project_id}/export/structural-drawing-set",
+        headers=HDRS,
+    )
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"] == "application/pdf"
+
+    pdf_bytes = res.content
+    assert pdf_bytes[:5] == b"%PDF-"
+
+    from tests.helpers.pdf_png import pdf_page_text, pdf_pages
+
+    assert pdf_pages(pdf_bytes) == 6
+
+    all_text = " ".join(pdf_page_text(pdf_bytes, i).upper() for i in range(6))
+    assert "COLUMN & FOOTING PLAN" in all_text
+    assert "FOOTING DETAILS" in all_text
+    assert "PLINTH BEAM PLAN" in all_text
+    assert "PLINTH BEAM DETAILS" in all_text
+    assert "ROOF BEAM & SLAB PLAN" in all_text
+    assert "ROOF BEAM DETAILS" in all_text
+    # At least one footing mark and one beam-schedule mark rendered from real data.
+    assert "T1" in all_text  # corner footing mark (GEO_V1 has a corner column)
+    assert "PB1" in all_text  # smallest-span plinth beam mark (1.60 m internal)
