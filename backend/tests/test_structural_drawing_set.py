@@ -19,6 +19,7 @@ from app.engine.structural_drawing_set import (
     _draw_beam_detail_box,
     render_column_footing_plan,
     render_footing_details,
+    render_plinth_beam_details,
     render_plinth_beam_plan,
 )
 from tests.helpers.pdf_png import pdf_page_text
@@ -338,3 +339,58 @@ def test_footing_details_schedule_position_clears_heading_tall_narrow_plot():
         parking=True,
     )
     _footing_schedule_top_clears_heading(tall_narrow_cfg, n_rows=2)
+
+
+def test_plinth_beam_details_renders_schedule_and_detail_boxes():
+    plinth_beams_data = {
+        "plinth-external-span3.50": {
+            "b_mm": 230,
+            "D_mm": 300,
+            "span_m": 3.5,
+            "kind": "external",
+            "count": 2,
+            "ok": True,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+            "checks": [],
+        },
+        "plinth-internal-span2.00": {
+            "b_mm": 115,
+            "D_mm": 275,
+            "span_m": 2.0,
+            "kind": "internal",
+            "count": 1,
+            "ok": True,
+            "design": {
+                "n_bars": 2,
+                "bar_dia": 10,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 175},
+            },
+            "checks": [],
+        },
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_plinth_beam_details(c, plinth_beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM DETAILS" in text.upper()
+    assert "PB1" in text
+    assert "PB2" in text
+
+
+def test_plinth_beam_details_renders_without_crashing_when_empty():
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_plinth_beam_details(c, {}, CFG, "Test Project")
+    c.showPage()
+    c.save()
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM DETAILS" in text.upper()

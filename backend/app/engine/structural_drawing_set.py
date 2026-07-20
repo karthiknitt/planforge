@@ -453,3 +453,78 @@ def _draw_beam_detail_box(
     c.drawString(label_x, y + bh / 2 - 2, f"stirrups@{sv}c/c")
 
     return bh + 40
+
+
+def render_plinth_beam_details(
+    c: canvas.Canvas,
+    plinth_beams_data: dict[str, Any],
+    cfg: PlotConfig,
+    project_name: str,
+) -> None:
+    """Render the "PLINTH BEAM DETAILS" sheet: a schedule table (one row per
+    plinth beam group, identified by mark) plus dimensioned beam cross-section
+    pictorials stacked vertically below the schedule.
+
+    Like `render_footing_details`, this sheet has no plan-view content tied to
+    model-space positions -- its content is a data table and representative
+    pictorials. `_draw_sheet_frame` is still called (for heading/road-strip/
+    plot-boundary/north-arrow furniture consistency), but the schedule and
+    beam-detail boxes are positioned at fixed page-relative offsets rather than
+    projected through model coordinates.
+    """
+    page_w, page_h = A4
+    _ox, oy, s, denom = _draw_sheet_frame(c, cfg, "PLINTH BEAM DETAILS")
+
+    # Compute schedule table position, using same heading/clamping logic as
+    # render_footing_details to avoid z-order occlusion with the sheet heading.
+    plot_py = cfg.plot_length * s
+    heading_y = oy + plot_py + 20
+    table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
+
+    # Build schedule rows from plinth_beams_data, sorted by mark for stable output.
+    mark_by_key = _assign_plinth_beam_marks(plinth_beams_data)
+    sorted_marks = sorted(mark_by_key.items(), key=lambda kv: kv[1])
+
+    headers = ("MARK", "SIZE (b x D mm)", "SPAN (m)")
+    col_ws = (50.0, 90.0, 70.0)
+    rows: list[tuple[str, str, str]] = []
+    for key, mark in sorted_marks:
+        data = plinth_beams_data[key]
+        b_mm = data.get("b_mm", 0)
+        D_mm = data.get("D_mm", 0)
+        span_m = data.get("span_m", 0)
+        rows.append((mark, f"{b_mm:.0f}x{D_mm:.0f}", f"{span_m:.2f}"))
+
+    _draw_generic_schedule_table(
+        c, "PLINTH BEAM SCHEDULE", headers, col_ws, rows, MARGIN, table_y_top
+    )
+    table_bottom = table_y_top - _generic_schedule_height(len(rows))
+
+    # Stack beam detail boxes below the schedule, starting with a margin below
+    # the table and never overlapping the title block at the bottom.
+    current_y = table_bottom - 40
+    current_y = max(current_y, TITLE_H + 40)
+
+    for key, mark in sorted_marks:
+        data = plinth_beams_data[key]
+        b_mm = data.get("b_mm", 0)
+        D_mm = data.get("D_mm", 0)
+        design = data.get("design", {})
+
+        height_consumed = _draw_beam_detail_box(
+            c, mark, b_mm, D_mm, design, x=MARGIN, y=current_y
+        )
+        current_y -= height_consumed + 15  # 15pt gap between boxes
+
+    _draw_title_block(
+        c,
+        project_name,
+        "A",
+        "Plinth Beam Details",
+        "Plinth Beam Details",
+        cfg,
+        _NUM_BEDROOMS_NA,
+        s,
+        page_w,
+        scale_denom=denom,
+    )
