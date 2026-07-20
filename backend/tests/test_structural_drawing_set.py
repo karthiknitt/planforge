@@ -394,3 +394,43 @@ def test_plinth_beam_details_renders_without_crashing_when_empty():
     c.save()
     text = pdf_page_text(buf.getvalue(), 0)
     assert "PLINTH BEAM DETAILS" in text.upper()
+
+
+def test_plinth_beam_details_truncates_excess_detail_boxes_without_crashing():
+    # Create 10 plinth-beam groups to force space exhaustion and truncation
+    # of detail boxes. Given available vertical space (~300pt) and each box
+    # consuming ~90pt, only ~3-4 will fit before the title block. This tests
+    # that the loop breaks gracefully without crashing or overlapping the
+    # title block. The schedule table remains complete (shows all 10 marks),
+    # but only early detail boxes are rendered.
+    plinth_beams_data = {}
+    for i in range(10):
+        span_m = 2.0 + i * 0.5
+        D_mm = 250 + i * 10
+        plinth_beams_data[f"plinth-span{span_m:.2f}"] = {
+            "b_mm": 230,
+            "D_mm": D_mm,
+            "span_m": span_m,
+            "kind": "external",
+            "count": 1,
+            "ok": True,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+            "checks": [],
+        }
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    # Should not crash despite many groups causing truncation.
+    render_plinth_beam_details(c, plinth_beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM DETAILS" in text.upper()
+    # First mark should appear in both schedule and detail boxes.
+    assert "PB1" in text

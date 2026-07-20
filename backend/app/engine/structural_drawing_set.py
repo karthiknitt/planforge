@@ -471,6 +471,11 @@ def render_plinth_beam_details(
     plot-boundary/north-arrow furniture consistency), but the schedule and
     beam-detail boxes are positioned at fixed page-relative offsets rather than
     projected through model coordinates.
+
+    Note: beam detail boxes are stacked vertically; if insufficient space
+    remains before the title block, excess beams are omitted from v1 (complete
+    list always in schedule table). Full multi-page pagination deferred to
+    post-MVP as per design simplifications in the module docstring.
     """
     page_w, page_h = A4
     _ox, oy, s, denom = _draw_sheet_frame(c, cfg, "PLINTH BEAM DETAILS")
@@ -481,9 +486,12 @@ def render_plinth_beam_details(
     heading_y = oy + plot_py + 20
     table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
 
-    # Build schedule rows from plinth_beams_data, sorted by mark for stable output.
+    # Build schedule rows from plinth_beams_data, sorted by span for stable output.
     mark_by_key = _assign_plinth_beam_marks(plinth_beams_data)
-    sorted_marks = sorted(mark_by_key.items(), key=lambda kv: kv[1])
+    sorted_marks = sorted(
+        mark_by_key.items(),
+        key=lambda kv: plinth_beams_data[kv[0]]["span_m"],
+    )
 
     headers = ("MARK", "SIZE (b x D mm)", "SPAN (m)")
     col_ws = (50.0, 90.0, 70.0)
@@ -501,7 +509,9 @@ def render_plinth_beam_details(
     table_bottom = table_y_top - _generic_schedule_height(len(rows))
 
     # Stack beam detail boxes below the schedule, starting with a margin below
-    # the table and never overlapping the title block at the bottom.
+    # the table and never overlapping the title block at the bottom. For v1,
+    # if space is exhausted, remaining beams are omitted (complete list in
+    # schedule table above).
     current_y = table_bottom - 40
     current_y = max(current_y, TITLE_H + 40)
 
@@ -510,6 +520,13 @@ def render_plinth_beam_details(
         b_mm = data.get("b_mm", 0)
         D_mm = data.get("D_mm", 0)
         design = data.get("design", {})
+
+        # Estimate height this box will consume (same as _draw_beam_detail_box's
+        # return value) and check if there's room before drawing.
+        height_estimate = D_mm * _BEAM_SECTION_PX_PER_MM + 40
+        if current_y - height_estimate - 15 < TITLE_H + 40:
+            # Insufficient space; stop stacking for v1.
+            break
 
         height_consumed = _draw_beam_detail_box(
             c, mark, b_mm, D_mm, design, x=MARGIN, y=current_y
