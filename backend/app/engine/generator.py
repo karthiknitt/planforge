@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from shapely.geometry import Polygon
 
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
@@ -12,6 +14,8 @@ from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .scorer import rank_and_select
 from .solver import solve_layouts
 from .vastu import check_vastu
+
+logger = logging.getLogger(__name__)
 
 
 def _remove_cutout_overlap(
@@ -415,7 +419,7 @@ _NO_ABSORB_TYPES = {
     "pooja",
 }
 _WET_SPLIT_TYPES = {"toilet", "wc_only", "bathroom_master"}
-_WET_CAP_SQM = 6.0
+_WET_CAP_SQM = 4.6
 _WET_MAX_ASPECT = 3.5
 _IWT_GAP = 0.115
 
@@ -808,6 +812,46 @@ def generate(cfg: PlotConfig) -> list[Layout]:
                 Column(x=round(c.cx, 3), y=round(c.cy, 3))
                 for c in derive_columns(walls)
             ]
+
+    # ── Navigability gate: reject layouts whose door graph cannot be
+    # repaired into a fully-reachable floor (same drop pattern as the
+    # compliance gate above). derive_openings runs the repair pass; the
+    # check re-derives openings exactly as build_floor_drawing does. ──────────
+    from app.engine.plan_geometry import (
+        derive_openings,
+        validate_floor_connectivity,
+    )
+    from app.engine.standards import get_opening_standards
+
+    std = get_opening_standards()
+    navigable_layouts = []
+    for layout in all_layouts:
+        ok = True
+        for fp in [
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+            layout.basement_floor,
+        ]:
+            if fp is None or not fp.rooms:
+                continue
+            walls = derive_walls(fp.rooms, buildable)
+            columns = derive_columns(walls)
+            openings = derive_openings(
+                fp.rooms, walls, columns, std, buildable, floor=fp.floor
+            )
+            if validate_floor_connectivity(fp.rooms, openings, fp.floor):
+                ok = False
+                break
+        if ok:
+            navigable_layouts.append(layout)
+    if navigable_layouts:
+        all_layouts = navigable_layouts
+    else:
+        # repair pass too weak for this config — never return zero layouts
+        logger.warning(
+            "navigability gate rejected every layout; keeping unfiltered set"
+        )
 
     # ── Score and select top 3 ────────────────────────────────────────────────
     top = rank_and_select(all_layouts, cfg, top_n=3)

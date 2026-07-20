@@ -450,9 +450,13 @@ Uses **OR-Tools CP-SAT** for constraint-based room placement:
 
 - Grid resolution: 10 cm (0.1 m)
 - Variables: `room_x`, `room_y` (integer, in grid units)
-- Hard constraints: rooms fit within floor plate, no overlaps, staircase width ≥ 900 mm
-- Soft objectives: adjacency preferences, natural light (exterior wall proximity)
-- 3 runs forced with staircase at front / mid / rear for layout diversity
+- **Hard constraints:**
+  - Rooms fit within floor plate, no overlaps
+  - Staircase width ≥ 900 mm, main entrance door ≥ 900 mm
+  - En-suite toilets: shared wall between bedroom and attached toilet ≥ 900 mm (when `attached_toilets=True`)
+  - Door-graph navigability: all rooms BFS-reachable from entrance; wet rooms exactly one door; bedrooms one circulation entry; staircase doored per floor
+- **Soft objectives:** adjacency preferences, natural light (exterior wall proximity), staircase centrality
+- **3 runs** forced with staircase at front / mid / rear for layout diversity
 - Room specs (min/max area, floor preference, mandatory flag) loaded from `config/room_specs.json`
 
 **19 room types:**
@@ -492,7 +496,8 @@ Loaded from `backend/app/config/compliance_rules.json`:
 |------|-----------|----------|
 | Bedroom area | ≥ 9.5 m² | Violation |
 | Kitchen area | ≥ 7.0 m² | Violation |
-| Toilet area | ≥ 3.0 m² | Violation |
+| Toilet area | ≥ 2.8 m² / max 4.5 m² | Violation |
+| WC area | ≥ 1.1 m² | Violation |
 | Stair width | ≥ 900 mm | Violation |
 | FAR / floor coverage | ≤ 70% | Violation |
 | Setbacks | per input | Violation |
@@ -502,6 +507,32 @@ Loaded from `backend/app/config/compliance_rules.json`:
 | Bath ventilation | window or mech vent | Warning |
 
 Layouts failing any violation are returned with `compliance.passed = false`. They are still shown to the user with violations listed.
+
+### En-Suite Toilets
+
+When `attached_toilets=True` per PlotConfig, the solver enforces:
+- **One attached bath per bedroom** — master bedroom gets `bathroom_master` (3.2–4.5 m²), other bedrooms get en-suite toilet (2.8–4.5 m², standard toilet spec)
+- **Hard wall-adjacency constraint** — shared wall between bedroom and attached toilet ≥ 900 mm (allows door opening + minimum wall span)
+- **Per-floor common toilet** — every occupied floor without a bedroom gets ≥1 common toilet (redistribution of user's toilet count; wet-zone only)
+- **Soft placement penalties** — front band preference avoided; staircase/parking adjacency penalised
+- **Wet-room exclusion** — wet rooms excluded from size-growth objective (soft constraint)
+
+Room sizing per NBC 2016 + Indian conventions:
+- `bathroom_master`: 3.2–4.5 m² (typical 5'×7' ≈ 3.25 m²)
+- `toilet` (standard): 2.8–4.5 m² (typical 5'×7' ≈ 3.25 m²)
+- `wc_only`: 1.1–2.0 m² (water-closet only, no bathing)
+
+### Door-Graph Navigability
+
+Generator enforces navigability via a repair pass (`plan_geometry.py` inside `derive_openings`) + gate (`generator.py`) after layout generation:
+- **BFS reachability** — all rooms reachable from entrance/staircase via door traversal (no dead-end room chains)
+- **Wet rooms exact-one-door** — bathrooms/toilets accessible via exactly one door (no corridor isolation)
+- **Bedrooms one circulation entry** — each bedroom entered via one primary door from circulation (no isolated bedrooms)
+- **Staircase doored per floor** — staircase core has a door on each floor it serves (landed access)
+- **Repair pass** — if violations found, door-graph corrected (opens/closes doors, adds/removes openings as needed)
+- **Generator gate** — layouts failing navigability post-repair are rejected (no output)
+
+Navigability violations are diagnostic; layouts passing all other rules but failing navigability are filtered before ranking.
 
 ### City Presets
 
@@ -534,17 +565,26 @@ Rules are evaluated per room type. Violations (wrong quadrant) and warnings (sub
 
 ### Components (`engine/scorer.py`)
 
-Five weighted components, total score 0–100:
+Seven weighted components, total score 0–100:
 
 | Component | Weight | Method |
 |-----------|--------|--------|
 | `natural_light` | 25% | Ratio of rooms touching exterior walls |
 | `adjacency` | 25% | Preferred room-pair adjacency satisfaction |
-| `aspect_ratio` | 20% | Per-room width:depth ratio (target 1:1.5) |
-| `circulation` | 15% | Staircase centrality + corridor efficiency |
-| `vastu` | 15% | Vastu rule satisfaction ratio |
+| `toilet_placement` | 10% | En-suite adjacency + wet-zone coherence (when `attached_toilets=True`) |
+| `grid_regularity` | 10% | Column-grid alignment efficiency + bay regularity |
+| `aspect_ratio` | 10% | Per-room width:depth ratio (target 1:1.5) |
+| `circulation` | 10% | Staircase centrality + corridor efficiency |
+| `vastu` | 10% | Vastu rule satisfaction ratio |
 
 `rank_and_select()` sorts layouts by `score.total` (descending) and returns top 3. Layout IDs assigned by the solver run (e.g., `"solver-front-0"`) — **not** guaranteed to be `A/B/C`.
+
+### Compliance Warnings
+
+Layouts passing geometry + navigability gates may emit placement warnings:
+- **Toilet placement violation** — en-suite toilet not hard-adjacent to its bedroom (≥ 900 mm shared wall missing)
+- **Staircase/parking proximity** — toilet adjacent to staircase/parking (preferred avoided per soft constraints)
+- **Front-band placement** — toilet in front setback band (suboptimal; reserved for entry/living)
 
 ---
 

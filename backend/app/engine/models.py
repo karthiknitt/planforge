@@ -97,6 +97,7 @@ class PlotConfig:
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
+    attached_toilets: bool = False
     plot_shape: str = (
         "rectangular"  # "rectangular" | "trapezoid" | "quadrilateral" | "l_shaped"
     )
@@ -118,6 +119,9 @@ class PlotConfig:
     municipality: str | None = None
     # Custom room config (arbitrary rooms, Phase C)
     custom_room_config: list | None = None  # list of dicts from CustomRoomSpec
+    # En-suite toilets: one attached bath per bedroom, additive to `toilets`
+    # (which then counts COMMON toilets only)
+    attached_toilets: bool = False
 
     @property
     def bhk(self) -> int:
@@ -151,8 +155,9 @@ class LayoutScore:
     aspect_ratio: float
     circulation: float
     vastu: float
-    # default keeps pre-existing stored layouts (no key) rehydrating cleanly
+    # defaults keep pre-existing stored layouts (no key) rehydrating cleanly
     grid_regularity: float = 100.0
+    toilet_placement: float = 100.0
 
 
 @dataclass

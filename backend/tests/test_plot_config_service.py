@@ -10,6 +10,7 @@ Before this service existed, 8 route call sites each hand-built PlotConfig and d
 import json
 
 from app.models.project import Project
+from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 from app.services.plot_config import plot_config_from_project
 
 
@@ -77,6 +78,55 @@ def test_malformed_json_fields_fall_back_to_none():
     cfg = plot_config_from_project(p)
     assert cfg.plot_corners is None
     assert cfg.custom_room_config is None
+
+
+def _create_payload(**overrides) -> dict:
+    base = dict(
+        name="Test Project",
+        plot_length=15.0,
+        plot_width=10.0,
+        setback_front=1.5,
+        setback_rear=1.0,
+        setback_left=1.0,
+        setback_right=1.0,
+        road_side="S",
+        north_direction="N",
+        num_bedrooms=2,
+        toilets=2,
+    )
+    base.update(overrides)
+    return base
+
+
+def test_project_create_schema_has_attached_toilets_default_false():
+    payload = ProjectCreate(**_create_payload())
+    assert payload.attached_toilets is False
+
+
+def test_project_create_schema_accepts_attached_toilets_true():
+    payload = ProjectCreate(**_create_payload(attached_toilets=True))
+    assert payload.attached_toilets is True
+
+
+def test_project_update_schema_allows_attached_toilets_none_or_bool():
+    assert ProjectUpdate().attached_toilets is None
+    assert ProjectUpdate(attached_toilets=True).attached_toilets is True
+
+
+def test_project_read_schema_has_attached_toilets_field():
+    assert "attached_toilets" in ProjectRead.model_fields
+
+
+def test_attached_toilets_reaches_config():
+    p = _project(attached_toilets=True)
+    cfg = plot_config_from_project(p)
+    assert cfg.attached_toilets is True
+
+
+def test_attached_toilets_defaults_false():
+    p = _project()
+    cfg = plot_config_from_project(p)
+    assert cfg.attached_toilets is False
 
 
 def test_defaults_for_unset_optional_columns():

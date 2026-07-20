@@ -1,5 +1,8 @@
 """Room-semantics guards: no absurd wet rooms, type-aware absorption (S5.4)."""
 
+import json
+from pathlib import Path
+
 from app.engine.generator import (
     _absorb_into_adjacent,
     _split_oversized_wet_rooms,
@@ -7,6 +10,8 @@ from app.engine.generator import (
 from app.engine.models import FloorPlan, Room
 
 from tests.helpers.golden import golden_layout
+
+CONFIG_DIR = Path(__file__).parent.parent / "app" / "config"
 
 IWT = 0.115
 WET_CAP_SQM = 6.0
@@ -102,3 +107,37 @@ def test_split_never_produces_sub_minimum_toilet():
     toilet = next(r for r in fp.rooms if r.type == "toilet")
     assert toilet.area >= 2.8
     assert len(fp.rooms) == 1  # no split happened
+
+
+def test_toilet_sizing_calibrated_to_indian_conventions_and_kept_in_sync():
+    """Both room_specs.json and compliance_rules.json must agree on the
+    Indian-convention toilet/bathroom caps (5'x7' ~= 3.25 sqm standard bath;
+    NBC minimums unchanged)."""
+    compliance = json.loads((CONFIG_DIR / "compliance_rules.json").read_text())
+    room_specs = json.loads((CONFIG_DIR / "room_specs.json").read_text())
+
+    assert compliance["max_toilet_sqm"] == 4.5
+    assert compliance["max_toilet_width_m"] == 2.1
+    assert compliance["max_wc_only_sqm"] == 2.0
+    assert compliance["min_bathroom_master_sqm"] == 3.2
+    assert compliance["max_bathroom_master_sqm"] == 4.5
+    assert compliance["min_bathroom_master_width_m"] == 1.5
+    # unchanged minimums
+    assert compliance["min_toilet_sqm"] == 2.8
+    assert compliance["min_wc_only_sqm"] == 1.1
+
+    assert room_specs["toilet"]["max_area_sqm"] == compliance["max_toilet_sqm"]
+    assert room_specs["toilet"]["max_width_m"] == compliance["max_toilet_width_m"]
+    assert room_specs["wc_only"]["max_area_sqm"] == compliance["max_wc_only_sqm"]
+    assert (
+        room_specs["bathroom_master"]["min_area_sqm"]
+        == compliance["min_bathroom_master_sqm"]
+    )
+    assert (
+        room_specs["bathroom_master"]["max_area_sqm"]
+        == compliance["max_bathroom_master_sqm"]
+    )
+    assert (
+        room_specs["bathroom_master"]["min_width_m"]
+        == compliance["min_bathroom_master_width_m"]
+    )
