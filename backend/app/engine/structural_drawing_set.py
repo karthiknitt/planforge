@@ -267,6 +267,68 @@ def render_footing_details(
     )
 
 
+def render_plinth_beam_plan(
+    c: canvas.Canvas,
+    walls: list[WallSegment],
+    plinth_beams_data: dict[str, Any],
+    cfg: PlotConfig,
+    project_name: str,
+) -> None:
+    """Render the "PLINTH BEAM PLAN" sheet: each wall centreline drawn as a
+    beam line, labelled with a short `PB<n>` mark. Marks are assigned by
+    sorting `plinth_beams_data`'s groups by span (ascending) and numbering
+    them in that order -- unlike `_FOOTING_MARK`, plinth-beam groups aren't a
+    fixed small set (they depend on the actual wall layout), so the mapping
+    is built dynamically per call rather than as a module constant.
+
+    A wall segment whose recomputed `(kind, round(length, 1))` group key has
+    no entry in `plinth_beams_data` (e.g. stale/mismatched input) is drawn
+    but left unlabelled rather than given a fabricated placeholder mark --
+    an unlabelled beam line is still useful, a made-up mark would mislead.
+    """
+    page_w, _page_h = A4
+    ox, oy, s, denom = _draw_sheet_frame(c, cfg, "PLINTH BEAM PLAN")
+
+    sorted_keys = sorted(
+        plinth_beams_data.keys(), key=lambda k: plinth_beams_data[k]["span_m"]
+    )
+    mark_by_key = {k: f"PB{i + 1}" for i, k in enumerate(sorted_keys)}
+
+    # Two passes, same convention as render_column_footing_plan: draw every
+    # beam line first with one color/width state, reset, then draw labels.
+    c.setStrokeColor(HexColor("#0088AA"))
+    c.setLineWidth(1.5)
+    labels = []
+    for w in walls:
+        x1, y1 = ox + w.x1 * s, oy + w.y1 * s
+        x2, y2 = ox + w.x2 * s, oy + w.y2 * s
+        c.line(x1, y1, x2, y2)
+        key = f"plinth-{w.kind}-span{round(w.length, 1):.2f}"
+        mark = mark_by_key.get(key)
+        if mark is not None:
+            labels.append(((x1 + x2) / 2, (y1 + y2) / 2, mark))
+    c.setLineWidth(1)
+    c.setStrokeColor(HexColor("#000000"))
+
+    c.setFont("Helvetica-Bold", 6)
+    c.setFillColor(HexColor("#000000"))
+    for mx, my, mark in labels:
+        c.drawCentredString(mx, my + 4, mark)
+
+    _draw_title_block(
+        c,
+        project_name,
+        "A",
+        "Plinth Beam Plan",
+        "Plinth Beam Plan",
+        cfg,
+        _NUM_BEDROOMS_NA,
+        s,
+        page_w,
+        scale_denom=denom,
+    )
+
+
 def _draw_typical_footing_section(
     c: canvas.Canvas, data: dict[str, Any], x: float, y: float
 ) -> None:

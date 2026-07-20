@@ -18,6 +18,7 @@ from app.engine.structural_drawing_set import (
     _draw_beam_detail_box,
     render_column_footing_plan,
     render_footing_details,
+    render_plinth_beam_plan,
 )
 from tests.helpers.pdf_png import pdf_page_text
 
@@ -249,6 +250,57 @@ def _footing_schedule_top_clears_heading(cfg: PlotConfig, n_rows: int) -> None:
 
 def test_footing_details_schedule_position_clears_heading_default_plot():
     _footing_schedule_top_clears_heading(CFG, n_rows=2)
+
+
+def test_plinth_beam_plan_renders_beam_marks():
+    walls = [
+        WallSegment(x1=0, y1=0, x2=4, y2=0, thickness=0.23, kind="external"),
+        WallSegment(x1=0, y1=0, x2=0, y2=3, thickness=0.115, kind="internal"),
+    ]
+    plinth_beams_data = {
+        "plinth-external-span4.00": {
+            "b_mm": 230,
+            "D_mm": 300,
+            "span_m": 4.0,
+            "kind": "external",
+            "count": 1,
+            "ok": True,
+            "design": {},
+            "checks": [],
+        },
+        "plinth-internal-span3.00": {
+            "b_mm": 115,
+            "D_mm": 275,
+            "span_m": 3.0,
+            "kind": "internal",
+            "count": 1,
+            "ok": True,
+            "design": {},
+            "checks": [],
+        },
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_plinth_beam_plan(c, walls, plinth_beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM PLAN" in text.upper()
+    assert "PB1" in text
+    assert "PB2" in text
+
+
+def test_plinth_beam_plan_skips_label_for_unmatched_wall_without_crashing():
+    walls = [WallSegment(x1=0, y1=0, x2=5, y2=0, thickness=0.23, kind="external")]
+    plinth_beams_data = {}  # no matching group at all
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_plinth_beam_plan(c, walls, plinth_beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM PLAN" in text.upper()
 
 
 def test_footing_details_schedule_position_clears_heading_tall_narrow_plot():
