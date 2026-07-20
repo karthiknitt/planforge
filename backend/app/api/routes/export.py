@@ -20,7 +20,12 @@ from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
 from app.services.plans import get_effective_plan_tier, tier_at_least
-from app.services import layout_store, plinth_beam_design, structural_store
+from app.services import (
+    layout_store,
+    plinth_beam_design,
+    structagent_client,
+    structural_store,
+)
 from app.services.plot_config import plot_config_from_project
 
 logger = logging.getLogger(__name__)
@@ -163,16 +168,17 @@ async def export_structural_drawing_set(
         )
 
     # Build layout object (prefer final_geometry if available from design)
-    layout = layout_store.engine_layout_from_geometry(row.geometry)
-    if design is not None:
-        geom = design.get("final_geometry") or row.geometry
-        layout = layout_store.engine_layout_from_geometry(geom)
+    geom = design.get("final_geometry") or row.geometry
+    layout = layout_store.engine_layout_from_geometry(geom)
 
     # Build ground-floor drawing (plinth beams live on GF)
     drawing = build_floor_drawing(layout.ground_floor, cfg)
 
     # Compute plinth beam design fresh at export time
-    plinth_beams_data = await plinth_beam_design.design_plinth_beams(drawing.walls)
+    try:
+        plinth_beams_data = await plinth_beam_design.design_plinth_beams(drawing.walls)
+    except structagent_client.StructuralAPIError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
     # Generate the 6-page PDF
     pdf_bytes = generate_structural_drawing_set(

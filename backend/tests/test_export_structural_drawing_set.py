@@ -6,6 +6,8 @@ external structapi HTTP call requirements.
 """
 
 from app.models.layout import StoredLayout
+from app.models.structural import StructuralDesign
+from app.services import plinth_beam_design, structagent_client
 
 HDRS = {"X-Test-User-Id": "export-owner"}
 
@@ -149,3 +151,53 @@ async def test_export_structural_drawing_set_404_missing_layout(client_db):
     )
     assert res.status_code == 404, res.text
     assert "Layout 'Z' not found" in res.json()["detail"]
+
+
+async def test_export_structural_drawing_set_502_on_structapi_error(
+    client_db, monkeypatch
+):
+    """Plinth beam design structapi error -> 502."""
+    client, SessionLocal = client_db
+    project_id = await _make_project(client)
+    await _seed_layout(SessionLocal, project_id, GEO_V1)
+
+    # Approve the layout
+    res = await client.post(
+        f"/api/projects/{project_id}/structural/approve",
+        json={"layout_id": "A"},
+        headers=HDRS,
+    )
+    assert res.status_code == 200, res.text
+    approval_resp = res.json()
+    revision_id = approval_resp["revision_id"]
+
+    # Seed a structural design row (approved + designed)
+    async with SessionLocal() as s:
+        design = StructuralDesign(
+            revision_id=revision_id,
+            status="designed",
+            structapi_response={
+                "api_version": "1",
+                "ok": True,
+                "checks": [],
+                "data": {},
+            },
+        )
+        s.add(design)
+        await s.commit()
+
+    # Monkeypatch plinth_beam_design to raise StructuralAPIError
+    async def _raise_structapi_error(walls):
+        raise structagent_client.StructuralAPIError("structapi unreachable")
+
+    monkeypatch.setattr(
+        plinth_beam_design, "design_plinth_beams", _raise_structapi_error
+    )
+
+    # Try to export - should return 502
+    res = await client.get(
+        f"/api/projects/{project_id}/export/structural-drawing-set",
+        headers=HDRS,
+    )
+    assert res.status_code == 502, res.text
+    assert "structapi unreachable" in res.json()["detail"]
