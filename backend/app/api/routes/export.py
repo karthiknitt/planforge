@@ -14,11 +14,13 @@ from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
 from app.engine.boq import QuantityEngine
 from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
+from app.engine.plan_geometry import build_floor_drawing
+from app.engine.structural_drawing_set import generate_structural_drawing_set
 from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
 from app.services.plans import get_effective_plan_tier, tier_at_least
-from app.services import layout_store, structural_store
+from app.services import layout_store, plinth_beam_design, structural_store
 from app.services.plot_config import plot_config_from_project
 
 logger = logging.getLogger(__name__)
@@ -90,6 +92,106 @@ async def export_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
+        },
+    )
+
+
+# ── Structural Drawing Set export ─────────────────────────────────────────────
+
+
+@router.get("/projects/{project_id}/export/structural-drawing-set")
+async def export_structural_drawing_set(
+    project_id: str,
+    layout_id: str = "A",
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Export a 6-page Structural Drawing Set PDF (Column & Footing Plan,
+    Footing Details, Plinth Beam Plan, Plinth Beam Details, Roof Beam & Slab
+    Plan, Roof Beam Details).
+
+    Gated on approved + designed layout: returns 409 if either approval or
+    structural design is missing. Computes plinth beams fresh at export time
+    (they depend on wall geometry only, not external structapi data).
+    """
+    project = await _get_project(project_id, user_id, db)
+    cfg = _cfg_from_project(project)
+
+    stored = await layout_store.get_or_generate_layouts(project, db)
+    row = next((r for r in stored if r.layout_key == layout_id), None)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Layout {layout_id!r} not found",
+        )
+
+    # Gate 1: Check approval
+    revision = await structural_store.find_revision_for_hash(
+        project_id,
+        layout_id,
+        structural_store.geometry_hash(row.geometry),
+        db,
+    )
+    if revision is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "not_approved",
+                "help": (
+                    "Approve the architectural plan first: "
+                    f"POST /api/projects/{project_id}/structural/approve "
+                    f'{{"layout_id": "{layout_id}"}}'
+                ),
+            },
+        )
+
+    # Gate 2: Check structural design exists
+    design = await structural_store.design_surface(
+        project_id, layout_id, row.geometry, db
+    )
+    if design is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "not_designed",
+                "help": (
+                    "Run structural design first: "
+                    f"POST /api/projects/{project_id}/structural "
+                    f'{{"layout_id": "{layout_id}"}}'
+                ),
+            },
+        )
+
+    # Build layout object (prefer final_geometry if available from design)
+    layout = layout_store.engine_layout_from_geometry(row.geometry)
+    if design is not None:
+        geom = design.get("final_geometry") or row.geometry
+        layout = layout_store.engine_layout_from_geometry(geom)
+
+    # Build ground-floor drawing (plinth beams live on GF)
+    drawing = build_floor_drawing(layout.ground_floor, cfg)
+
+    # Compute plinth beam design fresh at export time
+    plinth_beams_data = await plinth_beam_design.design_plinth_beams(drawing.walls)
+
+    # Generate the 6-page PDF
+    pdf_bytes = generate_structural_drawing_set(
+        project_name=project.name,
+        cfg=cfg,
+        columns=drawing.columns,
+        walls=drawing.walls,
+        plinth_beams_data=plinth_beams_data,
+        structural_design=design,
+        floor_plan=layout.first_floor,
+        layout=layout,
+        num_bedrooms=project.num_bedrooms,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="planforge-structural-drawings-{project_id}-layout-{layout_id}.pdf"'
         },
     )
 
