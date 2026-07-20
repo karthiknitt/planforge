@@ -140,6 +140,74 @@ def test_beam_detail_box_renders_top_steel_when_doubly_reinforced():
     assert "Top" in text
 
 
+def test_beam_detail_box_single_tension_bar_centers_without_crash():
+    # n_bars == 1 must place the single bar centered, not divide by
+    # (n_bars - 1) == 0 -- the exact divide-by-zero this renderer guards.
+    design = {
+        "n_bars": 1,
+        "bar_dia": 16,
+        "doubly_reinforced": False,
+        "stirrups": {"sv_provided": 150},
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    height = _draw_beam_detail_box(
+        c, mark="PB3", b_mm=230, D_mm=300, design=design, x=100, y=500
+    )
+    c.showPage()
+    c.save()
+
+    assert isinstance(height, float) and height > 0
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PB3" in text
+
+
+def test_beam_detail_box_zero_tension_bars_skips_row_without_crash():
+    # n_bars == 0 must skip the tension row entirely (no bars, no label)
+    # rather than iterate/divide -- still renders the box + heading.
+    design = {
+        "n_bars": 0,
+        "bar_dia": 0,
+        "doubly_reinforced": False,
+        "stirrups": {"sv_provided": 150},
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    height = _draw_beam_detail_box(
+        c, mark="PB4", b_mm=230, D_mm=300, design=design, x=100, y=500
+    )
+    c.showPage()
+    c.save()
+
+    assert isinstance(height, float) and height > 0
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PB4" in text
+
+
+def test_beam_detail_box_single_compression_bar_centers_without_crash():
+    # n_bars_comp == 1 under doubly_reinforced must center the single top
+    # bar, not divide by (n_bars_comp - 1) == 0.
+    design = {
+        "n_bars": 3,
+        "bar_dia": 12,
+        "doubly_reinforced": True,
+        "n_bars_comp": 1,
+        "stirrups": {"sv_provided": 150},
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    height = _draw_beam_detail_box(
+        c, mark="PB5", b_mm=230, D_mm=300, design=design, x=100, y=500
+    )
+    c.showPage()
+    c.save()
+
+    assert isinstance(height, float) and height > 0
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PB5" in text
+    assert "Top" in text
+
+
 def _footing_schedule_top_clears_heading(cfg: PlotConfig, n_rows: int) -> None:
     """Coordinate-based regression for the z-order occlusion bug found in
     code review (commit b4032a6): `_draw_sheet_frame` draws the sheet

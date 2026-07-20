@@ -53,6 +53,11 @@ _NUM_BEDROOMS_NA = 0
 #: vertical-space budgeting so the two stay in sync.
 _FOOTING_SECTION_PX_PER_MM = 0.15
 
+#: scale for `_draw_beam_detail_box`'s cross-section (points per mm of real
+#: beam dimension) -- shared with future sheet callers stacking these boxes
+#: so their vertical-space budgeting matches the drawn size.
+_BEAM_SECTION_PX_PER_MM = 0.12
+
 
 def _draw_sheet_frame(
     c: canvas.Canvas, cfg: PlotConfig, heading: str
@@ -311,7 +316,7 @@ def _draw_beam_detail_box(
     design: dict[str, Any],
     x: float,
     y: float,
-    px_per_mm: float = 0.12,
+    px_per_mm: float = _BEAM_SECTION_PX_PER_MM,
 ) -> float:
     """Dimensioned rectangular beam cross-section pictorial (b x D, scaled by
     `px_per_mm`) showing the envelope reinforcement: tension bars along the
