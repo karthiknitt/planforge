@@ -26,9 +26,13 @@ jobs:
         run: bash scripts/verify-structapi-vendor.sh
 
   vendor-freshness:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # NOTE: a job-level permissions block REPLACES the defaults — without
+    # contents: read the GITHUB_TOKEN cannot even check out this repo and
+    # actions/checkout dies with a masked-403 "Repository not found".
     permissions:
+      contents: read
       issues: write
     steps:
       - uses: actions/checkout@v7
