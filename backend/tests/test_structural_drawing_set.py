@@ -550,10 +550,26 @@ def test_roof_beam_details_renders_without_crashing_when_empty():
     assert "ROOF BEAM DETAILS" in text.upper()
 
 
-def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing():
+def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing(monkeypatch):
     # Create 10 roof-beam groups to force space exhaustion and truncation
     # of detail boxes. The schedule table remains complete, but only early
-    # detail boxes are rendered.
+    # detail boxes are rendered. This test uses monkeypatch to spy on
+    # _draw_beam_detail_box calls and verify that the overflow guard actually
+    # truncates box stacking (call count < 10), rather than just checking that
+    # the page doesn't crash (which would pass even if the guard were deleted,
+    # since the schedule table always lists all marks).
+    from app.engine import structural_drawing_set as sds
+
+    call_count = 0
+    original_draw_box = sds._draw_beam_detail_box
+
+    def counting_wrapper(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return original_draw_box(*args, **kwargs)
+
+    monkeypatch.setattr(sds, "_draw_beam_detail_box", counting_wrapper)
+
     beams_data = {}
     for i in range(10):
         span_m = 2.0 + i * 0.5
@@ -576,6 +592,11 @@ def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing():
     render_roof_beam_details(c, beams_data, CFG, "Test Project")
     c.showPage()
     c.save()
+
     text = pdf_page_text(buf.getvalue(), 0)
     assert "ROOF BEAM DETAILS" in text.upper()
     assert "B1" in text
+    assert 0 < call_count < 10, (
+        f"expected overflow guard to truncate box-stacking below 10 beams, "
+        f"got {call_count} detail boxes drawn"
+    )
