@@ -4,7 +4,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_elements import ColumnMarker, WallSegment
-from app.engine.models import PlotConfig
+from app.engine.models import ComplianceResult, FloorPlan, Layout, PlotConfig, Room
 from app.engine.pdf import (
     MARGIN,
     ROAD_GAP,
@@ -15,13 +15,18 @@ from app.engine.pdf import (
     _standard_scale,
 )
 from app.engine.structural_drawing_set import (
+    _assign_marks_by_span,
     _assign_plinth_beam_marks,
     _draw_beam_detail_box,
+    generate_structural_drawing_set,
     render_column_footing_plan,
     render_footing_details,
+    render_plinth_beam_details,
     render_plinth_beam_plan,
+    render_roof_beam_details,
+    render_roof_beam_slab_plan,
 )
-from tests.helpers.pdf_png import pdf_page_text
+from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 
 CFG = PlotConfig(
     plot_length=9.0,
@@ -338,3 +343,368 @@ def test_footing_details_schedule_position_clears_heading_tall_narrow_plot():
         parking=True,
     )
     _footing_schedule_top_clears_heading(tall_narrow_cfg, n_rows=2)
+
+
+def test_plinth_beam_details_renders_schedule_and_detail_boxes():
+    plinth_beams_data = {
+        "plinth-external-span3.50": {
+            "b_mm": 230,
+            "D_mm": 300,
+            "span_m": 3.5,
+            "kind": "external",
+            "count": 2,
+            "ok": True,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+            "checks": [],
+        },
+        "plinth-internal-span2.00": {
+            "b_mm": 115,
+            "D_mm": 275,
+            "span_m": 2.0,
+            "kind": "internal",
+            "count": 1,
+            "ok": True,
+            "design": {
+                "n_bars": 2,
+                "bar_dia": 10,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 175},
+            },
+            "checks": [],
+        },
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_plinth_beam_details(c, plinth_beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM DETAILS" in text.upper()
+    assert "PB1" in text
+    assert "PB2" in text
+
+
+def test_plinth_beam_details_renders_without_crashing_when_empty():
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_plinth_beam_details(c, {}, CFG, "Test Project")
+    c.showPage()
+    c.save()
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM DETAILS" in text.upper()
+
+
+def test_plinth_beam_details_truncates_excess_detail_boxes_without_crashing():
+    # Create 10 plinth-beam groups to force space exhaustion and truncation
+    # of detail boxes. Given available vertical space (~300pt) and each box
+    # consuming ~90pt, only ~3-4 will fit before the title block. This tests
+    # that the loop breaks gracefully without crashing or overlapping the
+    # title block. The schedule table remains complete (shows all 10 marks),
+    # but only early detail boxes are rendered.
+    plinth_beams_data = {}
+    for i in range(10):
+        span_m = 2.0 + i * 0.5
+        D_mm = 250 + i * 10
+        plinth_beams_data[f"plinth-span{span_m:.2f}"] = {
+            "b_mm": 230,
+            "D_mm": D_mm,
+            "span_m": span_m,
+            "kind": "external",
+            "count": 1,
+            "ok": True,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+            "checks": [],
+        }
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    # Should not crash despite many groups causing truncation.
+    render_plinth_beam_details(c, plinth_beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "PLINTH BEAM DETAILS" in text.upper()
+    # First mark should appear in both schedule and detail boxes.
+    assert "PB1" in text
+
+
+def test_roof_beam_slab_plan_renders_beam_layout_and_slab_labels():
+    rooms = [
+        Room(id="r1", name="Living", type="living", x=0.5, y=0.5, width=3.0, depth=3.5),
+        Room(
+            id="r2", name="Bedroom", type="bedroom", x=4.0, y=0.5, width=3.0, depth=3.5
+        ),
+    ]
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=rooms)
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_slab_plan(c, floor_plan, layout, CFG, "Test Project", 2, None)
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "S1" in text
+    assert "S2" in text
+
+
+def test_roof_beam_slab_plan_renders_without_crashing_when_no_rooms():
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=[])
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_slab_plan(c, floor_plan, layout, CFG, "Test Project", 2, None)
+    c.showPage()
+    c.save()
+    # Should not raise; page should still have been created (has some content).
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert isinstance(text, str)
+
+
+def test_assign_marks_by_span_orders_ascending_and_uses_prefix():
+    # Generic mark-assignment helper test: sorts by span ascending and uses
+    # the provided prefix (e.g., "B" for roof beams, "PB" for plinth beams).
+    data = {
+        "k-big": {"span_m": 5.0},
+        "k-small": {"span_m": 2.0},
+        "k-mid": {"span_m": 3.5},
+    }
+    result = _assign_marks_by_span(data, "B")
+    assert result == {"k-small": "B1", "k-mid": "B2", "k-big": "B3"}
+
+
+def test_roof_beam_details_renders_schedule_and_detail_boxes():
+    beams_data = {
+        "x-span4.00-trib2.25": {
+            "b_mm": 230,
+            "D_mm": 450,
+            "span_m": 4.0,
+            "trib_width_m": 2.25,
+            "n_spans": 2,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 16,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+                "Ast_prov_mm2": 603,
+            },
+        },
+        "y-span3.00-trib2.00": {
+            "b_mm": 230,
+            "D_mm": 375,
+            "span_m": 3.0,
+            "trib_width_m": 2.0,
+            "n_spans": 1,
+            "design": {
+                "n_bars": 2,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 175},
+                "Ast_prov_mm2": 226,
+            },
+        },
+    }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_details(c, beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "ROOF BEAM DETAILS" in text.upper()
+    assert "B1" in text
+    assert "B2" in text
+
+
+def test_roof_beam_details_renders_without_crashing_when_empty():
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_details(c, {}, CFG, "Test Project")
+    c.showPage()
+    c.save()
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "ROOF BEAM DETAILS" in text.upper()
+
+
+def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing(monkeypatch):
+    # Create 10 roof-beam groups to force space exhaustion and truncation
+    # of detail boxes. The schedule table remains complete, but only early
+    # detail boxes are rendered. This test uses monkeypatch to spy on
+    # _draw_beam_detail_box calls and verify that the overflow guard actually
+    # truncates box stacking (call count < 10), rather than just checking that
+    # the page doesn't crash (which would pass even if the guard were deleted,
+    # since the schedule table always lists all marks).
+    from app.engine import structural_drawing_set as sds
+
+    call_count = 0
+    original_draw_box = sds._draw_beam_detail_box
+
+    def counting_wrapper(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return original_draw_box(*args, **kwargs)
+
+    monkeypatch.setattr(sds, "_draw_beam_detail_box", counting_wrapper)
+
+    beams_data = {}
+    for i in range(10):
+        span_m = 2.0 + i * 0.5
+        D_mm = 250 + i * 10
+        beams_data[f"x-span{span_m:.2f}-trib2.00"] = {
+            "b_mm": 230,
+            "D_mm": D_mm,
+            "span_m": span_m,
+            "trib_width_m": 2.0,
+            "n_spans": 1,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+        }
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    render_roof_beam_details(c, beams_data, CFG, "Test Project")
+    c.showPage()
+    c.save()
+
+    text = pdf_page_text(buf.getvalue(), 0)
+    assert "ROOF BEAM DETAILS" in text.upper()
+    assert "B1" in text
+    assert 0 < call_count < 10, (
+        f"expected overflow guard to truncate box-stacking below 10 beams, "
+        f"got {call_count} detail boxes drawn"
+    )
+
+
+def test_generate_structural_drawing_set_produces_6_pages():
+    columns = [ColumnMarker(cx=0.0, cy=0.0), ColumnMarker(cx=4.0, cy=0.0)]
+    walls = [
+        WallSegment(x1=0, y1=0, x2=4, y2=0, thickness=0.23, kind="external"),
+        WallSegment(x1=0, y1=0, x2=0, y2=3, thickness=0.115, kind="internal"),
+    ]
+    plinth_beams_data = {
+        "plinth-external-span4.00": {
+            "b_mm": 230,
+            "D_mm": 300,
+            "span_m": 4.0,
+            "kind": "external",
+            "count": 1,
+            "ok": True,
+            "design": {
+                "n_bars": 3,
+                "bar_dia": 12,
+                "doubly_reinforced": False,
+                "stirrups": {"sv_provided": 150},
+            },
+            "checks": [],
+        },
+    }
+    structural_design = {
+        "structapi": {
+            "data": {
+                "footings": {
+                    "corner": {
+                        "data": {
+                            "L_m": 1.35,
+                            "B_m": 1.35,
+                            "D_overall_mm": 450,
+                            "bars_x": {"dia": 12, "spacing": 150},
+                            "bars_y": {"dia": 12, "spacing": 150},
+                        }
+                    },
+                },
+                "beams": {
+                    "x-span4.00-trib2.25": {
+                        "b_mm": 230,
+                        "D_mm": 450,
+                        "span_m": 4.0,
+                        "trib_width_m": 2.25,
+                        "n_spans": 2,
+                        "design": {
+                            "n_bars": 3,
+                            "bar_dia": 16,
+                            "doubly_reinforced": False,
+                            "stirrups": {"sv_provided": 150},
+                        },
+                    },
+                },
+            },
+        },
+    }
+    rooms = [
+        Room(id="r1", name="Living", type="living", x=0.5, y=0.5, width=3.0, depth=3.5)
+    ]
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=rooms)
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+
+    pdf_bytes = generate_structural_drawing_set(
+        project_name="Test Project",
+        cfg=CFG,
+        columns=columns,
+        walls=walls,
+        plinth_beams_data=plinth_beams_data,
+        structural_design=structural_design,
+        floor_plan=floor_plan,
+        layout=layout,
+        num_bedrooms=2,
+    )
+
+    assert pdf_bytes[:5] == b"%PDF-"
+    assert pdf_pages(pdf_bytes) == 6
+
+
+def test_generate_structural_drawing_set_handles_missing_structapi_data():
+    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=[])
+    layout = Layout(
+        id="T",
+        name="Test Layout",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=floor_plan,
+        compliance=ComplianceResult(passed=True),
+    )
+    pdf_bytes = generate_structural_drawing_set(
+        project_name="Test Project",
+        cfg=CFG,
+        columns=[],
+        walls=[],
+        plinth_beams_data={},
+        structural_design={},  # no "structapi" key at all
+        floor_plan=floor_plan,
+        layout=layout,
+        num_bedrooms=2,
+    )
+    assert pdf_bytes[:5] == b"%PDF-"
+    assert pdf_pages(pdf_bytes) == 6

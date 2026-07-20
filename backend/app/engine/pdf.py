@@ -1453,10 +1453,17 @@ def _draw_structural_floor(
     num_bedrooms: int,
     floor_label: str,
     structural_design: dict | None = None,
-) -> None:
+) -> tuple[float, float, float, int]:
     """Beam & column layout projected from the canonical FloorDrawing — the
     same scale, grid derivation (wall centrelines), and page furniture as
-    the architectural pages, so all four sheets read as one set."""
+    the architectural pages, so all four sheets read as one set.
+
+    Returns the computed ``(ox, oy, s, denom)`` frame (plot-origin X/Y in
+    points, scale, scale denominator) so callers that need to overlay
+    additional content in the same coordinate space (e.g.
+    `structural_drawing_set.render_roof_beam_slab_plan`) don't have to
+    reimplement this scale/offset math themselves — this function is the
+    single source of truth for it."""
     from app.engine.plan_geometry import build_floor_drawing
 
     page_w, page_h = A4
@@ -1511,7 +1518,7 @@ def _draw_structural_floor(
             page_w,
             scale_denom=denom,
         )
-        return
+        return ox, oy, s, denom
 
     drawing = build_floor_drawing(floor_plan, cfg)
     bx1, by1, bx2, by2 = drawing.bounds
@@ -1714,6 +1721,8 @@ def _draw_structural_floor(
         scale_denom=denom,
         far_text=_far_text(layout, cfg),
     )
+
+    return ox, oy, s, denom
 
 
 def _draw_title_block(

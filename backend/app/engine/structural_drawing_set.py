@@ -10,6 +10,7 @@ reinforcement schedule per beam mark rather than midspan/support split).
 
 from __future__ import annotations
 
+from io import BytesIO
 from typing import Any
 
 from reportlab.lib.colors import HexColor, white
@@ -18,7 +19,7 @@ from reportlab.pdfgen import canvas
 
 from app.engine.cad_elements import ColumnMarker, WallSegment
 from app.engine.footing_placement import place_footings
-from app.engine.models import PlotConfig
+from app.engine.models import FloorPlan, Layout, PlotConfig
 from app.engine.pdf import (
     MARGIN,
     ROAD_GAP,
@@ -27,6 +28,7 @@ from app.engine.pdf import (
     _centered_plot_oy,
     _draw_generic_schedule_table,
     _draw_north_arrow,
+    _draw_structural_floor,
     _draw_title_block,
     _generic_schedule_height,
     _standard_scale,
@@ -268,6 +270,16 @@ def render_footing_details(
     )
 
 
+def _assign_marks_by_span(data: dict[str, Any], prefix: str) -> dict[str, str]:
+    """Generic mark-assignment helper: assign each data group a short mark
+    (e.g., `B1`, `B2`, `PB1`, `PB2`) by sorting groups by span (ascending)
+    and numbering them in that order. This logic is extracted so it can be
+    reused by any beam renderer (plinth, roof, etc.) without duplication.
+    """
+    sorted_keys = sorted(data.keys(), key=lambda k: data[k]["span_m"])
+    return {k: f"{prefix}{i + 1}" for i, k in enumerate(sorted_keys)}
+
+
 def _assign_plinth_beam_marks(plinth_beams_data: dict[str, Any]) -> dict[str, str]:
     """Assign each `plinth_beams_data` group a short `PB<n>` mark by sorting
     groups by span (ascending) and numbering them in that order -- unlike
@@ -276,10 +288,7 @@ def _assign_plinth_beam_marks(plinth_beams_data: dict[str, Any]) -> dict[str, st
     rather than as a module constant. Extracted as its own function so the
     ordering can be tested directly without rendering a full PDF page.
     """
-    sorted_keys = sorted(
-        plinth_beams_data.keys(), key=lambda k: plinth_beams_data[k]["span_m"]
-    )
-    return {k: f"PB{i + 1}" for i, k in enumerate(sorted_keys)}
+    return _assign_marks_by_span(plinth_beams_data, "PB")
 
 
 def render_plinth_beam_plan(
@@ -453,3 +462,306 @@ def _draw_beam_detail_box(
     c.drawString(label_x, y + bh / 2 - 2, f"stirrups@{sv}c/c")
 
     return bh + 40
+
+
+def render_plinth_beam_details(
+    c: canvas.Canvas,
+    plinth_beams_data: dict[str, Any],
+    cfg: PlotConfig,
+    project_name: str,
+) -> None:
+    """Render the "PLINTH BEAM DETAILS" sheet: a schedule table (one row per
+    plinth beam group, identified by mark) plus dimensioned beam cross-section
+    pictorials stacked vertically below the schedule.
+
+    Like `render_footing_details`, this sheet has no plan-view content tied to
+    model-space positions -- its content is a data table and representative
+    pictorials. `_draw_sheet_frame` is still called (for heading/road-strip/
+    plot-boundary/north-arrow furniture consistency), but the schedule and
+    beam-detail boxes are positioned at fixed page-relative offsets rather than
+    projected through model coordinates.
+
+    Note: beam detail boxes are stacked vertically; if insufficient space
+    remains before the title block, excess beams are omitted from v1 (complete
+    list always in schedule table). Full multi-page pagination deferred to
+    post-MVP as per design simplifications in the module docstring.
+    """
+    page_w, page_h = A4
+    _ox, oy, s, denom = _draw_sheet_frame(c, cfg, "PLINTH BEAM DETAILS")
+
+    # Compute schedule table position, using same heading/clamping logic as
+    # render_footing_details to avoid z-order occlusion with the sheet heading.
+    plot_py = cfg.plot_length * s
+    heading_y = oy + plot_py + 20
+    table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
+
+    # Build schedule rows from plinth_beams_data, sorted by span for stable output.
+    mark_by_key = _assign_plinth_beam_marks(plinth_beams_data)
+    sorted_marks = sorted(
+        mark_by_key.items(),
+        key=lambda kv: plinth_beams_data[kv[0]]["span_m"],
+    )
+
+    headers = ("MARK", "SIZE (b x D mm)", "SPAN (m)")
+    col_ws = (50.0, 90.0, 70.0)
+    rows: list[tuple[str, str, str]] = []
+    for key, mark in sorted_marks:
+        data = plinth_beams_data[key]
+        b_mm = data.get("b_mm", 0)
+        D_mm = data.get("D_mm", 0)
+        span_m = data.get("span_m", 0)
+        rows.append((mark, f"{b_mm:.0f}x{D_mm:.0f}", f"{span_m:.2f}"))
+
+    _draw_generic_schedule_table(
+        c, "PLINTH BEAM SCHEDULE", headers, col_ws, rows, MARGIN, table_y_top
+    )
+    table_bottom = table_y_top - _generic_schedule_height(len(rows))
+
+    # Stack beam detail boxes below the schedule, starting with a margin below
+    # the table and never overlapping the title block at the bottom. For v1,
+    # if space is exhausted, remaining beams are omitted (complete list in
+    # schedule table above).
+    current_y = table_bottom - 40
+    current_y = max(current_y, TITLE_H + 40)
+
+    for key, mark in sorted_marks:
+        data = plinth_beams_data[key]
+        b_mm = data.get("b_mm", 0)
+        D_mm = data.get("D_mm", 0)
+        design = data.get("design", {})
+
+        # Estimate height this box will consume (same as _draw_beam_detail_box's
+        # return value) and check if there's room before drawing.
+        height_estimate = D_mm * _BEAM_SECTION_PX_PER_MM + 40
+        if current_y - height_estimate - 15 < TITLE_H + 40:
+            # Insufficient space; stop stacking for v1.
+            break
+
+        height_consumed = _draw_beam_detail_box(
+            c, mark, b_mm, D_mm, design, x=MARGIN, y=current_y
+        )
+        current_y -= height_consumed + 15  # 15pt gap between boxes
+
+    _draw_title_block(
+        c,
+        project_name,
+        "A",
+        "Plinth Beam Details",
+        "Plinth Beam Details",
+        cfg,
+        _NUM_BEDROOMS_NA,
+        s,
+        page_w,
+        scale_denom=denom,
+    )
+
+
+def render_roof_beam_details(
+    c: canvas.Canvas,
+    beams_data: dict[str, Any],
+    cfg: PlotConfig,
+    project_name: str,
+) -> None:
+    """Render the "ROOF BEAM DETAILS" sheet: a schedule table (one row per
+    roof beam group, identified by mark) plus dimensioned beam cross-section
+    pictorials stacked vertically below the schedule.
+
+    Like `render_plinth_beam_details`, this sheet has no plan-view content
+    tied to model-space positions -- its content is a data table and
+    representative pictorials. `_draw_sheet_frame` is still called (for
+    heading/road-strip/plot-boundary/north-arrow furniture consistency), but
+    the schedule and beam-detail boxes are positioned at fixed page-relative
+    offsets rather than projected through model coordinates.
+
+    Roof beam data is sourced from structapi's design-building chain
+    (design output keyed by tributary-width naming, e.g., "x-span4.00-trib2.25").
+
+    Note: beam detail boxes are stacked vertically; if insufficient space
+    remains before the title block, excess beams are omitted from v1 (complete
+    list always in schedule table). Full multi-page pagination deferred to
+    post-MVP as per design simplifications in the module docstring.
+    """
+    page_w, page_h = A4
+    _ox, oy, s, denom = _draw_sheet_frame(c, cfg, "ROOF BEAM DETAILS")
+
+    # Compute schedule table position, using same heading/clamping logic as
+    # render_plinth_beam_details to avoid z-order occlusion with the sheet
+    # heading.
+    plot_py = cfg.plot_length * s
+    heading_y = oy + plot_py + 20
+    table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
+
+    # Build schedule rows from beams_data, sorted by span for stable output.
+    mark_by_key = _assign_marks_by_span(beams_data, "B")
+    sorted_marks = sorted(
+        mark_by_key.items(),
+        key=lambda kv: beams_data[kv[0]]["span_m"],
+    )
+
+    headers = ("MARK", "SIZE (b x D mm)", "SPAN (m)")
+    col_ws = (50.0, 90.0, 70.0)
+    rows: list[tuple[str, str, str]] = []
+    for key, mark in sorted_marks:
+        data = beams_data[key]
+        b_mm = data.get("b_mm", 0)
+        D_mm = data.get("D_mm", 0)
+        span_m = data.get("span_m", 0)
+        rows.append((mark, f"{b_mm:.0f}x{D_mm:.0f}", f"{span_m:.2f}"))
+
+    _draw_generic_schedule_table(
+        c, "ROOF BEAM SCHEDULE", headers, col_ws, rows, MARGIN, table_y_top
+    )
+    table_bottom = table_y_top - _generic_schedule_height(len(rows))
+
+    # Stack beam detail boxes below the schedule, starting with a margin below
+    # the table and never overlapping the title block at the bottom. For v1,
+    # if space is exhausted, remaining beams are omitted (complete list in
+    # schedule table above).
+    current_y = table_bottom - 40
+    current_y = max(current_y, TITLE_H + 40)
+
+    for key, mark in sorted_marks:
+        data = beams_data[key]
+        b_mm = data.get("b_mm", 0)
+        D_mm = data.get("D_mm", 0)
+        design = data.get("design", {})
+
+        # Estimate height this box will consume (same as _draw_beam_detail_box's
+        # return value) and check if there's room before drawing.
+        height_estimate = D_mm * _BEAM_SECTION_PX_PER_MM + 40
+        if current_y - height_estimate - 15 < TITLE_H + 40:
+            # Insufficient space; stop stacking for v1.
+            break
+
+        height_consumed = _draw_beam_detail_box(
+            c, mark, b_mm, D_mm, design, x=MARGIN, y=current_y
+        )
+        current_y -= height_consumed + 15  # 15pt gap between boxes
+
+    _draw_title_block(
+        c,
+        project_name,
+        "A",
+        "Roof Beam Details",
+        "Roof Beam Details",
+        cfg,
+        _NUM_BEDROOMS_NA,
+        s,
+        page_w,
+        scale_denom=denom,
+    )
+
+
+def render_roof_beam_slab_plan(
+    c: canvas.Canvas,
+    floor_plan: FloorPlan,
+    layout: Layout,
+    cfg: PlotConfig,
+    project_name: str,
+    num_bedrooms: int,
+    structural_design: dict[str, Any] | None,
+) -> None:
+    """Render the "ROOF BEAM & SLAB PLAN" sheet by delegating the entire
+    beam/column layout drawing (grid, room outlines, road strip, plot
+    boundary, title block) to `_draw_structural_floor` -- the same
+    battle-tested renderer already used for the architectural PDF's GF/FF
+    structural pages -- and overlaying slab-panel labels on top.
+
+    Slab labels are derived from `floor_plan.rooms` (one label per room, in
+    iteration order: S1, S2, ...) rather than from structapi's
+    `data.slabs`, because that data is keyed by slab-group name with only
+    `{"D_mm": ...}` values -- no per-panel plan-position geometry to place a
+    label from. Treating one room as one slab panel is the documented v1
+    fallback for ordinary residential construction.
+
+    Note: PlanForge's column model (`ColumnMarker` in `cad_elements.py`) has
+    no floating/grounded distinction (verified via codebase search -- no
+    "floating column" concept exists anywhere in the engine). All columns
+    render via `_draw_structural_floor`'s existing beam/column drawing; there
+    is no separate floating-column overlay in v1.
+    """
+    ox, oy, s, _denom = _draw_structural_floor(
+        c,
+        floor_plan,
+        layout,
+        cfg,
+        project_name,
+        num_bedrooms,
+        "ROOF BEAM & SLAB PLAN",
+        structural_design=structural_design,
+    )
+
+    if not floor_plan.rooms:
+        return
+
+    # (ox, oy, s) above is the exact frame `_draw_structural_floor` used
+    # internally -- returned by that function rather than recomputed here,
+    # so slab labels can never drift from the beam/column drawing underneath
+    # even if that function's scale/offset math changes later.
+    c.setFont("Helvetica-Bold", 6)
+    c.setFillColor(HexColor("#0066CC"))
+    for i, room in enumerate(floor_plan.rooms, start=1):
+        cx = ox + (room.x + room.width / 2) * s
+        cy = oy + (room.y + room.depth / 2) * s
+        c.drawCentredString(cx, cy, f"S{i}")
+
+
+def generate_structural_drawing_set(
+    *,
+    project_name: str,
+    cfg: PlotConfig,
+    columns: list[ColumnMarker],
+    walls: list[WallSegment],
+    plinth_beams_data: dict[str, Any],
+    structural_design: dict[str, Any],
+    floor_plan: FloorPlan,
+    layout: Layout,
+    num_bedrooms: int,
+) -> bytes:
+    """Orchestrator for the 6-sheet Structural Drawing Set PDF.
+
+    Calls each of the 6 page renderers in sequence (Column & Footing Plan,
+    Footing Details, Plinth Beam Plan, Plinth Beam Details, Roof Beam & Slab
+    Plan, Roof Beam Details), mirroring `render_pdf`'s canvas-open/save pattern.
+    Extracts footings_data and beams_data from `structural_design["structapi"]["data"]`,
+    the same nested dict structure that the architectural PDF's structural pages
+    already consume. Degrades gracefully if either key is missing (empty dicts).
+    """
+    # Defensive extraction: structural_design is always expected to have this shape
+    # when called for real (per design: "requires structapi, gated on approved+designed"),
+    # but we don't let a missing/malformed key raise AttributeError/KeyError here.
+    structapi_data = (structural_design.get("structapi") or {}).get("data") or {}
+    footings_data = structapi_data.get("footings") or {}
+    beams_data = structapi_data.get("beams") or {}
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+
+    # Page 1: Column & Footing Plan
+    render_column_footing_plan(c, columns, walls, footings_data, cfg, project_name)
+    c.showPage()
+
+    # Page 2: Footing Details
+    render_footing_details(c, footings_data, cfg, project_name)
+    c.showPage()
+
+    # Page 3: Plinth Beam Plan
+    render_plinth_beam_plan(c, walls, plinth_beams_data, cfg, project_name)
+    c.showPage()
+
+    # Page 4: Plinth Beam Details
+    render_plinth_beam_details(c, plinth_beams_data, cfg, project_name)
+    c.showPage()
+
+    # Page 5: Roof Beam & Slab Plan
+    render_roof_beam_slab_plan(
+        c, floor_plan, layout, cfg, project_name, num_bedrooms, structural_design
+    )
+    c.showPage()
+
+    # Page 6: Roof Beam Details
+    render_roof_beam_details(c, beams_data, cfg, project_name)
+    c.showPage()
+
+    c.save()
+    return buf.getvalue()
