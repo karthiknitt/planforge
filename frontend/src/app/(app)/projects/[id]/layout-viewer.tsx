@@ -9,6 +9,8 @@ import {
   CircleDot,
   Clock,
   Copy,
+  Download,
+  FileStack,
   History,
   Link2,
   Lock,
@@ -786,6 +788,7 @@ export function LayoutViewer({
     setStructuralGeometry(null);
     setStructuralGeometryFallback(null);
     setAlreadyApprovedNotice(false);
+    setStructDrawingsBlob(null);
     void fetchStructuralStatus();
   }, [fetchStructuralStatus]);
 
@@ -912,6 +915,8 @@ export function LayoutViewer({
   const annDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDxf, setDownloadingDxf] = useState(false);
+  const [generatingStructDrawings, setGeneratingStructDrawings] = useState(false);
+  const [structDrawingsBlob, setStructDrawingsBlob] = useState<Blob | null>(null);
   const [downloadError, setDownloadError] = useState("");
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [approvalPdfPreviewOpen, setApprovalPdfPreviewOpen] = useState(false);
@@ -1477,6 +1482,48 @@ export function LayoutViewer({
     }
   }
 
+  function saveStructDrawings(blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `planforge-structural-drawings-${projectId}-layout-${selectedId}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleGenerateStructDrawings() {
+    if (!session) return;
+    setGeneratingStructDrawings(true);
+    try {
+      const res = await fetch(
+        `/api/backend/projects/${projectId}/export/structural-drawing-set?layout_id=${selectedId}`
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = (data as { detail?: unknown })?.detail;
+        let message = `Structural drawings export failed (${res.status})`;
+        if (typeof detail === "string") {
+          message = detail;
+        } else if (detail && typeof detail === "object") {
+          const { code, help } = detail as { code?: string; help?: string };
+          if (code === "not_approved") message = "Approve the architectural plan first.";
+          else if (code === "not_designed") message = "Run structural design first.";
+          else message = help ?? message;
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      setStructDrawingsBlob(blob);
+      saveStructDrawings(blob);
+      showToast("success", "Structural drawings generated");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Structural drawings export failed";
+      showErrorToast(message);
+    } finally {
+      setGeneratingStructDrawings(false);
+    }
+  }
+
   if (!generateData) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
@@ -1654,6 +1701,32 @@ export function LayoutViewer({
           >
             Approval
           </Button>
+          {structStatus?.design?.status === "designed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+              onClick={handleGenerateStructDrawings}
+              disabled={generatingStructDrawings || !session}
+              title="Generate the 6-sheet structural drawing set (column & footing, plinth beam, roof beam & slab)"
+            >
+              <FileStack className="h-3 w-3 mr-1.5" />
+              {generatingStructDrawings ? "…" : "Structural Drawings"}
+            </Button>
+          )}
+          {structDrawingsBlob && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+              onClick={() => saveStructDrawings(structDrawingsBlob)}
+              disabled={!session}
+              title="Download the generated structural drawing set PDF"
+            >
+              <Download className="h-3 w-3 mr-1.5" />
+              Download Structural Drawings
+            </Button>
+          )}
           <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
           <Button
             variant="outline"
