@@ -66,8 +66,10 @@ _DOOR_NEIGHBOUR_PRIORITY = {"passage": 0, "living": 1, "dining": 2, "staircase":
 _ENTRY_PRIORITY = {"living": 0, "passage": 1, "dining": 2}
 _NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
+# wet rooms + kitchen: interior-accessed, exactly one door, never a transit route
+_SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
-_NO_TRANSIT_TYPES = _WET_TYPES | _PARKING_TYPES
+_NO_TRANSIT_TYPES = _SINGLE_DOOR_TYPES | _PARKING_TYPES
 
 
 def _faces_main_door(adj: "_Adjacency", main_door: "Opening | None") -> bool:
@@ -886,7 +888,7 @@ def derive_openings(
     # ── Navigability: cap wet rooms at one door, then repair the door graph
     # so every room is reachable from the entrance (GF) / stair (FF) without
     # transiting a wet room or parking ───────────────────────────────────
-    _enforce_single_wet_door(rooms, openings, obstacles, adjs, tol)
+    _enforce_single_door(rooms, openings, obstacles, adjs, tol)
     _repair_connectivity(
         rooms,
         openings,
@@ -900,8 +902,8 @@ def derive_openings(
         tol,
         floor,
     )
-    # repair never doors into a wet room, but re-assert the invariant defensively
-    _enforce_single_wet_door(rooms, openings, obstacles, adjs, tol)
+    # repair never doors into a single-door room, but re-assert defensively
+    _enforce_single_door(rooms, openings, obstacles, adjs, tol)
     return openings
 
 
@@ -1024,19 +1026,20 @@ def validate_floor_connectivity(
     return problems
 
 
-def _enforce_single_wet_door(
+def _enforce_single_door(
     rooms: list[Room],
     openings: list[Opening],
     obstacles: _ObstacleIndex,
     adjs: list[_Adjacency],
     tol: float,
 ) -> None:
-    """Toilets/WCs/master baths keep exactly one door — the highest-priority
-    one (en-suite → its bedroom, else circulation). Extra doors on a wet room
-    only ever bridge a neighbour that already violates the transit rule, so
-    dropping them never disconnects a validly-reachable room."""
+    """Toilets/WCs/master baths/utility/kitchen keep exactly one door — the
+    highest-priority one (en-suite → its bedroom, else circulation). Extra
+    doors on a single-door room only ever bridge a neighbour that already
+    violates the transit rule, so dropping them never disconnects a
+    validly-reachable room."""
     for i, room in enumerate(rooms):
-        if room.type not in _WET_TYPES:
+        if room.type not in _SINGLE_DOOR_TYPES:
             continue
         ens_bed = _ensuite_bedroom_id(room.id)
         on_room: list[tuple[int, Opening]] = []
@@ -1126,11 +1129,12 @@ def _add_repair_door(
     floor: int,
 ) -> bool:
     room = rooms[i]
-    # never repair a wet room directly (it keeps its single door — its
-    # reachability must come via that door's non-wet neighbour), and never
-    # route a repair door INTO a wet room (that both breaks the one-wet-door
-    # invariant and cannot help, since wet rooms are not through-routes)
-    if room.type in _WET_TYPES:
+    # never repair a single-door room directly (it keeps its single door —
+    # its reachability must come via that door's non-single-door neighbour),
+    # and never route a repair door INTO a single-door room (that both breaks
+    # the single-door invariant and cannot help, since these rooms are not
+    # through-routes)
+    if room.type in _SINGLE_DOOR_TYPES:
         return False
     width = std.door_width_m
     cands = []
@@ -1144,7 +1148,7 @@ def _add_repair_door(
         if adj.hi - adj.lo < width + 2 * _JAMB:
             continue
         other = rooms[other_idx]
-        if other.type in _WET_TYPES:
+        if other.type in _SINGLE_DOOR_TYPES:
             continue
         pref = 0 if other_idx in reachable else 1
         prio = _DOOR_NEIGHBOUR_PRIORITY.get(other.type, 4)

@@ -347,6 +347,67 @@ def test_bedroom_has_one_entry_from_circulation():
     assert _doors_on_room(passage, doors)  # passage is reached by the entry door
 
 
+def _kitchen_sandwich_rooms():
+    """Kitchen bordered by two circulation rooms (living above, dining below) —
+    each independently doors its own gap to the kitchen, so without a
+    single-door rule the kitchen ends up with two doors."""
+    return [
+        _room("a_living", 1.23, 1.73, 6.54, 1.5, rtype="living"),
+        _room("b_kitchen", 1.23, 3.345, 6.54, 3.655, rtype="kitchen"),
+        _room("c_dining", 1.23, 7.115, 6.54, 6.655, rtype="dining"),
+    ]
+
+
+def test_kitchen_has_exactly_one_door():
+    rooms = _kitchen_sandwich_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    kitchen = next(r for r in rooms if r.type == "kitchen")
+    assert len(_doors_on_room(kitchen, doors)) == 1
+
+
+def test_kitchen_keeps_circulation_door_not_dropped_to_zero():
+    rooms = _kitchen_sandwich_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    kitchen = next(r for r in rooms if r.type == "kitchen")
+    assert len(_doors_on_room(kitchen, doors)) >= 1
+
+
+def test_kitchen_door_width_is_standard_not_wet_width():
+    rooms = _kitchen_sandwich_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    doors = [o for o in openings if o.kind == "door"]
+    kitchen = next(r for r in rooms if r.type == "kitchen")
+    kitchen_doors = _doors_on_room(kitchen, doors)
+    assert len(kitchen_doors) == 1
+    assert math.isclose(kitchen_doors[0].width, STD.door_width_m, abs_tol=1e-6)
+
+
+def _kitchen_deadend_rooms():
+    """stair (front) → kitchen → bedroom (rear). Mirrors `_deadend_rooms`
+    (the wet-room dead-end fixture): the bedroom's only interior neighbour
+    is the kitchen, which must behave as a no-transit room just like a
+    wet room."""
+    return [
+        _room("st", 1.23, 1.73, 6.54, 1.27, rtype="staircase"),
+        _room("kit", 1.23, 3.115, 6.54, 1.885, rtype="kitchen"),
+        _room("bed", 1.23, 5.115, 6.54, 8.655),
+    ]
+
+
+def test_room_reachable_only_via_kitchen_is_flagged_unreachable():
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    rooms = _kitchen_deadend_rooms()
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=1)
+    # upper floor: "outside" is not a corridor, so the repair pass cannot
+    # punch an open-air door to rescue the bedroom — it must stay flagged
+    problems = validate_floor_connectivity(rooms, openings, 1)
+    flagged = {p.split()[0] for p in problems}
+    assert flagged == {"bed"}, f"expected the bedroom flagged, got {problems}"
+
+
 def test_ground_floor_fully_reachable_on_golden():
     from app.engine.plan_geometry import validate_floor_connectivity
 
