@@ -145,6 +145,29 @@ def test_solve_columns_use_wall_junction_pipeline_not_room_corners():
     assert pipeline_total <= naive_corner_total
 
 
+def test_solved_parking_touches_road_side():
+    # Parking has no positional constraint in the CP-SAT solver path today —
+    # it can end up boxed in with no direct road/exterior access. The
+    # deterministic archetype path already places it flush against the
+    # front (road) edge; this guards the solver path gets the same
+    # soft-penalty treatment as the toilet front-band placement.
+    cfg = _basic_cfg(
+        plot_length=15.0, plot_width=12.0, num_bedrooms=2, toilets=2, parking=True
+    )
+    ewt = 0.23
+    front_y = cfg.setback_front + ewt
+    layouts = solve_layouts(cfg, ewt)
+    assert layouts, "expected at least one solver layout for this fixture"
+    for layout in layouts:
+        for floor_plan in (layout.ground_floor, layout.first_floor):
+            for room in floor_plan.rooms:
+                if room.type in ("parking", "parking_4w", "parking_2w"):
+                    assert room.y == pytest.approx(front_y, abs=0.05), (
+                        f"layout {layout.id} floor {floor_plan.floor}: parking "
+                        f"room not on road side (y={room.y}, expected {front_y})"
+                    )
+
+
 def test_solve_too_small_plot_returns_empty():
     cfg = _basic_cfg(
         plot_length=5.0,

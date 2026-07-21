@@ -99,6 +99,10 @@ TOILET_PARKING_PENALTY = 200_000
 # measured ballooning at weight 8). 30/mm makes growth strictly unprofitable
 # so wet rooms settle at their min-compliant size.
 WET_SHRINK_WEIGHT = 30
+# Parking road-facing penalty must dominate size/align terms — same order of
+# magnitude as the toilet penalties above, since it fights the same packing
+# pressure.
+PARKING_ROAD_PENALTY = 250_000
 
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 
@@ -856,6 +860,20 @@ def _solve_one(
                 model.add_bool_or([lb.Not() for lb in lits] + [share])
             penalty_terms.append(weight * share)
 
+    # ── Soft parking-placement penalty ────────────────────────────────────────
+    # Parking has no positional constraint otherwise and can end up boxed in
+    # with no direct road/exterior access. Soft term only, matching the
+    # toilet front-band precedent above — a hard rv.y == 0 constraint would
+    # be an even higher infeasibility risk than the toilet case already
+    # rejected as hard, given parking's larger min footprint.
+    for rv in room_vars:
+        if rv.room_type not in _PARKING_TYPES:
+            continue
+        not_road = model.new_bool_var(f"not_road_{rv.room_id}")
+        model.add(rv.y > 0).only_enforce_if(not_road)
+        model.add(rv.y <= 0).only_enforce_if(not_road.Not())
+        penalty_terms.append(PARKING_ROAD_PENALTY * not_road)
+
     # Wall-coalignment bonus: reified equalities between room edge
     # coordinates — same floor (partitions land on shared grid lines, no
     # mid-span T columns) and cross-floor (GF/FF columns stack). Without
@@ -943,12 +961,14 @@ def _solve_one(
         pre = _make_solver(det_budget=0.7, wall_budget=PHASE1_TIME_S)
         pre_status = pre.solve(model)
         if pre_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            # Hint everything EXCEPT the common toilets' positions: with the
-            # rest of the plan anchored, phase 2 reduces to re-placing the
-            # toilets — a subproblem small enough to escape the penalty
-            # zones inside the budget (fully-hinted runs kept the toilet
-            # glued to its penalised phase-1 spot).
-            free_ids = {rv.room_id for rv in common_wet}
+            # Hint everything EXCEPT the common toilets' and parking's
+            # positions: with the rest of the plan anchored, phase 2 reduces
+            # to re-placing just those rooms — a subproblem small enough to
+            # escape the penalty zones inside the budget (fully-hinted runs
+            # kept them glued to their penalised phase-1 spot).
+            free_ids = {rv.room_id for rv in common_wet} | {
+                rv.room_id for rv in room_vars if rv.room_type in _PARKING_TYPES
+            }
             model.clear_hints()
             for rv in room_vars:
                 hinted = (
