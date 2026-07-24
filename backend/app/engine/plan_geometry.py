@@ -361,6 +361,7 @@ def derive_columns(
     tol: float = 0.01,
     junctions: list[WallJunction] | None = None,
     max_beam_span_m: float | None = None,
+    rooms: list[Room] | None = None,
 ) -> list[ColumnMarker]:
     """Place columns only where structurally significant.
 
@@ -425,13 +426,40 @@ def derive_columns(
         if exceeds:
             kept.append(cand)
 
-    return _merge_adjacent_columns(kept)
+    return _merge_adjacent_columns(kept, rooms)
 
 
 _COLUMN_MERGE_TOL = 0.3  # m — junctions closer than this are one physical column
+# m — wider dedup radius, but ONLY for junction pairs where at least one sits
+# on/near a staircase enclosure. A staircase core's walls and a neighbouring
+# room's wall (e.g. a toilet/store abutting the stair) can each independently
+# qualify as a "certain" column junction while being 0.3-1.0 m apart — too far
+# for the general dedup, too close to form a sane structural grid line. This
+# stays scoped to staircase-adjacent junctions so it never merges genuinely
+# distinct, intentionally tight structural bays elsewhere in the plan.
+_STAIR_CORE_MERGE_TOL = 1.0
 
 
-def _merge_adjacent_columns(kept: list[WallJunction]) -> list[ColumnMarker]:
+def _near_staircase(
+    x: float, y: float, rooms: list[Room] | None, tol: float = 0.3
+) -> bool:
+    """True if (x, y) sits on/within tol of a staircase room's footprint."""
+    if not rooms:
+        return False
+    for r in rooms:
+        if r.type != "staircase":
+            continue
+        if (
+            r.x - tol <= x <= r.x + r.width + tol
+            and r.y - tol <= y <= r.y + r.depth + tol
+        ):
+            return True
+    return False
+
+
+def _merge_adjacent_columns(
+    kept: list[WallJunction], rooms: list[Room] | None = None
+) -> list[ColumnMarker]:
     """Collapse junction clusters into single columns.
 
     Mixed wall conventions (zero-gap room tiling vs iwt gaps, orphan walls
@@ -440,12 +468,24 @@ def _merge_adjacent_columns(kept: list[WallJunction]) -> list[ColumnMarker]:
     columns") and skews structural grid extraction. Anything under one
     column width apart is a single physical column — keep the
     highest-degree junction of each cluster (best beam anchoring).
+
+    Junction pairs adjacent to a staircase core use a wider merge radius
+    (_STAIR_CORE_MERGE_TOL) instead of the general _COLUMN_MERGE_TOL — see
+    _near_staircase.
     """
     remaining = sorted(kept, key=lambda j: (-j.degree, j.x, j.y))
     merged: list[WallJunction] = []
     for j in remaining:
+        j_near_stair = _near_staircase(j.x, j.y, rooms)
         if any(
-            (j.x - m.x) ** 2 + (j.y - m.y) ** 2 < _COLUMN_MERGE_TOL**2 for m in merged
+            (j.x - m.x) ** 2 + (j.y - m.y) ** 2
+            < (
+                _STAIR_CORE_MERGE_TOL
+                if j_near_stair or _near_staircase(m.x, m.y, rooms)
+                else _COLUMN_MERGE_TOL
+            )
+            ** 2
+            for m in merged
         ):
             continue
         merged.append(j)
@@ -1498,7 +1538,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     rooms = floorplan.rooms
     walls = derive_walls(rooms, buildable)
     junctions = derive_junctions(walls)
-    columns = derive_columns(walls, junctions=junctions)
+    columns = derive_columns(walls, junctions=junctions, rooms=rooms)
     openings = derive_openings(
         rooms,
         walls,

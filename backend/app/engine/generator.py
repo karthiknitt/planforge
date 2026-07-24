@@ -810,7 +810,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             walls = derive_walls(fp.rooms, buildable)
             fp.columns = [
                 Column(x=round(c.cx, 3), y=round(c.cy, 3))
-                for c in derive_columns(walls)
+                for c in derive_columns(walls, rooms=fp.rooms)
             ]
 
     # ── Navigability gate: reject layouts whose door graph cannot be
@@ -836,7 +836,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             if fp is None or not fp.rooms:
                 continue
             walls = derive_walls(fp.rooms, buildable)
-            columns = derive_columns(walls)
+            columns = derive_columns(walls, rooms=fp.rooms)
             openings = derive_openings(
                 fp.rooms, walls, columns, std, buildable, floor=fp.floor
             )

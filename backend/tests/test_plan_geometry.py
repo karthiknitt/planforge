@@ -12,9 +12,12 @@ import math
 
 from shapely.geometry import box
 
+from app.engine.cad_elements import WallJunction
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig, Room
 from app.engine.plan_geometry import (
+    _merge_adjacent_columns,
+    _near_staircase,
     derive_columns,
     derive_junctions,
     derive_walls,
@@ -335,3 +338,75 @@ def test_wall_polygons_union_and_opening_subtraction():
     door = box(4.0575 - IWT, 5.0, 4.0575 + IWT, 5.9)
     cut = wall_polygons(walls, openings=[door])["internal"]
     assert cut.area < internal.area - 1e-6
+
+
+def test_near_staircase_detects_points_on_and_off_a_staircase_footprint():
+    stair = Room(
+        id="stair", name="stair", type="staircase", x=1.0, y=1.0, width=2.0, depth=2.0
+    )
+    rooms = [stair]
+    # inside the footprint
+    assert _near_staircase(2.0, 2.0, rooms) is True
+    # just outside, within the default 0.3 m tol
+    assert _near_staircase(3.2, 2.0, rooms) is True
+    # well outside the tol
+    assert _near_staircase(5.0, 2.0, rooms) is False
+    # no rooms at all
+    assert _near_staircase(2.0, 2.0, None) is False
+    assert _near_staircase(2.0, 2.0, []) is False
+    # non-staircase rooms are never a match
+    bedroom = Room(
+        id="bed", name="bed", type="bedroom", x=1.0, y=1.0, width=2.0, depth=2.0
+    )
+    assert _near_staircase(2.0, 2.0, [bedroom]) is False
+
+
+def test_columns_merge_when_staircase_wall_and_neighbour_wall_are_close():
+    # Two "certain" junctions 0.9 m apart — too far for the general 0.3 m
+    # dedup, close enough that leaving both in reads as a structurally
+    # implausible grid once one of them abuts a staircase core.
+    stair = Room(
+        id="stair", name="stair", type="staircase", x=0.0, y=0.0, width=2.0, depth=2.0
+    )
+    j_stair = WallJunction(x=1.9, y=1.0, degree=4)  # inside the staircase footprint
+    j_other = WallJunction(x=2.8, y=1.0, degree=3)  # 0.9 m away, outside it
+
+    merged = _merge_adjacent_columns([j_stair, j_other], rooms=[stair])
+    assert len(merged) == 1, (
+        "staircase-adjacent close pair should collapse to one column"
+    )
+    kept = (round(merged[0].cx, 3), round(merged[0].cy, 3))
+    assert kept == (1.9, 1.0), (
+        "the higher-degree (better-anchored) junction should survive"
+    )
+
+
+def test_columns_not_merged_when_close_pair_is_not_staircase_adjacent():
+    # Identical 0.9 m spacing, but neither junction is near a staircase —
+    # the widened radius must NOT kick in here; both columns must survive.
+    j_a = WallJunction(x=1.9, y=1.0, degree=4)
+    j_b = WallJunction(x=2.8, y=1.0, degree=3)
+
+    merged_no_rooms = _merge_adjacent_columns([j_a, j_b], rooms=None)
+    assert len(merged_no_rooms) == 2, "unrelated close junctions must not be merged"
+
+    bedroom = Room(
+        id="bed", name="bed", type="bedroom", x=0.0, y=0.0, width=2.0, depth=2.0
+    )
+    merged_with_bedroom = _merge_adjacent_columns([j_a, j_b], rooms=[bedroom])
+    assert len(merged_with_bedroom) == 2, (
+        "a non-staircase room nearby must not trigger the widened merge radius"
+    )
+
+
+def test_derive_columns_rooms_param_optional_backward_compatible():
+    cfg = _cfg_9x15()
+    rooms = _two_full_height_rooms()
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    junctions = derive_junctions(walls)
+
+    without_rooms = derive_columns(walls, junctions=junctions)
+    with_none = derive_columns(walls, junctions=junctions, rooms=None)
+    assert [(round(c.cx, 3), round(c.cy, 3)) for c in without_rooms] == [
+        (round(c.cx, 3), round(c.cy, 3)) for c in with_none
+    ]

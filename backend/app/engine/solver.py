@@ -1022,7 +1022,7 @@ def _solve_one(
         buildable = buildable_polygon(cfg)
         walls = derive_walls(rooms, buildable, ewt=ewt)
         junctions = derive_junctions(walls)
-        columns = derive_columns(walls, junctions=junctions)
+        columns = derive_columns(walls, junctions=junctions, rooms=rooms)
         return [Column(x=c.cx, y=c.cy) for c in columns]
 
     from .compliance import check, load_rules
