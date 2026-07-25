@@ -552,3 +552,31 @@ def test_common_toilet_door_avoids_main_door_wall_when_alternative():
     # horizontal at y≈4.5575 — the toilet must use the side wall
     assert not d.is_horizontal, "toilet door sits on the main-door-facing wall"
     assert abs(d.cx - 5.5575) < 0.13
+
+
+def test_single_door_room_prefers_circulation_over_no_transit_neighbour():
+    # A toilet between a kitchen and an ordinary bedroom: both adjacencies
+    # tie on priority (neither is in _DOOR_NEIGHBOUR_PRIORITY), and the
+    # bedroom's id ("z_bed") sorts AFTER "kitchen" alphabetically — so a
+    # naive id tiebreak would pick the kitchen door. That door would be
+    # useless for reachability once kitchen joins the no-transit set (BFS
+    # dead-ends there), so the toilet must prefer the bedroom instead.
+    rooms = [
+        _room("kitchen", 1.23, 1.73, 2.0, 2.0, rtype="kitchen"),
+        _room("toilet_0", 3.345, 1.73, 1.5, 2.0, rtype="toilet"),
+        _room("z_bed", 4.96, 1.73, 2.0, 2.0, rtype="bedroom"),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=1)
+    doors = [o for o in openings if o.kind == "door"]
+    toilet = next(r for r in rooms if r.id == "toilet_0")
+    kitchen = next(r for r in rooms if r.id == "kitchen")
+    bedroom = next(r for r in rooms if r.id == "z_bed")
+
+    tdoors = _doors_on_room(toilet, doors)
+    assert len(tdoors) == 1, "toilet must keep exactly one door"
+    assert _doors_on_room(bedroom, doors), (
+        "toilet's single door should open onto the ordinary bedroom, not the kitchen"
+    )
+    assert not _doors_on_room(kitchen, doors), (
+        "toilet must not route its only door through the kitchen"
+    )

@@ -115,7 +115,9 @@ def test_solve_columns_use_wall_junction_pipeline_not_room_corners():
                 continue
             walls = derive_walls(floor_plan.rooms, buildable, ewt=ewt)
             junctions = derive_junctions(walls)
-            expected = derive_columns(walls, junctions=junctions)
+            expected = derive_columns(
+                walls, junctions=junctions, rooms=floor_plan.rooms
+            )
             expected_pts = {(round(c.cx, 3), round(c.cy, 3)) for c in expected}
             actual_pts = {(round(c.x, 3), round(c.y, 3)) for c in floor_plan.columns}
             assert actual_pts == expected_pts, (

@@ -796,7 +796,7 @@ def derive_openings(
                     continue
                 if adj.hi - adj.lo < width + 2 * _JAMB:
                     continue
-                cands.append((0, 0, 0, other.id, adj))
+                cands.append((0, 0, 0, 0, other.id, adj))
                 continue
             # a shared door serves this room too — unless it leads through
             # a wet room (a bedroom must not be reachable only via a toilet)
@@ -814,14 +814,25 @@ def derive_openings(
             else:
                 is_noncirc = 0
                 avoid = 0
-            cands.append((is_noncirc, avoid, prio, other.id, adj))
+            # a single-door room (toilet/kitchen/...) that ends up with its
+            # ONE door onto another no-transit neighbour risks orphaning
+            # itself — BFS dead-ends at a no-transit node, so this doesn't
+            # guarantee reachability the way an ordinary neighbour's door
+            # does. Deprioritized, not excluded: still used if it's the only
+            # option.
+            no_transit_neighbor = (
+                1
+                if room.type in _SINGLE_DOOR_TYPES and other.type in _NO_TRANSIT_TYPES
+                else 0
+            )
+            cands.append((no_transit_neighbor, is_noncirc, avoid, prio, other.id, adj))
         if already_served:
             continue
         # en-suite doors swing into the bedroom; all others into the room itself
         swing_room = rooms[bed_idx] if bed_idx is not None else room
         placed = False
-        for _nc, _av, _prio, _oid, adj in sorted(
-            cands, key=lambda t: (t[0], t[1], t[2], t[3])
+        for _nt, _nc, _av, _prio, _oid, adj in sorted(
+            cands, key=lambda t: (t[0], t[1], t[2], t[3], t[4])
         ):
             desired = adj.lo + _JAMB + width / 2  # hinge near the jamb, not centred
             centre = _fit_along(
@@ -1074,10 +1085,11 @@ def _enforce_single_door(
     tol: float,
 ) -> None:
     """Toilets/WCs/master baths/utility/kitchen keep exactly one door — the
-    highest-priority one (en-suite → its bedroom, else circulation). Extra
-    doors on a single-door room only ever bridge a neighbour that already
-    violates the transit rule, so dropping them never disconnects a
-    validly-reachable room."""
+    highest-priority one (en-suite → its bedroom, else circulation, with a
+    no-transit neighbour such as a kitchen or another wet room ranked worst
+    since keeping that door risks orphaning the room: BFS dead-ends at a
+    no-transit node, so a door onto one doesn't guarantee reachability the
+    way an ordinary circulation neighbour's door does)."""
     for i, room in enumerate(rooms):
         if room.type not in _SINGLE_DOOR_TYPES:
             continue
@@ -1094,6 +1106,12 @@ def _enforce_single_door(
                 rank = 5
             elif ens_bed is not None and rooms[other].id == ens_bed:
                 rank = 0
+            elif rooms[other].type in _NO_TRANSIT_TYPES:
+                # A neighbour that is itself a no-transit room (kitchen, a
+                # second wet room, parking) doesn't guarantee this room stays
+                # reachable — BFS dead-ends there. Only keep such a door if
+                # no ordinary circulation neighbour is available.
+                rank = 6
             else:
                 rank = _DOOR_NEIGHBOUR_PRIORITY.get(rooms[other].type, 4)
             on_room.append((rank, o))
