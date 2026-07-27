@@ -6,8 +6,12 @@ PlanForge is a G+1 2D residential floor plan generator for Indian small builders
 
 It generates 3 template-based layout variations for rectangular plots, enforces Indian building compliance rules, and exports professional PDF drawings.
 
-**Active PRD:** Lean MVP (`Lean_MVP_PRD_v1.md`)
-**Target timeline:** 6–8 weeks focused solo development
+It also acts as the front door to `structapi`, a separate multi-agent IS-code structural
+design engine ([karthiknitt/structapi](https://github.com/karthiknitt/structapi)) — see
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Status:** feature-complete (P0–P3 shipped), pre-revenue. `Lean_MVP_PRD_v1.md` is
+historical and no longer describes current scope.
 
 ---
 
@@ -17,12 +21,15 @@ It generates 3 template-based layout variations for rectangular plots, enforces 
 
 ```
 PlanForge/
-├── frontend/          # Next.js App Router + Better Auth + SVG rendering
-├── backend/           # FastAPI + Shapely + ReportLab + uv
-├── shared/            # Shared types/constants (if needed)
-├── CLAUDE.md
-├── Lean_MVP_PRD_v1.md
-└── Ambitious_PRD_v1.md
+├── frontend/           # Next.js App Router + Better Auth + Drizzle + SVG rendering
+├── backend/            # FastAPI + Shapely + OR-Tools + ReportLab + ezdxf + uv
+├── structapi-service/  # Vendored copy of structapi, pinned to a tag (CI byte-diffs it)
+├── docs/               # Reference docs + dated plans — see docs/README.md
+├── scripts/            # Setup/migration helpers (gcp-cloud-run-setup.sh, check_schema.py)
+├── experiments/        # Scratch evaluation harness (CCQS scoring, render bake-offs)
+├── data/               # Sample/reference data
+├── CLAUDE.md           # This file
+└── README.md
 ```
 
 ### Frontend (`/frontend`)
@@ -57,23 +64,30 @@ PlanForge/
 
 ---
 
-## Key Product Decisions (Lean MVP Constraints)
+## Key Product Decisions (current — supersedes `Lean_MVP_PRD_v1.md`)
+
+> **Note:** this project outgrew the Lean MVP scope in early 2026. The constraints below
+> reflect what is actually built and shipped. `Lean_MVP_PRD_v1.md` is retained as a
+> historical record only — do not treat it as current scope. Where it disagrees with this
+> section or `README.md`, it is out of date.
 
 ### Plot Support
-- **Rectangular plots only** — no quadrilateral in MVP
+- **Rectangular, trapezoid, convex quadrilateral (arbitrary 4-corner), and L-shaped**
+  (rectangle with cutout corner) plots
 - User inputs: length, width, setbacks (4 sides), road-facing side, north direction
 - Minimum plot size validation before generation
 
 ### Layout Engine
-- **3 predefined parametric archetypes** — no dynamic constraint solver:
-  - Layout A: Front staircase
-  - Layout B: Center staircase
-  - Layout C: Rear staircase
-- Rooms arranged proportionally using deterministic slicing logic
+- **OR-Tools CP-SAT constraint solver** with forced staircase diversity
+  (front / mid / rear); layouts scored by a 5-component scorer (natural light, adjacency,
+  aspect ratio, circulation, Vastu)
+- The 3 parametric archetypes remain as a **fallback** when the solver cannot converge
 - Layouts rejected if compliance fails (not adjusted automatically)
 
 ### Room Config
-- **2BHK or 3BHK only** — no arbitrary room count in MVP
+- **2BHK – 4BHK, 1–6 bedrooms**; optional pooja, study, balcony, servant quarter,
+  home office, gym, store
+- **Multi-floor** — G / G+1 / G+2, optional stilt floor, optional basement
 - User selects number of toilets
 - Parking: Yes/No
 
@@ -92,10 +106,15 @@ PlanForge/
 - Door-graph navigability: BFS reachability, wet rooms one-door, bedrooms one circulation entry, staircase doored per floor
 - Rules stored in configurable JSON
 
-### Structural Awareness
+### Structural Design
 - Columns at outer corners, staircase core, major wall intersections
-- Max beam span ≤ 4.5 m (warning flag only)
-- No structural calculations
+- Max beam span ≤ 4.5 m (warning flag only) in the layout engine
+- **Full IS-code structural design is shipped** via the `structapi` service
+  (IS 456/875/1893/13920/3370/10262): member sizing, reinforcement, BOQ steel/concrete
+  quantities, and structural drawing sheets. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+  Client: `backend/app/services/structagent_client.py`; orchestration:
+  `backend/app/services/structural_loop.py`. Disabled gracefully when
+  `STRUCTURAL_API_KEY` is unset — layout generation still works.
 
 ### PDF Output
 - Standard PDF (6 pages): GF plan, FF plan, GF structural, FF structural, SECTION A-A, FRONT ELEVATION
@@ -188,22 +207,24 @@ cd frontend && bunx drizzle-kit migrate
 
 ---
 
-## Feature Roadmap (Post-MVP)
+## Feature Roadmap
 
-1. Quadrilateral plot support
-2. Advanced compliance rules
-3. Arbitrary room counts
-4. Dynamic constraint solver
-5. Smarter layout engine
+Items 1–5 of the original post-MVP roadmap (quadrilateral plots, advanced compliance
+rules, arbitrary room counts, dynamic constraint solver, smarter layout engine) are all
+**shipped**. Current backlog lives in [docs/product-roadmap.md](docs/product-roadmap.md).
 
 ---
 
 ## Risks to Watch
 
-- Overengineering layout logic — stay with archetypes in MVP
-- Adding quadrilateral plots too early
-- Expanding compliance rules prematurely
-- Feature creep before launch validation
+- **Frontend test coverage** — backend has 650 tests across 87 files; the frontend has
+  no dedicated test files. Highest-value gap.
+- **No Alembic migrations** — schema is created/patched at startup. Fine at current
+  scale; needs replacing before multi-tenant production.
+- **Cold starts** — Cloud Run at `min-instances=0` means ~20–25s first-request latency
+  after idle, which has previously caused agent-tool timeouts (see issue 13 below).
+- **Vendored structapi drift** — `structapi-service/` is a pinned copy; CI byte-diffs it
+  against the tag on every push and PR. Do not edit it by hand.
 
 ---
 
@@ -262,7 +283,7 @@ cd frontend && bunx drizzle-kit migrate
 
 ## Testing
 
-- Backend: pytest (via `uv run pytest`) — ~593 passing
+- Backend: pytest (via `uv run pytest`) — 650 tests across 87 files
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts
 
