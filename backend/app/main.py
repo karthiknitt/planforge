@@ -76,6 +76,12 @@ async def _validation_error_handler(
     return JSONResponse(status_code=422, content={"detail": _json_safe(exc.errors())})
 
 
+app.add_middleware(
+    RateLimitMiddleware,
+    capacity=settings.rate_limit_capacity,
+    refill_per_second=settings.rate_limit_refill_per_second,
+)
+
 default_origins = ["http://localhost:3001", "http://localhost:3000"]
 app.add_middleware(
     CORSMiddleware,
@@ -84,12 +90,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
-app.add_middleware(
-    RateLimitMiddleware,
-    capacity=settings.rate_limit_capacity,
-    refill_per_second=settings.rate_limit_refill_per_second,
 )
 
 app.include_router(health.router, prefix="/api")
