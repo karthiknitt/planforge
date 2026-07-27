@@ -304,6 +304,11 @@ def _stair_band_rooms(
     band_w: float,
     band_d: float,
     iwt: float,
+    *,
+    prefix: str = "ff",
+    toilet_id: str = "ff_toilet_2",
+    toilet_name: str = "Toilet 2",
+    want_toilet: bool | None = None,
 ) -> list[Room]:
     """Fill the FF strip beside the staircase.
 
@@ -311,16 +316,32 @@ def _stair_band_rooms(
     plots that made a 13 m x 3 m "toilet" which _split_oversized_wet_rooms
     carved into a ~38 sqm Passage. Cap the toilet at spec-sane size and turn
     the remainder into a real room (Family Lounge) or a small Landing.
+
+    Order within the band matters: the filler room (circulation) sits hard
+    against the staircase and the toilet takes the far end. Toilet-first —
+    the original order — left the stair core with a WC as its only partition
+    long enough to take a door, so `derive_openings` put the stair's door
+    into the toilet (production project "MyLatest", 2026-07). The staircase
+    needs a circulation neighbour to open onto; the toilet then opens off
+    that room, which is also the conventional arrangement.
     """
-    rooms: list[Room] = []
-    rem_x, rem_w = x, band_w
-    if cfg.toilets >= 2 and band_w > 0.5:
-        t2_w = min(band_w, 2.0)
-        rooms.append(_r("ff_toilet_2", "Toilet 2", "toilet", x, y, t2_w, band_d))
-        rem_x = x + t2_w + iwt
-        rem_w = band_w - t2_w - iwt
-    rooms += _band_filler_rooms("ff", rem_x, y, rem_w, band_d)
-    return rooms
+    if want_toilet is None:
+        want_toilet = cfg.toilets >= 2
+    want_t = want_toilet and band_w > 0.5
+    t_w = min(band_w, 2.0) if want_t else 0.0
+    rem_w = band_w - t_w - iwt if want_t else band_w
+
+    filler = _band_filler_rooms(prefix, x, y, rem_w, band_d) if rem_w > 0.5 else []
+    if not want_t:
+        return filler
+    if not filler:
+        # Nothing else fits beside the stair — the toilet takes the whole band
+        # and the door placer falls back to its last resort. Rare, and better
+        # than dropping a toilet the config asked for.
+        return [_r(toilet_id, toilet_name, "toilet", x, y, band_w, band_d)]
+    return filler + [
+        _r(toilet_id, toilet_name, "toilet", x + rem_w + iwt, y, t_w, band_d)
+    ]
 
 
 def _band_filler_rooms(
@@ -331,7 +352,12 @@ def _band_filler_rooms(
         return []
     if w * d >= 9.5:
         return [_r(f"{prefix}_lounge", "Family Lounge", "living", x, y, w, d)]
-    return [_r(f"{prefix}_landing", "Landing", "utility", x, y, w, d)]
+    # "passage", not "utility": a landing is circulation. `utility` is in
+    # plan_geometry._WET_TYPES, so typing it that way gave the landing a
+    # 750 mm wet door, a single-door cap, a ventilator, and no-transit status
+    # in the reachability BFS — which is why rooms beyond a landing looked
+    # unreachable and the navigability gate rejected whole layout sets.
+    return [_r(f"{prefix}_landing", "Landing", "passage", x, y, w, d)]
 
 
 # ---------------------------------------------------------------------------
@@ -360,30 +386,36 @@ def layout_a(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     gf_rooms.append(_r("gf_stair", "Staircase", "staircase", ox, oy, STAIR_W, d_stair))
 
     if cfg.parking:
-        gf_rooms.append(
-            _r(
-                "gf_parking",
-                "Parking",
-                "parking",
-                ox + STAIR_W + iwt,
-                oy,
-                PARK_W,
-                d_stair,
-            )
-        )
-        foyer_x = ox + STAIR_W + iwt + PARK_W + iwt
-        foyer_w = W - STAIR_W - iwt - PARK_W - iwt
-        if foyer_w > 0.3:
+        # Foyer inboard of the parking bay, so it — not the parking — is the
+        # staircase's neighbour. Parking is a no-transit room like a wet room,
+        # so a stair boxed between the plot edge and a parking bay has no
+        # circulation partition to take its door from. Both stay in the front
+        # band, so the bay keeps its road access either way.
+        band_rest = W - STAIR_W - iwt - PARK_W - iwt
+        cur_x = ox + STAIR_W + iwt
+        # Foyer capped at a real foyer's size, not the whole leftover band:
+        # handing it every spare metre produced a ~36 sqm "passage", which is
+        # the oversized-circulation pathology generator._fill_blank_areas
+        # exists to undo — it re-absorbed the foyer and put the parking back
+        # against the stair. Cap it, then give the remainder to a real room.
+        foyer_w = min(band_rest, 2.0) if band_rest > 0.3 else 0.0
+        if foyer_w:
             gf_rooms.append(
-                _r("gf_foyer", "Foyer", "utility", foyer_x, oy, foyer_w, d_stair)
+                _r("gf_foyer", "Foyer", "passage", cur_x, oy, foyer_w, d_stair)
             )
+            cur_x += foyer_w + iwt
+        gf_rooms.append(
+            _r("gf_parking", "Parking", "parking", cur_x, oy, PARK_W, d_stair)
+        )
+        cur_x += PARK_W + iwt
+        gf_rooms += _band_filler_rooms("gf", cur_x, oy, ox + W - cur_x, d_stair)
     else:
         entry_w = W - STAIR_W - iwt
         gf_rooms.append(
             _r(
                 "gf_entry",
                 "Entry / Foyer",
-                "utility",
+                "passage",
                 ox + STAIR_W + iwt,
                 oy,
                 entry_w,
@@ -570,17 +602,24 @@ def layout_b(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     gf_rooms.append(
         _r("gf_stair", "Staircase", "staircase", ox, stair_y, STAIR_W, d_stair)
     )
-    wc_w = W - STAIR_W - iwt
-    gf_rooms.append(
-        _r(
-            "gf_toilet_1",
-            "Toilet 1",
-            "toilet",
-            ox + STAIR_W + iwt,
-            stair_y,
-            wc_w,
-            d_stair,
-        )
+    # Same band treatment as the upper floor: circulation against the stair,
+    # the toilet capped and pushed to the far end. Handing the whole strip to
+    # "Toilet 1" made the stair's only side neighbour a wet room (so its door
+    # had nowhere legal to go) AND produced a ~9 m wide toilet that
+    # _split_oversized_wet_rooms then had to carve up. A distinct `gf_mid`
+    # prefix keeps the filler's id clear of any `gf_lounge` the archetype or
+    # the wet-room split may already have created.
+    gf_rooms += _stair_band_rooms(
+        cfg,
+        ox + STAIR_W + iwt,
+        stair_y,
+        W - STAIR_W - iwt,
+        d_stair,
+        iwt,
+        prefix="gf_mid",
+        toilet_id="gf_toilet_1",
+        toilet_name="Toilet 1",
+        want_toilet=True,
     )
 
     # Rear zone: kitchen + optional pooja
@@ -647,7 +686,9 @@ def layout_b(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     ff_rooms.append(
         _r("ff_stair", "Staircase", "staircase", ox, stair_y, STAIR_W, d_stair)
     )
-    ff_rooms += _stair_band_rooms(cfg, ox + STAIR_W + iwt, stair_y, wc_w, d_stair, iwt)
+    ff_rooms += _stair_band_rooms(
+        cfg, ox + STAIR_W + iwt, stair_y, W - STAIR_W - iwt, d_stair, iwt
+    )
 
     # Rear zone on first floor: bed 3 (3BHK+), study, or utility
     if n_beds >= 3:
@@ -837,27 +878,33 @@ def layout_d(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     gf_rooms.append(_r("gf_stair", "Staircase", "staircase", ox, oy, STAIR_W, d_stair))
 
     if cfg.parking:
-        gf_rooms.append(
-            _r(
-                "gf_parking",
-                "Parking",
-                "parking",
-                ox + STAIR_W + iwt,
-                oy,
-                PARK_W,
-                d_stair,
-            )
-        )
-        foyer_w = living_w - PARK_W - iwt
+        # Living inboard of the parking bay so it — not the parking — is the
+        # staircase's neighbour. Parking is a no-transit room, so a stair
+        # sandwiched between the plot edge and a parking bay has no
+        # circulation partition its door can legally use. Both stay in the
+        # front band, so the bay keeps its road access. Same reasoning as
+        # layout_a's entry band and `_stair_band_rooms` on the upper floor.
+        hall_w = living_w - PARK_W - iwt
         gf_rooms.append(
             _r(
                 "gf_living",
                 "Living / Hall",
                 "living",
-                ox + STAIR_W + iwt + PARK_W + iwt,
+                ox + STAIR_W + iwt,
                 oy,
-                foyer_w,
+                hall_w,
                 d_front,
+            )
+        )
+        gf_rooms.append(
+            _r(
+                "gf_parking",
+                "Parking",
+                "parking",
+                ox + STAIR_W + iwt + hall_w + iwt,
+                oy,
+                PARK_W,
+                d_stair,
             )
         )
     else:
