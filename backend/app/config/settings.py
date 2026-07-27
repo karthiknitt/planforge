@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # fast instead of leaving it queued forever.
     job_queued_timeout_s: int = 120
 
+    # Rate limiting — in-process token bucket (see app/middleware/rate_limit.py)
+    rate_limit_capacity: int = 10
+    rate_limit_refill_per_second: float = 0.2
+
     @field_validator("internal_auth_secret")
     @classmethod
     def _secret_min_length(cls, v: str) -> str:

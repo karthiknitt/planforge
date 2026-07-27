@@ -25,6 +25,7 @@ from app.config.cors import parse_allowed_origins
 from app.config.settings import settings
 from app.db import Base, SessionLocal, engine
 from app.auto_migrate import auto_migrate_missing_columns
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.services.structural_store import rehash_architectural_revisions
 
 # Import all models so SQLAlchemy knows about them before create_all
@@ -83,6 +84,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.add_middleware(
+    RateLimitMiddleware,
+    capacity=settings.rate_limit_capacity,
+    refill_per_second=settings.rate_limit_refill_per_second,
 )
 
 app.include_router(health.router, prefix="/api")
