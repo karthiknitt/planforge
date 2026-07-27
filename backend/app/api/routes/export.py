@@ -51,12 +51,16 @@ async def _deliver(
 ) -> Response:
     """Persist to R2 (best-effort) and return the artifact to the caller."""
     storage = get_storage()
+    stored = True
     try:
         await storage.put_bytes(key, content, media_type)
     except Exception:
+        # Never redirect to a key we failed to write — the caller would get
+        # R2's NoSuchKey XML instead of their file.
+        stored = False
         logger.warning("R2 upload failed for %s — serving inline", key, exc_info=True)
 
-    if settings.export_delivery_mode == "redirect":
+    if stored and settings.export_delivery_mode == "redirect":
         url = storage.signed_url(key)
         if url:
             return RedirectResponse(url=url, status_code=307)

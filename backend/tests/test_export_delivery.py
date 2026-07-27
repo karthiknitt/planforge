@@ -25,6 +25,71 @@ async def test_export_semaphore_bounds_concurrency(monkeypatch):
     assert peak <= 2, f"exceeded the export concurrency cap (peak={peak})"
 
 
+class _FakeStorage:
+    """In-memory stand-in for R2 — no boto3, no network."""
+
+    def __init__(self, *, fail_upload=False):
+        self.fail_upload = fail_upload
+        self.objects: dict[str, bytes] = {}
+
+    async def put_bytes(self, key, data, content_type):
+        if self.fail_upload:
+            raise RuntimeError("simulated R2 outage")
+        self.objects[key] = data
+
+    async def get_bytes(self, key):
+        return self.objects.get(key)
+
+    def signed_url(self, key, ttl_seconds=900):
+        return f"https://signed.example/{key}"
+
+
+def _use_storage(monkeypatch, storage, mode):
+    monkeypatch.setattr(export_routes, "get_storage", lambda: storage)
+    monkeypatch.setattr(export_routes.settings, "export_delivery_mode", mode)
+
+
+@pytest.mark.asyncio
+async def test_redirect_mode_falls_back_to_inline_when_upload_fails(monkeypatch):
+    # Redirecting to a key we failed to write would hand the user R2's
+    # NoSuchKey XML instead of their PDF.
+    _use_storage(monkeypatch, _FakeStorage(fail_upload=True), "redirect")
+
+    resp = await export_routes._deliver(
+        b"%PDF-1.4", "application/pdf", "x.pdf", "exports/p/A/deadbeef.pdf"
+    )
+
+    assert resp.status_code == 200
+    assert resp.body == b"%PDF-1.4"
+    assert "attachment" in resp.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_redirect_mode_307s_when_upload_succeeds(monkeypatch):
+    storage = _FakeStorage()
+    _use_storage(monkeypatch, storage, "redirect")
+    key = "exports/p/A/deadbeef.pdf"
+
+    resp = await export_routes._deliver(b"%PDF-1.4", "application/pdf", "x.pdf", key)
+
+    assert resp.status_code == 307
+    assert resp.headers["location"] == f"https://signed.example/{key}"
+    assert storage.objects[key] == b"%PDF-1.4"
+
+
+@pytest.mark.asyncio
+async def test_inline_mode_never_redirects_even_on_a_healthy_upload(monkeypatch):
+    storage = _FakeStorage()
+    _use_storage(monkeypatch, storage, "inline")
+    key = "exports/p/A/deadbeef.pdf"
+
+    resp = await export_routes._deliver(b"%PDF-1.4", "application/pdf", "x.pdf", key)
+
+    assert resp.status_code == 200
+    assert resp.body == b"%PDF-1.4"
+    assert storage.objects[key] == b"%PDF-1.4"
+
+
 def test_artifact_key_is_stable_and_content_addressed():
     k1 = export_routes._artifact_key("proj1", "A", "pdf", b"same-bytes")
     k2 = export_routes._artifact_key("proj1", "A", "pdf", b"same-bytes")
