@@ -34,7 +34,11 @@ class LayoutRender(Base):
     )
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(64), nullable=False)
-    image_png: Mapped[bytes] = deferred(mapped_column(LargeBinary, nullable=False))
+    image_png: Mapped[bytes | None] = deferred(
+        mapped_column(LargeBinary, nullable=True)
+    )
+    # R2 object key. Rows written before R2 was enabled keep image_png instead.
+    image_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

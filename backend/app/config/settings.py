@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # AI render layer (Phase 2) — all optional; provider picked at bake-off
     render_provider: str = ""
     render_model: str = ""
+    # AI renders bill per call — cap per user per rolling 24h.
+    render_daily_quota: int = 20
     gemini_api_key: str = ""
     openai_api_key: str = ""
     openrouter_api_key: str = ""
