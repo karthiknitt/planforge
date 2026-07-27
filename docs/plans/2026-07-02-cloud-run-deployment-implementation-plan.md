@@ -1,5 +1,18 @@
 # Cloud Run $0-Tier Backend Deployment Implementation Plan
 
+> **Status: executed 2026-07-03. Historical record — do not follow verbatim.**
+>
+> This plan was written before the GCP project existed and proposes the project ID
+> `planforge-prod`. The project actually created is **`thermal-well-451906-b0`**
+> (region `us-central1`), and the deploy service account is
+> `planforge-deployer@thermal-well-451906-b0.iam.gserviceaccount.com`. Every
+> `planforge-prod` reference below is superseded by those values.
+>
+> Current live URLs: backend
+> `https://planforge-backend-912195238699.us-central1.run.app` (`/api/health`),
+> frontend `https://planforge-mauve.vercel.app`.
+> See [../ARCHITECTURE.md](../ARCHITECTURE.md) for current state.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Deploy `backend/` (FastAPI) to Google Cloud Run inside the Always Free tier,
