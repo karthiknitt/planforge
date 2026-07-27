@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     rate_limit_capacity: int = 10
     rate_limit_refill_per_second: float = 0.2
 
+    # Cloudflare R2 artifact storage — all four empty => NullStorage (no-op).
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = ""
+    # "inline" streams bytes (today's contract). "redirect" 307s to a signed
+    # R2 URL — flip only after verifying the frontend download path.
+    export_delivery_mode: str = "inline"
+    # Concurrent PDF/DXF renders per instance. ReportLab builds in memory and
+    # Cloud Run's filesystem is RAM-backed, so this is the real OOM guard.
+    export_max_concurrency: int = 2
+
     @field_validator("internal_auth_secret")
     @classmethod
     def _secret_min_length(cls, v: str) -> str:
