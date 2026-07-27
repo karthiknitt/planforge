@@ -48,3 +48,6 @@ data/
 
 # Graphify codebase graph (regenerable local artifact)
 graphify-out/
+
+# Vendored tech-stack skills installed by `npx autoskills` (machine-local, regenerable)
+.agents/
