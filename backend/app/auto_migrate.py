@@ -102,3 +102,55 @@ async def auto_migrate_missing_columns(engine: AsyncEngine) -> None:
                 logger.warning(
                     "Auto-migrated: added %s.%s (%s)", table_name, col.name, pg_type
                 )
+
+
+# Columns whose nullability was relaxed after initial deploy. The column
+# already exists in production, so `auto_migrate_missing_columns` (which only
+# adds missing columns) never touches it — the old NOT NULL constraint sticks
+# around until something explicitly drops it. Add an entry here only for a
+# real, reviewed nullability change; this is deliberately not a blanket
+# "sync every column to the model" sweep (too wide a blast radius on a
+# database that carries some intentional drift).
+NULLABLE_RECONCILIATIONS = (
+    # image_png moved to R2; rows written after R2 is configured store the
+    # bytes under image_key instead and leave this column NULL.
+    ("layout_renders", "image_png"),
+)
+
+
+async def reconcile_nullable_columns(engine: AsyncEngine) -> None:
+    """Drop NOT NULL on columns in `NULLABLE_RECONCILIATIONS` if the live
+    database still has it set. Safe to call every boot — idempotent, and a
+    no-op once the constraint has been dropped."""
+    from app.db import Base
+
+    async with engine.begin() as conn:
+        for table_name, col_name in NULLABLE_RECONCILIATIONS:
+            table = Base.metadata.tables.get(table_name)
+            if table is None or col_name not in table.columns:
+                continue
+            if not table.columns[col_name].nullable:
+                # Model itself still requires NOT NULL — nothing to relax.
+                continue
+
+            result = await conn.execute(
+                text(
+                    "SELECT is_nullable FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = :tbl "
+                    "AND column_name = :col"
+                ),
+                {"tbl": table_name, "col": col_name},
+            )
+            row = result.first()
+            if row is None or row[0] == "YES":
+                continue
+
+            await conn.execute(
+                text(
+                    f'ALTER TABLE "{table_name}" '
+                    f'ALTER COLUMN "{col_name}" DROP NOT NULL'
+                )
+            )
+            logger.warning(
+                "Auto-migrated: dropped NOT NULL on %s.%s", table_name, col_name
+            )

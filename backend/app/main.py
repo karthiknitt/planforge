@@ -24,7 +24,7 @@ from app.api.routes import (
 from app.config.cors import parse_allowed_origins
 from app.config.settings import settings
 from app.db import Base, SessionLocal, engine
-from app.auto_migrate import auto_migrate_missing_columns
+from app.auto_migrate import auto_migrate_missing_columns, reconcile_nullable_columns
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.services.structural_store import rehash_architectural_revisions
 
@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await auto_migrate_missing_columns(engine)
+    await reconcile_nullable_columns(engine)
     async with SessionLocal() as session:
         await rehash_architectural_revisions(session)
     yield
