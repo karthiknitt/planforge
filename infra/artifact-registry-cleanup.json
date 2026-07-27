@@ -5,6 +5,11 @@
     "mostRecentVersions": {"keepCount": 2}
   },
   {
+    "name": "keep-buildcache",
+    "action": {"type": "Keep"},
+    "condition": {"tagState": "TAGGED", "tagPrefixes": ["buildcache"]}
+  },
+  {
     "name": "delete-stale",
     "action": {"type": "Delete"},
     "condition": {"olderThan": "1d"}

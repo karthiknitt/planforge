@@ -32,12 +32,19 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build and push image
         working-directory: backend
         run: |
           IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/planforge-backend/api:${{ github.sha }}"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
+          CACHE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/planforge-backend/api:buildcache"
+          docker buildx build \
+            --cache-from "type=registry,ref=$CACHE" \
+            --cache-to   "type=registry,ref=$CACHE,mode=max" \
+            --tag "$IMAGE" \
+            --push \
+            .
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
