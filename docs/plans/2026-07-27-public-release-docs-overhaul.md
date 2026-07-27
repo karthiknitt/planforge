@@ -765,46 +765,26 @@ git add docs/README.md README.md && git commit -m "docs: add documentation index
 
 ---
 
-### Task 1.4.2: Add real request/response examples to the API docs
+### Task 1.4.2: ~~Add real request/response examples to the API docs~~ — **DROPPED**
 
-**Files:**
-- Create: `/home/karthik/projects/structapi/docs/API-EXAMPLES.md`
+**Decision (2026-07-28, Karthik):** do not publish API examples that let a reviewer call
+the live service off the shelf. Reviewers evaluate the product through the website
+(`https://planforge-mauve.vercel.app`), walked through directly if needed.
 
-Reviewers trust output they can see. The live service makes this verifiable rather than illustrative.
+**Rationale:**
+- Copy-pasteable requests against a live endpoint on a `$0`-tier Cloud Run service
+  (`min-instances=0`, `max-instances=3`) invite unmetered traffic and cost.
+- It would also require issuing a working `x-api-key`, or publishing example output whose
+  provenance a reader cannot verify anyway.
+- The auto-generated OpenAPI reference at `/docs` on a running structapi already documents
+  every endpoint for anyone who self-hosts, which covers the legitimate need.
 
-- [ ] **Step 1: Capture a real health response**
+No `docs/API-EXAMPLES.md` is created. The v1 envelope shape remains documented in §3 of
+`docs/PLANFORGE-INTEGRATION.md`, which is schema documentation rather than a runnable
+recipe against production.
 
-```bash
-curl -s https://structapi-912195238699.us-central1.run.app/v1/health | python3 -m json.tool
-```
-
-- [ ] **Step 2: Capture a real design response**
-
-Requires a valid `x-api-key` (one entry from `STRUCTAPI_KEYS`). Build a minimal building payload from the schema in `python/structapi/`, POST it, and save the response:
-
-```bash
-curl -s -X POST https://structapi-912195238699.us-central1.run.app/v1/design/building \
-  -H "Content-Type: application/json" -H "x-api-key: $STRUCTAPI_KEY" \
-  -d @python/tests/fixtures/beam_envelope_v1.json | python3 -m json.tool > /tmp/design-response.json
-```
-
-- [ ] **Step 3: Write the examples doc**
-
-Include: the request payload, the trimmed response envelope showing `checks[]` with IS clause references, `violations[]`, `grid_lines`, and `artifacts[]`. **Redact the API key** — replace with `<your-key-here>`. Add a note that responses are reproducible: same input always yields identical output, which is the point of the deterministic engine.
-
-- [ ] **Step 4: Verify no key leaked into the doc**
-
-```bash
-grep -iE "x-api-key: [a-zA-Z0-9]" /home/karthik/projects/structapi/docs/API-EXAMPLES.md
-```
-Expected: no output (only `<your-key-here>` placeholders).
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd /home/karthik/projects/structapi
-git add docs/API-EXAMPLES.md && git commit -m "docs: add real request/response examples from the live service"
-```
+**Downstream effect:** the pre-publish checklist item "No API keys in API-EXAMPLES.md"
+(Task 3.1.1) is void — there is no such file.
 
 ---
 
@@ -1060,7 +1040,7 @@ Confirm every line before asking:
 [ ] structapi LICENSE present                            (Task 0.1.2)
 [ ] No third-party copyrighted PDFs in either repo       (Task 1.3.3 Step 1)
 [ ] No real credentials in any .md, including Status.md  (Task 1.4.3 Step 4)
-[ ] No API keys in API-EXAMPLES.md                       (Task 1.4.2 Step 4)
+[ ] No runnable live-service examples published          (Task 1.4.2 — dropped by decision)
 [ ] Backend suite green: 650 passing                     (Task 0.2.2 Step 2)
 [ ] Working branch merged to main                        (Task 0.2.2 Step 5)
 [ ] Stale failed CI runs deleted                         (Task 0.2.1 Step 3)

@@ -217,8 +217,9 @@ rules, arbitrary room counts, dynamic constraint solver, smarter layout engine) 
 
 ## Risks to Watch
 
-- **Frontend test coverage** — backend has 650 tests across 87 files; the frontend has
-  no dedicated test files. Highest-value gap.
+- **No end-to-end coverage in CI** — 638 backend and 199 frontend unit tests pass, but
+  Playwright e2e (`bun run test:e2e`) is configured and not wired into CI, so no test
+  exercises a full user flow across frontend → backend → structapi.
 - **No Alembic migrations** — schema is created/patched at startup. Fine at current
   scale; needs replacing before multi-tenant production.
 - **Cold starts** — Cloud Run at `min-instances=0` means ~20–25s first-request latency
@@ -283,7 +284,9 @@ rules, arbitrary room counts, dynamic constraint solver, smarter layout engine) 
 
 ## Testing
 
-- Backend: pytest (via `uv run pytest`) — 650 tests across 87 files
+- Backend: pytest (via `cd backend && uv run pytest`) — 638 tests across 86 files
+- Frontend: `cd frontend && bun test` — 199 tests across 25 files, colocated as `*.test.ts`
+- E2E: Playwright (`bun run test:e2e`) — configured, not wired into CI
 - Frontend: Vitest or Playwright (TBD)
 - Compliance rules: unit-tested against known valid/invalid layouts
 

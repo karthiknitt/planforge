@@ -293,10 +293,10 @@ Full index: **[docs/README.md](docs/README.md)**
 
 Stated up front rather than left to be discovered:
 
-- **The frontend has no dedicated test files.** The backend is well covered (650 tests
-  across 87 files) and structapi has its own suite, but the Next.js frontend is verified
-  only via build, type-check, and preview deploys. Tracked in
-  [docs/product-roadmap.md](docs/product-roadmap.md).
+- **Test coverage is unit-heavy.** 638 backend tests (86 files) and 199 frontend tests
+  (25 files) all pass, but coverage is concentrated in pure logic — geometry, compliance,
+  scoring, parsing. Playwright is configured (`bun run test:e2e`) but end-to-end flows are
+  not exercised in CI. Tracked in [docs/product-roadmap.md](docs/product-roadmap.md).
 - **No Alembic migrations.** The backend schema is created and patched at startup via
   `Base.metadata.create_all` + `auto_migrate_missing_columns`. Adequate at current scale;
   would need replacing before multi-tenant production.

@@ -20,9 +20,18 @@ Active backend revision `planforge-backend-00034-28r`, deployed **manually** 202
 
 ## Test state
 
-- **Backend:** 650 tests across 87 files (`cd backend && uv run pytest`)
-- **Frontend:** no dedicated test files — verified via build, type-check, preview deploys
-- **structapi:** 94 tests, all passing (verified locally 2026-07-28)
+All measured on `chore/public-release-prep`, 2026-07-28:
+
+- **Backend:** 638 tests across 86 files, all passing (`cd backend && uv run pytest`)
+- **Frontend:** 199 tests across 25 files, all passing (`cd frontend && bun test`)
+- **structapi:** 94 tests, all passing (separate repo)
+- **E2E:** Playwright configured (`bun run test:e2e`), not wired into CI
+
+> Counts differ slightly by branch — `feat/structural-drawings-construction-grade` carries
+> additional tests (650/87) not yet on this branch. Measure before quoting.
+>
+> A fresh worktree has no `node_modules`, so `bun test` reports 10 module-resolution
+> failures until `bun install` is run. Those are environmental, not real failures.
 
 ## Known blockers
 
@@ -33,7 +42,9 @@ Active backend revision `planforge-backend-00034-28r`, deployed **manually** 202
    `deploy-backend.yml` cannot run, so backend deploys are manual. Resolution deferred by
    decision — no budget change; going public should clear it, since public repos draw no
    minutes from the allowance. Re-verify after the flip.
-2. **Frontend test coverage** — no dedicated test files. Highest-value engineering gap.
+2. **No end-to-end coverage in CI.** Unit coverage is solid on both sides, but Playwright
+   e2e is configured and unwired, so nothing tests a full flow across frontend → backend
+   → structapi. Highest-value remaining test gap.
 
 ## Active branches
 
