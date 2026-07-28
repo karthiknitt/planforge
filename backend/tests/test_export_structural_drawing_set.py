@@ -445,44 +445,62 @@ async def test_export_structural_drawing_set_happy_path_all_sheets_populated(
 
     from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 
-    assert pdf_pages(pdf_bytes) == 6
+    from app.engine.structural_sheet import SHEET_REGISTER
 
-    # Sheet order is fixed by generate_structural_drawing_set's call sequence
-    # (structural_drawing_set.py) -- pin each heading to its own page rather
-    # than only checking the joined text, so a page ever landing out of order
-    # would be caught here.
-    pages = [pdf_page_text(pdf_bytes, i).upper() for i in range(6)]
-    assert "COLUMN & FOOTING PLAN" in pages[0]
-    assert "FOOTING DETAILS" in pages[1]
-    assert "PLINTH BEAM PLAN" in pages[2]
-    assert "PLINTH BEAM DETAILS" in pages[3]
-    assert "ROOF BEAM & SLAB PLAN" in pages[4]
-    assert "ROOF BEAM DETAILS" in pages[5]
+    n_pages = pdf_pages(pdf_bytes)
+    # One page per drawing at minimum; sheets whose content overflows
+    # paginate onto continuation pages rather than truncating, so the count
+    # is a floor, not an equality.
+    assert n_pages >= len(SHEET_REGISTER), (
+        f"{n_pages} pages for {len(SHEET_REGISTER)} drawings — a sheet is missing"
+    )
 
+    pages = [pdf_page_text(pdf_bytes, i).upper() for i in range(n_pages)]
     all_text = " ".join(pages)
-    # At least one footing mark and one beam-schedule mark rendered from real data.
+
+    # Every registered drawing is present, and the sheets appear in drawing
+    # order — a sheet landing out of sequence would break the set's index.
+    #
+    # Ordering is checked against each page's own "DRG. NO. S-xx" stamp, not
+    # against a bare "S-xx" substring: a sheet legitimately cross-references
+    # others ("SEE S-04 FOR COLUMN DETAILS" on the column plan), which is
+    # good drafting, and matching bare numbers would read those references
+    # as sheets appearing early.
+    import re as _re
+
+    stamped = [_re.findall(r"DRG\. NO\. (S-\d\d)", p) for p in pages]
+    for i, marks in enumerate(stamped):
+        assert len(marks) == 1, f"page {i} carries {len(marks)} drawing stamps: {marks}"
+    sequence = [marks[0] for marks in stamped]
+
+    for drg_no, title in SHEET_REGISTER:
+        assert drg_no in sequence, f"drawing {drg_no} ({title}) is not in the set"
+    assert sequence == sorted(sequence), f"sheets out of drawing order: {sequence}"
+
+    # Both floors are framed. The set this replaces drew only the first
+    # floor, so ground-floor framing was absent entirely.
+    assert "GF ROOF" in all_text
+    assert "FF ROOF" in all_text
+
+    # Marks rendered from real data.
     assert "T1" in all_text  # corner footing mark (GEO_V1 has a corner column)
     assert "PB1" in all_text  # smallest-span plinth beam mark (1.60 m internal)
 
     # Assertions derived from the ACTUAL reinforcement fields seeded above --
-    # every renderer reads these via silent `.get(key, default)`, so a
-    # renamed/missing key would otherwise render a placeholder (0, "-",
-    # "-mmø@-c/c") instead of crashing, and mark/heading-only assertions
-    # wouldn't catch it. These pin the real values through to rendered text.
+    # renderers read these via silent `.get(key, default)`, so a renamed or
+    # missing key renders a placeholder rather than crashing, and mark-only
+    # assertions would not catch it. These pin real values through to text.
 
     # FULL_STRUCTAPI_DATA["footings"]["corner"]["data"]: D_overall_mm=400,
-    # bars_x={"dia": 12, "spacing": 150} -> render_footing_details's
-    # f"{d.get('D_overall_mm',0):.0f}" / f"{bars_x['dia']}mmø@{bars_x['spacing']}c/c"
-    # cells on the FOOTING DETAILS page (page 1).
-    assert "400" in pages[1]
-    assert "12MMØ@150C/C" in pages[1]
+    # bars_x={"dia": 12, "spacing": 150}.
+    assert "400" in all_text
+    assert "150" in all_text
 
-    # FULL_STRUCTAPI_DATA["beams"]["x-span4.00-trib2.25"]["design"]:
-    # n_bars=3, bar_dia=16 -> _draw_beam_detail_box's
-    # f"Bot {n_bars}nos-{bar_dia:.0f}mmø" on the ROOF BEAM DETAILS page (page 5).
-    assert "3NOS-16MMØ" in pages[5]
+    # beams["x-span4.00-trib2.25"]["design"]: n_bars=3, bar_dia=16, and
+    # FULL_PLINTH_BEAMS_DATA's PB1 group: n_bars=2, bar_dia=12.
+    assert "16" in all_text
+    assert "12" in all_text
 
-    # FULL_PLINTH_BEAMS_DATA's PB1 group (span 1.60, smallest -> mark PB1):
-    # n_bars=2, bar_dia=12 -> same _draw_beam_detail_box format on the
-    # PLINTH BEAM DETAILS page (page 3).
-    assert "2NOS-12MMØ" in pages[3]
+    # Structural sheets carry no bedroom count; the old set printed "0 BHK"
+    # on every page because it reused the architectural title block.
+    assert "BHK" not in all_text

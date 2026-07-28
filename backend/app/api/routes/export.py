@@ -152,9 +152,8 @@ async def export_structural_drawing_set(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """Export a 6-page Structural Drawing Set PDF (Column & Footing Plan,
-    Footing Details, Plinth Beam Plan, Plinth Beam Details, Roof Beam & Slab
-    Plan, Roof Beam Details).
+    """Export the 12-sheet construction-grade Structural Drawing Set PDF
+    (S-01 general notes through S-12 staircase details, covering both floors).
 
     Gated on approved + designed layout: returns 409 if either approval or
     structural design is missing. Computes plinth beams fresh at export time
@@ -212,7 +211,9 @@ async def export_structural_drawing_set(
     geom = design.get("final_geometry") or row.geometry
     layout = layout_store.engine_layout_from_geometry(geom)
 
-    # Build ground-floor drawing (plinth beams live on GF)
+    # Plinth beams live on GF and follow its walls, so they are designed from
+    # the ground-floor drawing. Every other sheet gets both floors' geometry
+    # from `layout` inside the set's own model builder.
     drawing = build_floor_drawing(layout.ground_floor, cfg)
 
     # Compute plinth beam design fresh at export time
@@ -221,18 +222,14 @@ async def export_structural_drawing_set(
     except structagent_client.StructuralAPIError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
-    # Generate the 6-page PDF
+    # Generate the drawing set
     async with _EXPORT_SEM:
         pdf_bytes = generate_structural_drawing_set(
             project_name=project.name,
             cfg=cfg,
-            columns=drawing.columns,
-            walls=drawing.walls,
-            plinth_beams_data=plinth_beams_data,
-            structural_design=design,
-            floor_plan=layout.first_floor,
             layout=layout,
-            num_bedrooms=project.num_bedrooms,
+            structural_design=design,
+            plinth_beams_data=plinth_beams_data,
         )
 
     filename = f"planforge-structural-drawings-{project_id}-layout-{layout_id}.pdf"

@@ -156,7 +156,8 @@ const faqs = [
    Page
 ────────────────────────────────────────────────────────────── */
 export const metadata: Metadata = {
-  title: "G+1 Floor Plan Generator for Indian Builders — NBC 2016 Compliant | PlanForge",
+  // The root layout applies `template: "%s | PlanForge"`, so do NOT repeat the suffix here.
+  title: "G+1 Floor Plan Generator for Indian Builders — NBC 2016 Compliant",
   description:
     "Generate 5 NBC 2016-compliant G+1 floor plan variations in under 1 second. Enter plot dimensions, get PDF, DXF & BOQ export. Free plan available. No AutoCAD needed.",
   keywords: [

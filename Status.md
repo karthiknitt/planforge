@@ -1,4 +1,87 @@
-# PlanForge — Status (Stage 1 Phase 1: Architectural Hardening)
+# PlanForge — Status
+
+**Last updated:** 2026-07-28 · **Product status:** feature-complete (P0–P3 shipped), pre-revenue
+**Current workstream:** public release + documentation overhaul
+
+## Live services (verified 2026-07-27)
+
+| Component | URL | Health |
+|---|---|---|
+| Frontend | https://planforge-mauve.vercel.app | 200, production deploy |
+| Backend | https://planforge-backend-912195238699.us-central1.run.app | `/api/health` → `{"status":"ok","service":"planforge-api"}` |
+| Engine (structapi) | https://structapi-912195238699.us-central1.run.app | `/v1/health` → iscodes 0.3.0 |
+
+Active backend revision `planforge-backend-00034-28r`, deployed manually 2026-07-25
+16:36 UTC while the CI deploy was blocked. Automated deploys work again now that the repo
+is public.
+
+> **Cold starts:** both services run at `min-instances=0`. A cold request can exceed 90
+> seconds before the first byte; warm requests settle at 1–15s. Measured 2026-07-28.
+
+> `planforge.vercel.app` is **not ours** — it serves an unrelated third-party app. The
+> canonical production URL is `planforge-mauve.vercel.app`.
+
+## Test state
+
+All measured on `chore/public-release-prep`, 2026-07-28:
+
+- **Backend:** 638 tests across 86 files, all passing (`cd backend && uv run pytest`)
+- **Frontend:** 199 tests across 25 files, all passing (`cd frontend && bun test`)
+- **structapi:** 94 tests, all passing (separate repo)
+- **E2E:** Playwright configured (`bun run test:e2e`), not wired into CI
+
+> Counts differ slightly by branch — `feat/structural-drawings-construction-grade` carries
+> additional tests (650/87) not yet on this branch. Measure before quoting.
+>
+> A fresh worktree has no `node_modules`, so `bun test` reports 10 module-resolution
+> failures until `bun install` is run. Those are environmental, not real failures.
+
+## Known blockers
+
+1. **Vendored structapi is behind.** `structapi-service/` pins v0.3.0 while structapi
+   has released v0.3.1 (isolated-footing development-length sizing). CI detects the drift
+   correctly but cannot open the tracking issue — `STRUCTAPI_SYNC_TOKEN` lacks
+   `issues:write`.
+
+   *Resolved 2026-07-28:* GitHub Actions was blocked from 2026-07-25 after July usage hit
+   2,438 minutes against the 2,000-minute free-plan allowance. Making the repo public
+   cleared it — public repos draw no minutes from the allowance.
+2. **No end-to-end coverage in CI.** Unit coverage is solid on both sides, but Playwright
+   e2e is configured and unwired, so nothing tests a full flow across frontend → backend
+   → structapi. Highest-value remaining test gap.
+
+## Active branches
+
+| Branch | Where | State |
+|---|---|---|
+| `main` | — | public since 2026-07-28; protected (required checks, no force-push) |
+| `chore/public-release-prep` | worktree `~/projects/PlanForge-release` | merged to main in #48 |
+| `feat/structural-drawings-construction-grade` | main checkout `~/projects/PlanForge` | active feature work |
+| `feat/saas-scalability` | worktree `~/projects/PlanForge-saas` | 10 ahead of main |
+
+Three lines of work run concurrently. Confirm branch and directory before editing
+(`git branch --show-current && pwd`).
+
+## Security
+
+Full-history `gitleaks` scan 2026-07-27 over 326 commits: **no real credentials**. Nine
+matches triaged as false positives (Docker image tags, a geometry dict key, the
+`INTERNAL_AUTH_SECRET` CI fixture) and recorded in `.gitleaksignore` with reasons. Re-run
+before any visibility change:
+
+```bash
+gitleaks detect --source . --log-opts="--all" --redact
+```
+
+---
+---
+
+# Historical log
+
+Everything below records earlier stage/phase work and is retained for provenance. It does
+**not** describe current state.
+
+## Stage 1 Phase 1: Architectural Hardening
 
 **Branch:** `worktree-stage1-phase1-hardening` (worktree; NOT merged to main — per Karthik's standing instruction, nothing merges until he says so)
 **Phase:** 1 of 3 (foundational bug audit + fix) — COMPLETE, awaiting sign-off
