@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400" viewBox="0 0 900 400" font-family="ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <rect width="900" height="400" fill="#ffffff"/>
+
+  <text x="450" y="32" text-anchor="middle" font-size="19" font-weight="600" fill="#0f172a">Floor plan to structural drawings</text>
+  <text x="450" y="53" text-anchor="middle" font-size="13" fill="#64748b">PlanForge solves the layout. structapi designs the structure. Neither guesses.</text>
+
+  <!-- Step 1 input -->
+  <rect x="34" y="92" width="172" height="72" rx="7" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="120" y="118" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">Input</text>
+  <text x="120" y="136" text-anchor="middle" font-size="10.5" fill="#475569">plot dimensions, setbacks</text>
+  <text x="120" y="151" text-anchor="middle" font-size="10.5" fill="#475569">rooms, road side, city</text>
+
+  <path d="M206 128 L246 128" stroke="#94a3b8" stroke-width="2" marker-end="url(#g)"/>
+
+  <!-- Step 2 solver -->
+  <rect x="246" y="92" width="196" height="72" rx="7" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+  <text x="344" y="115" text-anchor="middle" font-size="12.5" font-weight="600" fill="#115e59">PlanForge layout engine</text>
+  <text x="344" y="132" text-anchor="middle" font-size="10.5" fill="#0d9488">OR-Tools CP-SAT + Shapely</text>
+  <text x="344" y="147" text-anchor="middle" font-size="10.5" fill="#0d9488">compliance · Vastu · scoring</text>
+
+  <path d="M442 128 L482 128" stroke="#94a3b8" stroke-width="2" marker-end="url(#g)"/>
+
+  <!-- Step 3 layouts -->
+  <rect x="482" y="92" width="172" height="72" rx="7" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="568" y="115" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">3 scored layouts</text>
+  <text x="568" y="133" text-anchor="middle" font-size="10.5" fill="#475569">SVG · PDF · DXF · BOQ</text>
+  <text x="568" y="148" text-anchor="middle" font-size="10.5" fill="#475569">+ column grid</text>
+
+  <!-- down arrow to structapi -->
+  <path d="M568 164 L568 214" stroke="#0d9488" stroke-width="2" marker-end="url(#t)"/>
+  <text x="580" y="185" font-size="10.5" fill="#0d9488">POST /v1/design/building</text>
+  <text x="580" y="200" font-size="10.5" fill="#0d9488">frozen v1 envelope · x-api-key</text>
+
+  <!-- structapi -->
+  <rect x="380" y="214" width="376" height="70" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="568" y="238" text-anchor="middle" font-size="13" font-weight="600" fill="#1e3a8a">structapi — deterministic IS-code engine</text>
+  <text x="568" y="256" text-anchor="middle" font-size="10.5" fill="#3b82f6">IS 456 · 875 · 1893 · 13920 · 3370 · 10262</text>
+  <text x="568" y="272" text-anchor="middle" font-size="10.5" fill="#3b82f6">same plan in, same design out — no LLM in the calculation path</text>
+
+  <path d="M380 249 L300 249 L300 300" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#b)"/>
+
+  <!-- Output -->
+  <rect x="90" y="300" width="420" height="66" rx="7" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="300" y="323" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">Structural output</text>
+  <text x="300" y="341" text-anchor="middle" font-size="10.5" fill="#475569">member sizing · reinforcement detailing · SFD/BMD figures</text>
+  <text x="300" y="356" text-anchor="middle" font-size="10.5" fill="#475569">steel + concrete quantities · clause-referenced drawing sheets</text>
+
+  <!-- note -->
+  <text x="620" y="330" font-size="10.5" fill="#64748b">The LLM layer sits above the engine:</text>
+  <text x="620" y="345" font-size="10.5" fill="#64748b">PlanForge's chat calls structapi as a tool.</text>
+  <text x="620" y="360" font-size="10.5" fill="#64748b">Reproducibility is a hard requirement here —</text>
+  <text x="620" y="375" font-size="10.5" fill="#64748b">revisions, approvals and BOQ depend on it.</text>
+
+  <defs>
+    <marker id="g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#94a3b8"/></marker>
+    <marker id="t" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#0d9488"/></marker>
+    <marker id="b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#2563eb"/></marker>
+  </defs>
+</svg>

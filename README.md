@@ -5,22 +5,7 @@
 
 **[▶ Live demo](https://planforge-mauve.vercel.app)** · **[Architecture](docs/ARCHITECTURE.md)** · **[Engine repo](https://github.com/karthiknitt/structapi)**
 
-```
- plot dimensions, setbacks, room preferences
-                  │
-                  ▼
- ┌───────────────────────────────┐   OR-Tools CP-SAT + Shapely
- │  PlanForge (this repo)         │   3 scored, compliance-checked layouts
- └───────────────┬───────────────┘
-                 │  POST /v1/design/building
-                 │  frozen v1 envelope, x-api-key
-                 ▼
- ┌───────────────────────────────┐   IS 456 · 875 · 1893 · 13920 · 3370 · 10262
- │  structapi                     │   deterministic — no LLM in the calculation path
- └───────────────┬───────────────┘
-                 ▼
-   member design · reinforcement · BOQ quantities · structural PDF sheets
-```
+![PlanForge system flow: plot input to CP-SAT solver to three scored layouts, then to structapi for deterministic IS-code structural design](docs/assets/system-flow.svg)
 
 PlanForge takes plot dimensions, setbacks, and room preferences and instantly generates three compliant layout variations — complete with SVG preview, section view, Bill of Quantities, PDF drawing, and DXF export. It then hands the resulting column grid to [structapi](https://github.com/karthiknitt/structapi) for IS-code structural design, without the user leaving the app.
 
