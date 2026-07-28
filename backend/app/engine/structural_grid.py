@@ -23,6 +23,14 @@ MAX_SPACING = 8.0
 class GridExtraction:
     x_spacings_m: list = field(default_factory=list)
     y_spacings_m: list = field(default_factory=list)
+    #: absolute grid-line ordinates (m, plot coordinates) — the cluster
+    #: centres the spacings were differenced from. structapi keys each beam
+    #: group by `grid_line_indices` and each slab panel by `[i, j]` cell
+    #: indices; without the absolute lines those indices cannot be projected
+    #: back onto a drawing, so the framing plans could only fall back to
+    #: one-label-per-room. Spacings alone are lossy — they discard the origin.
+    x_lines_m: list = field(default_factory=list)
+    y_lines_m: list = field(default_factory=list)
     confident: bool = False
     notes: list = field(default_factory=list)
 
@@ -54,6 +62,8 @@ def extract_grid(columns: list[dict]) -> GridExtraction:
         out.notes.append("columns do not form at least one bay each way")
         return out
 
+    out.x_lines_m = [round(v, 3) for v in xs]
+    out.y_lines_m = [round(v, 3) for v in ys]
     out.x_spacings_m = [round(b - a, 2) for a, b in zip(xs, xs[1:])]
     out.y_spacings_m = [round(b - a, 2) for a, b in zip(ys, ys[1:])]
 
