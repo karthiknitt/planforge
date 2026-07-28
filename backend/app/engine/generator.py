@@ -116,6 +116,77 @@ def _trim_micro_overlaps(floor_plan: FloorPlan) -> None:
                     t.depth = round(t.depth - d_ov, 3)
 
 
+_PASSAGE_MAX_SQM = 6.0  # mirrors room_specs.json "passage".max_area_sqm
+
+
+def _ensure_stair_circulation_room(floor_plan: FloorPlan) -> str | None:
+    """Retype an auto-filler room into a circulation room if the staircase
+    has no doorable circulation partition yet.
+
+    The solver's own room list only defines a ``living`` room on the ground
+    floor (``_build_room_list`` in ``solver.py``) — an upper floor can be
+    bedrooms + staircase only. The CP-SAT hard constraint has a documented
+    fallback for this (any non-wet/non-parking room, including a bedroom,
+    satisfies its OWN door-access requirement), but that fallback doesn't
+    give the staircase a *circulation* neighbour, only *some* neighbour —
+    and none of the fill/split/trim passes above know to prioritise the
+    staircase when choosing where to place leftover-space filler (issue
+    #50's second suspect, alongside the snap pass fixed separately).
+
+    Retypes at most one auto-filler room per stair (utility/store_room/
+    balcony — the exact types ``_rect_fill_remainder`` creates), and only
+    when it already shares enough wall for a door AND is passage-sized
+    (``_PASSAGE_MAX_SQM``) — an Open Terrace or big Utility room sharing a
+    wall with the stair must NOT be relabelled wholesale, or "passage"
+    stops meaning circulation-sized. This reuses existing geometry rather
+    than moving anything, so nothing structural changes, only the room's
+    type/name and its resulting opening-placement eligibility.
+    """
+    from .plan_geometry import (
+        _adjacencies,
+        _CIRCULATION_TYPES,
+        _STAIR_DOOR_MIN_RUN_M,
+        IWT,
+    )
+
+    rooms = floor_plan.rooms
+    stair_idxs = [i for i, r in enumerate(rooms) if r.type == "staircase"]
+    if not stair_idxs:
+        return None
+
+    adjs = _adjacencies(rooms, IWT, 0.01)
+    retyped: str | None = None
+    for si in stair_idxs:
+        runs = [
+            (adj.hi - adj.lo, adj.b if adj.a == si else adj.a)
+            for adj in adjs
+            if si in (adj.a, adj.b)
+        ]
+        already_ok = any(
+            run >= _STAIR_DOOR_MIN_RUN_M - 1e-6 and rooms[oi].type in _CIRCULATION_TYPES
+            for run, oi in runs
+        )
+        if already_ok:
+            continue
+        candidates = sorted(
+            (
+                (run, oi)
+                for run, oi in runs
+                if run >= _STAIR_DOOR_MIN_RUN_M - 1e-6
+                and rooms[oi].type in ("utility", "store_room", "balcony")
+                and rooms[oi].area <= _PASSAGE_MAX_SQM
+            ),
+            reverse=True,
+        )
+        if not candidates:
+            continue
+        _, oi = candidates[0]
+        rooms[oi].type = "passage"
+        rooms[oi].name = "Landing"
+        retyped = rooms[oi].id
+    return retyped
+
+
 def _fill_blank_areas(
     floor_plan: FloorPlan,
     cfg: PlotConfig,
@@ -781,6 +852,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             space_notes.extend(notes)
             space_notes.extend(_split_oversized_wet_rooms(fp))
             _trim_micro_overlaps(fp)
+            _ensure_stair_circulation_room(fp)
 
         layout.space_notes = list(layout.space_notes) + space_notes
 
