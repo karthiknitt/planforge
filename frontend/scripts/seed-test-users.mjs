@@ -52,25 +52,43 @@ async function hashPassword(password) {
 
 // ── Test users ────────────────────────────────────────────────────────────────
 
+// These accounts are seeded against the PRODUCTION database, so the password must not
+// live in this file. Supply it at run time:
+//   SEED_PASSWORD='<value>' bun run scripts/seed-test-users.mjs
+const SEED_PASSWORD = process.env.SEED_PASSWORD;
+
+if (!SEED_PASSWORD) {
+  console.error(
+    "SEED_PASSWORD is not set.\n" +
+      "help: SEED_PASSWORD='<value>' bun run scripts/seed-test-users.mjs"
+  );
+  process.exit(1);
+}
+
+if (SEED_PASSWORD.length < 8) {
+  console.error("SEED_PASSWORD must be at least 8 characters.");
+  process.exit(1);
+}
+
 const TEST_USERS = [
   {
     name: "Free Tester",
     email: "free@planforge.dev",
-    password: "Test@1234",
+    password: SEED_PASSWORD,
     planTier: "free",
     planExpiresAt: null,
   },
   {
     name: "Basic Tester",
     email: "basic@planforge.dev",
-    password: "Test@1234",
+    password: SEED_PASSWORD,
     planTier: "basic",
     planExpiresAt: new Date("2099-12-31T23:59:59Z"),
   },
   {
     name: "Pro Tester",
     email: "pro@planforge.dev",
-    password: "Test@1234",
+    password: SEED_PASSWORD,
     planTier: "pro",
     planExpiresAt: new Date("2099-12-31T23:59:59Z"),
   },
@@ -145,7 +163,7 @@ async function seed() {
   await sql.end();
 
   console.log("\n─────────────────────────────────────────────");
-  console.log("Test credentials (all passwords: Test@1234)");
+  console.log("Test accounts seeded (password: the SEED_PASSWORD you supplied)");
   console.log("─────────────────────────────────────────────");
   for (const u of TEST_USERS) {
     console.log(`  ${u.planTier.padEnd(5)}  ${u.email}`);

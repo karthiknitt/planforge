@@ -1,5 +1,18 @@
 # Cloud Run $0-Tier Backend Deployment Implementation Plan
 
+> **Status: executed 2026-07-03. Historical record — do not follow verbatim.**
+>
+> This plan was written before the GCP project existed and proposes the project ID
+> `planforge-prod`. The project actually created is **`thermal-well-451906-b0`**
+> (region `us-central1`), and the deploy service account is
+> `planforge-deployer@thermal-well-451906-b0.iam.gserviceaccount.com`. Every
+> `planforge-prod` reference below is superseded by those values.
+>
+> Current live URLs: backend
+> `https://planforge-backend-912195238699.us-central1.run.app` (`/api/health`),
+> frontend `https://planforge-mauve.vercel.app`.
+> See [../ARCHITECTURE.md](../ARCHITECTURE.md) for current state.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Deploy `backend/` (FastAPI) to Google Cloud Run inside the Always Free tier,
@@ -178,7 +191,7 @@ app.add_middleware(
 (`allow_origin_regex` covers every Vercel preview-deployment URL automatically —
 `https://<project>-<hash>-<team>.vercel.app` — so you don't have to add a new origin by
 hand for every PR preview. `allowed_origins` env var is for your one stable production
-Vercel domain, e.g. `https://planforge.vercel.app`.)
+Vercel domain, e.g. `https://planforge-mauve.vercel.app`.)
 
 You'll also need `from app.config.settings import settings` already present in
 `main.py` — check before adding a duplicate import.
@@ -302,7 +315,7 @@ git commit -m "feat(backend): toggleable NullPool for Neon pooled connections vi
 
 Append to `backend/.env.example`:
 ```
-ALLOWED_ORIGINS=https://planforge.vercel.app
+ALLOWED_ORIGINS=https://planforge-mauve.vercel.app
 DB_USE_NULLPOOL=false
 ```
 
@@ -466,7 +479,7 @@ Via `gh` CLI (per your convention of preferring `gh` over the web UI):
 gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --body "<full provider resource name from Task 9>"
 gh secret set GCP_SERVICE_ACCOUNT --body "planforge-deployer@planforge-prod.iam.gserviceaccount.com"
 gh secret set NEON_DATABASE_URL --body "<pooled connection string from Task 8, with +asyncpg>"
-gh secret set BACKEND_ALLOWED_ORIGINS --body "https://planforge.vercel.app"
+gh secret set BACKEND_ALLOWED_ORIGINS --body "https://planforge-mauve.vercel.app"
 gh variable set GCP_PROJECT_ID --body "planforge-prod"
 gh variable set GCP_REGION --body "us-central1"
 ```

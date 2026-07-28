@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FadeIn } from "@/components/motion/fade-in";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | PlanForge",
+  title: "Privacy Policy",
   description: "PlanForge privacy policy — how we collect, use, and protect your data.",
   robots: { index: true, follow: true },
   alternates: { canonical: "/privacy" },
