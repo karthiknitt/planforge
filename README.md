@@ -14,9 +14,18 @@ PlanForge takes plot dimensions, setbacks, and room preferences and instantly ge
 Verify both services are live right now:
 
 ```bash
-curl -s https://structapi-912195238699.us-central1.run.app/v1/health
-curl -s https://planforge-backend-912195238699.us-central1.run.app/api/health
+curl -s --max-time 120 https://structapi-912195238699.us-central1.run.app/v1/health
+# {"status":"ok","api_version":"1","iscodes_version":"0.3.0"}
+
+curl -s --max-time 120 https://planforge-backend-912195238699.us-central1.run.app/api/health
+# {"status":"ok","service":"planforge-api"}
 ```
+
+> **Both services scale to zero.** They run on Cloud Run at `min-instances=0` to stay
+> inside the free tier, so a cold request can take **60–120 seconds** before the first
+> byte; subsequent requests settle around 1–15s. Give it the full timeout above rather
+> than concluding the service is down. The same applies to the first plan you generate in
+> the live app.
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)

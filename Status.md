@@ -2,7 +2,6 @@
 
 **Last updated:** 2026-07-28 · **Product status:** feature-complete (P0–P3 shipped), pre-revenue
 **Current workstream:** public release + documentation overhaul
-(`docs/plans/2026-07-27-public-release-docs-overhaul.md`)
 
 ## Live services (verified 2026-07-27)
 
@@ -12,8 +11,12 @@
 | Backend | https://planforge-backend-912195238699.us-central1.run.app | `/api/health` → `{"status":"ok","service":"planforge-api"}` |
 | Engine (structapi) | https://structapi-912195238699.us-central1.run.app | `/v1/health` → iscodes 0.3.0 |
 
-Active backend revision `planforge-backend-00034-28r`, deployed **manually** 2026-07-25
-16:36 UTC because the CI deploy is blocked (see below).
+Active backend revision `planforge-backend-00034-28r`, deployed manually 2026-07-25
+16:36 UTC while the CI deploy was blocked. Automated deploys work again now that the repo
+is public.
+
+> **Cold starts:** both services run at `min-instances=0`. A cold request can exceed 90
+> seconds before the first byte; warm requests settle at 1–15s. Measured 2026-07-28.
 
 > `planforge.vercel.app` is **not ours** — it serves an unrelated third-party app. The
 > canonical production URL is `planforge-mauve.vercel.app`.
@@ -35,13 +38,14 @@ All measured on `chore/public-release-prep`, 2026-07-28:
 
 ## Known blockers
 
-1. **GitHub Actions blocked on PlanForge.** July usage reached 2,438 minutes against a
-   2,000-minute free-plan allowance; PlanForge accounts for 2,381. Runs since 2026-07-25
-   fail in 2–9s with "recent account payments have failed or your spending limit needs to
-   be increased". structapi is unaffected (green CI on 2026-07-27). Consequence:
-   `deploy-backend.yml` cannot run, so backend deploys are manual. Resolution deferred by
-   decision — no budget change; going public should clear it, since public repos draw no
-   minutes from the allowance. Re-verify after the flip.
+1. **Vendored structapi is behind.** `structapi-service/` pins v0.3.0 while structapi
+   has released v0.3.1 (isolated-footing development-length sizing). CI detects the drift
+   correctly but cannot open the tracking issue — `STRUCTAPI_SYNC_TOKEN` lacks
+   `issues:write`.
+
+   *Resolved 2026-07-28:* GitHub Actions was blocked from 2026-07-25 after July usage hit
+   2,438 minutes against the 2,000-minute free-plan allowance. Making the repo public
+   cleared it — public repos draw no minutes from the allowance.
 2. **No end-to-end coverage in CI.** Unit coverage is solid on both sides, but Playwright
    e2e is configured and unwired, so nothing tests a full flow across frontend → backend
    → structapi. Highest-value remaining test gap.
@@ -50,8 +54,8 @@ All measured on `chore/public-release-prep`, 2026-07-28:
 
 | Branch | Where | State |
 |---|---|---|
-| `main` | — | `7cc9932` |
-| `chore/public-release-prep` | worktree `~/projects/PlanForge-release` | public release + docs |
+| `main` | — | public since 2026-07-28; protected (required checks, no force-push) |
+| `chore/public-release-prep` | worktree `~/projects/PlanForge-release` | merged to main in #48 |
 | `feat/structural-drawings-construction-grade` | main checkout `~/projects/PlanForge` | active feature work |
 | `feat/saas-scalability` | worktree `~/projects/PlanForge-saas` | 10 ahead of main |
 

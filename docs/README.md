@@ -23,7 +23,6 @@ first. These are **historical working documents** — they record what was decid
 when, not the current state of the system. Where a plan contradicts this index or the
 root `README.md`, the plan is out of date.
 
-Current public-release work: [plans/2026-07-27-public-release-docs-overhaul.md](plans/2026-07-27-public-release-docs-overhaul.md).
 
 ## Related repositories
 
