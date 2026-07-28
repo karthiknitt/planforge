@@ -4,13 +4,13 @@
 
 PlanForge is a G+1 2D residential floor plan generator for Indian small builders and civil engineers.
 
-It generates 3 template-based layout variations for rectangular plots, enforces Indian building compliance rules, and exports professional PDF drawings.
+It generates 3 solver-produced layout variations for rectangular, trapezoid, quadrilateral, and L-shaped plots, enforces Indian building compliance rules (including 5-city municipal bye-laws and Vastu), and exports PDF drawings, DXF CAD files, and a Bill of Quantities.
 
 It also acts as the front door to `structapi`, a separate multi-agent IS-code structural
 design engine ([karthiknitt/structapi](https://github.com/karthiknitt/structapi)) — see
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Status:** feature-complete (P0–P3 shipped), pre-revenue. `Lean_MVP_PRD_v1.md` is
+**Status:** feature-complete (P0–P3 shipped), pre-revenue. `docs/archive/Lean_MVP_PRD_v1.md` is
 historical and no longer describes current scope.
 
 ---
@@ -64,10 +64,10 @@ PlanForge/
 
 ---
 
-## Key Product Decisions (current — supersedes `Lean_MVP_PRD_v1.md`)
+## Key Product Decisions (current — supersedes `docs/archive/Lean_MVP_PRD_v1.md`)
 
 > **Note:** this project outgrew the Lean MVP scope in early 2026. The constraints below
-> reflect what is actually built and shipped. `Lean_MVP_PRD_v1.md` is retained as a
+> reflect what is actually built and shipped. `docs/archive/Lean_MVP_PRD_v1.md` is retained as a
 > historical record only — do not treat it as current scope. Where it disagrees with this
 > section or `README.md`, it is out of date.
 
