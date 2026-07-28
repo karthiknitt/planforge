@@ -53,6 +53,17 @@ MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 # trades — popular grid lines earn quadratically (C(n,2) pairs), which is
 # exactly the pressure that consolidates walls onto few lines.
 ALIGN_BONUS = 2500
+# Cross-floor pairs used to share ALIGN_BONUS with same-floor pairs — the
+# wrong weighting on the merits, since a same-floor near-miss just costs an
+# untidy mid-span T column while an unstacked upper-floor column is a
+# structural defect (floating column). Swept 7500/25000/60000/150000 on the
+# grid-alignment test's own config: 60000 is the measured peak (worst solver
+# layout 0.55 -> 0.67 stacked); 150000 over-weights and regresses to 0.55.
+# Must be applied together with the stair/circulation snap protection (see
+# `_stair_circulation_protect_ids`) — at this weight the solver's incumbent
+# shifts enough that unprotected post-solve snapping could otherwise break
+# the stair-door-access guarantee (issue #50).
+CROSS_FLOOR_ALIGN_BONUS = 60_000
 # Post-solve wall-line snapping reach. Facing edge pairs (the two faces of
 # one wall) are detected and moved rigidly as a unit, so a large tolerance
 # can never collapse a wall gap — it only merges genuinely distinct wall
@@ -322,6 +333,51 @@ class _SnapEdge:
     line: float = 0.0  # implied wall-line coordinate used for clustering
 
 
+def _stair_circulation_protect_ids(rooms: list[Room]) -> set[str]:
+    """Room ids (stair + its qualifying circulation neighbour) whose shared
+    wall already meets the solver's hard stair-door-access overlap
+    (``_STAIR_DOOR_MIN_OVERLAP_MM``).
+
+    Mirrors the CP-SAT reified overlap test in ``_solve_one`` (same four-side
+    cases, same gap/overlap thresholds) but as plain post-hoc geometry, so
+    ``snap_rooms_to_shared_grid`` can pin both rooms and guarantee the
+    invariant survives snapping — a hard CP-SAT constraint at solve time was
+    still silently undone downstream because the circulation room next to a
+    pinned staircase was itself free to move (issue #50).
+    """
+    stairs = [r for r in rooms if r.type == "staircase"]
+    if not stairs:
+        return set()
+    targets = [r for r in rooms if r.type in _CIRCULATION_TYPES]
+    if not targets:
+        targets = [
+            r
+            for r in rooms
+            if r.type not in _WET_TYPES
+            and r.type not in _PARKING_TYPES
+            and r.type != "staircase"
+        ]
+    min_overlap = _STAIR_DOOR_MIN_OVERLAP_MM / SCALE
+    protect: set[str] = set()
+    for st in stairs:
+        st_xe, st_ye = st.x + st.width, st.y + st.depth
+        for tgt in targets:
+            tgt_xe, tgt_ye = tgt.x + tgt.width, tgt.y + tgt.depth
+            cases = (
+                (tgt.x - st_xe, st.y, st_ye, tgt.y, tgt_ye),  # stair left
+                (st.x - tgt_xe, st.y, st_ye, tgt.y, tgt_ye),  # stair right
+                (tgt.y - st_ye, st.x, st_xe, tgt.x, tgt_xe),  # stair in front
+                (st.y - tgt_ye, st.x, st_xe, tgt.x, tgt_xe),  # stair behind
+            )
+            for gap, a_lo, a_hi, b_lo, b_hi in cases:
+                if 0 <= gap <= _IWT_M and (
+                    min(a_hi, b_hi) - max(a_lo, b_lo) >= min_overlap
+                ):
+                    protect.add(st.id)
+                    protect.add(tgt.id)
+    return protect
+
+
 def snap_rooms_to_shared_grid(
     floors: list[list[Room]],
     min_dims: dict[str, dict],
@@ -359,6 +415,11 @@ def snap_rooms_to_shared_grid(
         for r in rooms
         if pin_room_types and r.type in pin_room_types
     }
+    # Unconditional (not opt-in via pin_room_types): a stair/circulation pair
+    # that already clears the hard door-access overlap must not be allowed to
+    # drift apart by this best-effort pass, on either snap call site.
+    for rooms in floors:
+        pinned_ids |= _stair_circulation_protect_ids(rooms)
 
     edges: list[_SnapEdge] = []
     for fi, rooms in enumerate(floors):
@@ -938,10 +999,12 @@ def _solve_one(
     # this, size_terms grows every room independently and adjacent rooms
     # almost never share a wall line (pro-tester regression, 2026-07-16).
     align_bools = []
+    cross_floor_align_bools = []
     for i, a in enumerate(room_vars):
         for b in room_vars[i + 1 :]:
             if a.room_type == "staircase" and b.room_type == "staircase":
                 continue  # already hard-equal across floors
+            bucket = align_bools if a.floor == b.floor else cross_floor_align_bools
             # All 4 end combos per axis: rooms pack with gaps anywhere in
             # [0, iwt+], so a shared wall line shows up as lo↔lo, hi↔hi or
             # the mixed hi↔lo forms depending on which side of the gap each
@@ -959,7 +1022,7 @@ def _solve_one(
                 bv = model.new_bool_var(f"al_{a.room_id}_{b.room_id}_{tag}")
                 model.add(e1 == e2).only_enforce_if(bv)
                 model.add(e1 != e2).only_enforce_if(bv.Not())
-                align_bools.append(bv)
+                bucket.append(bv)
 
     # Drift minimisation (closed-loop re-solve): hint the solver toward the
     # approved geometry and penalise deviation from it, so a structural
@@ -987,6 +1050,7 @@ def _solve_one(
         sum(dist_terms)
         - sum(size_terms)
         - ALIGN_BONUS * sum(align_bools)
+        - CROSS_FLOOR_ALIGN_BONUS * sum(cross_floor_align_bools)
         + sum(wet_shrink_terms)
         + deviation_weight * sum(deviation_terms)
     )

@@ -309,6 +309,7 @@ def _stair_band_rooms(
     toilet_id: str = "ff_toilet_2",
     toilet_name: str = "Toilet 2",
     want_toilet: bool | None = None,
+    align_widths: tuple[float, float] | None = None,
 ) -> list[Room]:
     """Fill the FF strip beside the staircase.
 
@@ -324,10 +325,33 @@ def _stair_band_rooms(
     into the toilet (production project "MyLatest", 2026-07). The staircase
     needs a circulation neighbour to open onto; the toilet then opens off
     that room, which is also the conventional arrangement.
+
+    ``align_widths``, when given, is the ground floor's own (lead, last) slot
+    split for this same x-span (e.g. living/parking) — reusing it here lands
+    the filler/toilet joint on the exact same grid line as the GF joint, so
+    the two floors' columns stack (issue #51). The toilet still takes the
+    leading edge of the LAST (aligned) slot, never the first, preserving the
+    staircase's circulation neighbour; an oversized toilet that doesn't fully
+    fill the slot is caught by the existing post-fill wet-room split, same as
+    the unaligned path below.
     """
     if want_toilet is None:
         want_toilet = cfg.toilets >= 2
     want_t = want_toilet and band_w > 0.5
+
+    if align_widths and want_t:
+        lead_w, last_w = align_widths
+        aligned_filler = (
+            _band_filler_rooms(prefix, x, y, lead_w, band_d) if lead_w > 0.5 else []
+        )
+        if aligned_filler:
+            t_w = min(last_w, 2.0)
+            return aligned_filler + [
+                _r(toilet_id, toilet_name, "toilet", x + lead_w + iwt, y, t_w, band_d)
+            ]
+        # Lead slot too narrow to be a real room — fall through to the
+        # unaligned default split below.
+
     t_w = min(band_w, 2.0) if want_t else 0.0
     rem_w = band_w - t_w - iwt if want_t else band_w
 
@@ -410,18 +434,23 @@ def layout_a(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
         cur_x += PARK_W + iwt
         gf_rooms += _band_filler_rooms("gf", cur_x, oy, ox + W - cur_x, d_stair)
     else:
-        entry_w = W - STAIR_W - iwt
-        gf_rooms.append(
-            _r(
-                "gf_entry",
-                "Entry / Foyer",
-                "passage",
-                ox + STAIR_W + iwt,
-                oy,
-                entry_w,
-                d_stair,
+        # Same size-cap fix as the gf_foyer branch above: on a wide,
+        # no-parking plot the whole band (W - STAIR_W - iwt) was handed to
+        # ONE "passage" room, overflowing room_specs.json's passage cap
+        # (max_area_sqm=6.0 / max_width_m=2.0) — the exact oversized-
+        # circulation pathology the parking branch's comment already
+        # describes fixing, just not carried over here. Cap the entry at a
+        # real foyer's size and give the remainder to a real room via
+        # _band_filler_rooms, which sizes it "living" or "passage" itself.
+        band_rest = W - STAIR_W - iwt
+        cur_x = ox + STAIR_W + iwt
+        entry_w = min(band_rest, 2.0) if band_rest > 0.3 else 0.0
+        if entry_w:
+            gf_rooms.append(
+                _r("gf_entry", "Entry / Foyer", "passage", cur_x, oy, entry_w, d_stair)
             )
-        )
+            cur_x += entry_w + iwt
+        gf_rooms += _band_filler_rooms("gf", cur_x, oy, ox + W - cur_x, d_stair)
 
     living_y = oy + d_stair + iwt
 
@@ -978,7 +1007,12 @@ def layout_d(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     ff_rooms.append(_r("ff_stair", "Staircase", "staircase", ox, oy, STAIR_W, d_stair))
 
     landing_w = W - STAIR_W - iwt
-    ff_rooms += _stair_band_rooms(cfg, ox + STAIR_W + iwt, oy, landing_w, d_stair, iwt)
+    # Reuse the GF living/parking split (issue #51: GF joint at 7.79 m vs FF's
+    # own independent joint at 8.87 m was exactly the unstacked column pair).
+    align_widths = (hall_w, PARK_W) if cfg.parking else None
+    ff_rooms += _stair_band_rooms(
+        cfg, ox + STAIR_W + iwt, oy, landing_w, d_stair, iwt, align_widths=align_widths
+    )
 
     bed_y = oy + d_stair + iwt
     d_bed = D - d_stair - iwt
