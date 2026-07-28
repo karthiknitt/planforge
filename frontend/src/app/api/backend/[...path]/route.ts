@@ -1,10 +1,16 @@
 import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
+import { arcjetEnabled, rateLimitedClient } from "@/lib/arcjet";
 import { auth } from "@/lib/auth";
 import { signInternalAuthToken } from "@/lib/internal-auth";
 import { forwardableHeaders } from "@/lib/proxy-headers";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+
+// This single route fronts every render/export/structural/generate call to
+// FastAPI, so it's the highest-leverage place to cap abuse per user. Budget
+// is generous since normal page usage fires several GETs in quick succession.
+const aj = rateLimitedClient({ refillRate: 60, interval: "1m", capacity: 100 });
 
 // The Structural tab's design POST rides through this proxy and structapi
 // is allowed up to 120 s (structagent_client) plus Cloud Run cold starts —
@@ -28,6 +34,17 @@ async function proxy(
   }
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (arcjetEnabled) {
+    const decision = await aj.protect(req, { userId: session.user.id, requested: 1 });
+    if (decision.isDenied()) {
+      const status = decision.reason.isRateLimit() ? 429 : 403;
+      return NextResponse.json(
+        { error: decision.reason.isRateLimit() ? "Rate limit exceeded" : "Forbidden" },
+        { status }
+      );
+    }
   }
 
   const secret = process.env.INTERNAL_AUTH_SECRET;

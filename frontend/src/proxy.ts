@@ -1,9 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { ajShield, arcjetEnabled } from "@/lib/arcjet";
 
 const PROTECTED_PATHS = ["/dashboard", "/projects", "/account"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 
 export async function proxy(request: NextRequest) {
+  if (arcjetEnabled) {
+    const decision = await ajShield.protect(request);
+    if (decision.isDenied()) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
   const isAuthPath = AUTH_PATHS.some((p) => pathname.startsWith(p));

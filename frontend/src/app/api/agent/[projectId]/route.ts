@@ -18,6 +18,7 @@ import {
   type ModelChainPlanEntry,
   runModelChain,
 } from "@/lib/agent-model-chain";
+import { arcjetEnabled, rateLimitedClient } from "@/lib/arcjet";
 import { auth } from "@/lib/auth";
 import {
   DEFAULT_MODEL_ID,
@@ -29,6 +30,10 @@ import {
 // Fluid Compute allows up to 300s on every Vercel plan; a multi-step tool
 // sequence (each backend call capped at 45s) must not be killed mid-stream.
 export const maxDuration = 300;
+
+// LLM calls are the most expensive thing this app does per-request — cap
+// sustained chat volume per signed-in user, independent of anyone else's usage.
+const aj = rateLimitedClient({ refillRate: 20, interval: "1m", capacity: 30 });
 
 function buildSystemPrompt(layoutState: unknown): string {
   return `You are PlanForge's AI layout assistant. You help users refine their residential floor plans through natural language.
@@ -225,6 +230,17 @@ export async function POST(req: Request, { params }: { params: Params }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (arcjetEnabled) {
+    const decision = await aj.protect(req, { userId: session.user.id, requested: 1 });
+    if (decision.isDenied()) {
+      const status = decision.reason.isRateLimit() ? 429 : 403;
+      return Response.json(
+        { error: decision.reason.isRateLimit() ? "Rate limit exceeded — slow down" : "Forbidden" },
+        { status }
+      );
+    }
   }
 
   let body: Record<string, unknown>;
