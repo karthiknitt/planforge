@@ -40,8 +40,7 @@ data/
 .dev-logs/
 
 # Claude Code local settings (machine-specific)
-.claude/settings.local.json
-.claude/*.local.md
+.claude/
 .worktrees/
 .vercel
 .gcp-cloud-run-setup.out
@@ -51,3 +50,32 @@ graphify-out/
 
 # Vendored tech-stack skills installed by `npx autoskills` (machine-local, regenerable)
 .agents/
+
+# Experimental evaluation artifacts (local scoring only)
+experiments/
+
+# Internal documentation & session notes (local reference only)
+Status.md
+Handover.md
+CLAUDE.md
+docs/plans/
+docs/superpowers/plans/
+docs/archive/
+
+# Large reference PDFs and scratch files
+docs/2learn.pdf
+docs/building_report.pdf
+docs/plan.pdf
+docs/Guides/*.pdf
+docs/*-quality-improvement.md
+docs/image-gen-*.md
+docs/issues_*.md
+Ambitious_PRD*.md
+Planforge_bug_fixes.pdf
+Home\ Planning\ Guide\ India.pdf
+Issues\ to\ fix.md
+Prompt*.md
+Screenshot*.png
+skills-lock.json
+dev-migrate.sh
+.envrc
