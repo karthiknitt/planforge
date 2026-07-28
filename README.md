@@ -242,13 +242,19 @@ No local dev server and no Playwright/e2e locally — real end-to-end checks hap
 
 ### Test users (dev/QA only)
 
-After running `bun run seed` (pointed at the Neon database via `DATABASE_URL`), three accounts are available:
+Seed three tier-test accounts with `SEED_PASSWORD='<value>' bun run seed`, pointed at a
+database via `DATABASE_URL`. The script refuses to run without `SEED_PASSWORD`.
 
-| Email | Password | Plan |
-|-------|----------|------|
-| `free@planforge.dev` | `Test@1234` | Free |
-| `basic@planforge.dev` | `Test@1234` | Basic |
-| `pro@planforge.dev` | `Test@1234` | Pro |
+| Email | Plan |
+|-------|------|
+| `free@planforge.dev` | Free |
+| `basic@planforge.dev` | Basic |
+| `pro@planforge.dev` | Pro |
+
+> Passwords are not published. The accounts on the production database are for the
+> maintainer's own QA — there is no self-serve demo login. To see the product working,
+> use the [live app](https://planforge-mauve.vercel.app); generation is stateless and
+> does not require an account.
 
 ### Conventions
 
