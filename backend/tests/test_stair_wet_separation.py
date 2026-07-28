@@ -23,6 +23,7 @@ from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig
 from app.engine.plan_geometry import (
     _CIRCULATION_TYPES,
+    _PARKING_TYPES,
     _STAIR_DOOR_MIN_RUN_M,
     _WET_TYPES,
     derive_columns,
@@ -164,12 +165,24 @@ def test_staircase_gets_a_doorable_circulation_wall(fixture, floor_idx, request)
     """
     for layout in request.getfixturevalue(fixture):
         fp = _floor_plan(layout, floor_idx)
-        for stair in [r for r in fp.rooms if r.type == "staircase"]:
-            runs = [
-                _shared_wall_run(stair, other)
-                for other in fp.rooms
-                if other is not stair and other.type in _CIRCULATION_TYPES
+        # Mirror solver.py's own hard constraint exactly: a true circulation
+        # room if the floor has one, else any ordinary (non-wet, non-parking)
+        # room — solver.py's own comment calls a bedroom door "poor practice,
+        # an unsolvable plan is worse" and accepts it as a last resort. A
+        # floor with zero circulation rooms at all (an all-bedroom/utility
+        # solver plate) is legal under that fallback, so the test has to
+        # accept the same fallback rather than only the ideal case.
+        targets = [r for r in fp.rooms if r.type in _CIRCULATION_TYPES]
+        if not targets:
+            targets = [
+                r
+                for r in fp.rooms
+                if r.type not in _WET_TYPES
+                and r.type not in _PARKING_TYPES
+                and r.type != "staircase"
             ]
+        for stair in [r for r in fp.rooms if r.type == "staircase"]:
+            runs = [_shared_wall_run(stair, other) for other in targets]
             assert runs and max(runs) >= _STAIR_DOOR_MIN_RUN_M - 1e-6, (
                 f"{layout.id} floor {floor_idx}: staircase {stair.id} has no "
                 f"circulation partition >= {_STAIR_DOOR_MIN_RUN_M} m "

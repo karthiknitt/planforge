@@ -45,6 +45,12 @@ SOLVE_TIME_S = 14.0  # per-run wall-clock budget (generation runs async)
 # the deterministic budget more real-world headroom to actually be the
 # thing that binds, which is what restores reproducibility.
 PHASE1_TIME_S = 5.0
+# Deterministic (machine-independent) work budgets — see the comment above
+# PHASE1_TIME_S. These are the values meant to actually bind; module-level so
+# a test that needs the search to fully escape a penalty zone can raise them
+# without needing a proportionally larger wall-clock cap too.
+PHASE1_DET_BUDGET = 0.7
+PHASE2_DET_BUDGET = 1.5
 MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 
 # Wall-coalignment bonus (objective units = mm) per exactly-aligned edge
@@ -370,11 +376,55 @@ def _stair_circulation_protect_ids(rooms: list[Room]) -> set[str]:
                 (st.y - tgt_ye, st.x, st_xe, tgt.x, tgt_xe),  # stair behind
             )
             for gap, a_lo, a_hi, b_lo, b_hi in cases:
-                if 0 <= gap <= _IWT_M and (
-                    min(a_hi, b_hi) - max(a_lo, b_lo) >= min_overlap
+                # -0.01/+0.01 mirrors _adjacencies in plan_geometry.py (the
+                # test derive_openings actually uses): post-solve rooms are
+                # rounded to 3dp and later passes make them flush, so a pair
+                # that derive_openings treats as sharing a wall could fall a
+                # fraction of a millimetre outside a tighter range and be
+                # left unpinned — exactly the drift this function exists to
+                # prevent.
+                if -0.01 <= gap <= _IWT_M + 0.01 and (
+                    min(a_hi, b_hi) - max(a_lo, b_lo) >= min_overlap - 1e-6
                 ):
                     protect.add(st.id)
                     protect.add(tgt.id)
+    return protect
+
+
+def _ensuite_protect_ids(rooms: list[Room]) -> set[str]:
+    """Room ids (ensuite toilet + its bedroom) whose shared wall already
+    meets the solver's hard ensuite-adjacency overlap (``_ENSUITE_MIN_OVERLAP_MM``).
+
+    Sibling to ``_stair_circulation_protect_ids`` — the CP-SAT ensuite
+    constraint is just as hard as the stair one, but snapping only ever
+    protected the stair pair, so an ensuite toilet was still free to drift
+    off its bedroom wall (test_solved_ensuite_shares_wall_with_bedroom failing
+    intermittently, root-caused by this gap rather than solver search quality).
+    """
+    protect: set[str] = set()
+    by_id = {r.id: r for r in rooms}
+    min_overlap = _ENSUITE_MIN_OVERLAP_MM / SCALE
+    for r in rooms:
+        bed_id = ensuite_attachment(r.id)
+        if bed_id is None:
+            continue
+        bed = by_id.get(bed_id)
+        if bed is None:
+            continue
+        r_xe, r_ye = r.x + r.width, r.y + r.depth
+        bed_xe, bed_ye = bed.x + bed.width, bed.y + bed.depth
+        cases = (
+            (bed.x - r_xe, r.y, r_ye, bed.y, bed_ye),  # ensuite left of bed
+            (r.x - bed_xe, r.y, r_ye, bed.y, bed_ye),  # ensuite right of bed
+            (bed.y - r_ye, r.x, r_xe, bed.x, bed_xe),  # ensuite in front
+            (r.y - bed_ye, r.x, r_xe, bed.x, bed_xe),  # ensuite behind
+        )
+        for gap, a_lo, a_hi, b_lo, b_hi in cases:
+            if -0.01 <= gap <= _IWT_M + 0.01 and (
+                min(a_hi, b_hi) - max(a_lo, b_lo) >= min_overlap - 1e-6
+            ):
+                protect.add(r.id)
+                protect.add(bed_id)
     return protect
 
 
@@ -416,10 +466,12 @@ def snap_rooms_to_shared_grid(
         if pin_room_types and r.type in pin_room_types
     }
     # Unconditional (not opt-in via pin_room_types): a stair/circulation pair
-    # that already clears the hard door-access overlap must not be allowed to
-    # drift apart by this best-effort pass, on either snap call site.
+    # or ensuite/bedroom pair that already clears its hard CP-SAT overlap
+    # constraint must not be allowed to drift apart by this best-effort pass,
+    # on either snap call site.
     for rooms in floors:
         pinned_ids |= _stair_circulation_protect_ids(rooms)
+        pinned_ids |= _ensuite_protect_ids(rooms)
 
     edges: list[_SnapEdge] = []
     for fi, rooms in enumerate(floors):
@@ -1080,7 +1132,7 @@ def _solve_one(
     # then spends its entire budget relocating toilets out of penalty zones.
     if penalty_terms and not seed_rooms:
         model.minimize(base_objective)
-        pre = _make_solver(det_budget=0.7, wall_budget=PHASE1_TIME_S)
+        pre = _make_solver(det_budget=PHASE1_DET_BUDGET, wall_budget=PHASE1_TIME_S)
         pre_status = pre.solve(model)
         if pre_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             # Hint everything EXCEPT the common toilets' and parking's
@@ -1100,7 +1152,7 @@ def _solve_one(
                     model.add_hint(var, pre.value(var))
 
     model.minimize(base_objective + sum(penalty_terms))
-    solver = _make_solver(det_budget=1.5)
+    solver = _make_solver(det_budget=PHASE2_DET_BUDGET)
 
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
