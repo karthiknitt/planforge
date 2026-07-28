@@ -168,14 +168,15 @@ To actually see a change working, push to a branch: Vercel builds a preview depl
 | `BETTER_AUTH_SECRET` | ✓ | 32+ char random string |
 | `BETTER_AUTH_URL` | ✓ | `https://planforge-mauve.vercel.app` |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | ✓ | `https://planforge-mauve.vercel.app` |
-| `NEXT_PUBLIC_API_URL` | ✓ | Cloud Run backend URL |
-| `BACKEND_URL` | ✓ | Cloud Run backend URL (server-side only) |
+| `NEXT_PUBLIC_API_URL` | ✓ | Cloud Run backend URL (public — used by client components calling the backend directly) |
+| `BACKEND_URL` | ✓ | Cloud Run backend URL (server-side only — proxy route, `fetchBackend`) |
 | `INTERNAL_AUTH_SECRET` | ✓ | Must match the backend's value exactly |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | optional | Razorpay test key |
-| `OPENAI_API_KEY` | optional | Voice transcription (Whisper) |
+| `NEXT_PUBLIC_AGENT_CHAT` | optional | `1` to show the agent chat tab |
+| `OPENAI_API_KEY` | optional | Voice transcription (Whisper) + agent chat fallback |
 | `ANTHROPIC_API_KEY` | optional | Agentic chat (Claude) |
 | `OPENROUTER_API_KEY` | optional | Agentic chat via OpenRouter (any model) |
-| `OPENROUTER_MODEL` | optional | e.g. `deepseek/deepseek-chat-v3-0324` |
+| `OPENROUTER_MODEL` | optional | e.g. `anthropic/claude-sonnet-5` (default) |
 
 Set via `vercel env add <NAME> production|preview` — not a local `.env.local` in practice, since there's no local dev server. See `frontend/.env.example` for the full reference list.
 
@@ -186,11 +187,52 @@ Set via `vercel env add <NAME> production|preview` — not a local `.env.local` 
 | `DATABASE_URL` | ✓ | `postgresql+asyncpg://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?ssl=require` |
 | `DB_USE_NULLPOOL` | ✓ | `true` (required for Neon's pooled endpoint) |
 | `ALLOWED_ORIGINS` | ✓ | `https://planforge-mauve.vercel.app` |
-| `INTERNAL_AUTH_SECRET` | ✓ | Must match the frontend's value exactly |
-| `RAZORPAY_KEY_ID` | optional | Razorpay test key |
-| `RAZORPAY_KEY_SECRET` | optional | Razorpay secret |
+| `INTERNAL_AUTH_SECRET` | ✓ | Must match the frontend's value exactly, 32+ chars |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | optional | Payments — empty disables checkout |
+| `STRUCTURAL_API_URL` / `STRUCTURAL_API_KEY` | optional | structapi structural design — empty returns 503 on `/structural` |
+| `RENDER_PROVIDER` / `RENDER_MODEL` | optional | AI render layer — empty disables the render tab |
+| `RENDER_DAILY_QUOTA` | optional | Default `20` — AI renders per user per rolling 24h |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | optional | Render-provider and agent-chat model keys |
+| `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` | optional | Async job pipeline — both empty falls back to inline synchronous generation |
+| `INNGEST_APP_ID` | optional | Default `planforge` — **must be distinct per deployment** (main vs solver-split) or jobs silently no-op on the wrong URL |
+| `JOB_QUEUED_TIMEOUT_S` | optional | Default `120` — fails a stuck job fast on next poll instead of hanging forever |
+| `RATE_LIMIT_CAPACITY` / `RATE_LIMIT_REFILL_PER_SECOND` | optional | Defaults `10` / `0.2` — in-process token bucket |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | optional | Cloudflare R2 artifact storage — all four empty = no-op, exports stream inline. **See [Cloudflare R2 setup](#cloudflare-r2-setup-artifact-storage) below.** |
+| `EXPORT_DELIVERY_MODE` | optional | Default `inline` — `redirect` 307s to a presigned R2 URL instead of streaming bytes |
+| `EXPORT_MAX_CONCURRENCY` | optional | Default `2` — concurrent PDF/DXF renders per instance (OOM guard, Cloud Run's filesystem is RAM-backed) |
 
-Set via `gh secret set <NAME> --repo karthiknitt/planforge` — injected into Cloud Run at deploy time. See `scripts/gcp-cloud-run-setup.sh` and `backend/.env.example`.
+Set via `gh secret set <NAME> --repo karthiknitt/planforge` — injected into Cloud Run at deploy time. See `scripts/gcp-cloud-run-setup.sh` and `backend/.env.example` for the full reference list.
+
+### Cloudflare R2 setup (artifact storage)
+
+R2 stores generated artifacts (PDF, DXF, XLSX, AI render PNGs) — chosen over GCS for the free 10 GB tier and, more importantly, **zero egress fees**. All four `R2_*` vars empty means the backend falls back to `NullStorage` and streams exports inline exactly as before R2 existed — nothing breaks if you skip this section.
+
+Quick setup:
+
+```bash
+# 1. Cloudflare dashboard → R2 Object Storage → Create bucket
+#    Name: planforge-artifacts · Location: Automatic · public access: disabled
+
+# 2. R2 → Manage R2 API Tokens → Create API token
+#    Permission: Object Read & Write · Scope: planforge-artifacts only
+
+# 3. Store as GitHub Actions secrets (deploy-backend.yml passes these to Cloud Run)
+gh secret set R2_ACCOUNT_ID        --body '<your-account-id>'
+gh secret set R2_ACCESS_KEY_ID     --body '<your-access-key-id>'
+gh secret set R2_SECRET_ACCESS_KEY --body '<your-secret-access-key>'
+gh secret set R2_BUCKET            --body 'planforge-artifacts'
+
+# 4. Verify after deploy — no output means R2 is configured correctly
+gcloud run services logs read planforge-backend --region=us-central1 --limit=100 \
+  | grep -i "R2 not configured"
+```
+
+> ⚠️ Never paste R2 keys into any file in the repo, including markdown — they belong only
+> in GitHub Actions secrets. `EXPORT_DELIVERY_MODE` defaults to `inline`; switching to
+> `redirect` (presigned URLs, bytes never pass through Cloud Run) requires a bucket CORS
+> policy first — see the full guide for the exact JSON and a header gotcha with signed URLs.
+
+Full walkthrough with cost breakdown, CORS config, and the redirect-mode gotcha: **[docs/guides/cloudflare-r2-setup.md](docs/guides/cloudflare-r2-setup.md)**.
 
 ---
 
@@ -198,14 +240,23 @@ Set via `gh secret set <NAME> --repo karthiknitt/planforge` — injected into Cl
 
 ```
 PlanForge/
+├── .github/workflows/          # CI (backend-ci, frontend-ci) + CD (deploy-backend, deploy-solver,
+│                               #   deploy-structapi) + verify-structapi-vendor (byte-diffs the vendored copy)
 ├── backend/
 │   ├── app/
-│   │   ├── api/routes/        # projects, generate, export, payments, rooms
-│   │   ├── config/            # compliance_rules.json, room_specs.json
-│   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, pdf, approval_pdf, BOQ
+│   │   ├── api/routes/        # projects, generate, export, payments, rooms, structural, agent tools
+│   │   ├── config/            # compliance_rules.json, room_specs.json, settings.py (env vars)
+│   │   ├── core/              # shared core utilities
+│   │   ├── dependencies/      # auth dependency (JWT verification for frontend proxy)
+│   │   ├── engine/            # solver, archetypes, scorer, compliance, Vastu, geometry, PDF/DXF,
+│   │   │                      #   section/elevation, structural drawing sheets (foundation/framing/slab/notes)
+│   │   ├── middleware/        # in-process token-bucket rate limiter
 │   │   ├── models/            # SQLAlchemy ORM models
-│   │   └── schemas/           # Pydantic I/O schemas
-│   └── tests/                 # 547 pytest tests (API e2e, engine, solver, scorer, L-shaped, CAD, openings, section)
+│   │   ├── quality/           # CCQS (CAD Compliance Quality Score) automated scoring
+│   │   ├── schemas/           # Pydantic I/O schemas
+│   │   └── services/          # jobs (Inngest), layout/structural store, R2 storage, Razorpay,
+│   │                          #   render providers, structagent client
+│   └── tests/                 # pytest — API e2e, engine, solver, scorer, L-shaped, CAD, openings, section
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -213,17 +264,36 @@ PlanForge/
 │       │   ├── (auth)/        # Sign-in, sign-up
 │       │   ├── (marketing)/   # Landing, pricing, how-it-works, gallery, privacy, terms
 │       │   ├── share/         # Public read-only share view
-│       │   └── api/           # Better Auth handler, agent chat, transcription
+│       │   └── api/           # Better Auth handler, agent chat, transcription, backend proxy
 │       ├── components/        # SVG renderer, section view, BOQ viewer, chat panel, overlays
 │       ├── db/                # Drizzle client + schema (Better Auth tables)
 │       ├── hooks/             # useVoiceInput
-│       └── lib/               # auth config, layout types, utils
+│       └── lib/               # auth config, layout types, utils, agent-error fallback chain
+├── structapi-service/          # Vendored copy of structapi (IS-code structural engine), pinned to a
+│                               #   tag — CI byte-diffs it against the tag on every push/PR, don't hand-edit
 ├── docs/
-│   └── developer-reference.md # Full technical reference
+│   ├── ARCHITECTURE.md         # How PlanForge and structapi fit together
+│   ├── developer-reference.md  # Full technical reference
+│   ├── documentation.md        # Living technical reference / session log
+│   ├── product-roadmap.md      # Shipped features (P0–P3) + backlog
+│   ├── guides/                 # cloudflare-r2-setup, neon-pooling, solver-service-split
+│   └── assets/                 # system-flow.svg
+├── infra/
+│   └── artifact-registry-cleanup.json  # GCP Artifact Registry image-pruning policy
 ├── scripts/
-│   └── gcp-cloud-run-setup.sh # One-time GCP + Neon setup for the Cloud Run backend
-└── CLAUDE.md
+│   ├── gcp-cloud-run-setup.sh          # One-time GCP + Neon setup for the Cloud Run backend
+│   ├── check_schema.py                 # DB schema drift check
+│   ├── check-structapi-freshness.sh    # Weekly vendored-tag freshness check
+│   └── verify-structapi-vendor.sh      # Byte-diffs structapi-service/ against its pinned tag
+├── AGENTS.md
+├── LICENSE                     # PolyForm Shield 1.0.0
+└── README.md
 ```
+
+> **Not tracked on GitHub, kept local-only:** `CLAUDE.md` (AI agent instructions — contains
+> internal infra identifiers), `Status.md`/`Handover.md` (session diary),
+> `docs/plans/`, `docs/archive/` (dated internal planning notes), `experiments/` (eval
+> artifacts). See `.gitignore` for the full exclusion list.
 
 ---
 
@@ -234,7 +304,7 @@ PlanForge/
 ```bash
 # Backend
 cd backend
-uv run pytest tests/ -v          # run 547 tests (in-memory SQLite, no Neon needed)
+uv run pytest tests/ -v          # run 741 tests (in-memory SQLite, no Neon needed)
 uv run ruff check . && uv run ruff format .
 docker build -t planforge-backend .   # validate the Dockerfile only
 
@@ -285,6 +355,9 @@ Full index: **[docs/README.md](docs/README.md)**
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How PlanForge and structapi fit together, and why the engine is deterministic |
 | [docs/developer-reference.md](docs/developer-reference.md) | Architecture, API reference, engine internals, DB schema, feature gating, testing, UI design system |
 | [docs/product-roadmap.md](docs/product-roadmap.md) | Shipped features (P0–P3) and remaining backlog |
+| [docs/guides/cloudflare-r2-setup.md](docs/guides/cloudflare-r2-setup.md) | Full R2 artifact storage setup — bucket, API token, CORS, redirect delivery mode |
+| [docs/guides/neon-pooling.md](docs/guides/neon-pooling.md) | Neon pooled connection setup for the backend's `DATABASE_URL` |
+| [docs/guides/solver-service-split.md](docs/guides/solver-service-split.md) | Why the solver runs as a second Cloud Run service (`deploy-solver.yml`) sharing the `backend/` codebase |
 
 ---
 
@@ -292,7 +365,7 @@ Full index: **[docs/README.md](docs/README.md)**
 
 Stated up front rather than left to be discovered:
 
-- **Test coverage is unit-heavy.** 638 backend tests (86 files) and 199 frontend tests
+- **Test coverage is unit-heavy.** 741 backend tests (97 files) and 199 frontend tests
   (25 files) all pass, but coverage is concentrated in pure logic — geometry, compliance,
   scoring, parsing. Playwright is configured (`bun run test:e2e`) but end-to-end flows are
   not exercised in CI. Tracked in [docs/product-roadmap.md](docs/product-roadmap.md).
