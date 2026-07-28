@@ -40,6 +40,17 @@ export default function PdfDocumentViewer({ blob }: { blob: Blob }) {
         <Page
           pageNumber={pageNumber}
           width={640}
+          // Neither is needed for a read-only preview, and both layers ship
+          // without their required CSS (react-pdf/dist/Page/*.css isn't
+          // imported anywhere in the app) — without it their containers
+          // render unpositioned/un-clipped instead of absolutely inset and
+          // pointer-events-none, which can silently swallow clicks on
+          // whatever's rendered after the page (issue #38: Next never
+          // responded). Disabling them removes the layer instead of fixing
+          // its styling, since this modal never needs text selection or
+          // clickable annotations.
+          renderTextLayer={false}
+          renderAnnotationLayer={false}
           onLoadSuccess={() => setPageLoadError(null)}
           onLoadError={(err) => {
             // react-pdf's own warning() is a no-op in production builds, so
