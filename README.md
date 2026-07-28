@@ -31,7 +31,7 @@ curl -s --max-time 120 https://planforge-backend-912195238699.us-central1.run.ap
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.129-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-PolyForm%20Shield-9c27b0)
 
 ---
 
@@ -308,4 +308,8 @@ Stated up front rather than left to be discovered:
 
 ## License
 
-MIT © Karthikeyan Natarajan
+**PolyForm Shield License 1.0.0** © Karthikeyan Natarajan
+
+This project is licensed under the [PolyForm Shield License 1.0.0](LICENSE), which permits you to view, use, and modify the software for any purpose **except providing a product that competes with PlanForge or any product offered using this software**. See [LICENSE](LICENSE) for full terms.
+
+For questions about licensing or commercial use, please reach out.

@@ -58,7 +58,7 @@ PlanForge/
 - **No local dev servers, no local Playwright/preview testing.** Frontend is tested via Vercel (preview + production deploys); backend is tested via Google Cloud Run. There is no `docker compose up` workflow — `docker-compose.yml` was removed for this reason.
 - **What still runs locally (and in CI):** unit tests (`uv run pytest`, `bun test`), linting/formatting (`ruff`, `biome`), type-checking (`tsc --noEmit`), and `docker build ./backend` to validate the Dockerfile. None of these need real Neon/Vercel/Cloud Run credentials — backend tests run against an in-memory SQLite DB (`backend/tests/conftest.py`), frontend tests set their own env vars inline per-test.
 - **CI:** GitHub Actions (`.github/workflows/`) runs the same local checks (tests, lint, build) on every push/PR.
-- **Backend runtime:** Google Cloud Run, `$0`-tier (`min-instances=0`, `max-instances=3`), deployed via `.github/workflows/deploy-backend.yml` on push to `main` (path-filtered to `backend/**`). WIF-based auth (no service account keys). Setup automated by `scripts/gcp-cloud-run-setup.sh`.
+- **Backend runtime:** Google Cloud Run, `$0`-tier (`min-instances=0`, `max-instances=3`), deployed via `.github/workflows/deploy-backend.yml` on push to `main` (path-filtered to `backend/**`). WIF-based auth (no service account keys). Setup automated by `scripts/gcp-cloud-run-setup.sh`. _(Specific GCP project/Cloud Run URL configured in GitHub secrets.)_
 - **Frontend runtime:** Vercel, deployed on push (preview per-branch, production on `main`).
 - **Real secrets** live in GitHub Actions secrets (backend/Cloud Run) and Vercel's env store (frontend) — never in a committed or local file. `.env.example` files are reference-only.
 
@@ -259,7 +259,7 @@ rules, arbitrary room counts, dynamic constraint solver, smarter layout engine) 
 
 ### Fixed (session 10, 2026-07-03)
 
-10. **Cloud Run deployment live** — Backend deployed to Google Cloud Run ($0-tier: min-instances=0, max=3): `https://planforge-backend-hoiaqu2xbq-uc.a.run.app`. GCP project `thermal-well-451906-b0` (region `us-central1`), Neon Postgres project `planforge` (id `plain-brook-17631682`), Artifact Registry `planforge-backend`, WIF-based GitHub Actions deploy (`.github/workflows/deploy-backend.yml`, triggers on `backend/**` push to `main`). Frontend redeployed to `https://planforge-mauve.vercel.app` with `BACKEND_URL`/`NEXT_PUBLIC_API_URL` pointed at the Cloud Run URL. Setup automated via `scripts/gcp-cloud-run-setup.sh`.
+10. **Cloud Run deployment live** — Backend deployed to Google Cloud Run ($0-tier: min-instances=0, max=3). Neon Postgres for persistence (region `us-central1`), Artifact Registry for images, WIF-based GitHub Actions deploy (`.github/workflows/deploy-backend.yml`, triggers on `backend/**` push to `main`). Frontend deployed to Vercel with `BACKEND_URL`/`NEXT_PUBLIC_API_URL` pointed at the Cloud Run service. Setup automated via `scripts/gcp-cloud-run-setup.sh`. _(Specific GCP project, Neon project ID, and service URLs configured in GitHub secrets and Vercel dashboard.)_
 
 ### Fixed (2026-07-11)
 
