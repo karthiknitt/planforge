@@ -19,17 +19,15 @@ git branch --show-current && pwd -P
 
 ## In flight
 
-**Public release + documentation overhaul** — plan at
-`docs/plans/2026-07-27-public-release-docs-overhaul.md` (5 phases, 22 tasks).
+**Public release + documentation overhaul** (plan kept outside the repo).
 
-Done: secret scan and allowlist, structapi MIT LICENSE, env-ignore hardening, billing
-diagnosis, architecture doc, both README rewrites, docs index, CLAUDE.md corrections.
+**Complete as of 2026-07-28.** Both repos are public (#48 here, #3 in structapi) with
+rewritten READMEs, an architecture doc, committed SVG diagrams, a docs index, per-directory
+conventions, and branch protection on `main`.
 
-Not done: API examples doc, per-directory CLAUDE.md files, architecture SVGs (need
-approval before committing), demo access path, demo video, and the publish gate itself.
-
-**The publish step is human-gated.** Do not change repo visibility without explicit
-approval — it is irreversible in practice (forks and caches persist).
+Two items were dropped by decision rather than left undone: runnable live-service API
+examples (they would invite unmetered traffic on a free-tier service) and a demo video.
+There is no self-serve demo login.
 
 ## Gotchas that have bitten before
 
