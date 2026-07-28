@@ -2,7 +2,7 @@
 
 The registration test below is the point of the whole module: sheets in a
 drawing set must overlay. The renderer this set replaces computed its scale
-without ``reserve_w=SCHED_RESERVE`` on some sheets and with it on others, so
+with a reserved schedule column on some sheets and without it on others, so
 two plans of the same building were drawn at different scales and origins.
 Nothing in a text-extraction test can see that, which is exactly why it
 survived — so it is pinned numerically here.
@@ -14,8 +14,7 @@ import pytest
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from app.engine.models import ComplianceResult, FloorPlan, Layout, PlotConfig, Room
-from app.engine.pdf import _draw_structural_floor
+from app.engine.models import PlotConfig
 from app.engine.structural_sheet import (
     DETAIL_DENOMS,
     SHEET_REGISTER,
@@ -63,27 +62,6 @@ NARROW_CFG = PlotConfig(
 )
 
 
-def _stub_layout() -> Layout:
-    rooms = [
-        Room(
-            id="r1",
-            name="Living",
-            type="living",
-            x=1.2,
-            y=1.5,
-            width=4.0,
-            depth=4.0,
-        )
-    ]
-    return Layout(
-        id="A",
-        name="Front Staircase",
-        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=rooms),
-        first_floor=FloorPlan(floor=1, floor_type="first", rooms=rooms),
-        compliance=ComplianceResult(passed=True),
-    )
-
-
 def _canvas() -> tuple[canvas.Canvas, BytesIO]:
     buf = BytesIO()
     return canvas.Canvas(buf, pagesize=A4), buf
@@ -93,38 +71,43 @@ def _canvas() -> tuple[canvas.Canvas, BytesIO]:
 
 
 @pytest.mark.parametrize("cfg", [CFG, NARROW_CFG], ids=["wide", "narrow"])
-def test_plan_sheet_frame_registers_with_architectural_structural_page(cfg):
-    """A plan sheet and the architectural PDF's structural page must project
-    model coordinates identically — same origin, same scale, same denominator.
+def test_all_plan_sheets_share_one_frame(cfg):
+    """S-02, S-05, S-07 and S-09 are separate calls on separate sheets; they
+    must project model coordinates identically — same origin, same scale,
+    same denominator.
 
-    If this fails, the two drawings cannot be overlaid, traced or checked
-    against each other, which is the whole reason a set exists.
+    If this fails the sheets cannot be overlaid, traced or checked against
+    each other, which is the whole reason a set exists. The renderer this
+    replaces computed the scale with a reserved schedule column on some
+    sheets and without it on others, so two plans of the same building came
+    out at different scales AND origins. Asserted on two plot geometries that
+    land on different standard denominators, so it cannot pass by coincidence
+    on one shape.
     """
-    layout = _stub_layout()
-
-    c1, _ = _canvas()
-    frame = plan_sheet_frame(c1, cfg, heading="COLUMN & FOOTING PLAN", drg_no="S-02")
-
-    c2, _ = _canvas()
-    reference = _draw_structural_floor(
-        c2, layout.first_floor, layout, cfg, "P", 2, "FIRST FLOOR"
-    )
-
-    assert frame.as_tuple() == pytest.approx(reference), (
-        "plan sheet frame does not register with _draw_structural_floor: "
-        f"{frame.as_tuple()} vs {reference}"
-    )
-
-
-def test_all_plan_sheets_share_one_frame():
-    """S-02, S-05, S-07 and S-09 are separate calls; they must agree."""
     frames = []
     for drg in ("S-02", "S-05", "S-07", "S-09"):
         c, _ = _canvas()
         frames.append(
-            plan_sheet_frame(c, CFG, heading=SHEET_TITLES[drg], drg_no=drg).as_tuple()
+            plan_sheet_frame(c, cfg, heading=SHEET_TITLES[drg], drg_no=drg).as_tuple()
         )
     assert len(set(frames)) == 1, f"plan sheets drawn at differing frames: {frames}"
+
+
+def test_plan_sheets_are_not_scale_starved_by_a_schedule_column():
+    """Withholding a 160 pt schedule column costs a full standard scale step
+    on an ordinary Indian plot — 1:200 instead of 1:100 — while a third of
+    the page height goes unused. 1:200 is too small to set out a foundation
+    from, so schedules overlay the drawing instead of sitting beside it.
+    """
+    c, _ = _canvas()
+    frame = plan_sheet_frame(c, CFG, heading=SHEET_TITLES["S-02"], drg_no="S-02")
+    assert frame.denom <= 100, (
+        f"12.19 x 18.29 m plot drawn at 1:{frame.denom} — a residential "
+        "foundation plan must reach 1:100 on A4"
+    )
+    # and it genuinely fits the page, rather than merely claiming a scale
+    assert frame.plot_px <= A4[0] - 2 * 52
+    assert frame.oy + frame.plot_py <= A4[1] - 52
 
 
 # ── sheet register ───────────────────────────────────────────────────────────

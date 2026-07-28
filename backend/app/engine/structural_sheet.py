@@ -137,15 +137,28 @@ def plan_sheet_frame(
     """Furniture + projection for a plan sheet: road strip, dashed plot
     boundary, north arrow, drawing-number stamp.
 
-    The scale/origin arithmetic is copied from `_draw_structural_floor`
-    verbatim (including ``reserve_w=SCHED_RESERVE``) so every plan sheet in
-    the set — and the architectural PDF's own structural pages — share one
-    projection.
+    Every plan sheet in the set goes through here, so they all share one
+    projection and overlay exactly — which is the property the set needs and
+    the one the renderer this replaces did not have.
+
+    The scale is computed WITHOUT withholding a schedule column, and that is
+    a deliberate trade. Reserving ``SCHED_RESERVE`` (160 pt) costs a full
+    standard scale step: a 12.19 x 18.29 m plot is 518 pt tall against 596 pt
+    available, but 346 pt wide against only 331 pt once the column is
+    withheld — so it drops to 1:200 while more than a third of the page
+    height goes unused. 1:200 is too small to set out a foundation from.
+
+    Schedules therefore sit over the drawing area rather than beside it,
+    anchored at the sheet's right margin. `_draw_generic_schedule_table`
+    paints an opaque white background as its first operation, so a table
+    reads cleanly over the plan — standard drafting practice, and it lands on
+    the rear setback strip rather than on the building itself. Legibility of
+    the drawing wins over never overlapping it.
     """
     page_w, page_h = A4
-    s, denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
+    s, denom = _standard_scale(cfg, page_w, page_h)
     plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
-    ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
+    ox = MARGIN + (page_w - 2 * MARGIN - plot_px) / 2
     oy = _centered_plot_oy(
         page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
     )
