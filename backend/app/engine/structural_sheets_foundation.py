@@ -291,25 +291,36 @@ def _draw_footing_detail(
     c.setFillColor(HexColor("#000000"))
     c.drawString(x, y_top, f"{f.mark} — {f.footing_class.upper()} FOOTING SECTION")
 
-    sx = x
     sy = y_top - avail_h + 20.0
     fw = l_mm * px_per_mm
     fh = d_mm * px_per_mm
     pcc_w = fw + 2 * 50.0 * px_per_mm
     pcc_h = pcc_mm * px_per_mm
 
-    # earth below the PCC bed
+    # The earth band and the PCC bed both project LEFT of the footing slab's
+    # own origin, so anchoring the section at the frame's left edge pushed
+    # them outside the sheet border. Inset by the widest leftward overhang so
+    # the whole detail sits inside the frame.
     earth_h = 14.0
+    earth_overhang = 20.0
+    sx = x + max(earth_overhang, (pcc_w - fw) / 2)
     earth_pts = [
-        (sx - 20, sy - earth_h),
-        (sx + pcc_w + 20, sy - earth_h),
-        (sx + pcc_w + 20, sy),
-        (sx - 20, sy),
+        (sx - earth_overhang, sy - earth_h),
+        (sx + pcc_w + earth_overhang, sy - earth_h),
+        (sx + pcc_w + earth_overhang, sy),
+        (sx - earth_overhang, sy),
     ]
     hatch_polygon(c, earth_pts, "earth", spacing_pt=3.0)
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(0.4)
-    c.rect(sx - 20, sy - earth_h, pcc_w + 40, earth_h, fill=0, stroke=1)
+    c.rect(
+        sx - earth_overhang,
+        sy - earth_h,
+        pcc_w + 2 * earth_overhang,
+        earth_h,
+        fill=0,
+        stroke=1,
+    )
 
     # PCC bed projects 50mm beyond the footing on each side
     pcc_x0 = sx - (pcc_w - fw) / 2

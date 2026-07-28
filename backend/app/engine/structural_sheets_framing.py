@@ -998,19 +998,6 @@ def render_plinth_beam_plan(c: canvas.Canvas, model: StructuralModel) -> int:
 
     _plan_furniture(c, frame, model, drawing)
 
-    marked = len([b for b in model.plinth_beams if b.mark])
-    draw_notes(
-        c,
-        [
-            "PLINTH BEAM NOTES:",
-            f"1. {marked} DESIGNED PLINTH BEAM RUNS — SEE SCHEDULE THIS SHEET",
-            "2. BEAMS DRAWN TO TRUE WIDTH; SOFFIT AT PLINTH LEVEL",
-            "3. UNMARKED LINES CARRY NO DESIGN ENTRY — REFER ENGINEER",
-            "4. REINFORCEMENT DETAILS ON DRG. S-06",
-        ],
-        MARGIN,
-        frame.page_h - MARGIN,
-    )
     specs = [
         _Sched(
             "PLINTH BEAM SCHEDULE",
@@ -1029,9 +1016,19 @@ def _render_plan_schedules(
     frame: PlanFrame,
     drg_no: str,
     heading: str,
+    *,
+    defer_schedules: bool = False,
+    notes: list[str] | None = None,
 ) -> int:
     """Draw schedules in the plan sheet's reserved column; overflow continues
     on ``(CONTD.)`` pages rather than losing rows.
+
+    With ``defer_schedules``, nothing is drawn on the plan sheet at all — the
+    notes and every schedule go onto their own continuation sheet. The
+    framing plans need this: once the plot is drawn at 1:100 it reaches the
+    full page width, so a schedule stacked in the top-right corner lands on
+    the plan's own dimension chains and grid bubbles. A drawing you cannot
+    read the dimensions off is worse than an extra sheet.
 
     Draws the plan page's own title block too — it has to land before the
     first ``showPage()``, so it cannot be left to the caller to add after
@@ -1043,7 +1040,7 @@ def _render_plan_schedules(
     # all but the outermost edge of it
     col_top = frame.page_h - MARGIN - _NORTH_ARROW_CLEAR
     avail_h = col_top - (TITLE_H + SCHED_PAD)
-    pages = _paginate_schedules(specs, avail_h)
+    pages = [] if defer_schedules else _paginate_schedules(specs, avail_h)
 
     if pages:
         _draw_schedule_stack(c, pages[0], sched_x, col_top)
@@ -1057,6 +1054,10 @@ def _render_plan_schedules(
         scale_denom=frame.denom,
         layout_label=model.layout_label,
     )
+    if defer_schedules:
+        return 1 + _render_deferred_schedule_sheet(
+            c, model, specs, drg_no, heading, notes
+        )
     if not pages:
         return 1
 
@@ -1072,6 +1073,55 @@ def _render_plan_schedules(
             drg_no=drg_no,
             sheet_title=heading,
             page_w=dframe.page_w,
+            scale_text="NTS",
+            layout_label=model.layout_label,
+        )
+    return len(pages)
+
+
+def _render_deferred_schedule_sheet(
+    c: canvas.Canvas,
+    model: StructuralModel,
+    specs: list[_Sched],
+    drg_no: str,
+    heading: str,
+    notes: list[str] | None,
+) -> int:
+    """Notes + schedules on their own sheet(s), continuing the plan's number.
+
+    Notes are laid out as just another paginatable block alongside the
+    schedules, so neither can be pushed off the sheet by the other.
+    """
+    c.showPage()
+    frame = detail_sheet_frame(c, heading=heading, drg_no=drg_no, continued=True)
+
+    items: list[_Item] = []
+    if notes:
+        items.append(_notes_item(notes))
+    items += _schedule_items(specs, frame.height)
+
+    pages = paginate_boxes(
+        items, lambda it: it.height, top=frame.y1, bottom=frame.y0, gap=_BOX_GAP
+    ) or [[]]
+
+    for i, page_items in enumerate(pages):
+        if i:
+            c.showPage()
+            frame = detail_sheet_frame(
+                c, heading=heading, drg_no=drg_no, continued=True
+            )
+        y = frame.y1
+        for item in page_items:
+            item.draw(c, frame.x0, y, frame.width)
+            y -= item.height + _BOX_GAP
+        draw_disclaimer(c, model.disclaimer, frame.x0, TITLE_H + 2)
+        structural_title_block(
+            c,
+            project_name=model.project_name,
+            cfg=model.cfg,
+            drg_no=drg_no,
+            sheet_title=heading,
+            page_w=frame.page_w,
             scale_text="NTS",
             layout_label=model.layout_label,
         )
@@ -1143,6 +1193,10 @@ def _render_beam_details_sheet(
 
 
 def render_plinth_beam_details(c: canvas.Canvas, model: StructuralModel) -> int:
+    # S-05's plan notes are merged in here rather than printed on the plan
+    # itself: at 1:100 the plan fills the sheet, and this sheet is mostly
+    # text already, so the two note blocks belong together on one page.
+    marked = len([b for b in model.plinth_beams if b.mark])
     return _render_beam_details_sheet(
         c,
         model,
@@ -1151,10 +1205,15 @@ def render_plinth_beam_details(c: canvas.Canvas, model: StructuralModel) -> int:
         heading=SHEET_TITLES["S-06"],
         sched_title="PLINTH BEAM SCHEDULE",
         notes=[
+            "PLINTH BEAM NOTES (PLAN ON DRG. S-05):",
+            f"1. {marked} DESIGNED PLINTH BEAM RUNS — SEE SCHEDULE THIS SHEET",
+            "2. BEAMS DRAWN TO TRUE WIDTH; SOFFIT AT PLINTH LEVEL",
+            "3. UNMARKED LINES ON S-05 CARRY NO DESIGN ENTRY — REFER ENGINEER",
+            "",
             "PLINTH BEAM DETAILING NOTES:",
-            "1. STIRRUPS CLOSED AT 2D FROM EACH SUPPORT FACE",
-            "2. BOTTOM BARS ANCHORED INTO SUPPORTS WITH STANDARD HOOK",
-            "3. LAPS STAGGERED; NOT MORE THAN 50% AT ONE SECTION",
+            "4. STIRRUPS CLOSED AT 2D FROM EACH SUPPORT FACE",
+            "5. BOTTOM BARS ANCHORED INTO SUPPORTS WITH STANDARD HOOK",
+            "6. LAPS STAGGERED; NOT MORE THAN 50% AT ONE SECTION",
         ],
     )
 
@@ -1215,7 +1274,6 @@ def render_framing_plan(
         notes.append(
             "5. TERRACE: WATERPROOFING OVER SLAB WITH 1:100 SLOPE TO RAINWATER OUTLETS"
         )
-    draw_notes(c, notes, MARGIN, frame.page_h - MARGIN)
     specs = [
         _Sched(
             "SLAB SCHEDULE",
@@ -1230,7 +1288,19 @@ def render_framing_plan(
             _beam_schedule_rows(framing.beams),
         ),
     ]
-    return _render_plan_schedules(c, model, specs, frame, framing.drg_plan, heading)
+    # Notes and schedules both go to a continuation sheet: at 1:100 the plan
+    # occupies the full page width, so anything stacked over it lands on the
+    # dimension chains and grid bubbles.
+    return _render_plan_schedules(
+        c,
+        model,
+        specs,
+        frame,
+        framing.drg_plan,
+        heading,
+        defer_schedules=True,
+        notes=notes,
+    )
 
 
 __all__ = [

@@ -433,7 +433,7 @@ def render_staircase_details(c: canvas.Canvas, model: StructuralModel) -> int:
     sec_h = 190.0
     sx0, sy0 = frame.x0, y - sec_h
     sec_w = frame.width * 0.58
-    _draw_stair_section(
+    section_bottom = _draw_stair_section(
         c,
         sx0,
         sy0,
@@ -457,7 +457,7 @@ def render_staircase_details(c: canvas.Canvas, model: StructuralModel) -> int:
     plan_w = frame.width - sec_w - 14
     _draw_stair_plan(c, px0, sy0, plan_w, sec_h, room, stair, landing_w_m)
 
-    y = sy0 - 14
+    y = min(sy0 - 14, section_bottom)
     c.setFont("Helvetica", 5.5)
     landing_beam = f"{max(230, round(waist_mm / 10) * 10):.0f}x{round(storey_h_m * 100):.0f}mm (BEARING >= 200mm ON WALL)"
     c.drawString(frame.x0, y, f"LANDING BEAM: {landing_beam}")
@@ -518,7 +518,9 @@ def _draw_stair_section(
     dist_dia: int,
     dist_sp: int,
     dist_nom: bool,
-) -> None:
+) -> float:
+    """Draw the flight section and its callouts; returns the y below the
+    lowest line drawn, so the caller can continue under it."""
     c.setFont("Helvetica-Bold", 6)
     c.drawString(x0, y0 + h - 8, "SECTION THROUGH FLIGHT")
 
@@ -586,31 +588,45 @@ def _draw_stair_section(
         oy + rise_pt + off * dy / waist_pt if waist_pt else oy + rise_pt,
     )
 
-    c.setFont("Helvetica-Bold", 5)
+    # One stack, one leading. These were previously two independent stacks
+    # anchored at the box origin and at the flight origin, which sit at
+    # roughly the same height — so the five lines printed on top of each
+    # other. Returns the bottom so the caller can flow below it instead of
+    # guessing a fixed offset.
+    callouts = [
+        (
+            "Helvetica",
+            4.5,
+            f"{n_risers} RISERS @ {riser_mm:.0f} = {total_rise_mm:.0f}mm",
+        ),
+        (
+            "Helvetica",
+            4.5,
+            f"GOING {going_mm:.0f}mm  WAIST {waist_mm:.0f}mm  "
+            f"F2F HT {total_rise_mm:.0f}mm",
+        ),
+        (
+            "Helvetica-Bold",
+            5,
+            "MAIN: "
+            + _callout(
+                main_dia, main_sp, "ALONG WAIST, BENT UP OVER LANDING BEAM", main_nom
+            ),
+        ),
+        (
+            "Helvetica",
+            5,
+            "DIST: " + _callout(dist_dia, dist_sp, "PERPENDICULAR TO MAIN", dist_nom),
+        ),
+    ]
     c.setFillColor(HexColor("#000000"))
-    c.drawString(
-        x0,
-        y0 - 4,
-        f"MAIN: {_callout(main_dia, main_sp, 'ALONG WAIST, BENT UP OVER LANDING BEAM', main_nom)}",
-    )
-    c.setFont("Helvetica", 5)
-    c.drawString(
-        x0,
-        y0 - 12,
-        f"DIST: {_callout(dist_dia, dist_sp, 'PERPENDICULAR TO MAIN', dist_nom)}",
-    )
-    draw_scale_note(c, x0, y0 - 20, denom)
-
-    # dimensions
-    c.setFont("Helvetica", 4.5)
-    c.drawString(
-        ox, oy - 10, f"{n_risers} RISERS @ {riser_mm:.0f} = {total_rise_mm:.0f}mm"
-    )
-    c.drawString(
-        ox,
-        oy - 18,
-        f"GOING {going_mm:.0f}mm  WAIST {waist_mm:.0f}mm  F2F HT {total_rise_mm:.0f}mm",
-    )
+    ty = y0 - 6.0
+    for font, size, text in callouts:
+        c.setFont(font, size)
+        c.drawString(x0, ty, text)
+        ty -= 8.0
+    draw_scale_note(c, x0, ty, denom)
+    return ty - 8.0
 
 
 def _draw_stair_plan(

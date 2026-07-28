@@ -236,12 +236,15 @@ def test_framing_plan_covers_both_floors_from_one_renderer(model):
 
 def test_framing_plan_shows_slab_marks_and_span_type(model):
     data, _ = _render(render_framing_plan, model, model.floors[0])
-    text = pdf_page_text(data, 0).upper()
-    assert "S1" in text
+    # Panel marks and steel directions are ON the plan; the schedule rides
+    # its own continuation sheet, so assert across the whole drawing.
+    plan = pdf_page_text(data, 0).upper()
+    text = _all_text(data).upper()
+    assert "S1" in plan
+    assert "ONE-WAY" in plan or "TWO-WAY" in plan
+    assert "MAIN" in plan
+    assert "DIST" in plan
     assert "SLAB SCHEDULE" in text
-    assert "ONE-WAY" in text or "TWO-WAY" in text
-    assert "MAIN" in text
-    assert "DIST" in text
 
 
 def test_framing_plan_carries_beam_schedule_too(model):
@@ -252,8 +255,11 @@ def test_framing_plan_carries_beam_schedule_too(model):
 def test_terrace_note_only_on_the_terrace_level(model):
     gf, _ = _render(render_framing_plan, model, model.floors[0])
     ff, _ = _render(render_framing_plan, model, model.floors[1])
-    assert "WATERPROOFING" not in pdf_page_text(gf, 0).upper()
-    assert "WATERPROOFING" in pdf_page_text(ff, 0).upper()
+    # Notes moved off the plan onto the sheet's continuation page, so search
+    # the whole drawing — the discriminating half of this test is that the
+    # ground-floor level never carries it.
+    assert "WATERPROOFING" not in _all_text(gf).upper()
+    assert "WATERPROOFING" in _all_text(ff).upper()
 
 
 # ── S-08 / S-10 ──────────────────────────────────────────────────────────────
