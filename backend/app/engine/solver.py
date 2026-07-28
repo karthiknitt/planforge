@@ -68,6 +68,16 @@ _WET_TYPES = {"toilet", "wc_only", "bathroom_master", "utility"}
 
 # En-suite ↔ bedroom shared wall must fit a door (900 mm min clear width).
 _ENSUITE_MIN_OVERLAP_MM = 900
+# The stair core must share this much wall with a circulation room: a 900 mm
+# door leaf plus its two 115 mm jambs, i.e. exactly plan_geometry's per-wall
+# door-fit test (`adj.hi - adj.lo < width + 2 * _JAMB`). Without it the solver
+# is free to box the stair in behind a toilet — observed in production, where
+# a 0.90 m wide stair's only partition long enough for a door was a WC, so
+# derive_openings had no legal wall left and put the toilet door on the
+# landing. No door-placement rule can repair that: ban the toilet wall and the
+# staircase is simply left with no door at all.
+_STAIR_DOOR_MIN_OVERLAP_MM = 900 + 2 * 115
+_CIRCULATION_TYPES = {"passage", "living", "dining"}
 # Repulsion guard bands: the solver otherwise games hard thresholds (parks a
 # toilet 1 mm past the wall gap) and post-solve snapping (±SNAP_TOL_M) can
 # close a raw clearance into real contact. Penalise anything within a
@@ -738,6 +748,54 @@ def _solve_one(
             model.add(b_hi - a_lo >= _ENSUITE_MIN_OVERLAP_MM).only_enforce_if(sb)
             side_bools.append(sb)
         model.add_bool_or(side_bools)
+
+    # Hard staircase-access adjacency: every stair core shares at least a
+    # door's worth of wall with a circulation room on its own floor. Same
+    # four-side reified pattern as the en-suite block above, but the overlap
+    # is measured exactly (min of the far edges minus max of the near ones)
+    # rather than via the en-suite block's looser pair of half-tests — here
+    # the number IS the door-fit threshold plan_geometry will re-apply, so an
+    # approximation that can pass at 0.9 m would put us straight back into the
+    # production failure this constraint exists to prevent.
+    for floor_no in {rv.floor for rv in room_vars}:
+        on_floor = [rv for rv in room_vars if rv.floor == floor_no]
+        stairs = [rv for rv in on_floor if rv.room_type == "staircase"]
+        targets = [rv for rv in on_floor if rv.room_type in _CIRCULATION_TYPES]
+        # A floor with no circulation room at all (e.g. an all-bedroom upper
+        # plate) would make this infeasible; fall back to any ordinary room
+        # rather than fail the solve — a bedroom door is poor practice, an
+        # unsolvable plan is worse.
+        if not targets:
+            targets = [
+                rv
+                for rv in on_floor
+                if rv.room_type not in _WET_TYPES
+                and rv.room_type not in _PARKING_TYPES
+                and rv.room_type != "staircase"
+            ]
+        if not stairs or not targets:
+            continue
+        for st in stairs:
+            side_bools = []
+            for tgt in targets:
+                cases = (
+                    (tgt.x - st.xe, st.y, st.ye, tgt.y, tgt.ye),  # stair left
+                    (st.x - tgt.xe, st.y, st.ye, tgt.y, tgt.ye),  # stair right
+                    (tgt.y - st.ye, st.x, st.xe, tgt.x, tgt.xe),  # stair in front
+                    (st.y - tgt.ye, st.x, st.xe, tgt.x, tgt.xe),  # stair behind
+                )
+                for ci, (gap, a_lo, a_hi, b_lo, b_hi) in enumerate(cases):
+                    tag = f"stair_{st.room_id}_{tgt.room_id}_{ci}"
+                    sb = model.new_bool_var(tag)
+                    model.add(gap >= 0).only_enforce_if(sb)
+                    model.add(gap <= _IWT_MM).only_enforce_if(sb)
+                    lo = model.new_int_var(0, max(bw, bd), f"lo_{tag}")
+                    hi = model.new_int_var(0, max(bw, bd), f"hi_{tag}")
+                    model.add_max_equality(lo, [a_lo, b_lo])
+                    model.add_min_equality(hi, [a_hi, b_hi])
+                    model.add(hi - lo >= _STAIR_DOOR_MIN_OVERLAP_MM).only_enforce_if(sb)
+                    side_bools.append(sb)
+            model.add_bool_or(side_bools)
 
     # ── Objective: pull preferred-adjacency pairs together ───────────────────
     # The previous "objective" forced adj==1 and maximized a constant — the

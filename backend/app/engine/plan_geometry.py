@@ -70,6 +70,18 @@ _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 _SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
 _NO_TRANSIT_TYPES = _SINGLE_DOOR_TYPES | _PARKING_TYPES
+# rooms the staircase may legitimately take its door from
+_CIRCULATION_TYPES = {"passage", "living", "dining"}
+# shared-wall run the staircase needs with one of those to fit a door leaf
+# plus both jambs — the same test the candidate loop applies per wall below.
+_STAIR_DOOR_MIN_RUN_M = 0.9 + 2 * _JAMB
+
+
+def _is_wet_stair_pair(type_a: str, type_b: str) -> bool:
+    """True for a wall shared by a wet room and the staircase — never doorable
+    in either direction (a WC opening onto a stair landing)."""
+    pair = {type_a, type_b}
+    return "staircase" in pair and bool(pair & _WET_TYPES)
 
 
 def _faces_main_door(adj: "_Adjacency", main_door: "Opening | None") -> bool:
@@ -796,7 +808,7 @@ def derive_openings(
                     continue
                 if adj.hi - adj.lo < width + 2 * _JAMB:
                     continue
-                cands.append((0, 0, 0, 0, other.id, adj))
+                cands.append((0, 0, 0, 0, 0, other.id, adj))
                 continue
             # a shared door serves this room too — unless it leads through
             # a wet room (a bedroom must not be reachable only via a toilet)
@@ -825,14 +837,33 @@ def derive_openings(
                 if room.type in _SINGLE_DOOR_TYPES and other.type in _NO_TRANSIT_TYPES
                 else 0
             )
-            cands.append((no_transit_neighbor, is_noncirc, avoid, prio, other.id, adj))
+            # A WC/bath must never open onto the stair landing. One door in a
+            # shared wall serves BOTH rooms, so the ban is on the wall, not on
+            # a direction — it has to rank the same whether we arrive here
+            # from the toilet's turn or the staircase's. Ranked worst rather
+            # than dropped so a stair (or toilet) whose only doorable
+            # partition is the other still gets a door instead of being
+            # orphaned; the solver's _STAIR_DOOR_MIN_OVERLAP_MM constraint is
+            # what makes that last resort unreachable in practice.
+            wet_stair_wall = 1 if _is_wet_stair_pair(room.type, other.type) else 0
+            cands.append(
+                (
+                    wet_stair_wall,
+                    no_transit_neighbor,
+                    is_noncirc,
+                    avoid,
+                    prio,
+                    other.id,
+                    adj,
+                )
+            )
         if already_served:
             continue
         # en-suite doors swing into the bedroom; all others into the room itself
         swing_room = rooms[bed_idx] if bed_idx is not None else room
         placed = False
-        for _nt, _nc, _av, _prio, _oid, adj in sorted(
-            cands, key=lambda t: (t[0], t[1], t[2], t[3], t[4])
+        for _ws, _nt, _nc, _av, _prio, _oid, adj in sorted(
+            cands, key=lambda t: (t[0], t[1], t[2], t[3], t[4], t[5])
         ):
             desired = adj.lo + _JAMB + width / 2  # hinge near the jamb, not centred
             centre = _fit_along(
@@ -1106,6 +1137,11 @@ def _enforce_single_door(
                 rank = 5
             elif ens_bed is not None and rooms[other].id == ens_bed:
                 rank = 0
+            elif _is_wet_stair_pair(room.type, rooms[other].type):
+                # ranked below even a no-transit neighbour: of all the doors a
+                # wet room could keep, the one onto the stair landing is the
+                # one to drop first
+                rank = 7
             elif rooms[other].type in _NO_TRANSIT_TYPES:
                 # A neighbour that is itself a no-transit room (kitchen, a
                 # second wet room, parking) doesn't guarantee this room stays

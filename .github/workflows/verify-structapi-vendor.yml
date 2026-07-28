@@ -6,9 +6,6 @@ on:
     paths:
       - "structapi-service/**"
       - ".github/workflows/verify-structapi-vendor.yml"
-  pull_request:
-    paths:
-      - "structapi-service/**"
   schedule:
     # Weekly freshness check (informational — opens an issue, doesn't fail)
     - cron: "0 6 * * 1"

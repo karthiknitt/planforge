@@ -63,7 +63,15 @@ def test_no_twin_columns_and_columns_match_final_rooms():
             )
 
             walls = derive_walls(fp.rooms, buildable)
-            expected = {(round(c.cx, 3), round(c.cy, 3)) for c in derive_columns(walls)}
+            # `rooms=` must be passed here exactly as generate() passes it: it
+            # enables the wider staircase-core dedup radius (_near_staircase).
+            # Without it this re-derivation is not the one production runs, and
+            # the comparison silently drifts the moment a near-duplicate lands
+            # next to a stair core — which is a merge generate() is right to do.
+            expected = {
+                (round(c.cx, 3), round(c.cy, 3))
+                for c in derive_columns(walls, rooms=fp.rooms)
+            }
             stored = {(round(x, 3), round(y, 3)) for x, y in cols}
             assert stored == expected, (
                 f"layout {layout.id} floor {fp.floor}: stored columns diverge "
