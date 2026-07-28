@@ -251,10 +251,9 @@ database via `DATABASE_URL`. The script refuses to run without `SEED_PASSWORD`.
 | `basic@planforge.dev` | Basic |
 | `pro@planforge.dev` | Pro |
 
-> Passwords are not published. The accounts on the production database are for the
-> maintainer's own QA — there is no self-serve demo login. To see the product working,
-> use the [live app](https://planforge-mauve.vercel.app); generation is stateless and
-> does not require an account.
+> Passwords are not published. These accounts live on the production database and are for
+> the maintainer's own QA. There is no self-serve demo login — creating and generating a
+> plan requires an account (`/projects/new` redirects to sign-in).
 
 ### Conventions
 
