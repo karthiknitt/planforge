@@ -1,6 +1,7 @@
 """Tests for the CP-SAT constraint solver."""
 
 import pytest
+from app.engine import solver
 from app.engine.models import PlotConfig
 from app.engine.solver import (
     solve_layouts,
@@ -8,6 +9,21 @@ from app.engine.solver import (
     _build_room_list,
     ensuite_attachment,
 )
+
+
+def _generous_solve_budget(monkeypatch):
+    """Common (non-en-suite) toilet placement is a soft penalty term, not a
+    hard constraint — the two-phase warm start exists specifically to spend
+    its budget relocating toilets out of penalty zones, so its quality is
+    genuinely search-budget-dependent. Bumping only the wall-clock caps
+    (SOLVE_TIME_S/PHASE1_TIME_S) does nothing on a machine fast enough that
+    the *deterministic* budget binds first — which is normal, by design (see
+    solver.py's header) — so raise both together.
+    """
+    monkeypatch.setattr(solver, "SOLVE_TIME_S", 40.0)
+    monkeypatch.setattr(solver, "PHASE1_TIME_S", 15.0)
+    monkeypatch.setattr(solver, "PHASE1_DET_BUDGET", 3.0)
+    monkeypatch.setattr(solver, "PHASE2_DET_BUDGET", 6.0)
 
 
 def _basic_cfg(**kwargs) -> PlotConfig:
@@ -321,9 +337,10 @@ def test_solved_toilets_do_not_balloon():
                     )
 
 
-def test_solved_toilet_placement_common_sense():
+def test_solved_toilet_placement_common_sense(monkeypatch):
     # Standard 9×15 config: common toilets should avoid the front band
     # (road side, y-min) and should not share a wall with the staircase.
+    _generous_solve_budget(monkeypatch)
     cfg = _basic_cfg(plot_length=15.0, plot_width=9.0, num_bedrooms=2, toilets=2)
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
