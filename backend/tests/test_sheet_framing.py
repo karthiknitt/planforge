@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -37,9 +38,7 @@ CFG = PlotConfig(
     parking=True,
 )
 
-SAMPLE_DIR = Path(
-    os.environ.get("PLANFORGE_SAMPLE_DIR", "/home/karthik/.claude/jobs/fc32a438/tmp")
-)
+SAMPLE_DIR = Path(os.environ.get("PLANFORGE_SAMPLE_DIR", tempfile.gettempdir()))
 
 
 def _beam_design(span: float, b: float, d: float, axis: str, lines: list[int]) -> dict:

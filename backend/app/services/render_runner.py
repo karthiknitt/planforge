@@ -4,9 +4,10 @@ endpoint and the async Inngest render-job pipeline (Task 6)."""
 import hashlib
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
@@ -19,6 +20,7 @@ from app.models.render import LayoutRender
 from app.quality.pdf_image import pdf_page_png
 from app.services import jobs, layout_store
 from app.services.plot_config import plot_config_from_project
+from app.services.storage import NullStorage, get_storage
 from app.services.render_providers import (
     GEMINI_MODEL,
     OPENAI_MODEL,
@@ -47,6 +49,34 @@ RENDER_FLOORS = ("ground_floor", "first_floor", "second_floor", "basement_floor"
 
 def _geometry_hash(geometry: dict) -> str:
     return hashlib.sha256(json.dumps(geometry, sort_keys=True).encode()).hexdigest()
+
+
+async def _daily_render_count(user_id: str, db) -> int:
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    result = await db.execute(
+        select(func.count())
+        .select_from(LayoutRender)
+        .join(Project, Project.id == LayoutRender.project_id)
+        .where(Project.user_id == user_id, LayoutRender.created_at >= since)
+    )
+    return int(result.scalar_one())
+
+
+async def check_render_quota(user_id: str, db, limit: int | None = None) -> None:
+    """Raise 429 if the user has burned their 24h AI-render allowance."""
+    from app.config.settings import settings
+
+    cap = settings.render_daily_quota if limit is None else limit
+    used = await _daily_render_count(user_id, db)
+    if used >= cap:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "render_quota_exceeded",
+                "detail": f"Daily AI render limit reached ({cap}).",
+                "help": "Renders reset 24h after each generation.",
+            },
+        )
 
 
 def validate_render_floor(floor: str) -> str:
@@ -150,6 +180,8 @@ async def perform_render(
         cached.was_cached = True
         return cached
 
+    await check_render_quota(project.user_id, db)
+
     cfg = plot_config_from_project(project)
     layout = layout_store.engine_layout_from_geometry(stored.geometry)
     if reference_png is None:
@@ -176,6 +208,17 @@ async def perform_render(
     except RenderProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    storage = get_storage()
+    image_key = f"renders/{project_id}/{layout_hash}/{floor}.png"
+    stored_remotely = False
+    try:
+        await storage.put_bytes(image_key, result.image_png, "image/png")
+        stored_remotely = not isinstance(storage, NullStorage)
+    except Exception:
+        logger.warning(
+            "R2 render upload failed — falling back to DB blob", exc_info=True
+        )
+
     row = LayoutRender(
         project_id=project_id,
         layout_id=stored.id,
@@ -183,12 +226,21 @@ async def perform_render(
         floor=floor,
         provider=result.provider,
         model=result.model,
-        image_png=result.image_png,
+        image_png=None if stored_remotely else result.image_png,
+        image_key=image_key if stored_remotely else None,
     )
     db.add(row)
     await db.commit()
     row.was_cached = False
     return row
+
+
+async def render_bytes(row: LayoutRender) -> bytes | None:
+    if row.image_key:
+        data = await get_storage().get_bytes(row.image_key)
+        if data is not None:
+            return data
+    return row.image_png
 
 
 async def execute_render_job(db: AsyncSession, job: GenerationJob) -> None:

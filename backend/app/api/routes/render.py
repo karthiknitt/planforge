@@ -63,8 +63,12 @@ async def get_layout_render(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No render available")
 
+    image_bytes = await render_runner.render_bytes(row)
+    if image_bytes is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No render available")
+
     return Response(
-        content=row.image_png,
+        content=image_bytes,
         media_type="image/png",
         headers={"Cache-Control": "no-store"},
     )
