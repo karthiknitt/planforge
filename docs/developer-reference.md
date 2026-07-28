@@ -826,11 +826,23 @@ Three test users are pre-seeded into the database with different plan tiers so y
 
 ### Credentials
 
+> **Passwords redacted 2026-07-28 ahead of public release.** These accounts are seeded
+> against the **production** Neon database, so their credentials must not appear in a
+> public repo.
+>
+> ⚠️ **Redaction does not undo exposure.** The original password was committed on
+> 2026-07-03 and remains readable in git history (`git log -S`). Once this repo is
+> public, treat all three accounts as compromised and rotate them. Redaction only stops
+> *new* readers of the current file.
+>
+> There is no self-serve demo login. Reviewers are walked through the live app at
+> `https://planforge-mauve.vercel.app` directly.
+
 | Email | Password | Plan | Features accessible |
 |-------|----------|------|-------------------|
-| `free@planforge.dev` | `Test@1234` | Free | Dashboard, 3 projects max, SVG preview, Section View, BOQ (view), PDF export |
-| `basic@planforge.dev` | `Test@1234` | Basic | All Free features + unlimited projects + DXF export |
-| `pro@planforge.dev` | `Test@1234` | Pro | All Basic features + BOQ Excel export + Agentic chat (room editor, voice input) |
+| `free@planforge.dev` | `<redacted — ask Karthik>` | Free | Dashboard, 3 projects max, SVG preview, Section View, BOQ (view), PDF export |
+| `basic@planforge.dev` | `<redacted — ask Karthik>` | Basic | All Free features + unlimited projects + DXF export |
+| `pro@planforge.dev` | `<redacted — ask Karthik>` | Pro | All Basic features + BOQ Excel export + Agentic chat (room editor, voice input) |
 
 The `basic` and `pro` accounts have `plan_expires_at` set to 2099-12-31 so they never expire during testing.
 

@@ -1,8 +1,22 @@
 # PlanForge
 
-> G+1 residential floor plan generator for Indian small builders and civil engineers.
+> G+1 residential floor plan generator for Indian small builders and civil engineers —
+> and the front door to a multi-agent IS-code structural design engine.
 
-PlanForge takes plot dimensions, setbacks, and room preferences and instantly generates three compliant layout variations — complete with SVG preview, section view, Bill of Quantities, PDF drawing, and DXF export.
+**[▶ Live demo](https://planforge-mauve.vercel.app)** · **[Architecture](docs/ARCHITECTURE.md)** · **[Engine repo](https://github.com/karthiknitt/structapi)**
+
+![PlanForge system flow: plot input to CP-SAT solver to three scored layouts, then to structapi for deterministic IS-code structural design](docs/assets/system-flow.svg)
+
+PlanForge takes plot dimensions, setbacks, and room preferences and instantly generates three compliant layout variations — complete with SVG preview, section view, Bill of Quantities, PDF drawing, and DXF export. It then hands the resulting column grid to [structapi](https://github.com/karthiknitt/structapi) for IS-code structural design, without the user leaving the app.
+
+**Why the engine is deterministic and not an agent:** structural design from a known floor plan is fully parameterised, so the same plan must always produce the same design — a hard requirement for revision history, approvals, and BOQ reproducibility. The LLM layer sits *above* it: PlanForge's Claude chat calls structapi as a tool, and StructAgent offers a natural-language front door for humans. Full reasoning in [the architecture doc](docs/ARCHITECTURE.md).
+
+Verify both services are live right now:
+
+```bash
+curl -s https://structapi-912195238699.us-central1.run.app/v1/health
+curl -s https://planforge-backend-912195238699.us-central1.run.app/api/health
+```
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
@@ -228,13 +242,18 @@ No local dev server and no Playwright/e2e locally — real end-to-end checks hap
 
 ### Test users (dev/QA only)
 
-After running `bun run seed` (pointed at the Neon database via `DATABASE_URL`), three accounts are available:
+Seed three tier-test accounts with `SEED_PASSWORD='<value>' bun run seed`, pointed at a
+database via `DATABASE_URL`. The script refuses to run without `SEED_PASSWORD`.
 
-| Email | Password | Plan |
-|-------|----------|------|
-| `free@planforge.dev` | `Test@1234` | Free |
-| `basic@planforge.dev` | `Test@1234` | Basic |
-| `pro@planforge.dev` | `Test@1234` | Pro |
+| Email | Plan |
+|-------|------|
+| `free@planforge.dev` | Free |
+| `basic@planforge.dev` | Basic |
+| `pro@planforge.dev` | Pro |
+
+> Passwords are not published. These accounts live on the production database and are for
+> the maintainer's own QA. There is no self-serve demo login — creating and generating a
+> plan requires an account (`/projects/new` redirects to sign-in).
 
 ### Conventions
 
@@ -250,7 +269,31 @@ After running `bun run seed` (pointed at the Neon database via `DATABASE_URL`), 
 
 ## Documentation
 
-**[docs/developer-reference.md](docs/developer-reference.md)** — full architecture, API reference, engine internals, database schema, feature gating, testing guide, and UI design system.
+Full index: **[docs/README.md](docs/README.md)**
+
+| Doc | What it covers |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How PlanForge and structapi fit together, and why the engine is deterministic |
+| [docs/developer-reference.md](docs/developer-reference.md) | Architecture, API reference, engine internals, DB schema, feature gating, testing, UI design system |
+| [docs/product-roadmap.md](docs/product-roadmap.md) | Shipped features (P0–P3) and remaining backlog |
+
+---
+
+## Known gaps
+
+Stated up front rather than left to be discovered:
+
+- **Test coverage is unit-heavy.** 638 backend tests (86 files) and 199 frontend tests
+  (25 files) all pass, but coverage is concentrated in pure logic — geometry, compliance,
+  scoring, parsing. Playwright is configured (`bun run test:e2e`) but end-to-end flows are
+  not exercised in CI. Tracked in [docs/product-roadmap.md](docs/product-roadmap.md).
+- **No Alembic migrations.** The backend schema is created and patched at startup via
+  `Base.metadata.create_all` + `auto_migrate_missing_columns`. Adequate at current scale;
+  would need replacing before multi-tenant production.
+- **Cold starts are slow.** Cloud Run runs at `min-instances=0` to stay in the free tier,
+  so the first request after idle can take ~20–25s.
+- **Pre-revenue.** Razorpay checkout is integrated and functional, but the product has not
+  launched commercially.
 
 ---
 

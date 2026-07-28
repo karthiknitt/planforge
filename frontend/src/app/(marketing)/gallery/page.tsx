@@ -8,7 +8,7 @@ import { GalleryClient, type GalleryPlan } from "./gallery-client";
 // ── Metadata ──────────────────────────────────────────────────────────────────
 
 export const metadata: Metadata = {
-  title: "Floor Plan Templates for Indian Homes | PlanForge",
+  title: "Floor Plan Templates for Indian Homes",
   description:
     "Browse 2BHK, 3BHK and 4BHK floor plan templates for 20×30, 30×40 and 40×60 ft plots. NBC-compliant layouts for Chennai, Bangalore and other Indian cities. Customize and export instantly.",
   openGraph: {

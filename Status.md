@@ -1,4 +1,83 @@
-# PlanForge — Status (Stage 1 Phase 1: Architectural Hardening)
+# PlanForge — Status
+
+**Last updated:** 2026-07-28 · **Product status:** feature-complete (P0–P3 shipped), pre-revenue
+**Current workstream:** public release + documentation overhaul
+(`docs/plans/2026-07-27-public-release-docs-overhaul.md`)
+
+## Live services (verified 2026-07-27)
+
+| Component | URL | Health |
+|---|---|---|
+| Frontend | https://planforge-mauve.vercel.app | 200, production deploy |
+| Backend | https://planforge-backend-912195238699.us-central1.run.app | `/api/health` → `{"status":"ok","service":"planforge-api"}` |
+| Engine (structapi) | https://structapi-912195238699.us-central1.run.app | `/v1/health` → iscodes 0.3.0 |
+
+Active backend revision `planforge-backend-00034-28r`, deployed **manually** 2026-07-25
+16:36 UTC because the CI deploy is blocked (see below).
+
+> `planforge.vercel.app` is **not ours** — it serves an unrelated third-party app. The
+> canonical production URL is `planforge-mauve.vercel.app`.
+
+## Test state
+
+All measured on `chore/public-release-prep`, 2026-07-28:
+
+- **Backend:** 638 tests across 86 files, all passing (`cd backend && uv run pytest`)
+- **Frontend:** 199 tests across 25 files, all passing (`cd frontend && bun test`)
+- **structapi:** 94 tests, all passing (separate repo)
+- **E2E:** Playwright configured (`bun run test:e2e`), not wired into CI
+
+> Counts differ slightly by branch — `feat/structural-drawings-construction-grade` carries
+> additional tests (650/87) not yet on this branch. Measure before quoting.
+>
+> A fresh worktree has no `node_modules`, so `bun test` reports 10 module-resolution
+> failures until `bun install` is run. Those are environmental, not real failures.
+
+## Known blockers
+
+1. **GitHub Actions blocked on PlanForge.** July usage reached 2,438 minutes against a
+   2,000-minute free-plan allowance; PlanForge accounts for 2,381. Runs since 2026-07-25
+   fail in 2–9s with "recent account payments have failed or your spending limit needs to
+   be increased". structapi is unaffected (green CI on 2026-07-27). Consequence:
+   `deploy-backend.yml` cannot run, so backend deploys are manual. Resolution deferred by
+   decision — no budget change; going public should clear it, since public repos draw no
+   minutes from the allowance. Re-verify after the flip.
+2. **No end-to-end coverage in CI.** Unit coverage is solid on both sides, but Playwright
+   e2e is configured and unwired, so nothing tests a full flow across frontend → backend
+   → structapi. Highest-value remaining test gap.
+
+## Active branches
+
+| Branch | Where | State |
+|---|---|---|
+| `main` | — | `7cc9932` |
+| `chore/public-release-prep` | worktree `~/projects/PlanForge-release` | public release + docs |
+| `feat/structural-drawings-construction-grade` | main checkout `~/projects/PlanForge` | active feature work |
+| `feat/saas-scalability` | worktree `~/projects/PlanForge-saas` | 10 ahead of main |
+
+Three lines of work run concurrently. Confirm branch and directory before editing
+(`git branch --show-current && pwd`).
+
+## Security
+
+Full-history `gitleaks` scan 2026-07-27 over 326 commits: **no real credentials**. Nine
+matches triaged as false positives (Docker image tags, a geometry dict key, the
+`INTERNAL_AUTH_SECRET` CI fixture) and recorded in `.gitleaksignore` with reasons. Re-run
+before any visibility change:
+
+```bash
+gitleaks detect --source . --log-opts="--all" --redact
+```
+
+---
+---
+
+# Historical log
+
+Everything below records earlier stage/phase work and is retained for provenance. It does
+**not** describe current state.
+
+## Stage 1 Phase 1: Architectural Hardening
 
 **Branch:** `worktree-stage1-phase1-hardening` (worktree; NOT merged to main — per Karthik's standing instruction, nothing merges until he says so)
 **Phase:** 1 of 3 (foundational bug audit + fix) — COMPLETE, awaiting sign-off

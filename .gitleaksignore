@@ -1,0 +1,19 @@
+# gitleaks allowlist — reviewed 2026-07-27 ahead of public release.
+# Every entry was manually triaged and confirmed NOT to be a real credential.
+# Regenerate with: gitleaks detect --source . --log-opts="--all" --redact
+#
+# Docker image tags: `api:<sha>` / `api-v2:<sha>` are 40-char git SHAs used as container
+# tags, not API keys. gitleaks matches on the `name:hex` shape.
+29b3c96cad2a8f677b01ca2e8dd31701eaea1e0e:docs/superpowers/plans/2026-07-27-saas-scalability-and-gcp-cost.md:generic-api-key:130
+# Test fixture `test-secret-for-ci-...` in a docker-run example inside a planning doc.
+29b3c96cad2a8f677b01ca2e8dd31701eaea1e0e:docs/superpowers/plans/2026-07-27-saas-scalability-and-gcp-cost.md:generic-api-key:233
+# Beam-design dict key `"x-span4.0-trib2.25"` — a geometry identifier, not a secret.
+a23f7c2cbf3ae8179fabe9fbdd8661d955d716c5:docs/plans/2026-07-19-structural-drawing-set.md:generic-api-key:998
+# INTERNAL_AUTH_SECRET test default. The backend validator requires >=32 chars, so the CI
+# fixture is deliberately long, which trips the entropy heuristic. The real value lives
+# only in GitHub Actions secrets. See backend/tests/conftest.py.
+c6080e52fcce068bc7accbbecc6242ba61a3c3cf:backend/scripts/regenerate_experiments.py:generic-api-key:26
+8d4b3a899be51fc0e8e388160e9f1b7f4a3a5abe:backend/scripts/render_bakeoff.py:generic-api-key:21
+c502fdb725f8793c11caf18e2a85a95a897aec6d:backend/scripts/make_ccqs_fixture.py:generic-api-key:19
+ecaa5ec38760856edd9b7c5e3302b6b11fa0859b:backend/tests/conftest.py:generic-api-key:5
+ecaa5ec38760856edd9b7c5e3302b6b11fa0859b:backend/tests/test_auth_wiring_integration.py:generic-api-key:11
