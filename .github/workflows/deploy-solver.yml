@@ -1,11 +1,11 @@
-name: Deploy Backend to Cloud Run
+name: Deploy Solver to Cloud Run
 
 on:
   push:
     branches: [main]
     paths:
       - "backend/**"
-      - ".github/workflows/deploy-backend.yml"
+      - ".github/workflows/deploy-solver.yml"
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Same image as the API service — one Dockerfile, one artifact, two
+      # services. Cache is read-only here: this workflow and deploy-backend.yml
+      # trigger on the same backend/** paths and therefore run concurrently, so
+      # two --cache-to exporters would race on the one :buildcache ref and
+      # corrupt what Task B3 added. Reading it still gives full layer reuse and
+      # writes nothing extra into Artifact Registry.
       - name: Build and push image
         working-directory: backend
         run: |
@@ -41,7 +47,6 @@ jobs:
           CACHE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/planforge-backend/api:buildcache"
           docker buildx build \
             --cache-from "type=registry,ref=$CACHE" \
-            --cache-to   "type=registry,ref=$CACHE,mode=max" \
             --tag "$IMAGE" \
             --push \
             .
@@ -51,23 +56,22 @@ jobs:
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
-          service: planforge-backend
+          service: planforge-solver
           region: ${{ vars.GCP_REGION }}
           image: ${{ env.IMAGE }}
+          # --concurrency=1 is the whole point: one solve per instance, so a
+          # request never queues behind a 40s CP-SAT run on a busy worker.
+          # --no-allow-unauthenticated: only Inngest and the API service call this.
           flags: >-
             --min-instances=0
-            --max-instances=3
-            --concurrency=4
-            --timeout=300
-            --cpu=1
-            --memory=1Gi
-            --allow-unauthenticated
-          # deploy-cloudrun's env_vars parser splits on BOTH commas and newlines between
-          # KEY=VALUE pairs. If BACKEND_ALLOWED_ORIGINS ever needs more than one origin
-          # (backend/app/config/cors.py's parse_allowed_origins supports comma-separated
-          # lists), escape each comma as \, when setting the secret, e.g.:
-          #   gh secret set BACKEND_ALLOWED_ORIGINS --body 'https://a.com\,https://b.com'
-          # An unescaped comma in the value is otherwise silently read as a new pair.
+            --max-instances=5
+            --concurrency=1
+            --timeout=600
+            --cpu=2
+            --memory=2Gi
+            --no-allow-unauthenticated
+          # See deploy-backend.yml for the comma-escaping caveat on
+          # BACKEND_ALLOWED_ORIGINS.
           env_vars: |
             DATABASE_URL=${{ secrets.NEON_DATABASE_URL }}
             DB_USE_NULLPOOL=true
@@ -80,7 +84,7 @@ jobs:
             OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
             INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}
             INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}
-            INNGEST_APP_ID=planforge-api
+            INNGEST_APP_ID=planforge-solver
             STRUCTURAL_API_URL=${{ secrets.STRUCTURAL_API_URL }}
             STRUCTURAL_API_KEY=${{ secrets.STRUCTURAL_API_KEY }}
             R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }}

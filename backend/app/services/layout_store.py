@@ -6,6 +6,7 @@ copy-pasted in generate.py, share.py and revisions.py.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -19,6 +20,7 @@ from app.engine.models import (
     FloorPlan,
     Layout,
     LayoutScore,
+    PlotConfig,
     Room,
 )
 from app.engine.plan_geometry import build_floor_drawing
@@ -110,6 +112,17 @@ async def get_stored_layout(
     return result.scalar_one_or_none()
 
 
+async def solve_layouts_async(cfg: PlotConfig) -> list[Layout]:
+    """Run the CP-SAT solve off the event loop.
+
+    CP-SAT is blocking C++ (it releases the GIL). Called inline it pins the
+    whole worker for the duration of a ~40s solve, so no other request on this
+    instance is served. Wrapping the caller — not solver.py — keeps this change
+    off the concurrently-edited geometry engine.
+    """
+    return await asyncio.to_thread(generate, cfg)
+
+
 async def regenerate_and_store(
     project: Project, db: AsyncSession
 ) -> list[StoredLayout]:
@@ -121,7 +134,7 @@ async def regenerate_and_store(
     from app.services import structural_store
 
     cfg = plot_config_from_project(project)
-    layouts = generate(cfg)
+    layouts = await solve_layouts_async(cfg)
 
     await db.execute(delete(StoredLayout).where(StoredLayout.project_id == project.id))
     # Regeneration replaces every layout — all structural designs are stale.

@@ -1,13 +1,16 @@
+import asyncio
+import hashlib
 import logging
 import math
 from decimal import Decimal
 from io import BytesIO, StringIO
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.settings import settings
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
 from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
@@ -27,9 +30,46 @@ from app.services import (
     structural_store,
 )
 from app.services.plot_config import plot_config_from_project
+from app.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ReportLab builds the whole document in memory; Cloud Run's filesystem is
+# RAM-backed so spooling to /tmp would not help. Bounding concurrency is the
+# only thing that actually stops an OOM taking the instance down.
+_EXPORT_SEM = asyncio.Semaphore(settings.export_max_concurrency)
+
+
+def _artifact_key(project_id: str, layout_id: str, ext: str, content: bytes) -> str:
+    digest = hashlib.sha256(content).hexdigest()[:16]
+    return f"exports/{project_id}/{layout_id}/{digest}.{ext}"
+
+
+async def _deliver(
+    content: bytes, media_type: str, filename: str, key: str
+) -> Response:
+    """Persist to R2 (best-effort) and return the artifact to the caller."""
+    storage = get_storage()
+    stored = True
+    try:
+        await storage.put_bytes(key, content, media_type)
+    except Exception:
+        # Never redirect to a key we failed to write — the caller would get
+        # R2's NoSuchKey XML instead of their file.
+        stored = False
+        logger.warning("R2 upload failed for %s — serving inline", key, exc_info=True)
+
+    if stored and settings.export_delivery_mode == "redirect":
+        url = storage.signed_url(key)
+        if url:
+            return RedirectResponse(url=url, status_code=307)
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 async def _get_plan_tier(user_id: str, db: AsyncSession) -> str:
@@ -82,22 +122,23 @@ async def export_pdf(
         layout = layout_store.engine_layout_from_geometry(geom)
 
     annotations = getattr(project, "annotations", None) or {}
-    pdf_bytes = render_pdf(
-        project.name,
-        layout,
-        cfg,
-        project.num_bedrooms,
-        annotations=annotations or None,
-        structural_design=design,
-        watermark_preliminary=True,
-    )
+    async with _EXPORT_SEM:
+        pdf_bytes = render_pdf(
+            project.name,
+            layout,
+            cfg,
+            project.num_bedrooms,
+            annotations=annotations or None,
+            structural_design=design,
+            watermark_preliminary=True,
+        )
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="planforge-{project_id}-layout-{layout_id}.pdf"'
-        },
+    filename = f"planforge-{project_id}-layout-{layout_id}.pdf"
+    return await _deliver(
+        pdf_bytes,
+        "application/pdf",
+        filename,
+        _artifact_key(project_id, layout_id, "pdf", pdf_bytes),
     )
 
 
@@ -181,20 +222,22 @@ async def export_structural_drawing_set(
     except structagent_client.StructuralAPIError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
-    pdf_bytes = generate_structural_drawing_set(
-        project_name=project.name,
-        cfg=cfg,
-        layout=layout,
-        structural_design=design,
-        plinth_beams_data=plinth_beams_data,
-    )
+    # Generate the drawing set
+    async with _EXPORT_SEM:
+        pdf_bytes = generate_structural_drawing_set(
+            project_name=project.name,
+            cfg=cfg,
+            layout=layout,
+            structural_design=design,
+            plinth_beams_data=plinth_beams_data,
+        )
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="planforge-structural-drawings-{project_id}-layout-{layout_id}.pdf"'
-        },
+    filename = f"planforge-structural-drawings-{project_id}-layout-{layout_id}.pdf"
+    return await _deliver(
+        pdf_bytes,
+        "application/pdf",
+        filename,
+        _artifact_key(project_id, layout_id, "pdf", pdf_bytes),
     )
 
 
@@ -269,16 +312,15 @@ async def export_approval_pdf(
         municipality=municipality,
     )
 
-    pdf_bytes = generate_approval_pdf(layout, cfg, owner, layout_id)
+    async with _EXPORT_SEM:
+        pdf_bytes = generate_approval_pdf(layout, cfg, owner, layout_id)
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="planforge-approval-{project_id}-layout-{layout_id}.pdf"'
-            )
-        },
+    filename = f"planforge-approval-{project_id}-layout-{layout_id}.pdf"
+    return await _deliver(
+        pdf_bytes,
+        "application/pdf",
+        filename,
+        _artifact_key(project_id, layout_id, "pdf", pdf_bytes),
     )
 
 
@@ -323,14 +365,15 @@ async def export_dxf(
         geom = design.get("final_geometry") or row.geometry
         layout = layout_store.engine_layout_from_geometry(geom)
 
-    dxf_bytes = _render_dxf(project.name, layout, cfg, structural_design=design)
+    async with _EXPORT_SEM:
+        dxf_bytes = _render_dxf(project.name, layout, cfg, structural_design=design)
 
-    return Response(
-        content=dxf_bytes,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="planforge-{project_id}-layout-{layout_id}.dxf"'
-        },
+    filename = f"planforge-{project_id}-layout-{layout_id}.dxf"
+    return await _deliver(
+        dxf_bytes,
+        "application/dxf",
+        filename,
+        _artifact_key(project_id, layout_id, "dxf", dxf_bytes),
     )
 
 
@@ -830,7 +873,10 @@ async def export_boq(
             raise HTTPException(
                 status_code=402, detail="BOQ Excel export requires Pro plan."
             )
-        return _boq_excel_response(boq, project_id, layout_id)
+        # The workbook build is synchronous and allocates the whole file in
+        # memory, so it shares the render budget with the PDF/DXF paths.
+        async with _EXPORT_SEM:
+            return await _boq_excel_response(boq, project_id, layout_id)
 
     import json
 
@@ -840,7 +886,7 @@ async def export_boq(
     )
 
 
-def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
+async def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
     try:
         import openpyxl  # noqa: F401
     except ImportError:
@@ -935,12 +981,12 @@ def _boq_excel_response(boq, project_id: str, layout_id: str) -> Response:
 
     buf = BytesIO()
     wb.save(buf)
-    buf.seek(0)
+    xlsx_bytes = buf.getvalue()
 
-    return Response(
-        content=buf.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f'attachment; filename="planforge-boq-{project_id}-{layout_id}.xlsx"'
-        },
+    filename = f"planforge-boq-{project_id}-{layout_id}.xlsx"
+    return await _deliver(
+        xlsx_bytes,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename,
+        _artifact_key(project_id, layout_id, "xlsx", xlsx_bytes),
     )
