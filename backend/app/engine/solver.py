@@ -53,6 +53,17 @@ MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 # trades — popular grid lines earn quadratically (C(n,2) pairs), which is
 # exactly the pressure that consolidates walls onto few lines.
 ALIGN_BONUS = 2500
+# Cross-floor pairs used to share ALIGN_BONUS with same-floor pairs — the
+# wrong weighting on the merits, since a same-floor near-miss just costs an
+# untidy mid-span T column while an unstacked upper-floor column is a
+# structural defect (floating column). Swept 7500/25000/60000/150000 on the
+# grid-alignment test's own config: 60000 is the measured peak (worst solver
+# layout 0.55 -> 0.67 stacked); 150000 over-weights and regresses to 0.55.
+# Must be applied together with the stair/circulation snap protection (see
+# `_stair_circulation_protect_ids`) — at this weight the solver's incumbent
+# shifts enough that unprotected post-solve snapping could otherwise break
+# the stair-door-access guarantee (issue #50).
+CROSS_FLOOR_ALIGN_BONUS = 60_000
 # Post-solve wall-line snapping reach. Facing edge pairs (the two faces of
 # one wall) are detected and moved rigidly as a unit, so a large tolerance
 # can never collapse a wall gap — it only merges genuinely distinct wall
@@ -988,10 +999,12 @@ def _solve_one(
     # this, size_terms grows every room independently and adjacent rooms
     # almost never share a wall line (pro-tester regression, 2026-07-16).
     align_bools = []
+    cross_floor_align_bools = []
     for i, a in enumerate(room_vars):
         for b in room_vars[i + 1 :]:
             if a.room_type == "staircase" and b.room_type == "staircase":
                 continue  # already hard-equal across floors
+            bucket = align_bools if a.floor == b.floor else cross_floor_align_bools
             # All 4 end combos per axis: rooms pack with gaps anywhere in
             # [0, iwt+], so a shared wall line shows up as lo↔lo, hi↔hi or
             # the mixed hi↔lo forms depending on which side of the gap each
@@ -1009,7 +1022,7 @@ def _solve_one(
                 bv = model.new_bool_var(f"al_{a.room_id}_{b.room_id}_{tag}")
                 model.add(e1 == e2).only_enforce_if(bv)
                 model.add(e1 != e2).only_enforce_if(bv.Not())
-                align_bools.append(bv)
+                bucket.append(bv)
 
     # Drift minimisation (closed-loop re-solve): hint the solver toward the
     # approved geometry and penalise deviation from it, so a structural
@@ -1037,6 +1050,7 @@ def _solve_one(
         sum(dist_terms)
         - sum(size_terms)
         - ALIGN_BONUS * sum(align_bools)
+        - CROSS_FLOOR_ALIGN_BONUS * sum(cross_floor_align_bools)
         + sum(wet_shrink_terms)
         + deviation_weight * sum(deviation_terms)
     )
