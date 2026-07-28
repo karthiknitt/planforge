@@ -60,7 +60,7 @@ const SEED_PASSWORD = process.env.SEED_PASSWORD;
 if (!SEED_PASSWORD) {
   console.error(
     "SEED_PASSWORD is not set.\n" +
-      "help: SEED_PASSWORD='<value>' bun run scripts/seed-test-users.mjs",
+      "help: SEED_PASSWORD='<value>' bun run scripts/seed-test-users.mjs"
   );
   process.exit(1);
 }
