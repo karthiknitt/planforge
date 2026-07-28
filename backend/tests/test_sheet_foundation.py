@@ -4,6 +4,7 @@ Details & Schedule) — app.engine.structural_sheets_foundation."""
 from __future__ import annotations
 
 import os
+import tempfile
 from io import BytesIO
 
 import pytest
@@ -29,7 +30,7 @@ from app.engine.structural_sheets_foundation import (
 )
 from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 
-SAMPLE_DIR = "/home/karthik/.claude/jobs/fc32a438/tmp"
+SAMPLE_DIR = os.environ.get("PLANFORGE_SAMPLE_DIR", tempfile.gettempdir())
 
 CFG = PlotConfig(
     plot_length=9.0,
