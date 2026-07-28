@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Pricing — Free, ₹499 & ₹999/month | PlanForge",
+  title: "Pricing — Free, ₹499 & ₹999/month",
   description:
     "PlanForge pricing: Free (3 projects, PDF export), Basic ₹499/month (unlimited projects + DXF), Pro ₹999/month (BOQ Excel + priority support). No AutoCAD needed. Cancel anytime.",
   openGraph: {

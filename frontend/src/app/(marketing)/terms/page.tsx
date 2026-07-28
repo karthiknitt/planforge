@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FadeIn } from "@/components/motion/fade-in";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | PlanForge",
+  title: "Terms of Service",
   description: "PlanForge terms of service — acceptable use, subscription terms, and liability.",
   robots: { index: true, follow: true },
   alternates: { canonical: "/terms" },
