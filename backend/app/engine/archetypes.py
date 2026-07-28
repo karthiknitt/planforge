@@ -434,18 +434,23 @@ def layout_a(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
         cur_x += PARK_W + iwt
         gf_rooms += _band_filler_rooms("gf", cur_x, oy, ox + W - cur_x, d_stair)
     else:
-        entry_w = W - STAIR_W - iwt
-        gf_rooms.append(
-            _r(
-                "gf_entry",
-                "Entry / Foyer",
-                "passage",
-                ox + STAIR_W + iwt,
-                oy,
-                entry_w,
-                d_stair,
+        # Same size-cap fix as the gf_foyer branch above: on a wide,
+        # no-parking plot the whole band (W - STAIR_W - iwt) was handed to
+        # ONE "passage" room, overflowing room_specs.json's passage cap
+        # (max_area_sqm=6.0 / max_width_m=2.0) — the exact oversized-
+        # circulation pathology the parking branch's comment already
+        # describes fixing, just not carried over here. Cap the entry at a
+        # real foyer's size and give the remainder to a real room via
+        # _band_filler_rooms, which sizes it "living" or "passage" itself.
+        band_rest = W - STAIR_W - iwt
+        cur_x = ox + STAIR_W + iwt
+        entry_w = min(band_rest, 2.0) if band_rest > 0.3 else 0.0
+        if entry_w:
+            gf_rooms.append(
+                _r("gf_entry", "Entry / Foyer", "passage", cur_x, oy, entry_w, d_stair)
             )
-        )
+            cur_x += entry_w + iwt
+        gf_rooms += _band_filler_rooms("gf", cur_x, oy, ox + W - cur_x, d_stair)
 
     living_y = oy + d_stair + iwt
 
