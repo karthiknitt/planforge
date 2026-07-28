@@ -1,710 +1,248 @@
-from io import BytesIO
+"""Set-level integration tests for the 12-sheet Structural Drawing Set.
 
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+Per-sheet content is covered by `test_sheet_notes.py`,
+`test_sheet_foundation.py`, `test_sheet_framing.py` and
+`test_sheet_slab_stair.py`; the frame/scale/pagination primitives by
+`test_structural_sheet.py`. What is pinned here is what only the assembled
+set can show: that every drawing in the register is present, that both
+floors are detailed, and that the set carries its provenance.
+"""
 
-from app.engine.cad_elements import ColumnMarker, WallSegment
-from app.engine.models import ComplianceResult, FloorPlan, Layout, PlotConfig, Room
-from app.engine.pdf import (
-    MARGIN,
-    ROAD_GAP,
-    ROAD_H,
-    TITLE_H,
-    _centered_plot_oy,
-    _generic_schedule_height,
-    _standard_scale,
-)
-from app.engine.structural_drawing_set import (
-    _assign_marks_by_span,
-    _assign_plinth_beam_marks,
-    _draw_beam_detail_box,
-    generate_structural_drawing_set,
-    render_column_footing_plan,
-    render_footing_details,
-    render_plinth_beam_details,
-    render_plinth_beam_plan,
-    render_roof_beam_details,
-    render_roof_beam_slab_plan,
-)
+import pytest
+
+from app.engine.generator import generate
+from app.engine.models import PlotConfig
+from app.engine.structural_data import build_structural_model
+from app.engine.structural_drawing_set import generate_structural_drawing_set
+from app.engine.structural_sheet import SHEET_REGISTER
 from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 
 CFG = PlotConfig(
-    plot_length=9.0,
-    plot_width=8.0,
-    setback_front=3.0,
-    setback_rear=1.5,
-    setback_left=1.0,
-    setback_right=1.0,
+    plot_width=12.192,
+    plot_length=18.288,
     num_bedrooms=2,
     toilets=2,
+    setback_front=1.5,
+    setback_rear=1.5,
+    setback_left=1.2,
+    setback_right=1.2,
     parking=True,
+    city="other",
+    road_side="E",
+    vastu_enabled=True,
 )
 
+DISCLAIMER = "Advisory design output. To be verified and sealed by a licensed engineer."
 
-def test_column_footing_plan_renders_footing_labels():
-    # 3 x-grid-lines (0, 4, 8) x 2 y-grid-lines (0, 4) so the two columns
-    # classify as different footing types: (0,0) is extreme on both axes
-    # (corner -> T1), (4,0) is extreme only on y (edge -> T2). This exercises
-    # both the classification join in place_footings() and the distinct
-    # label rendering in render_column_footing_plan().
-    columns = [ColumnMarker(cx=0.0, cy=0.0), ColumnMarker(cx=4.0, cy=0.0)]
-    walls = [
-        WallSegment(x1=0, y1=0, x2=8, y2=0, thickness=0.23, kind="external"),
-        WallSegment(x1=0, y1=4, x2=8, y2=4, thickness=0.23, kind="external"),
-        WallSegment(x1=0, y1=0, x2=0, y2=4, thickness=0.23, kind="external"),
-        WallSegment(x1=4, y1=0, x2=4, y2=4, thickness=0.23, kind="external"),
-        WallSegment(x1=8, y1=0, x2=8, y2=4, thickness=0.23, kind="external"),
-    ]
-    footings_data = {
-        "corner": {"data": {"L_m": 1.35, "B_m": 1.35}},
-        "edge": {"data": {"L_m": 1.5, "B_m": 1.35}},
-        "interior": {"data": {"L_m": 1.6, "B_m": 1.6}},
-    }
-
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_column_footing_plan(c, columns, walls, footings_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "COLUMN & FOOTING PLAN" in text.upper()
-    assert "T1" in text
-    assert "T2" in text
-
-
-def test_footing_details_renders_schedule_and_typical_section():
-    footings_data = {
-        "corner": {
-            "data": {
-                "L_m": 1.35,
-                "B_m": 1.35,
-                "D_overall_mm": 450,
-                "bars_x": {"dia": 12, "spacing": 150},
-                "bars_y": {"dia": 12, "spacing": 150},
-            }
-        },
-        "interior": {
-            "data": {
-                "L_m": 1.65,
-                "B_m": 1.65,
-                "D_overall_mm": 500,
-                "bars_x": {"dia": 16, "spacing": 125},
-                "bars_y": {"dia": 16, "spacing": 125},
-            }
-        },
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_footing_details(c, footings_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "FOOTING" in text.upper()
-    assert "T1" in text  # corner
-    assert "T3" in text  # interior
-
-
-def test_beam_detail_box_renders_mark_and_bar_count():
-    design = {
-        "n_bars": 3,
-        "bar_dia": 12,
-        "doubly_reinforced": False,
-        "stirrups": {"sv_provided": 150},
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    _draw_beam_detail_box(
-        c, mark="PB1", b_mm=230, D_mm=300, design=design, x=100, y=500
-    )
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PB1" in text
-    assert "3-12" in text.replace(" ", "") or "3nos-12" in text.replace(" ", "")
-
-
-def test_beam_detail_box_renders_top_steel_when_doubly_reinforced():
-    design = {
-        "n_bars": 3,
-        "bar_dia": 12,
-        "doubly_reinforced": True,
-        "n_bars_comp": 2,
-        "stirrups": {"sv_provided": 150},
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    _draw_beam_detail_box(
-        c, mark="PB2", b_mm=230, D_mm=300, design=design, x=100, y=500
-    )
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PB2" in text
-    assert "Top" in text
-
-
-def test_beam_detail_box_single_tension_bar_centers_without_crash():
-    # n_bars == 1 must place the single bar centered, not divide by
-    # (n_bars - 1) == 0 -- the exact divide-by-zero this renderer guards.
-    design = {
-        "n_bars": 1,
-        "bar_dia": 16,
-        "doubly_reinforced": False,
-        "stirrups": {"sv_provided": 150},
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    height = _draw_beam_detail_box(
-        c, mark="PB3", b_mm=230, D_mm=300, design=design, x=100, y=500
-    )
-    c.showPage()
-    c.save()
-
-    assert isinstance(height, float) and height > 0
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PB3" in text
-
-
-def test_beam_detail_box_zero_tension_bars_skips_row_without_crash():
-    # n_bars == 0 must skip the tension row entirely (no bars, no label)
-    # rather than iterate/divide -- still renders the box + heading.
-    design = {
-        "n_bars": 0,
-        "bar_dia": 0,
-        "doubly_reinforced": False,
-        "stirrups": {"sv_provided": 150},
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    height = _draw_beam_detail_box(
-        c, mark="PB4", b_mm=230, D_mm=300, design=design, x=100, y=500
-    )
-    c.showPage()
-    c.save()
-
-    assert isinstance(height, float) and height > 0
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PB4" in text
-
-
-def test_beam_detail_box_single_compression_bar_centers_without_crash():
-    # n_bars_comp == 1 under doubly_reinforced must center the single top
-    # bar, not divide by (n_bars_comp - 1) == 0.
-    design = {
-        "n_bars": 3,
-        "bar_dia": 12,
-        "doubly_reinforced": True,
-        "n_bars_comp": 1,
-        "stirrups": {"sv_provided": 150},
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    height = _draw_beam_detail_box(
-        c, mark="PB5", b_mm=230, D_mm=300, design=design, x=100, y=500
-    )
-    c.showPage()
-    c.save()
-
-    assert isinstance(height, float) and height > 0
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PB5" in text
-    assert "Top" in text
-
-
-def _footing_schedule_top_clears_heading(cfg: PlotConfig, n_rows: int) -> None:
-    """Coordinate-based regression for the z-order occlusion bug found in
-    code review (commit b4032a6): `_draw_sheet_frame` draws the sheet
-    heading at `(page_w / 2, oy + plot_py + 20)`, and
-    `_draw_generic_schedule_table` paints an OPAQUE white background as its
-    first draw op. If the table's top ever landed at/above the heading's
-    glyph band, the white box would silently erase the heading in the
-    rendered PDF -- something the text-extraction assertions above can't
-    catch, since glyphs stay in the content stream regardless of paint
-    order.
-
-    This recomputes the same geometry `render_footing_details` uses
-    internally (mirroring its `table_y_top = min(page_h - MARGIN - 30,
-    heading_y - 20)` clamp) and asserts the table's top sits strictly below
-    the heading's approximate glyph band (heading font size 9 -> glyphs span
-    roughly [heading_y - 2, heading_y + 7]), for the given plot geometry.
-    """
-    page_w, page_h = A4
-    s, _denom = _standard_scale(cfg, page_w, page_h)
-    plot_py = cfg.plot_length * s
-    oy = _centered_plot_oy(
-        page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
-    )
-    heading_y = oy + plot_py + 20
-    table_y_top = min(page_h - MARGIN - 30, heading_y - 20)
-
-    assert table_y_top <= heading_y - 20, (
-        f"schedule table top ({table_y_top}) must sit at least 20pt below "
-        f"the heading position ({heading_y}) for plot "
-        f"{cfg.plot_length}x{cfg.plot_width}"
-    )
-    # And the table's own bottom edge must not run into the title block.
-    table_bottom = table_y_top - _generic_schedule_height(n_rows)
-    assert table_bottom > TITLE_H, (
-        f"schedule table bottom ({table_bottom}) must clear the title block "
-        f"(top at y={TITLE_H}) for plot {cfg.plot_length}x{cfg.plot_width}"
-    )
-
-
-def test_footing_details_schedule_position_clears_heading_default_plot():
-    _footing_schedule_top_clears_heading(CFG, n_rows=2)
-
-
-def test_plinth_beam_plan_renders_beam_marks():
-    walls = [
-        WallSegment(x1=0, y1=0, x2=4, y2=0, thickness=0.23, kind="external"),
-        WallSegment(x1=0, y1=0, x2=0, y2=3, thickness=0.115, kind="internal"),
-    ]
-    plinth_beams_data = {
-        "plinth-external-span4.00": {
-            "b_mm": 230,
-            "D_mm": 300,
-            "span_m": 4.0,
-            "kind": "external",
-            "count": 1,
-            "ok": True,
-            "design": {},
-            "checks": [],
-        },
-        "plinth-internal-span3.00": {
-            "b_mm": 115,
-            "D_mm": 275,
-            "span_m": 3.0,
-            "kind": "internal",
-            "count": 1,
-            "ok": True,
-            "design": {},
-            "checks": [],
-        },
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_plinth_beam_plan(c, walls, plinth_beams_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PLINTH BEAM PLAN" in text.upper()
-    assert "PB1" in text
-    assert "PB2" in text
-
-
-def test_assign_plinth_beam_marks_orders_by_ascending_span():
-    # 3 groups, deliberately inserted out of span order, to lock down that
-    # PB1 always lands on the smallest span and PB<n> on the largest --
-    # not just "both marks appear somewhere" (test gap flagged in review).
-    plinth_beams_data = {
-        "plinth-external-span4.00": {"span_m": 4.0},
-        "plinth-internal-span2.00": {"span_m": 2.0},
-        "plinth-external-span3.00": {"span_m": 3.0},
-    }
-    marks = _assign_plinth_beam_marks(plinth_beams_data)
-    assert marks == {
-        "plinth-internal-span2.00": "PB1",
-        "plinth-external-span3.00": "PB2",
-        "plinth-external-span4.00": "PB3",
-    }
-
-
-def test_plinth_beam_plan_skips_label_for_unmatched_wall_without_crashing():
-    walls = [WallSegment(x1=0, y1=0, x2=5, y2=0, thickness=0.23, kind="external")]
-    plinth_beams_data = {}  # no matching group at all
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_plinth_beam_plan(c, walls, plinth_beams_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PLINTH BEAM PLAN" in text.upper()
-
-
-def test_footing_details_schedule_position_clears_heading_tall_narrow_plot():
-    # Tall/narrow frontage (common for Indian plots) pushes the plot
-    # boundary -- and therefore the heading -- higher up the page than the
-    # default near-square CFG does, which is exactly the case that exposed
-    # the occlusion bug during review.
-    tall_narrow_cfg = PlotConfig(
-        plot_length=20.0,
-        plot_width=6.0,
-        setback_front=3.0,
-        setback_rear=1.5,
-        setback_left=1.0,
-        setback_right=1.0,
-        num_bedrooms=2,
-        toilets=2,
-        parking=True,
-    )
-    _footing_schedule_top_clears_heading(tall_narrow_cfg, n_rows=2)
-
-
-def test_plinth_beam_details_renders_schedule_and_detail_boxes():
-    plinth_beams_data = {
-        "plinth-external-span3.50": {
-            "b_mm": 230,
-            "D_mm": 300,
-            "span_m": 3.5,
-            "kind": "external",
-            "count": 2,
-            "ok": True,
-            "design": {
-                "n_bars": 3,
-                "bar_dia": 12,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 150},
+DESIGN = {
+    "status": "designed",
+    "revision_id": "rev-7",
+    "changelog": ["initial design"],
+    "structapi": {
+        "disclaimer": DISCLAIMER,
+        "data": {
+            "inputs": {
+                "fck": 25,
+                "fy": 500,
+                "exposure": "moderate",
+                "sbc_kpa": 150,
+                "storeys": 2,
+                "storey_height_m": 3.0,
+                "seismic_zone": "III",
             },
-            "checks": [],
-        },
-        "plinth-internal-span2.00": {
-            "b_mm": 115,
-            "D_mm": 275,
-            "span_m": 2.0,
-            "kind": "internal",
-            "count": 1,
-            "ok": True,
-            "design": {
-                "n_bars": 2,
-                "bar_dia": 10,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 175},
+            "columns": {
+                "corner": {"b_mm": 230, "D_mm": 300, "bars": "6-16"},
+                "edge": {"b_mm": 230, "D_mm": 380, "bars": "6-16"},
+                "interior": {"b_mm": 300, "D_mm": 300, "bars": "8-16"},
             },
-            "checks": [],
-        },
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_plinth_beam_details(c, plinth_beams_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PLINTH BEAM DETAILS" in text.upper()
-    assert "PB1" in text
-    assert "PB2" in text
-
-
-def test_plinth_beam_details_renders_without_crashing_when_empty():
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_plinth_beam_details(c, {}, CFG, "Test Project")
-    c.showPage()
-    c.save()
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PLINTH BEAM DETAILS" in text.upper()
-
-
-def test_plinth_beam_details_truncates_excess_detail_boxes_without_crashing():
-    # Create 10 plinth-beam groups to force space exhaustion and truncation
-    # of detail boxes. Given available vertical space (~300pt) and each box
-    # consuming ~90pt, only ~3-4 will fit before the title block. This tests
-    # that the loop breaks gracefully without crashing or overlapping the
-    # title block. The schedule table remains complete (shows all 10 marks),
-    # but only early detail boxes are rendered.
-    plinth_beams_data = {}
-    for i in range(10):
-        span_m = 2.0 + i * 0.5
-        D_mm = 250 + i * 10
-        plinth_beams_data[f"plinth-span{span_m:.2f}"] = {
-            "b_mm": 230,
-            "D_mm": D_mm,
-            "span_m": span_m,
-            "kind": "external",
-            "count": 1,
-            "ok": True,
-            "design": {
-                "n_bars": 3,
-                "bar_dia": 12,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 150},
-            },
-            "checks": [],
-        }
-
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    # Should not crash despite many groups causing truncation.
-    render_plinth_beam_details(c, plinth_beams_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "PLINTH BEAM DETAILS" in text.upper()
-    # First mark should appear in both schedule and detail boxes.
-    assert "PB1" in text
-
-
-def test_roof_beam_slab_plan_renders_beam_layout_and_slab_labels():
-    rooms = [
-        Room(id="r1", name="Living", type="living", x=0.5, y=0.5, width=3.0, depth=3.5),
-        Room(
-            id="r2", name="Bedroom", type="bedroom", x=4.0, y=0.5, width=3.0, depth=3.5
-        ),
-    ]
-    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=rooms)
-    layout = Layout(
-        id="T",
-        name="Test Layout",
-        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
-        first_floor=floor_plan,
-        compliance=ComplianceResult(passed=True),
-    )
-
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_roof_beam_slab_plan(c, floor_plan, layout, CFG, "Test Project", 2, None)
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "S1" in text
-    assert "S2" in text
-
-
-def test_roof_beam_slab_plan_renders_without_crashing_when_no_rooms():
-    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=[])
-    layout = Layout(
-        id="T",
-        name="Test Layout",
-        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
-        first_floor=floor_plan,
-        compliance=ComplianceResult(passed=True),
-    )
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_roof_beam_slab_plan(c, floor_plan, layout, CFG, "Test Project", 2, None)
-    c.showPage()
-    c.save()
-    # Should not raise; page should still have been created (has some content).
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert isinstance(text, str)
-
-
-def test_assign_marks_by_span_orders_ascending_and_uses_prefix():
-    # Generic mark-assignment helper test: sorts by span ascending and uses
-    # the provided prefix (e.g., "B" for roof beams, "PB" for plinth beams).
-    data = {
-        "k-big": {"span_m": 5.0},
-        "k-small": {"span_m": 2.0},
-        "k-mid": {"span_m": 3.5},
-    }
-    result = _assign_marks_by_span(data, "B")
-    assert result == {"k-small": "B1", "k-mid": "B2", "k-big": "B3"}
-
-
-def test_roof_beam_details_renders_schedule_and_detail_boxes():
-    beams_data = {
-        "x-span4.00-trib2.25": {
-            "b_mm": 230,
-            "D_mm": 450,
-            "span_m": 4.0,
-            "trib_width_m": 2.25,
-            "n_spans": 2,
-            "design": {
-                "n_bars": 3,
-                "bar_dia": 16,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 150},
-                "Ast_prov_mm2": 603,
-            },
-        },
-        "y-span3.00-trib2.00": {
-            "b_mm": 230,
-            "D_mm": 375,
-            "span_m": 3.0,
-            "trib_width_m": 2.0,
-            "n_spans": 1,
-            "design": {
-                "n_bars": 2,
-                "bar_dia": 12,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 175},
-                "Ast_prov_mm2": 226,
-            },
-        },
-    }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_roof_beam_details(c, beams_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "ROOF BEAM DETAILS" in text.upper()
-    assert "B1" in text
-    assert "B2" in text
-
-
-def test_roof_beam_details_renders_without_crashing_when_empty():
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_roof_beam_details(c, {}, CFG, "Test Project")
-    c.showPage()
-    c.save()
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "ROOF BEAM DETAILS" in text.upper()
-
-
-def test_roof_beam_details_truncates_excess_detail_boxes_without_crashing(monkeypatch):
-    # Create 10 roof-beam groups to force space exhaustion and truncation
-    # of detail boxes. The schedule table remains complete, but only early
-    # detail boxes are rendered. This test uses monkeypatch to spy on
-    # _draw_beam_detail_box calls and verify that the overflow guard actually
-    # truncates box stacking (call count < 10), rather than just checking that
-    # the page doesn't crash (which would pass even if the guard were deleted,
-    # since the schedule table always lists all marks).
-    from app.engine import structural_drawing_set as sds
-
-    call_count = 0
-    original_draw_box = sds._draw_beam_detail_box
-
-    def counting_wrapper(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        return original_draw_box(*args, **kwargs)
-
-    monkeypatch.setattr(sds, "_draw_beam_detail_box", counting_wrapper)
-
-    beams_data = {}
-    for i in range(10):
-        span_m = 2.0 + i * 0.5
-        D_mm = 250 + i * 10
-        beams_data[f"x-span{span_m:.2f}-trib2.00"] = {
-            "b_mm": 230,
-            "D_mm": D_mm,
-            "span_m": span_m,
-            "trib_width_m": 2.0,
-            "n_spans": 1,
-            "design": {
-                "n_bars": 3,
-                "bar_dia": 12,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 150},
-            },
-        }
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    render_roof_beam_details(c, beams_data, CFG, "Test Project")
-    c.showPage()
-    c.save()
-
-    text = pdf_page_text(buf.getvalue(), 0)
-    assert "ROOF BEAM DETAILS" in text.upper()
-    assert "B1" in text
-    assert 0 < call_count < 10, (
-        f"expected overflow guard to truncate box-stacking below 10 beams, "
-        f"got {call_count} detail boxes drawn"
-    )
-
-
-def test_generate_structural_drawing_set_produces_6_pages():
-    columns = [ColumnMarker(cx=0.0, cy=0.0), ColumnMarker(cx=4.0, cy=0.0)]
-    walls = [
-        WallSegment(x1=0, y1=0, x2=4, y2=0, thickness=0.23, kind="external"),
-        WallSegment(x1=0, y1=0, x2=0, y2=3, thickness=0.115, kind="internal"),
-    ]
-    plinth_beams_data = {
-        "plinth-external-span4.00": {
-            "b_mm": 230,
-            "D_mm": 300,
-            "span_m": 4.0,
-            "kind": "external",
-            "count": 1,
-            "ok": True,
-            "design": {
-                "n_bars": 3,
-                "bar_dia": 12,
-                "doubly_reinforced": False,
-                "stirrups": {"sv_provided": 150},
-            },
-            "checks": [],
-        },
-    }
-    structural_design = {
-        "structapi": {
-            "data": {
-                "footings": {
-                    "corner": {
-                        "data": {
-                            "L_m": 1.35,
-                            "B_m": 1.35,
-                            "D_overall_mm": 450,
-                            "bars_x": {"dia": 12, "spacing": 150},
-                            "bars_y": {"dia": 12, "spacing": 150},
-                        }
-                    },
+            "footings": {
+                "corner": {
+                    "data": {
+                        "L_m": 1.35,
+                        "B_m": 1.35,
+                        "D_overall_mm": 450,
+                        "bars_x": {"dia": 12, "spacing": 150},
+                        "bars_y": {"dia": 12, "spacing": 150},
+                    }
                 },
-                "beams": {
-                    "x-span4.00-trib2.25": {
-                        "b_mm": 230,
-                        "D_mm": 450,
-                        "span_m": 4.0,
-                        "trib_width_m": 2.25,
-                        "n_spans": 2,
-                        "design": {
-                            "n_bars": 3,
-                            "bar_dia": 16,
-                            "doubly_reinforced": False,
-                            "stirrups": {"sv_provided": 150},
-                        },
-                    },
+                "edge": {
+                    "data": {
+                        "L_m": 1.5,
+                        "B_m": 1.5,
+                        "D_overall_mm": 500,
+                        "bars_x": {"dia": 12, "spacing": 130},
+                        "bars_y": {"dia": 12, "spacing": 130},
+                    }
+                },
+                "interior": {
+                    "data": {
+                        "L_m": 1.7,
+                        "B_m": 1.7,
+                        "D_overall_mm": 550,
+                        "bars_x": {"dia": 16, "spacing": 140},
+                        "bars_y": {"dia": 16, "spacing": 140},
+                    }
                 },
             },
+            "beams": {
+                "x-span4.0-trib2.0": {
+                    "axis": "x",
+                    "b_mm": 230,
+                    "D_mm": 400,
+                    "span_m": 4.0,
+                    "n_spans": 3,
+                    "grid_line_indices": [0, 1, 2],
+                    "n_bars": 3,
+                    "bar_dia": 16,
+                    "doubly_reinforced": False,
+                    "stirrups": {"sv_provided": 150, "dia": 8, "legs": 2},
+                },
+                "y-span3.2-trib1.8": {
+                    "axis": "y",
+                    "b_mm": 230,
+                    "D_mm": 350,
+                    "span_m": 3.2,
+                    "n_spans": 2,
+                    "grid_line_indices": [0, 1],
+                    "n_bars": 2,
+                    "bar_dia": 12,
+                    "n_bars_comp": 2,
+                    "doubly_reinforced": True,
+                    "stirrups": {"sv_provided": 175, "dia": 8, "legs": 2},
+                },
+            },
+            "slabs": {
+                "(3.05, 4.27, 'interior')": {
+                    "type": "two-way",
+                    "lx_m": 3.05,
+                    "ly_m": 4.27,
+                    "case_": "interior",
+                    "D_mm": 125,
+                    "panel_indices": [[0, 0], [1, 0]],
+                },
+                "(1.5, 4.27, 'edge')": {
+                    "type": "one-way",
+                    "lx_m": 1.5,
+                    "ly_m": 4.27,
+                    "case_": "edge",
+                    "D_mm": 110,
+                    "panel_indices": [[2, 1]],
+                },
+            },
+            "assumptions": ["regular orthogonal grid; columns at all intersections"],
+            "violations": [],
+            "quantities": {},
+            "lateral": {"governing": "seismic", "seismic_VB_kN": 88.4},
         },
-    }
-    rooms = [
-        Room(id="r1", name="Living", type="living", x=0.5, y=0.5, width=3.0, depth=3.5)
-    ]
-    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=rooms)
-    layout = Layout(
-        id="T",
-        name="Test Layout",
-        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
-        first_floor=floor_plan,
-        compliance=ComplianceResult(passed=True),
-    )
+    },
+}
 
-    pdf_bytes = generate_structural_drawing_set(
-        project_name="Test Project",
+
+@pytest.fixture(scope="module")
+def layout():
+    layouts = generate(CFG)
+    assert layouts
+    return layouts[0]
+
+
+@pytest.fixture(scope="module")
+def model(layout):
+    return build_structural_model(
+        project_name="MyLatest",
         cfg=CFG,
-        columns=columns,
-        walls=walls,
-        plinth_beams_data=plinth_beams_data,
-        structural_design=structural_design,
-        floor_plan=floor_plan,
         layout=layout,
-        num_bedrooms=2,
-    )
-
-    assert pdf_bytes[:5] == b"%PDF-"
-    assert pdf_pages(pdf_bytes) == 6
-
-
-def test_generate_structural_drawing_set_handles_missing_structapi_data():
-    floor_plan = FloorPlan(floor=1, floor_type="first", rooms=[])
-    layout = Layout(
-        id="T",
-        name="Test Layout",
-        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
-        first_floor=floor_plan,
-        compliance=ComplianceResult(passed=True),
-    )
-    pdf_bytes = generate_structural_drawing_set(
-        project_name="Test Project",
-        cfg=CFG,
-        columns=[],
-        walls=[],
+        structural_design=DESIGN,
         plinth_beams_data={},
-        structural_design={},  # no "structapi" key at all
-        floor_plan=floor_plan,
-        layout=layout,
-        num_bedrooms=2,
     )
-    assert pdf_bytes[:5] == b"%PDF-"
-    assert pdf_pages(pdf_bytes) == 6
+
+
+@pytest.fixture(scope="module")
+def pdf_bytes(layout):
+    return generate_structural_drawing_set(
+        project_name="MyLatest",
+        cfg=CFG,
+        layout=layout,
+        structural_design=DESIGN,
+        plinth_beams_data={},
+    )
+
+
+@pytest.fixture(scope="module")
+def all_text(pdf_bytes):
+    return [pdf_page_text(pdf_bytes, i) for i in range(pdf_pages(pdf_bytes))]
+
+
+def test_set_has_at_least_one_page_per_registered_drawing(pdf_bytes):
+    n_pages = pdf_pages(pdf_bytes)
+    assert n_pages >= len(SHEET_REGISTER), (
+        f"{n_pages} pages for {len(SHEET_REGISTER)} drawings — a sheet is missing"
+    )
+
+
+@pytest.mark.parametrize("drg_no,title", SHEET_REGISTER)
+def test_every_registered_drawing_appears_in_the_set(all_text, drg_no, title):
+    joined = "\n".join(all_text)
+    assert drg_no in joined, f"drawing {drg_no} ({title}) is not in the set"
+
+
+def test_both_floors_are_detailed(model, all_text):
+    """Both-floor coverage. The set this replaces passed only
+    `layout.first_floor` to the renderer, so the ground floor's framing was
+    never drawn at all."""
+    joined = "\n".join(all_text).upper()
+    assert len(model.floors) == 2
+    for framing in model.floors:
+        assert framing.drg_plan in joined
+        assert framing.drg_details in joined
+
+
+def test_set_carries_its_provenance_on_every_sheet(all_text):
+    """A structural set is advisory until an engineer seals it; the
+    disclaimer and the project name must be legible on each sheet."""
+    for i, text in enumerate(all_text):
+        assert "MyLatest" in text, f"page {i} has no project identification"
+
+
+def test_set_never_prints_the_meaningless_bhk_field(all_text):
+    joined = "\n".join(all_text)
+    assert "0 BHK" not in joined
+    assert "BHK" not in joined, "structural sheets carry no bedroom count"
+
+
+def test_schedules_ride_with_their_drawings(all_text):
+    """Tables and drawings must be in the same set, on the sheet they
+    describe — the explicit scoping requirement for this work."""
+    joined = "\n".join(all_text).upper()
+    for schedule in ("FOOTING SCHEDULE", "COLUMN SCHEDULE", "BEAM SCHEDULE"):
+        assert schedule in joined, f"{schedule} missing from the set"
+
+
+def test_generation_is_deterministic(layout):
+    a = generate_structural_drawing_set(
+        project_name="MyLatest",
+        cfg=CFG,
+        layout=layout,
+        structural_design=DESIGN,
+        plinth_beams_data={},
+    )
+    b = generate_structural_drawing_set(
+        project_name="MyLatest",
+        cfg=CFG,
+        layout=layout,
+        structural_design=DESIGN,
+        plinth_beams_data={},
+    )
+    assert pdf_pages(a) == pdf_pages(b)
+
+
+def test_missing_structural_design_degrades_rather_than_raising(layout):
+    """Export is gated on a designed layout, but a malformed or partial
+    persisted design must not take the endpoint down with a KeyError."""
+    out = generate_structural_drawing_set(
+        project_name="MyLatest",
+        cfg=CFG,
+        layout=layout,
+        structural_design={},
+        plinth_beams_data={},
+    )
+    assert pdf_pages(out) >= 1

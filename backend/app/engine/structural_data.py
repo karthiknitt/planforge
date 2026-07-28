@@ -392,6 +392,36 @@ def _plinth_runs(walls, plinth_beams_data: dict) -> list[BeamRun]:
     return runs
 
 
+#: keys a sheet may read off `model.materials`, with the value used when
+#: structapi did not supply one.
+_MATERIAL_DEFAULTS: dict[str, Any] = {
+    "fck": 25,
+    "fy": 500,
+    "exposure": "mild",
+    "sbc_kpa": 150,
+    "storeys": 2,
+    "storey_height_m": 3.0,
+    "seismic_zone": "III",
+}
+
+
+def _materials(inputs: dict) -> dict:
+    """Material inputs with every key guaranteed non-null.
+
+    A key present with value ``None`` is worse than a missing one: sheets
+    reasonably write ``materials.get("exposure", "mild")``, and ``dict.get``
+    only substitutes its default when the key is ABSENT — a null value passes
+    straight through and blows up at the first ``.upper()``. Partial designs
+    are a real state (export degrades rather than 500s), so the nulls are
+    resolved once, here, instead of in every sheet.
+    """
+    out = dict(_MATERIAL_DEFAULTS)
+    for key, fallback in _MATERIAL_DEFAULTS.items():
+        value = inputs.get(key)
+        out[key] = fallback if value is None else value
+    return out
+
+
 def build_structural_model(
     *,
     project_name: str,
@@ -455,15 +485,7 @@ def build_structural_model(
             gf_drawing.walls if gf_drawing else [], plinth_beams_data or {}
         ),
         floors=floors,
-        materials={
-            "fck": inputs.get("fck"),
-            "fy": inputs.get("fy"),
-            "exposure": inputs.get("exposure"),
-            "sbc_kpa": inputs.get("sbc_kpa"),
-            "storeys": inputs.get("storeys"),
-            "storey_height_m": inputs.get("storey_height_m"),
-            "seismic_zone": inputs.get("seismic_zone"),
-        },
+        materials=_materials(inputs),
         lateral=data.get("lateral") or {},
         quantities=data.get("quantities") or {},
         assumptions=list(data.get("assumptions") or []),
