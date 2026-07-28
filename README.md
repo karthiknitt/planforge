@@ -118,9 +118,39 @@ PlanForge is a SaaS tool for Indian residential construction. A user enters plot
 | Layout engine | Shapely, OR-Tools CP-SAT |
 | PDF / DXF | ReportLab, ezdxf |
 | AI | Vercel AI SDK (Claude Sonnet/Opus), OpenAI Whisper |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 16 (Neon, serverless/pooled) |
+| Object storage | Cloudflare R2 (S3-compatible) |
 | Payments | Razorpay |
-| Tooling | Bun (package manager + runtime + test runner), Biome, Drizzle ORM, uv, Docker (build-only) |
+| Hosting — frontend | Vercel |
+| Hosting — backend | Google Cloud Run |
+| Containerization | Docker (multi-stage, build-only locally) |
+| CI/CD | GitHub Actions |
+| Tooling | Bun (package manager + runtime + test runner), Biome, Drizzle ORM, uv |
+
+### Deployment & infrastructure notes
+
+- **Google Cloud Run (backend)** — the FastAPI app runs as a container on Cloud Run at the
+  `$0` tier: `min-instances=0`, `max-instances=3`. Scale-to-zero keeps hosting cost at zero
+  between requests, at the cost of a cold start (~20–25s) after idle — the trade-off is
+  explicit in [Known gaps](#known-gaps). A second Cloud Run service (`planforge-solver`)
+  runs the *same* `backend/` image to isolate CP-SAT solver load from API request handling
+  — see [`docs/guides/solver-service-split.md`](docs/guides/solver-service-split.md). Both
+  are deployed via `.github/workflows/deploy-backend.yml` / `deploy-solver.yml` using
+  Workload Identity Federation (WIF) — no long-lived service-account keys ever leave GCP.
+- **Vercel (frontend)** — Next.js is deployed with a preview build per branch and a
+  production deploy on every push to `main`. Server Components call the backend directly;
+  client components go through a same-origin `/api/backend/[...path]` proxy so the Cloud
+  Run URL and `INTERNAL_AUTH_SECRET` never reach the browser.
+- **Docker** — used for exactly one purpose: building and validating `backend/Dockerfile`
+  (multi-stage: deps → builder → runner) so a broken image is caught in CI before Cloud Run
+  ever sees it. There is **no `docker compose up`** dev workflow — see
+  [Quick Start](#quick-start) for why local dev servers aren't part of this project's loop.
+- **Cloudflare R2 (artifact storage)** — stores generated PDF/DXF/XLSX exports and AI
+  render PNGs. Chosen over Google Cloud Storage for two reasons: the free 10 GB tier, and
+  **zero egress fees** — egress is the cost line that scales badly with usage on GCS/S3.
+  All export/import paths degrade gracefully to inline streaming when R2 isn't configured
+  (`NullStorage`), so it's fully optional at small scale. Full setup:
+  [Cloudflare R2 setup](#cloudflare-r2-setup-artifact-storage) below.
 
 ---
 
