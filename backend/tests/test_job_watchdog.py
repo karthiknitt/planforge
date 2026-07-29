@@ -92,7 +92,7 @@ async def test_stale_queued_job_fails_fast_on_poll(client_db):
     assert body["status"] == "failed"
     assert body["stage"] == "failed"
     assert "inngest" in body["error"].lower()
-    assert "docs/deploy" in body["error"]
+    assert "docs/guides/solver-service-split.md" in body["error"]
 
     # DB row persists as failed, not just the response body
     async with SessionLocal() as session:
