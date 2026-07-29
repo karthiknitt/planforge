@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 QUEUED_TIMEOUT_ERROR = (
     "Job has been queued for over {timeout}s without starting. "
-    "Inngest app may not be synced to this deployment — see docs/deploy, "
+    "Inngest app may not be synced to this deployment — see "
+    "docs/guides/solver-service-split.md, "
     "then retry generation."
 )
 

@@ -61,7 +61,14 @@ jobs:
           image: ${{ env.IMAGE }}
           # --concurrency=1 is the whole point: one solve per instance, so a
           # request never queues behind a 40s CP-SAT run on a busy worker.
-          # --no-allow-unauthenticated: only Inngest and the API service call this.
+          # --allow-unauthenticated: Inngest Cloud is an external SaaS with no
+          # GCP identity, so it can never satisfy Cloud Run's IAM invoker check
+          # (confirmed: --no-allow-unauthenticated returned 403 at the platform
+          # layer, before Inngest's own signature check ever ran — every job
+          # routed here silently vanished and only surfaced via the 120s
+          # queued-job watchdog in jobs.py). Security is enforced the same way
+          # planforge-backend already does it: INNGEST_SIGNING_KEY verification
+          # inside the Inngest SDK, not Cloud Run IAM.
           flags: >-
             --min-instances=0
             --max-instances=5
@@ -69,7 +76,7 @@ jobs:
             --timeout=600
             --cpu=2
             --memory=2Gi
-            --no-allow-unauthenticated
+            --allow-unauthenticated
           # See deploy-backend.yml for the comma-escaping caveat on
           # BACKEND_ALLOWED_ORIGINS.
           env_vars: |

@@ -10,8 +10,20 @@ traffic:
 | cpu / memory | 1 / 1Gi | 2 / 2Gi |
 | timeout | 300s | 600s |
 | max instances | 3 | 5 |
-| ingress | `--allow-unauthenticated` | `--no-allow-unauthenticated` |
+| ingress | `--allow-unauthenticated` | `--allow-unauthenticated` |
 | `INNGEST_APP_ID` | `planforge-api` | `planforge-solver` |
+
+> **2026-07-29 incident:** this table originally read `--no-allow-unauthenticated`
+> for the solver. That's unsatisfiable — Inngest Cloud is an external SaaS with
+> no GCP identity, so it can never pass Cloud Run's IAM invoker check (confirmed:
+> requests 403'd at the platform layer, before Inngest's own signature check ever
+> ran). Every job routed to `planforge-solver` silently vanished; the only signal
+> was the 120s queued-job watchdog in `jobs.py`. Fixed by granting `allUsers` the
+> `roles/run.invoker` role (both live via `gcloud run services
+> add-iam-policy-binding` and in `deploy-solver.yml` so it survives redeploys) —
+> the same trust model `planforge-backend` already used: public ingress, real
+> security enforced by `INNGEST_SIGNING_KEY` verification inside the Inngest SDK,
+> not by Cloud Run IAM.
 
 Cloud Run's free tier is **per project**, so two services draw from one pool —
 splitting does not double the bill.
