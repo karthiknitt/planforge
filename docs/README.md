@@ -9,20 +9,17 @@
 | [product-roadmap.md](product-roadmap.md) | Shipped features (P0–P3) and the remaining backlog |
 | [documentation.md](documentation.md) | End-user feature documentation |
 
-## Design & research
+## Setup guides
 
 | Doc | What it covers |
 |---|---|
-| [cad_primitives_plan.md](cad_primitives_plan.md) | CAD primitive design for DXF/drawing output |
-| [2026-07-15-drafted-ai-research-and-solver-dataset-sourcing.md](2026-07-15-drafted-ai-research-and-solver-dataset-sourcing.md) | Research notes on AI-assisted layout generation and solver dataset sourcing |
+| [guides/cloudflare-r2-setup.md](guides/cloudflare-r2-setup.md) | R2 bucket setup for generated artifacts (PDF, DXF, XLSX, AI renders) |
+| [guides/neon-pooling.md](guides/neon-pooling.md) | Neon pooled connection string setup |
+| [guides/solver-service-split.md](guides/solver-service-split.md) | Manual rollout steps for the `planforge-solver` Cloud Run service |
 
-## Plans
-
-`plans/` and `superpowers/plans/` hold dated implementation and design plans, oldest
-first. These are **historical working documents** — they record what was decided and
-when, not the current state of the system. Where a plan contradicts this index or the
-root `README.md`, the plan is out of date.
-
+Internal design research and dated implementation plans are kept locally
+(gitignored) rather than in the repo — they're working notes, not reference
+material for contributors.
 
 ## Related repositories
 

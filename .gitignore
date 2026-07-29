@@ -70,6 +70,9 @@ docs/Guides/*.pdf
 docs/*-quality-improvement.md
 docs/image-gen-*.md
 docs/issues_*.md
+docs/freecad-backend-tradeoffs.md
+docs/cad_primitives_plan.md
+docs/2026-*-drafted-ai-research-*.md
 Ambitious_PRD*.md
 Planforge_bug_fixes.pdf
 Home\ Planning\ Guide\ India.pdf
