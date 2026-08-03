@@ -171,7 +171,7 @@ export const metadata: Metadata = {
     "DXF floor plan AutoCAD",
   ],
   openGraph: {
-    title: "PlanForge — Generate G+1 Floor Plans in Seconds",
+    title: "PlanForge — Generate G+1 Floor Plans in Minutes",
     description:
       "3 NBC-compliant layout variations from your plot dimensions. PDF, DXF & BOQ export. Free to start. Built for Indian civil engineers.",
   },
@@ -238,7 +238,7 @@ export default async function LandingPage() {
               <div className="animate-fade-up delay-100">
                 <Badge className="mb-6 bg-primary/10 text-primary border-primary/30 hover:bg-primary/15 px-4 py-1.5">
                   <Sparkles className="h-3 w-3 mr-1.5" />
-                  NBC 2016 Compliant · Instant Generation
+                  NBC 2016 Compliant · AI-Powered
                 </Badge>
               </div>
               <h1
@@ -249,7 +249,7 @@ export default async function LandingPage() {
                 <br />
                 Floor Plans
                 <br />
-                <span className="text-gradient-orange">in Seconds</span>
+                <span className="text-gradient-orange">in Minutes</span>
               </h1>
               <p className="animate-fade-up delay-300 text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-lg">
                 Input your plot dimensions, get 3 layout variations instantly — each NBC-compliant,
@@ -545,7 +545,7 @@ export default async function LandingPage() {
           </h2>
           <p className="text-muted-foreground text-lg mb-10">
             Sign up free — no credit card required. Start generating NBC-compliant floor plans in
-            seconds.
+            minutes.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/sign-up">
