@@ -11,16 +11,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { JsonLd } from "@/components/json-ld";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { auth } from "@/lib/auth";
 
 /* ──────────────────────────────────────────────────────────────
    Feature cards
@@ -178,10 +175,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default async function LandingPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (session) redirect("/dashboard");
-
+export default function LandingPage() {
   const softwareJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -242,7 +236,7 @@ export default async function LandingPage() {
                 </Badge>
               </div>
               <h1
-                className="animate-fade-up delay-200 text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-foreground leading-[1.05] mb-6"
+                className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-foreground leading-[1.05] mb-6"
                 style={{ fontFamily: "var(--font-display)" }}
               >
                 Generate G+1
@@ -281,7 +275,7 @@ export default async function LandingPage() {
             </div>
 
             {/* Right: floor plan preview */}
-            <div className="animate-scale-in delay-300 relative">
+            <div className="relative">
               <div className="rounded-2xl border border-border/60 shadow-2xl shadow-black/50 overflow-hidden bg-card">
                 <div className="px-4 pt-3 pb-2 border-b border-border/50 bg-muted/30 flex items-center gap-2">
                   <div className="flex gap-1.5">
