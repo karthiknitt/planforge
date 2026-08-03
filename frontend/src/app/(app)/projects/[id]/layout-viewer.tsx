@@ -89,6 +89,7 @@ import {
   floorKeyFromIndex,
   type RenderFloorKey,
 } from "@/lib/render-tab";
+import { buildShareUrl } from "@/lib/share-url";
 import {
   isPreliminaryStatus,
   type RenderSourceFallbackReason,
@@ -1367,19 +1368,30 @@ export function LayoutViewer({
     }
   }
 
+  // Fetch-or-create the public share URL for this project. The backend is
+  // idempotent (POST /share returns the existing token if one was already
+  // minted), so it's safe to call this from multiple entry points — the
+  // Share dialog, "Send for approval", and the WhatsApp share button — and
+  // reuse the cached `shareUrl` once created.
+  async function ensureShareUrl(): Promise<string> {
+    if (shareUrl) return shareUrl;
+    const res = await fetch(`/api/backend/projects/${projectId}/share`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.detail ?? `Failed to generate share link (${res.status})`);
+    }
+    const json = await res.json();
+    const fullUrl = buildShareUrl(window.location.origin, json.share_url);
+    setShareUrl(fullUrl);
+    return fullUrl;
+  }
+
   async function handleShare() {
     if (!session) return;
     setShareLoading(true);
     setShareError("");
     try {
-      const res = await fetch(`/api/backend/projects/${projectId}/share`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail ?? `Failed to generate share link (${res.status})`);
-      }
-      const json = await res.json();
-      const fullUrl = `${window.location.origin}${json.share_url}`;
-      setShareUrl(fullUrl);
+      await ensureShareUrl();
       setShareOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not generate share link";
@@ -1727,7 +1739,12 @@ export function LayoutViewer({
               Download Structural Drawings
             </Button>
           )}
-          <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
+          <ShareWhatsAppButton
+            projectName={projectName}
+            layoutId={selectedId}
+            getShareUrl={ensureShareUrl}
+            disabled={!session}
+          />
           <Button
             variant="outline"
             size="sm"

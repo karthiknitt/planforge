@@ -494,8 +494,9 @@ export default function NewProjectPage() {
         throw new Error(data?.detail ?? "Failed to create project.");
       }
 
+      const created = await res.json();
       showToast("success", "Project created");
-      router.push("/dashboard");
+      router.push(`/projects/${created.id}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong.";
       setError(message);
