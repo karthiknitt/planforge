@@ -1,10 +1,12 @@
+import type { useSession } from "@/lib/auth-client";
+
 export type NavSessionState = "pending" | "authenticated" | "anonymous";
 
-interface SessionQuery {
-  isPending?: boolean;
-  data?: unknown;
-  error?: unknown;
-}
+/**
+ * Pinned to Better Auth's own hook return type: a field renamed upstream becomes
+ * a build error here instead of silently resolving every user to "anonymous".
+ */
+export type SessionQuery = Pick<ReturnType<typeof useSession>, "isPending" | "data" | "error">;
 
 /**
  * Marketing nav renders a neutral placeholder until the client-side session
