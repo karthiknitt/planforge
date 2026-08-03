@@ -33,7 +33,7 @@ const features = [
   },
   {
     icon: LayoutGrid,
-    title: "5 Layout Variations",
+    title: "3 Layout Variations",
     desc: "Front, centre, rear, corner, and open-plan archetypes generated instantly from your plot dimensions.",
   },
   {
@@ -69,7 +69,7 @@ const steps = [
   },
   {
     num: "02",
-    title: "Get 5 Layouts",
+    title: "Get 3 Layouts",
     desc: "Engine generates all archetypes simultaneously and checks each against NBC + city-specific rules.",
   },
   {
@@ -88,7 +88,7 @@ const plans = [
     price: "₹0",
     period: "/month",
     tagline: "Try it out",
-    perks: ["3 projects", "All 5 layout archetypes", "PDF export"],
+    perks: ["3 projects", "All 3 layout archetypes", "PDF export"],
     cta: "Get Started",
     highlight: false,
   },
@@ -116,10 +116,10 @@ const plans = [
    Social proof stats
 ────────────────────────────────────────────────────────────── */
 const stats = [
-  { value: "5", label: "Layout archetypes" },
+  { value: "3", label: "Layout archetypes" },
   { value: "6+", label: "Indian cities" },
   { value: "NBC", label: "2016 compliant" },
-  { value: "<1s", label: "Generation time" },
+  { value: "Minutes", label: "Generation time" },
 ];
 
 /* ──────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ const faqs = [
   },
   {
     q: "Is the free plan really free?",
-    a: "Yes — no credit card required. The free plan lets you create up to 3 projects with all 5 layout variations and PDF export. Upgrade to Basic (₹499/mo) for DXF export or Pro (₹999/mo) for BOQ Excel.",
+    a: "Yes — no credit card required. The free plan lets you create up to 3 projects with all 3 layout variations and PDF export. Upgrade to Basic (₹499/mo) for DXF export or Pro (₹999/mo) for BOQ Excel.",
   },
   {
     q: "What compliance standard does PlanForge use?",
@@ -159,7 +159,7 @@ export const metadata: Metadata = {
   // The root layout applies `template: "%s | PlanForge"`, so do NOT repeat the suffix here.
   title: "G+1 Floor Plan Generator for Indian Builders — NBC 2016 Compliant",
   description:
-    "Generate 5 NBC 2016-compliant G+1 floor plan variations in under 1 second. Enter plot dimensions, get PDF, DXF & BOQ export. Free plan available. No AutoCAD needed.",
+    "Generate 3 NBC 2016-compliant G+1 floor plan variations in minutes. Enter plot dimensions, get PDF, DXF & BOQ export. Free plan available. No AutoCAD needed.",
   keywords: [
     "G+1 floor plan generator",
     "floor plan generator India",
@@ -173,7 +173,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PlanForge — Generate G+1 Floor Plans in Seconds",
     description:
-      "5 NBC-compliant layout variations from your plot dimensions. PDF, DXF & BOQ export. Free to start. Built for Indian civil engineers.",
+      "3 NBC-compliant layout variations from your plot dimensions. PDF, DXF & BOQ export. Free to start. Built for Indian civil engineers.",
   },
   alternates: { canonical: "/" },
 };
@@ -190,11 +190,11 @@ export default async function LandingPage() {
     operatingSystem: "Web",
     url: "https://planforge.in",
     description:
-      "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 5 layout variations, PDF & DXF export.",
+      "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 3 layout variations, PDF & DXF export.",
     screenshot: "https://planforge.in/opengraph-image",
     featureList: [
       "NBC 2016 compliance checks",
-      "5 layout archetypes (front, centre, rear, corner, open-plan)",
+      "3 layout archetypes (front, centre, rear, corner, open-plan)",
       "PDF export at 1:100 scale",
       "DXF export with 9 named layers",
       "BOQ Excel with 11 quantity items",
@@ -252,7 +252,7 @@ export default async function LandingPage() {
                 <span className="text-gradient-orange">in Seconds</span>
               </h1>
               <p className="animate-fade-up delay-300 text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-lg">
-                Input your plot dimensions, get 5 layout variations instantly — each NBC-compliant,
+                Input your plot dimensions, get 3 layout variations instantly — each NBC-compliant,
                 export-ready as PDF or DXF. Built for Indian civil engineers and small builders.
               </p>
               <div className="animate-fade-up delay-400 flex flex-wrap gap-3 mb-6">
@@ -306,7 +306,7 @@ export default async function LandingPage() {
                 />
               </div>
               <div className="absolute -top-3 -right-3 bg-primary text-primary-foreground text-xs font-bold px-3 py-1.5 rounded-full shadow-lg shadow-primary/30 animate-float">
-                5 layouts
+                3 layouts
               </div>
               {/* Decorative glow behind the card */}
               <div className="absolute -inset-4 bg-primary/5 rounded-3xl blur-2xl -z-10" />

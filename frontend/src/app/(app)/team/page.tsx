@@ -14,7 +14,7 @@ import { CreateTeamForm } from "./create-team-form";
 import { InviteMemberForm } from "./invite-member-form";
 import { RemoveMemberButton } from "./remove-member-button";
 
-export const metadata: Metadata = { title: "Team — PlanForge" };
+export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const session = await auth.api.getSession({ headers: await headers() });

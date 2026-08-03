@@ -104,7 +104,7 @@ export default async function GalleryPage() {
           {plans.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-muted-foreground mb-4">
-                Gallery is loading. Please start the backend server.
+                No templates available yet — check back soon.
               </p>
               <Link href="/sign-up">
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">

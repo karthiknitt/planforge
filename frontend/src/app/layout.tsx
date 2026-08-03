@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s | PlanForge",
   },
   description:
-    "Generate NBC 2016-compliant G+1 residential floor plans instantly. Enter plot dimensions, get 5 layout variations, export PDF & DXF. Built for Indian civil engineers and small builders.",
+    "Generate NBC 2016-compliant G+1 residential floor plans instantly. Enter plot dimensions, get 3 layout variations, export PDF & DXF. Built for Indian civil engineers and small builders.",
   keywords: [
     "floor plan generator India",
     "G+1 floor plan",

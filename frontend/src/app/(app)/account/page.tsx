@@ -10,7 +10,7 @@ import { db } from "@/db";
 import { teamMember as teamMemberTable, team as teamTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 
-export const metadata: Metadata = { title: "Account — PlanForge" };
+export const metadata: Metadata = { title: "Account" };
 
 const TIER_BADGE: Record<string, { label: string; className: string }> = {
   free: {
