@@ -1446,10 +1446,10 @@ export function LayoutViewer({
                 </p>
               )}
               <div className="flex items-center gap-2 mt-2">
-                <input
+                <Input
                   readOnly
                   value={shareUrl}
-                  className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
+                  className="flex-1 bg-muted font-mono"
                   onFocus={(e) => e.target.select()}
                 />
                 <Button
@@ -1481,10 +1481,10 @@ export function LayoutViewer({
                 </p>
               )}
               <div className="flex items-center gap-2 mt-2">
-                <input
+                <Input
                   readOnly
                   value={approvalShareUrl}
-                  className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
+                  className="flex-1 bg-muted font-mono"
                   onFocus={(e) => e.target.select()}
                 />
                 <Button
@@ -2029,12 +2029,12 @@ export function LayoutViewer({
             <div className="flex items-center gap-2">
               {showSnapshotInput ? (
                 <>
-                  <input
+                  <Input
                     type="text"
                     value={snapshotLabel}
                     onChange={(e) => setSnapshotLabel(e.target.value)}
                     placeholder="Label (optional, e.g. Before plot resize)"
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="flex-1"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleSaveSnapshot();
                       if (e.key === "Escape") setShowSnapshotInput(false);
