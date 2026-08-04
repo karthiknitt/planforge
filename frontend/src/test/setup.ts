@@ -17,4 +17,5 @@ mock.module("@/lib/auth", () => ({
 
 mock.module("next/headers", () => ({
   headers: async () => new Headers(),
+  cookies: async () => ({ get: () => undefined }),
 }));
