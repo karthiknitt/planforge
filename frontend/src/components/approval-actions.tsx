@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -116,7 +117,7 @@ export function ApprovalActions({
 
     return (
       <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-start gap-3">
-        <span className="text-green-600 text-lg mt-0.5">✅</span>
+        <Check className="h-5 w-5 text-green-600 mt-0.5" />
         <div className="flex flex-col gap-1">
           <p className="font-semibold text-green-700 dark:text-green-400">You approved this plan</p>
           {approvedNames.length > 0 && (
@@ -261,11 +262,16 @@ export function ApprovalActions({
             disabled={loading !== null || selectedLayouts.length === 0}
             className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-40"
           >
-            {loading === "approve"
-              ? "Approving…"
-              : selectedLayouts.length === 0
-                ? "✅ Approve (select a layout first)"
-                : `✅ Approve ${selectedLayouts.length === 1 ? `Layout ${selectedLayouts[0]}` : `${selectedLayouts.length} layouts`}`}
+            {loading === "approve" ? (
+              "Approving…"
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                {selectedLayouts.length === 0
+                  ? "Approve (select a layout first)"
+                  : `Approve ${selectedLayouts.length === 1 ? `Layout ${selectedLayouts[0]}` : `${selectedLayouts.length} layouts`}`}
+              </>
+            )}
           </Button>
           <Button
             variant="outline"
