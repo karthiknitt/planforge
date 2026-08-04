@@ -461,6 +461,18 @@
   background-clip: text;
 }
 
+/* Forced-colors mode (Windows High Contrast) strips the gradient background
+   but leaves -webkit-text-fill-color: transparent in place, so the text
+   would otherwise render invisible — fall back to the system text color. */
+@media (forced-colors: active) {
+  .text-gradient-blue,
+  .text-gradient-orange {
+    background: none;
+    -webkit-text-fill-color: CanvasText;
+    color: CanvasText;
+  }
+}
+
 /* ─── Card glass (feature/pricing cards in dark mode) ───────────────────── */
 .card-glass {
   background: rgba(17, 24, 45, 0.85);
