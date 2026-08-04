@@ -78,6 +78,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Team
               </Link>
               <Link
+                href="/gallery"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+              >
+                Templates
+              </Link>
+              <Link
+                href="/how-it-works"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+              >
+                How it works
+              </Link>
+              <Link
                 href="/pricing"
                 className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
               >

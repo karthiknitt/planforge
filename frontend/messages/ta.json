@@ -27,7 +27,10 @@
     "onboardingStep2": "உடனடியாக 3 NBC-இணக்க தளவமைப்பு விருப்பங்களை உருவாக்கவும்",
     "onboardingStep3": "நிலையான அல்லது ஒப்புதல்-தயார் PDF, DXF, BOQ ஏற்றுமதி செய்யவும்",
     "onboardingBrowseTemplates": "வார்ப்புருக்களைப் பார்க்கவும்",
-    "onboardingStartProject": "திட்டத்தைத் தொடங்கவும்"
+    "onboardingStartProject": "திட்டத்தைத் தொடங்கவும்",
+    "onboardingContinue": "தொடரவும்",
+    "onboardingProgressLabel": "படிகள் முடிந்தது",
+    "onboardingDismiss": "பட்டியலை நீக்கு"
   },
   "project": {
     "newProject": "புதிய திட்டம்",

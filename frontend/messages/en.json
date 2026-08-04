@@ -27,7 +27,10 @@
     "onboardingStep2": "Generate 3 NBC-compliant layout variations instantly",
     "onboardingStep3": "Export standard or approval-ready PDF, DXF, and BOQ",
     "onboardingBrowseTemplates": "Browse templates",
-    "onboardingStartProject": "Start a project"
+    "onboardingStartProject": "Start a project",
+    "onboardingContinue": "Continue",
+    "onboardingProgressLabel": "steps complete",
+    "onboardingDismiss": "Dismiss checklist"
   },
   "project": {
     "newProject": "New Project",

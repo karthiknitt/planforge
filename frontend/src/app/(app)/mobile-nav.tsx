@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Menu, Plus, Star, Users, X } from "lucide-react";
+import { BookOpen, LayoutDashboard, LayoutGrid, Menu, Plus, Star, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -9,6 +9,8 @@ const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects/new", label: "New Project", icon: Plus },
   { href: "/team", label: "Team", icon: Users },
+  { href: "/gallery", label: "Templates", icon: LayoutGrid },
+  { href: "/how-it-works", label: "How it works", icon: BookOpen },
   { href: "/pricing", label: "Upgrade", icon: Star },
 ] as const;
 

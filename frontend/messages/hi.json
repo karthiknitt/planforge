@@ -27,7 +27,10 @@
     "onboardingStep2": "तुरंत 3 NBC-अनुरूप लेआउट विकल्प बनाएं",
     "onboardingStep3": "मानक या अनुमोदन-तैयार PDF, DXF और BOQ एक्सपोर्ट करें",
     "onboardingBrowseTemplates": "टेम्पलेट देखें",
-    "onboardingStartProject": "प्रोजेक्ट शुरू करें"
+    "onboardingStartProject": "प्रोजेक्ट शुरू करें",
+    "onboardingContinue": "जारी रखें",
+    "onboardingProgressLabel": "चरण पूर्ण",
+    "onboardingDismiss": "चेकलिस्ट हटाएं"
   },
   "project": {
     "newProject": "नया प्रोजेक्ट",
