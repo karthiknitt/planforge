@@ -86,7 +86,7 @@ export function GenerationPanel({
 
   if (error || phase === "failed") {
     return (
-      <div className="rounded-lg border border-destructive/40 p-6 text-center">
+      <div role="alert" className="rounded-lg border border-destructive/40 p-6 text-center">
         <p className="text-sm text-destructive">{error || job?.error || "Generation failed."}</p>
         <Button variant="outline" size="sm" className="mt-3" onClick={start}>
           Try again
@@ -95,8 +95,11 @@ export function GenerationPanel({
     );
   }
   return (
-    <div className="rounded-lg border border-dashed p-10 text-center">
-      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div role="status" className="rounded-lg border border-dashed p-10 text-center">
+      <div
+        aria-hidden="true"
+        className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
+      />
       <p className="mt-3 font-medium">Generating your 3 layouts</p>
       <p className="mt-1 text-sm text-muted-foreground">
         {job ? stageLabel(job.stage) : "Starting…"}

@@ -111,7 +111,10 @@ function SignUpForm() {
         </div>
 
         {error && (
-          <p className="rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-destructive"
+          >
             {error}
           </p>
         )}

@@ -238,6 +238,7 @@ export function PlanTab({
                 <button
                   type="button"
                   onClick={onToggleVastuZones}
+                  aria-pressed={showVastuZones}
                   className={[
                     "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                     showVastuZones
@@ -251,6 +252,7 @@ export function PlanTab({
               <button
                 type="button"
                 onClick={onToggleFurniture}
+                aria-pressed={showFurniture}
                 className={[
                   "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                   showFurniture
@@ -263,6 +265,7 @@ export function PlanTab({
               <button
                 type="button"
                 onClick={onToggleElectrical}
+                aria-pressed={showElectrical}
                 className={[
                   "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                   showElectrical
@@ -275,6 +278,7 @@ export function PlanTab({
               <button
                 type="button"
                 onClick={onTogglePlumbing}
+                aria-pressed={showPlumbing}
                 className={[
                   "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                   showPlumbing
@@ -287,6 +291,7 @@ export function PlanTab({
               <button
                 type="button"
                 onClick={onToggleAnnotationMode}
+                aria-pressed={annotationMode}
                 className={[
                   "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                   annotationMode
@@ -306,6 +311,7 @@ export function PlanTab({
                 <button
                   type="button"
                   onClick={handleEditToggleClick}
+                  aria-pressed={editMode}
                   className={[
                     "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                     editMode
@@ -339,6 +345,7 @@ export function PlanTab({
           <button
             type="button"
             onClick={onToggleVastuZones}
+            aria-pressed={showVastuZones}
             className={[
               "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
               showVastuZones
@@ -352,6 +359,7 @@ export function PlanTab({
         <button
           type="button"
           onClick={onToggleFurniture}
+          aria-pressed={showFurniture}
           className={[
             "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
             showFurniture
@@ -364,6 +372,7 @@ export function PlanTab({
         <button
           type="button"
           onClick={onToggleElectrical}
+          aria-pressed={showElectrical}
           className={[
             "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
             showElectrical
@@ -376,6 +385,7 @@ export function PlanTab({
         <button
           type="button"
           onClick={onTogglePlumbing}
+          aria-pressed={showPlumbing}
           className={[
             "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
             showPlumbing
@@ -388,6 +398,7 @@ export function PlanTab({
         <button
           type="button"
           onClick={onToggleAnnotationMode}
+          aria-pressed={annotationMode}
           className={[
             "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
             annotationMode
@@ -412,6 +423,7 @@ export function PlanTab({
           <button
             type="button"
             onClick={handleEditToggleClick}
+            aria-pressed={editMode}
             className={[
               "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
               editMode
@@ -530,7 +542,10 @@ export function PlanTab({
             </Button>
           </div>
           {editSaveError && (
-            <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
+            <p
+              role="alert"
+              className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5"
+            >
               {editSaveError}
             </p>
           )}

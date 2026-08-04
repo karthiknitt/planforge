@@ -1400,7 +1400,10 @@ export function LayoutViewer({
             </TabsList>
             <TabsContent value="link" className="flex flex-col gap-2">
               {shareError && (
-                <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <p
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                >
                   {shareError}
                 </p>
               )}
@@ -1435,7 +1438,10 @@ export function LayoutViewer({
             </TabsContent>
             <TabsContent value="approval" className="flex flex-col gap-2">
               {approvalShareError && (
-                <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <p
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                >
                   {approvalShareError}
                 </p>
               )}
@@ -1659,7 +1665,10 @@ export function LayoutViewer({
 
       {/* Download error */}
       {downloadError && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
           {downloadError}
         </p>
       )}

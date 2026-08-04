@@ -5,6 +5,14 @@ import en from "../../messages/en.json";
 
 export type Locale = "en" | "ta" | "hi";
 
+// BCP-47 tags for the reactive <html lang> — kept region-qualified ("-IN")
+// to match the tag the root layout sets statically for the "en" default.
+const LOCALE_BCP47: Record<Locale, string> = {
+  en: "en-IN",
+  ta: "ta-IN",
+  hi: "hi-IN",
+};
+
 // Nested key access: t('nav.dashboard') → string
 export type Messages = typeof en;
 
@@ -136,6 +144,13 @@ export function LocaleProvider({
     setLocaleState(next);
     setLocaleCookie(next);
   }, []);
+
+  // Keeps <html lang> in sync with the active locale so assistive tech picks
+  // the right pronunciation/language rules after a client-side switch — the
+  // root layout only sets it once, statically, at SSR time.
+  useEffect(() => {
+    document.documentElement.lang = LOCALE_BCP47[locale];
+  }, [locale]);
 
   const t = useCallback(
     (key: TranslationKey): string => {
