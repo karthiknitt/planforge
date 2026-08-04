@@ -24,7 +24,6 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import { DxfPreviewDialog } from "@/components/dxf-preview-dialog";
 import type { Annotation } from "@/components/floor-plan-svg";
 import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
@@ -33,6 +32,17 @@ import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
 import { StructuralLifecycleHeader } from "@/components/structural-lifecycle-header";
 import type { StructuralStatusResponse } from "@/components/structural-viewer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1416,17 +1426,34 @@ export function LayoutViewer({
           >
             {approvalFetching ? "…" : "↻"}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={() => setRegenerating(true)}
-            disabled={regenerating}
-            title="Re-run the layout engine for this project"
-          >
-            <RefreshCw className="h-3 w-3 mr-1.5" />
-            Regenerate layouts
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+                disabled={regenerating}
+                title="Re-run the layout engine for this project"
+              >
+                <RefreshCw className="h-3 w-3 mr-1.5" />
+                Regenerate layouts
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Regenerate layouts?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will run the layout engine again and replace your current layouts.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => setRegenerating(true)}>
+                  Regenerate
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -2252,15 +2279,32 @@ export function LayoutViewer({
                         <RotateCcw className="h-3 w-3" />
                         {restoringVersion === rev.version ? "Loading…" : "Restore"}
                       </Button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRevision(rev.version)}
-                        className="h-7 w-7 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors text-xs"
-                        title="Delete this revision"
-                        aria-label={`Delete revision v${rev.version}`}
-                      >
-                        ×
-                      </button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            type="button"
+                            className="h-7 w-7 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors text-xs"
+                            title="Delete this revision"
+                            aria-label={`Delete revision v${rev.version}`}
+                          >
+                            ×
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete revision v{rev.version}?</AlertDialogTitle>
+                            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => void handleDeleteRevision(rev.version)}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </li>
                 ))}

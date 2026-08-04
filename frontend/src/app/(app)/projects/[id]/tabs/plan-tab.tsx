@@ -14,9 +14,21 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -131,8 +143,41 @@ export function PlanTab({
   typeLabels: Record<string, string>;
   swatch: Record<string, string>;
 }) {
+  // Exiting edit mode with unsaved room edits silently discarded the edit —
+  // only prompt when there's actually something to lose.
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  function handleEditToggleClick() {
+    if (editMode && editedRooms !== null) {
+      setExitConfirmOpen(true);
+    } else {
+      onToggleEditMode();
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      <AlertDialog open={exitConfirmOpen} onOpenChange={setExitConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your unsaved room edits?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Exiting edit mode without saving discards your room changes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setExitConfirmOpen(false);
+                onToggleEditMode();
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {isPreliminaryStatus(structStatusStatus) && (
         <output className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
           PRELIMINARY — for planning only, not for construction
@@ -260,7 +305,7 @@ export function PlanTab({
               {tierAtLeast(planTier, "pro") ? (
                 <button
                   type="button"
-                  onClick={onToggleEditMode}
+                  onClick={handleEditToggleClick}
                   className={[
                     "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                     editMode
@@ -366,7 +411,7 @@ export function PlanTab({
         {tierAtLeast(planTier, "pro") ? (
           <button
             type="button"
-            onClick={onToggleEditMode}
+            onClick={handleEditToggleClick}
             className={[
               "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
               editMode
@@ -445,16 +490,31 @@ export function PlanTab({
               <RefreshCw className="h-3 w-3" />
               Check Compliance
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 text-xs h-7 px-2.5"
-              onClick={onResetRooms}
-              title="Restore rooms to the original generated layout"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Reset
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs h-7 px-2.5"
+                  title="Restore rooms to the original generated layout"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Reset
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset rooms?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Discard your room edits and reset to the original layout?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={onResetRooms}>Reset</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button
               size="sm"
               className="gap-1.5 text-xs h-7 px-2.5 bg-blue-600 text-white hover:bg-blue-700"
