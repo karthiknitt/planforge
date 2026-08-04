@@ -1,8 +1,7 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
-import { Building2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
@@ -21,9 +20,7 @@ import {
   DashboardPaymentToast,
   DashboardProjectCount,
   DashboardTitle,
-  ProjectCardApprovalBadge,
-  ProjectCardBuilding2Icon,
-  ProjectCardViewLink,
+  ProjectCard,
 } from "./dashboard-strings";
 import { OnboardingModal } from "./onboarding-modal";
 
@@ -107,53 +104,7 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p, i) => (
-            <Link
-              key={p.id}
-              href={`/projects/${p.id}`}
-              className="animate-fade-up block h-full group"
-              style={{ animationDelay: `${100 + i * 60}ms` }}
-            >
-              <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
-                {/* Project header */}
-                <div className="flex items-start justify-between gap-2">
-                  <ProjectCardBuilding2Icon name={p.name} />
-                </div>
-
-                {/* Tags */}
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.plotLength} &times; {p.plotWidth} m
-                  </span>
-                  <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.numBedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
-                  </span>
-                  {p.city && p.city !== "other" && (
-                    <span className="inline-flex items-center rounded-full bg-primary/8 text-primary/70 px-2 py-0.5 text-[11px] font-medium capitalize">
-                      {p.city}
-                    </span>
-                  )}
-                </div>
-
-                {/* Approval badge */}
-                {p.approvalStatus && (
-                  <div className="flex items-center gap-1.5">
-                    <ProjectCardApprovalBadge status={p.approvalStatus} />
-                  </div>
-                )}
-
-                {/* Footer */}
-                <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
-                  <span className="text-[11px] text-muted-foreground/70">
-                    {new Date(p.createdAt).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                  <ProjectCardViewLink />
-                </div>
-              </div>
-            </Link>
+            <ProjectCard key={p.id} project={p} variant="own" animationDelayMs={100 + i * 60} />
           ))}
         </div>
       )}
@@ -173,49 +124,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {teamProjects.map((p, i) => (
-              <Link
-                key={p.id}
-                href={`/projects/${p.id}`}
-                className="animate-fade-up block h-full group"
-                style={{ animationDelay: `${100 + i * 60}ms` }}
-              >
-                <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/8 ring-1 ring-primary/15">
-                        <Building2 className="h-4 w-4 text-primary/70" />
-                      </div>
-                      <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {p.name}
-                      </span>
-                    </div>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 flex-shrink-0">
-                      <Users className="h-2.5 w-2.5" />
-                      Shared
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {p.plotLength} &times; {p.plotWidth} m
-                    </span>
-                    <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {p.numBedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
-                    </span>
-                  </div>
-                  <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
-                    <span className="text-[11px] text-muted-foreground/70">
-                      {new Date(p.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                    <span className="text-xs font-medium text-primary/70 group-hover:text-primary transition-colors">
-                      View &rarr;
-                    </span>
-                  </div>
-                </div>
-              </Link>
+              <ProjectCard key={p.id} project={p} variant="team" animationDelayMs={100 + i * 60} />
             ))}
           </div>
         </div>

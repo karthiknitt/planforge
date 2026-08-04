@@ -1,12 +1,15 @@
 "use client";
 
-import { Building2, Plus } from "lucide-react";
+import { Building2, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import type { project } from "@/db/schema";
 import { useLocale } from "@/lib/locale-context";
 import { showToast } from "@/lib/toast";
+
+type Project = typeof project.$inferSelect;
 
 // Confirms a Razorpay checkout that redirected back here — the checkout
 // buttons themselves unmount on navigation, so success can only be
@@ -159,5 +162,66 @@ export function ProjectCardBuilding2Icon({ name }: { name: string }) {
         {name}
       </span>
     </div>
+  );
+}
+
+export function ProjectCard({
+  project,
+  variant,
+  animationDelayMs,
+}: {
+  project: Project;
+  variant: "own" | "team";
+  animationDelayMs: number;
+}) {
+  return (
+    <Link
+      href={`/projects/${project.id}`}
+      className="animate-fade-up block h-full group"
+      style={{ animationDelay: `${animationDelayMs}ms` }}
+    >
+      <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
+        <div className="flex items-start justify-between gap-2">
+          <ProjectCardBuilding2Icon name={project.name} />
+          {variant === "team" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 flex-shrink-0">
+              <Users className="h-2.5 w-2.5" />
+              Shared
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {project.plotLength} &times; {project.plotWidth} m
+          </span>
+          <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {project.numBedrooms} BHK &middot; {project.toilets}T{project.parking ? " · P" : ""}
+          </span>
+          {variant === "own" && project.city && project.city !== "other" && (
+            <span className="inline-flex items-center rounded-full bg-primary/8 text-primary/70 px-2 py-0.5 text-[11px] font-medium capitalize">
+              {project.city}
+            </span>
+          )}
+        </div>
+
+        {variant === "own" && project.approvalStatus && (
+          <div className="flex items-center gap-1.5">
+            <ProjectCardApprovalBadge status={project.approvalStatus} />
+          </div>
+        )}
+
+        <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
+          <span className="text-[11px] text-muted-foreground/70">
+            {new Date(project.createdAt).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+          <ProjectCardViewLink />
+        </div>
+      </div>
+    </Link>
   );
 }
