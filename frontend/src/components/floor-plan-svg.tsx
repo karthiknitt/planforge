@@ -1,5 +1,6 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
@@ -60,7 +61,40 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   open_terrace: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
 };
 
-const color = (type: string) => PALETTE[type] ?? PALETTE.utility;
+// Dark-mode counterpart of PALETTE — same room-type keys, values chosen so
+// every fill sits near the --svg-plot-fill dark tone (~L21%) while text/stroke
+// stay hue-matched to their light variant but lifted for AA contrast against
+// that fill (text ≥7.5:1, stroke ≥3:1, verified against #0d1529/#111e35).
+const PALETTE_DARK: Record<string, { fill: string; stroke: string; text: string }> = {
+  living: { fill: "#4c481f", stroke: "#f0bb4c", text: "#f2e5d9" },
+  bedroom: { fill: "#281f4c", stroke: "#894def", text: "#e7d9f2" },
+  master_bedroom: { fill: "#351f4c", stroke: "#a24fed", text: "#e7d9f2" },
+  kitchen: { fill: "#1f4c2f", stroke: "#54e88b", text: "#d9f2e3" },
+  toilet: { fill: "#1f3a4c", stroke: "#4cb8f0", text: "#d9e9f2" },
+  wc_only: { fill: "#1f3d4c", stroke: "#4cb8f0", text: "#d9e9f2" },
+  bathroom_master: { fill: "#1f334c", stroke: "#547be8", text: "#d9dff2" },
+  staircase: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  parking: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  parking_4w: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  parking_2w: { fill: "#383534", stroke: "#a39d99", text: "#e7e6e4" },
+  utility: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  pooja: { fill: "#4c381f", stroke: "#f0844c", text: "#f2dfd9" },
+  study: { fill: "#1f4c2d", stroke: "#59e48d", text: "#d9f2e3" },
+  balcony: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  dining: { fill: "#4c481f", stroke: "#f0ad4c", text: "#f2e5d9" },
+  servant_quarter: { fill: "#4c381f", stroke: "#f0844c", text: "#f2dfd9" },
+  home_office: { fill: "#1f4c2d", stroke: "#59e48d", text: "#d9f2e3" },
+  gym: { fill: "#4c1f22", stroke: "#e95374", text: "#f2d9e1" },
+  store_room: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  garage: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  passage: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  open_terrace: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+};
+
+const color = (type: string, dark = false) => {
+  const palette = dark ? PALETTE_DARK : PALETTE;
+  return palette[type] ?? palette.utility;
+};
 
 // ── North arrow ───────────────────────────────────────────────────────────────
 const NORTH_ROTATION: Record<string, number> = { S: 0, N: 180, W: 90, E: 270 };
@@ -128,12 +162,14 @@ function RoomLabel({
   py,
   scale,
   locale = "en",
+  dark = false,
 }: {
   room: RoomData;
   px: (v: number) => number;
   py: (v: number) => number;
   scale: number;
   locale?: Locale;
+  dark?: boolean;
 }) {
   const cx = px(room.x + room.width / 2);
   const cy = py(room.y + room.depth / 2);
@@ -143,7 +179,7 @@ function RoomLabel({
   if (roomPxW < 28 || roomPxH < 22) return null;
 
   const fs = Math.max(7, Math.min(11, roomPxW / 8, roomPxH / 4));
-  const c = color(room.type);
+  const c = color(room.type, dark);
   const displayName = getRoomName(room.type, locale);
   const lines =
     roomPxH >= 44 ? [displayName, `${room.area} m²`] : [`${displayName} · ${room.area}m²`];
@@ -1182,6 +1218,17 @@ export function FloorPlanSVG({
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
 
+  // Room fill/stroke/text palette needs a JS theme read (23 room types × 3
+  // properties would mean 69 new CSS custom properties — impractical per the
+  // token-budget guidance, so this one piece of the drawing switches palette
+  // objects instead of routing through CSS vars like the rest of the file).
+  // `mounted` avoids an SSR/CSR palette mismatch; expect one paint at the
+  // light palette before the dark palette takes over on first client render.
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === "dark";
+
   // ── Edit mode drag state ────────────────────────────────────────────────────
   interface DragState {
     wall: SharedWall;
@@ -1497,6 +1544,7 @@ export function FloorPlanSVG({
         viewBox={`0 0 ${VP_W} ${VP_H}`}
         className={["floor-plan-svg", className].filter(Boolean).join(" ")}
         style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
+        role="img"
         aria-label={
           showFurniture || showPlumbing
             ? "Floor plan diagram with furniture and fixture layout"
@@ -1694,8 +1742,8 @@ export function FloorPlanSVG({
                   y={ry}
                   width={rw}
                   height={rh}
-                  fill={color(room.type).fill}
-                  stroke={color(room.type).stroke}
+                  fill={color(room.type, isDark).fill}
+                  stroke={color(room.type, isDark).stroke}
                   strokeWidth={1.5}
                   strokeDasharray="3 2"
                 />
@@ -1733,7 +1781,7 @@ export function FloorPlanSVG({
               y={ry}
               width={rw}
               height={rh}
-              fill={color(room.type).fill}
+              fill={color(room.type, isDark).fill}
               stroke={isSelected ? "#1d4ed8" : undefined}
               strokeWidth={isSelected ? 2.5 : undefined}
               {...roomMouseDownProps}
@@ -1813,6 +1861,7 @@ export function FloorPlanSVG({
             py={py}
             scale={scale}
             locale={locale}
+            dark={isDark}
           />
         ))}
 
