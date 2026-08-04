@@ -68,10 +68,22 @@ const NORTH_ROTATION: Record<string, number> = { S: 0, N: 180, W: 90, E: 270 };
 function NorthArrow({ x, y, rotation = 0 }: { x: number; y: number; rotation?: number }) {
   return (
     <g transform={`translate(${x},${y})`}>
-      <circle r={14} fill="white" stroke="#94A3B8" strokeWidth={1} className="svg-north-circle" />
+      <circle
+        r={14}
+        fill="white"
+        stroke="var(--svg-ink-secondary)"
+        strokeWidth={1}
+        className="svg-north-circle"
+      />
       <g transform={`rotate(${rotation})`}>
-        <polygon points="0,-10 -4,4 0,1 4,4" fill="#1E293B" />
-        <text y={-14} textAnchor="middle" fontSize={9} fill="#64748B" fontFamily="sans-serif">
+        <polygon points="0,-10 -4,4 0,1 4,4" fill="var(--svg-wall-external)" />
+        <text
+          y={-14}
+          textAnchor="middle"
+          fontSize={9}
+          fill="var(--svg-ink-secondary)"
+          fontFamily="sans-serif"
+        >
           N
         </text>
       </g>
@@ -85,15 +97,22 @@ function ScaleBar({ x, y, scale }: { x: number; y: number; scale: number }) {
   const barPx = barM * scale;
   return (
     <g transform={`translate(${x},${y})`}>
-      <line x1={0} y1={0} x2={barPx} y2={0} stroke="#64748B" strokeWidth={2} />
-      <line x1={0} y1={-4} x2={0} y2={4} stroke="#64748B" strokeWidth={1.5} />
-      <line x1={barPx} y1={-4} x2={barPx} y2={4} stroke="#64748B" strokeWidth={1.5} />
+      <line x1={0} y1={0} x2={barPx} y2={0} stroke="var(--svg-ink-secondary)" strokeWidth={2} />
+      <line x1={0} y1={-4} x2={0} y2={4} stroke="var(--svg-ink-secondary)" strokeWidth={1.5} />
+      <line
+        x1={barPx}
+        y1={-4}
+        x2={barPx}
+        y2={4}
+        stroke="var(--svg-ink-secondary)"
+        strokeWidth={1.5}
+      />
       <text
         x={barPx / 2}
         y={14}
         textAnchor="middle"
         fontSize={9}
-        fill="#64748B"
+        fill="var(--svg-ink-secondary)"
         fontFamily="sans-serif"
       >
         {barM} m
@@ -633,7 +652,7 @@ function DimLine({
   if (horizontal) {
     const dy = y1 - offset;
     return (
-      <g stroke="#94A3B8" strokeWidth={0.5} fill="#94A3B8">
+      <g stroke="var(--svg-ink-secondary)" strokeWidth={0.5} fill="var(--svg-ink-secondary)">
         <line x1={x1} y1={y1} x2={x1} y2={dy - 4} />
         <line x1={x2} y1={y1} x2={x2} y2={dy - 4} />
         <line x1={x1} y1={dy} x2={x2} y2={dy} />
@@ -652,7 +671,7 @@ function DimLine({
   }
   const dx = x1 - offset;
   return (
-    <g stroke="#94A3B8" strokeWidth={0.5} fill="#94A3B8">
+    <g stroke="var(--svg-ink-secondary)" strokeWidth={0.5} fill="var(--svg-ink-secondary)">
       <line x1={x1} y1={y1} x2={dx - 4} y2={y1} />
       <line x1={x1} y1={y2} x2={dx - 4} y2={y2} />
       <line x1={dx} y1={y1} x2={dx} y2={y2} />
@@ -690,7 +709,7 @@ function DrawingWall({
   scale: number;
 }) {
   const half = (wall.thickness / 2) * scale;
-  const fill = wall.kind === "external" ? "#1E293B" : "#475569";
+  const fill = wall.kind === "external" ? "var(--svg-wall-external)" : "var(--svg-wall-internal)";
   if (Math.abs(wall.x1 - wall.x2) < 1e-6) {
     const x = px(wall.x1);
     const yA = py(wall.y1);
@@ -782,7 +801,7 @@ function DrawingDoorSymbol({
   const mid = angJ + delta / 2;
 
   return (
-    <g stroke="#64748B" strokeWidth={0.75} fill="none">
+    <g stroke="var(--svg-ink-secondary)" strokeWidth={0.75} fill="none">
       <line x1={hx} y1={hy} x2={ex} y2={ey} />
       <path d={`M ${jx} ${jy} A ${r} ${r} 0 0 ${sweepFlag} ${ex} ${ey}`} />
       <text
@@ -792,7 +811,7 @@ function DrawingDoorSymbol({
         dominantBaseline="middle"
         fontSize={6}
         fontWeight="700"
-        fill="#64748B"
+        fill="var(--svg-ink-secondary)"
         stroke="none"
         fontFamily="sans-serif"
       >
@@ -806,7 +825,7 @@ function DrawingDoorSymbol({
           dominantBaseline="middle"
           fontSize={5}
           fontWeight="700"
-          fill="#64748B"
+          fill="var(--svg-ink-secondary)"
           stroke="none"
           fontFamily="sans-serif"
         >
@@ -831,7 +850,7 @@ function DrawingStairSymbol({
   const [ux, uy] = stair.up_label_xy;
   return (
     <g>
-      <g stroke="#94A3B8" strokeWidth={0.6}>
+      <g stroke="var(--svg-ink-secondary)" strokeWidth={0.6}>
         {stair.treads.map(([x1, y1, x2, y2], i) => (
           <line
             key={`tread-${i}-${x1}-${y1}-${x2}-${y2}`}
@@ -847,18 +866,25 @@ function DrawingStairSymbol({
         y1={py(by1)}
         x2={px(bx2)}
         y2={py(by2)}
-        stroke="#64748B"
+        stroke="var(--svg-ink-secondary)"
         strokeWidth={1.2}
         strokeDasharray="4 2"
       />
-      <line x1={px(ax1)} y1={py(ay1)} x2={px(ax2)} y2={py(ay2)} stroke="#64748B" strokeWidth={1} />
+      <line
+        x1={px(ax1)}
+        y1={py(ay1)}
+        x2={px(ax2)}
+        y2={py(ay2)}
+        stroke="var(--svg-ink-secondary)"
+        strokeWidth={1}
+      />
       <text
         x={px(ux)}
         y={py(uy)}
         textAnchor="middle"
         fontSize={7}
         fontFamily="sans-serif"
-        fill="#64748B"
+        fill="var(--svg-ink-secondary)"
         fontWeight="600"
       >
         UP
@@ -1484,7 +1510,7 @@ export function FloorPlanSVG({
         <defs>
           {/* Masonry wall hatch — 45° diagonal, for external walls */}
           <pattern id="wall-hatch-floor" width="4" height="4" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="4" x2="4" y2="0" stroke="#94a3b8" strokeWidth="0.5" />
+            <line x1="0" y1="4" x2="4" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="0.5" />
           </pattern>
           {/* Internal wall hatch — lighter diagonal */}
           <pattern id="int-wall-hatch" width="3" height="3" patternUnits="userSpaceOnUse">
@@ -1511,7 +1537,7 @@ export function FloorPlanSVG({
           textAnchor="middle"
           fontSize={9}
           fontFamily="sans-serif"
-          fill="#475569"
+          fill="var(--svg-wall-internal)"
           letterSpacing={2}
         >
           ROAD ({roadSide})
@@ -1772,7 +1798,7 @@ export function FloorPlanSVG({
               y={py(col.cy) - colPx / 2}
               width={colPx}
               height={colPx}
-              fill="#1E293B"
+              fill="var(--svg-wall-external)"
               opacity={drawingOpacity}
             />
           );
