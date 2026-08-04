@@ -556,9 +556,34 @@ export default function NewProjectPage() {
     setStep(idx);
   }
 
+  /* Re-run every step's gate right before submit. `jumpTo` (StepIndicator clicks,
+   * Review "Edit" links) intentionally allows revisiting any already-reached step
+   * without re-running `goNext()`'s gate on the way back to Review — that's a UX
+   * nicety for already-reached steps, not a validation guarantee. Without this
+   * final check, a user could reach Review, jump back to Plot, blank a required
+   * field, then jump forward to Review again (i <= maxReached, no gate runs) and
+   * submit invalid data. This closes that gap for every plot shape, not just the
+   * ones the old single-page form's HTML5 `required` attributes happened to catch. */
+  function findFirstInvalidStep(): { index: number; message: string } | null {
+    for (let i = 0; i < STEPS.length; i++) {
+      const err = STEPS[i].validate();
+      if (err) return { index: i, message: err };
+    }
+    return null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    const invalid = findFirstInvalidStep();
+    if (invalid) {
+      setStep(invalid.index);
+      setMaxStepReached((m) => Math.max(m, invalid.index));
+      setStepError(invalid.message);
+      return;
+    }
+    setStepError("");
     setLoading(true);
 
     try {
