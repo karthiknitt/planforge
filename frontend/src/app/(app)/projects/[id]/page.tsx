@@ -190,30 +190,41 @@ function GeneratingFallback() {
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  // Session read depends only on request headers, the project row select only
+  // on the route's `id` param — no data dependency between them, so run concurrently.
+  const requestHeaders = await headers();
+  const [session, rows] = await Promise.all([
+    auth.api.getSession({ headers: requestHeaders }),
+    db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1),
+  ]);
   if (!session) redirect("/sign-in");
 
-  const rows = await db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1);
   const project = rows[0];
   if (!project) notFound();
 
   // Owner OR member of the project's team — matches the backend access rule
   let canAccess = project.userId === session.user.id;
-  if (!canAccess && project.teamId != null) {
-    const membership = await db
-      .select({ id: teamMember.id })
-      .from(teamMember)
-      .where(and(eq(teamMember.teamId, project.teamId), eq(teamMember.userId, session.user.id)))
-      .limit(1);
-    canAccess = membership.length > 0;
-  }
+  // Plan-tier only depends on session.user.id, not on canAccess, so it can run
+  // alongside the membership check — a small latency win on the common
+  // (authorized) path, at the cost of one wasted read-only query on the rare
+  // unauthorized path (which hits notFound() below and discards it).
+  const [membership, userRows] = await Promise.all([
+    !canAccess && project.teamId != null
+      ? db
+          .select({ id: teamMember.id })
+          .from(teamMember)
+          .where(and(eq(teamMember.teamId, project.teamId), eq(teamMember.userId, session.user.id)))
+          .limit(1)
+      : Promise.resolve([]),
+    db
+      .select({ planTier: userTable.planTier })
+      .from(userTable)
+      .where(eq(userTable.id, session.user.id))
+      .limit(1),
+  ]);
+  if (!canAccess) canAccess = membership.length > 0;
   if (!canAccess) notFound();
 
-  const userRows = await db
-    .select({ planTier: userTable.planTier })
-    .from(userTable)
-    .where(eq(userTable.id, session.user.id))
-    .limit(1);
   const planTier = userRows[0]?.planTier ?? "free";
 
   const lengthFt = metresToFeet(project.plotLength);
