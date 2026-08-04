@@ -1,3 +1,4 @@
+import { domAnimation, LazyMotion } from "framer-motion";
 import type { Metadata } from "next";
 import { JetBrains_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -93,8 +94,10 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
-          <Toaster richColors position="top-right" />
+          <LazyMotion features={domAnimation} strict>
+            {children}
+            <Toaster richColors position="top-right" />
+          </LazyMotion>
         </ThemeProvider>
       </body>
     </html>

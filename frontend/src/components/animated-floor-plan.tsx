@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface AnimatedFloorPlanProps {
@@ -126,7 +126,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
 
       {/* ── Room fills — fade in before walls overlay them ── */}
       {ROOMS.map((r, i) => (
-        <motion.rect
+        <m.rect
           key={r.id}
           x={r.x}
           y={r.y}
@@ -140,7 +140,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       ))}
 
       {/* ── Staircase hatching ── */}
-      <motion.g
+      <m.g
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: dur(0.3), delay: d(0.92) }}
@@ -158,10 +158,10 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
             strokeDasharray="4 4"
           />
         ))}
-      </motion.g>
+      </m.g>
 
       {/* ── Outer wall — draws first via pathLength ── */}
-      <motion.path
+      <m.path
         d="M30,30 L390,30 L390,290 L30,290 Z"
         fill="none"
         stroke="#60a5fa"
@@ -173,7 +173,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
 
       {/* ── Internal walls — staggered after outer ── */}
       {/* Vertical centre wall */}
-      <motion.line
+      <m.line
         x1={210}
         y1={30}
         x2={210}
@@ -184,7 +184,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
         {...wall(0.62)}
       />
       {/* Horizontal mid wall */}
-      <motion.line
+      <m.line
         x1={30}
         y1={200}
         x2={390}
@@ -195,7 +195,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
         {...wall(0.74)}
       />
       {/* Bathroom divider */}
-      <motion.line
+      <m.line
         x1={290}
         y1={200}
         x2={290}
@@ -206,7 +206,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
         {...wall(0.83)}
       />
       {/* Staircase top */}
-      <motion.line
+      <m.line
         x1={210}
         y1={120}
         x2={390}
@@ -219,7 +219,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
 
       {/* ── Window symbols ── */}
       {WINDOWS.map((win, i) => (
-        <motion.rect
+        <m.rect
           key={win.id}
           x={win.x}
           y={win.y}
@@ -234,14 +234,14 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
       ))}
 
       {/* ── Door swing arcs ── */}
-      <motion.path
+      <m.path
         d="M30 192 Q50 182 50 202"
         fill="none"
         stroke="#60a5fa"
         strokeWidth={1.2}
         {...wall(1.02, 0.4)}
       />
-      <motion.path
+      <m.path
         d="M210 192 Q230 182 230 202"
         fill="none"
         stroke="#60a5fa"
@@ -251,7 +251,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
 
       {/* ── Column markers — orange squares spring in ── */}
       {COLUMNS.map(([cx, cy], i) => (
-        <motion.rect
+        <m.rect
           key={`col-${cx}-${cy}`}
           x={cx - 5}
           y={cy - 5}
@@ -273,7 +273,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
 
       {/* ── Room labels ── */}
       {ROOMS.map((r, i) => (
-        <motion.text
+        <m.text
           key={`lbl-${r.id}`}
           x={r.lx}
           y={r.ly}
@@ -286,11 +286,11 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
           transition={{ duration: dur(0.4), delay: d(0.87 + i * 0.1) }}
         >
           {r.label}
-        </motion.text>
+        </m.text>
       ))}
 
       {/* ── Dimension lines ── */}
-      <motion.g
+      <m.g
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: dur(0.4), delay: d(1.58) }}
@@ -310,10 +310,10 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
         >
           6.5 m
         </text>
-      </motion.g>
+      </m.g>
 
       {/* ── North arrow — orange, fades in last ── */}
-      <motion.g
+      <m.g
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: dur(0.5), delay: d(1.78) }}
@@ -323,10 +323,10 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
         <text x="380" y="32" textAnchor="middle" fontSize={8} fill="#f97316" fontWeight={700}>
           N
         </text>
-      </motion.g>
+      </m.g>
 
       {/* ── Title block ── */}
-      <motion.g
+      <m.g
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: dur(0.4), delay: d(1.88) }}
@@ -335,7 +335,7 @@ export function AnimatedFloorPlan({ className }: AnimatedFloorPlanProps) {
         <text x="210" y="318" textAnchor="middle" fontSize={7} fill="#475569">
           PlanForge — Ground Floor — Scale 1:100
         </text>
-      </motion.g>
+      </m.g>
     </svg>
   );
 }

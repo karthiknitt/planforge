@@ -1,6 +1,6 @@
 "use client";
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "framer-motion";
+import { type HTMLMotionProps, m, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
 interface ScaleInProps extends Omit<HTMLMotionProps<"div">, "children"> {
@@ -20,8 +20,10 @@ export function ScaleIn({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <motion.div
-      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.94 }}
+    <m.div
+      // opacity stays 1 in the SSR'd/no-JS state — only the scale animates,
+      // so content never renders invisible if JS is delayed or disabled
+      initial={{ opacity: 1, scale: shouldReduceMotion ? 1 : 0.94 }}
       whileInView={{ opacity: 1, scale: 1 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{
@@ -33,6 +35,6 @@ export function ScaleIn({
       {...props}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

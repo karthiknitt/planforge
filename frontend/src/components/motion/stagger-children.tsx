@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
 interface StaggerChildrenProps {
@@ -17,7 +17,7 @@ export function StaggerChildren({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <motion.div
+    <m.div
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, margin: "-50px" }}
@@ -32,7 +32,7 @@ export function StaggerChildren({
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -40,9 +40,11 @@ export function StaggerItem({ children, className }: { children: ReactNode; clas
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <motion.div
+    <m.div
+      // opacity stays 1 in the "hidden" variant — only the y offset animates,
+      // so content never renders invisible if JS is delayed or disabled
       variants={{
-        hidden: shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 },
+        hidden: { opacity: 1, y: shouldReduceMotion ? 0 : 20 },
         visible: {
           opacity: 1,
           y: 0,
@@ -55,6 +57,6 @@ export function StaggerItem({ children, className }: { children: ReactNode; clas
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
