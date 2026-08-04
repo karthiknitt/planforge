@@ -9,27 +9,9 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { teamMember as teamMemberTable, team as teamTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { TIER_BADGE } from "@/lib/tier-badge";
 
 export const metadata: Metadata = { title: "Account" };
-
-const TIER_BADGE: Record<string, { label: string; className: string }> = {
-  free: {
-    label: "Free",
-    className: "bg-muted text-muted-foreground border border-border",
-  },
-  basic: {
-    label: "Basic",
-    className: "bg-primary/10 text-primary/70 border border-primary/20",
-  },
-  pro: {
-    label: "Pro",
-    className: "bg-primary/15 text-primary border border-primary/25",
-  },
-  firm: {
-    label: "Firm",
-    className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-  },
-};
 
 export default async function AccountPage() {
   const session = await auth.api.getSession({ headers: await headers() });

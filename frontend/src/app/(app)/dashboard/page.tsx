@@ -13,6 +13,7 @@ import {
   user as userTable,
 } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { TIER_BADGE } from "@/lib/tier-badge";
 import {
   DashboardEmptyState,
   DashboardMobileFAB,
@@ -27,25 +28,6 @@ import {
 import { OnboardingModal } from "./onboarding-modal";
 
 export const metadata: Metadata = { title: "Dashboard" };
-
-const TIER_BADGE: Record<string, { label: string; className: string }> = {
-  free: {
-    label: "Free",
-    className: "bg-muted/80 text-muted-foreground border border-border/60",
-  },
-  basic: {
-    label: "Basic",
-    className: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-  },
-  pro: {
-    label: "Pro",
-    className: "bg-primary/10 text-primary border border-primary/25",
-  },
-  firm: {
-    label: "Firm",
-    className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-  },
-};
 
 export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
