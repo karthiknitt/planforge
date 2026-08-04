@@ -96,35 +96,36 @@ export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: Se
     return d;
   }
 
-  const dimColor = "#94A3B8";
-  const foundColor = "#92400E";
+  const dimColor = "var(--svg-ink-secondary)";
+  const foundColor = "var(--svg-material-foundation)";
   const groundColor = "#D97706";
-  const textColor = "#334155";
+  const textColor = "var(--svg-ink-secondary)";
 
   return (
     <svg
       viewBox={`0 0 ${VP_W} ${VP_H}`}
       className={["section-view-svg", className].filter(Boolean).join(" ")}
       style={{ width: "100%", height: "auto" }}
+      role="img"
       aria-label="Building section view"
     >
       <defs>
         {/* Wall hatch: 45° diagonal lines on masonry dark background */}
         <pattern id="wall-hatch" width="6" height="6" patternUnits="userSpaceOnUse">
-          <rect width="6" height="6" fill="#1E293B" />
-          <line x1="0" y1="6" x2="6" y2="0" stroke="#334155" strokeWidth="1.2" />
-          <line x1="-6" y1="6" x2="0" y2="0" stroke="#334155" strokeWidth="1.2" />
-          <line x1="6" y1="6" x2="12" y2="0" stroke="#334155" strokeWidth="1.2" />
+          <rect width="6" height="6" fill="var(--svg-wall-external)" />
+          <line x1="0" y1="6" x2="6" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="1.2" />
+          <line x1="-6" y1="6" x2="0" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="1.2" />
+          <line x1="6" y1="6" x2="12" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="1.2" />
         </pattern>
         {/* Slab hatch: crosshatch on concrete slate background */}
         <pattern id="slab-hatch" width="6" height="6" patternUnits="userSpaceOnUse">
-          <rect width="6" height="6" fill="#475569" />
-          <line x1="0" y1="6" x2="6" y2="0" stroke="#64748B" strokeWidth="1" />
-          <line x1="-6" y1="6" x2="0" y2="0" stroke="#64748B" strokeWidth="1" />
-          <line x1="6" y1="6" x2="12" y2="0" stroke="#64748B" strokeWidth="1" />
-          <line x1="0" y1="0" x2="6" y2="6" stroke="#64748B" strokeWidth="1" />
-          <line x1="-6" y1="0" x2="0" y2="6" stroke="#64748B" strokeWidth="1" />
-          <line x1="6" y1="0" x2="12" y2="6" stroke="#64748B" strokeWidth="1" />
+          <rect width="6" height="6" fill="var(--svg-wall-internal)" />
+          <line x1="0" y1="6" x2="6" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="1" />
+          <line x1="-6" y1="6" x2="0" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="1" />
+          <line x1="6" y1="6" x2="12" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="1" />
+          <line x1="0" y1="0" x2="6" y2="6" stroke="var(--svg-ink-secondary)" strokeWidth="1" />
+          <line x1="-6" y1="0" x2="0" y2="6" stroke="var(--svg-ink-secondary)" strokeWidth="1" />
+          <line x1="6" y1="0" x2="12" y2="6" stroke="var(--svg-ink-secondary)" strokeWidth="1" />
         </pattern>
       </defs>
       {/* Background */}
@@ -221,7 +222,12 @@ export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: Se
 
       {/* ── Staircase profile ─────────────────────────────────────── */}
       {sw(treadW) > 2 && sy(0) - stairY0 > 10 && (
-        <path d={buildStairPath()} fill="#CBD5E1" stroke="#64748B" strokeWidth={0.8} />
+        <path
+          d={buildStairPath()}
+          fill="var(--svg-plot-stroke)"
+          stroke="var(--svg-ink-secondary)"
+          strokeWidth={0.8}
+        />
       )}
 
       {/* ── Ground level line ─────────────────────────────────────── */}
@@ -354,7 +360,7 @@ export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: Se
             fontSize={Math.max(9, Math.min(13, bPx / 10))}
             fontFamily="sans-serif"
             fontWeight="600"
-            fill="#4B5563"
+            fill="var(--svg-ink-secondary)"
           >
             {label}
           </text>
@@ -386,7 +392,7 @@ export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: Se
         fontSize={10}
         fontFamily="sans-serif"
         fontWeight="600"
-        fill="#1E293B"
+        fill="var(--svg-wall-external)"
       >
         Section A–A · G+1 Residential · Scale approx. 1:{Math.round(1 / (scale * 0.001))}
       </text>
@@ -405,7 +411,7 @@ export function SectionViewSVG({ buildingWidth, className, stairTreadCount }: Se
         <text x={164} y={0} fontSize={8} fill={textColor} fontFamily="sans-serif">
           Foundation (schematic)
         </text>
-        <rect x={276} y={-9} width={12} height={9} fill="#CBD5E1" opacity={1} />
+        <rect x={276} y={-9} width={12} height={9} fill="var(--svg-plot-stroke)" opacity={1} />
         <text x={292} y={0} fontSize={8} fill={textColor} fontFamily="sans-serif">
           Staircase
         </text>
