@@ -117,6 +117,10 @@
   --svg-plot-stroke: #cbd5e1;
   --svg-road-fill: #cbd5e1;
   --svg-north-bg: white;
+  --svg-wall-external: #1e293b;
+  --svg-wall-internal: #475569;
+  --svg-ink-secondary: #64748b;
+  --svg-material-foundation: #92400e;
 }
 
 /* ─── Dark Mode — Blueprint Dark ─────────────────────────────────────────── */
@@ -152,7 +156,7 @@
   --sidebar-accent: oklch(0.18 0.025 252);
   --sidebar-accent-foreground: oklch(0.92 0.012 252);
   --sidebar-border: oklch(0.36 0.05 252);
-  --sidebar-ring: oklch(0.68 0.22 45);
+  --sidebar-ring: oklch(0.55 0.22 45);
 
   /* ─── Surface layers ─────────────────────────────────────────────────────── */
   --surface-1: oklch(0.1 0.018 255);
@@ -174,6 +178,10 @@
   --svg-plot-stroke: #2a4a7f;
   --svg-road-fill: #1a2744;
   --svg-north-bg: #1a2744;
+  --svg-wall-external: #cbd5e1;
+  --svg-wall-internal: #94a3b8;
+  --svg-ink-secondary: #94a3b8;
+  --svg-material-foundation: #df6820;
 }
 
 /* ─── Base styles ─────────────────────────────────────────────────────────── */
