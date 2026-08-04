@@ -64,6 +64,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { APPROVAL_POLL_MAX_POLLS, isAwaitingApprovalResponse } from "@/lib/approval-poll";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
 import {
@@ -77,6 +78,7 @@ import {
 } from "@/lib/edit-history";
 import type { FloorPlanData, GenerateResponse, LayoutData, RoomData } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
+import { startPolling } from "@/lib/poll-backoff";
 import { floorKeyFromIndex } from "@/lib/render-tab";
 import { SWATCH, TYPE_LABELS } from "@/lib/room-type-labels";
 import { buildShareUrl } from "@/lib/share-url";
@@ -524,9 +526,18 @@ export function LayoutViewer({
   const [approvalShareCopied, setApprovalShareCopied] = useState(false);
   const [approvalShareLoading, setApprovalShareLoading] = useState(false);
   const [approvalShareError, setApprovalShareError] = useState("");
+  // Ref (not just the `approvalFetching` state) so the guard below is always
+  // read live from both the automatic poll tick's closure (captured once,
+  // when the poll effect mounts/re-mounts) and the manual "↻" button's
+  // closure (fresh every render) — a plain state read in the tick closure
+  // would stay frozen at whatever it was when the effect last ran, letting a
+  // manual click and an in-flight tick fire concurrently.
+  const approvalFetchingRef = useRef(false);
+  const approvalPollCountRef = useRef(0);
 
   async function fetchApprovalStatus() {
-    if (!session) return;
+    if (!session || approvalFetchingRef.current) return;
+    approvalFetchingRef.current = true;
     setApprovalFetching(true);
     try {
       const res = await fetch(`/api/backend/projects/${projectId}/approval-status`);
@@ -540,9 +551,33 @@ export function LayoutViewer({
     } catch {
       // silent — approval status is non-critical
     } finally {
+      approvalFetchingRef.current = false;
       setApprovalFetching(false);
     }
   }
+
+  // Replaces the old manual-refresh-only ritual with real polling, reusing
+  // the same lib/poll-backoff.ts engine as generation-panel.tsx/render-tab.tsx.
+  // Only runs while genuinely awaiting a response (shared + no status yet —
+  // see lib/approval-poll.ts, shared with the dashboard's poller so the two
+  // never drift on what "awaiting" means); stops itself the instant
+  // approval.status resolves to a non-null value, since that flips the
+  // condition below to false and the effect's cleanup fires.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fetchApprovalStatus is a plain function redefined every render (not memoized) and is intentionally excluded — including it would tear down/restart the poll loop on every fetch it triggers, since setApproval/setApprovalFetching inside it cause this component to re-render
+  useEffect(() => {
+    if (!isAwaitingApprovalResponse(shareToken, approval.status)) return;
+    approvalPollCountRef.current = 0;
+    const stop = startPolling({
+      pollCountRef: approvalPollCountRef,
+      maxPolls: APPROVAL_POLL_MAX_POLLS,
+      tick: fetchApprovalStatus,
+      onTimeout: () => {
+        // Silent — matches fetchApprovalStatus's own non-critical posture.
+        // The manual "↻" button below still works after this.
+      },
+    });
+    return () => stop();
+  }, [shareToken, approval.status]);
 
   // ── Annotation helpers ─────────────────────────────────────────────────────
 
@@ -1311,12 +1346,22 @@ export function LayoutViewer({
             <Link2 className="h-3 w-3 mr-1.5" />
             {shareLoading || approvalShareLoading ? "…" : "Share"}
           </Button>
-          {/* Refresh approval status button */}
+          {/* Manual refresh — supplements the automatic poll above (see the
+              effect near fetchApprovalStatus's definition), it doesn't
+              replace it. approvalFetchingRef inside fetchApprovalStatus
+              blocks this from running concurrently with an in-flight
+              automatic tick; resetting the poll count here just fast-tracks
+              the *next* automatic tick back to the poll loop's shortest
+              backoff tier instead of waiting out whatever tier it had
+              climbed to. */}
           <Button
             variant="outline"
             size="sm"
             className="shrink-0 min-h-[40px] md:min-h-0 border-border text-muted-foreground hover:bg-muted"
-            onClick={fetchApprovalStatus}
+            onClick={() => {
+              approvalPollCountRef.current = 0;
+              fetchApprovalStatus();
+            }}
             disabled={approvalFetching || !session}
             title="Refresh client approval status"
           >
