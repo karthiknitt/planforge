@@ -52,11 +52,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
@@ -571,6 +579,7 @@ export function LayoutViewer({
   const [approvalPdfPreviewOpen, setApprovalPdfPreviewOpen] = useState(false);
   const [dxfPreviewOpen, setDxfPreviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareTab, setShareTab] = useState<"link" | "approval">("link");
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
@@ -583,7 +592,6 @@ export function LayoutViewer({
     updatedAt: initialApproval?.updatedAt ?? null,
   });
   const [approvalFetching, setApprovalFetching] = useState(false);
-  const [sendForApprovalOpen, setSendForApprovalOpen] = useState(false);
   const [approvalShareUrl, setApprovalShareUrl] = useState(
     shareToken
       ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/${shareToken}`
@@ -870,7 +878,8 @@ export function LayoutViewer({
       const json = await res.json();
       const fullUrl = `${window.location.origin}${json.share_url}`;
       setApprovalShareUrl(fullUrl);
-      setSendForApprovalOpen(true);
+      setShareTab("approval");
+      setShareOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not generate share link";
       setApprovalShareError(message);
@@ -1040,6 +1049,7 @@ export function LayoutViewer({
     setShareError("");
     try {
       await ensureShareUrl();
+      setShareTab("link");
       setShareOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not generate share link";
@@ -1047,6 +1057,17 @@ export function LayoutViewer({
       showErrorToast(message);
     } finally {
       setShareLoading(false);
+    }
+  }
+
+  // Lazily fetch each tab's link the first time it's viewed — avoids firing
+  // both `ensureShareUrl()` and `handleSendForApproval()` on every dialog open.
+  function handleShareTabChange(tab: string) {
+    setShareTab(tab as "link" | "approval");
+    if (tab === "link" && !shareUrl) {
+      handleShare();
+    } else if (tab === "approval" && !approvalShareUrl) {
+      handleSendForApproval();
     }
   }
 
@@ -1295,98 +1316,91 @@ export function LayoutViewer({
           ))}
         </div>
 
-        {/* Export + share buttons — horizontal scroll on mobile */}
+        {/* Primary actions + Export/Share — horizontal scroll on mobile */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:items-center md:[mask-image:none]">
           {/* PDF — primary action, prominent on mobile */}
           <Button
             size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 bg-primary text-primary-foreground hover:bg-primary/90 md:bg-transparent md:text-foreground md:border md:border-border md:hover:bg-muted md:shadow-none shadow-md md:variant-outline"
+            className="shrink-0 min-h-[40px] md:min-h-0 bg-primary text-primary-foreground hover:bg-primary/90 md:bg-transparent md:text-foreground md:border md:border-border md:hover:bg-muted md:shadow-none shadow-md"
             onClick={() => handleDownload("pdf")}
             disabled={downloadingPdf || !session}
           >
             {downloadingPdf ? "…" : "⬇ PDF"}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={() => setPdfPreviewOpen(true)}
-            disabled={!session}
-          >
-            Preview
-          </Button>
-          {planTier === "free" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              asChild
-              title="Upgrade to Basic for DXF export"
-            >
-              <Link href="/pricing">
-                <Lock className="h-3 w-3 mr-1.5" />
-                DXF
-              </Link>
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={() => handleDownload("dxf")}
-              disabled={downloadingDxf || !session}
-              title="DXF for AutoCAD / DraftSight"
-            >
-              {downloadingDxf ? "…" : "DXF"}
-            </Button>
-          )}
-          {planTier !== "free" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={() => setDxfPreviewOpen(true)}
-              disabled={!session}
-            >
-              Preview DXF
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={() => setApprovalDialogOpen(true)}
-            disabled={!session}
-            title="Download municipality approval drawing package (CMDA/BBMP/GHMC format)"
-          >
-            Approval
-          </Button>
-          {structStatus?.design?.status === "designed" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={handleGenerateStructDrawings}
-              disabled={generatingStructDrawings || !session}
-              title="Generate the 6-sheet structural drawing set (column & footing, plinth beam, roof beam & slab)"
-            >
-              <FileStack className="h-3 w-3 mr-1.5" />
-              {generatingStructDrawings ? "…" : "Structural Drawings"}
-            </Button>
-          )}
-          {structDrawingsBlob && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={() => saveStructDrawings(structDrawingsBlob)}
-              disabled={!session}
-              title="Download the generated structural drawing set PDF"
-            >
-              <Download className="h-3 w-3 mr-1.5" />
-              Download Structural Drawings
-            </Button>
-          )}
+
+          {/* Export — everything else export-related, tucked behind one dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+                disabled={!session}
+              >
+                Export
+                <ChevronDown className="h-3 w-3 ml-1.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuItem onClick={() => setPdfPreviewOpen(true)}>
+                Preview PDF
+              </DropdownMenuItem>
+              {planTier === "free" ? (
+                <DropdownMenuItem asChild title="Upgrade to Basic for DXF export">
+                  <Link href="/pricing">
+                    <Lock className="h-3 w-3" />
+                    DXF (upgrade required)
+                  </Link>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={() => handleDownload("dxf")}
+                  disabled={downloadingDxf}
+                  title="DXF for AutoCAD / DraftSight"
+                >
+                  {downloadingDxf ? "Downloading DXF…" : "DXF"}
+                </DropdownMenuItem>
+              )}
+              {planTier !== "free" && (
+                <DropdownMenuItem onClick={() => setDxfPreviewOpen(true)}>
+                  Preview DXF
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setApprovalDialogOpen(true)}
+                title="Download municipality approval drawing package (CMDA/BBMP/GHMC format)"
+              >
+                Approval Package
+              </DropdownMenuItem>
+              {(structStatus?.design?.status === "designed" || structDrawingsBlob) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Structural drawings</DropdownMenuLabel>
+                  {structStatus?.design?.status === "designed" && (
+                    <DropdownMenuItem
+                      onClick={handleGenerateStructDrawings}
+                      disabled={generatingStructDrawings}
+                      title="Generate the 6-sheet structural drawing set (column & footing, plinth beam, roof beam & slab)"
+                    >
+                      <FileStack className="h-3 w-3" />
+                      {generatingStructDrawings ? "Generating…" : "Generate set"}
+                    </DropdownMenuItem>
+                  )}
+                  {structDrawingsBlob && (
+                    <DropdownMenuItem
+                      onClick={() => saveStructDrawings(structDrawingsBlob)}
+                      title="Download the generated structural drawing set PDF"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download set
+                    </DropdownMenuItem>
+                  )}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <ShareWhatsAppButton
             projectName={projectName}
             layoutId={selectedId}
@@ -1398,22 +1412,11 @@ export function LayoutViewer({
             size="sm"
             className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
             onClick={handleShare}
-            disabled={shareLoading || !session}
-            title="Get a read-only share link for your client"
+            disabled={shareLoading || approvalShareLoading || !session}
+            title="Get a read-only share link, or send this plan for client approval"
           >
             <Link2 className="h-3 w-3 mr-1.5" />
-            {shareLoading ? "…" : "Share"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={handleSendForApproval}
-            disabled={approvalShareLoading || !session}
-            title="Send this plan to client for approval"
-          >
-            <MessageSquare className="h-3 w-3 mr-1.5" />
-            {approvalShareLoading ? "…" : "Approve"}
+            {shareLoading || approvalShareLoading ? "…" : "Share"}
           </Button>
           {/* Refresh approval status button */}
           <Button
@@ -1459,13 +1462,6 @@ export function LayoutViewer({
 
       {regenerating && (
         <GenerationPanel projectId={projectId} autoStart onDone={() => setRegenerating(false)} />
-      )}
-
-      {/* Share error */}
-      {shareError && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {shareError}
-        </p>
       )}
 
       {/* Annotation dialog */}
@@ -1526,86 +1522,92 @@ export function LayoutViewer({
         </DialogContent>
       </Dialog>
 
-      {/* Share link dialog */}
+      {/* Unified Share dialog — read-only link vs. send-for-approval, one trigger two tabs */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Share floor plan with client</DialogTitle>
+            <DialogTitle>Share with client</DialogTitle>
             <DialogDescription>
-              Anyone with this link can view the floor plans in read-only mode — no login required.
+              Get a read-only link, or send this plan for client approval — no login needed on their
+              end either way.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              readOnly
-              value={shareUrl}
-              className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
-              onFocus={(e) => e.target.select()}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCopy}
-              className="shrink-0"
-              aria-label={copied ? "Copied to clipboard" : "Copy link"}
-            >
-              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          {copied && (
-            <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            The link shows all layout options with floor plans, section view, and compliance status.
-          </p>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approval share error */}
-      {approvalShareError && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {approvalShareError}
-        </p>
-      )}
-
-      {/* Send for Approval dialog */}
-      <Dialog open={sendForApprovalOpen} onOpenChange={setSendForApprovalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send for client approval</DialogTitle>
-            <DialogDescription>
-              Share this link with your client. They can approve the plan or request changes — no
-              login needed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              readOnly
-              value={approvalShareUrl}
-              className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
-              onFocus={(e) => e.target.select()}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCopyApprovalLink}
-              className="shrink-0"
-              aria-label={approvalShareCopied ? "Copied to clipboard" : "Copy approval link"}
-            >
-              {approvalShareCopied ? (
-                <Check className="h-4 w-4 text-green-600" />
-              ) : (
-                <Copy className="h-4 w-4" />
+          <Tabs value={shareTab} onValueChange={handleShareTabChange}>
+            <TabsList className="w-full">
+              <TabsTrigger value="link">Share link</TabsTrigger>
+              <TabsTrigger value="approval">Send for Approval</TabsTrigger>
+            </TabsList>
+            <TabsContent value="link" className="flex flex-col gap-2">
+              {shareError && (
+                <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {shareError}
+                </p>
               )}
-            </Button>
-          </div>
-          {approvalShareCopied && (
-            <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            After sending the link, use the ↻ button in the toolbar to check if the client has
-            responded.
-          </p>
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  readOnly
+                  value={shareUrl}
+                  className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
+                  onFocus={(e) => e.target.select()}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCopy}
+                  className="shrink-0"
+                  aria-label={copied ? "Copied to clipboard" : "Copy link"}
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {copied && (
+                <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Anyone with this link can view the floor plans in read-only mode — layout options,
+                floor plans, section view, and compliance status.
+              </p>
+            </TabsContent>
+            <TabsContent value="approval" className="flex flex-col gap-2">
+              {approvalShareError && (
+                <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {approvalShareError}
+                </p>
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  readOnly
+                  value={approvalShareUrl}
+                  className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
+                  onFocus={(e) => e.target.select()}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCopyApprovalLink}
+                  className="shrink-0"
+                  aria-label={approvalShareCopied ? "Copied to clipboard" : "Copy approval link"}
+                >
+                  {approvalShareCopied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {approvalShareCopied && (
+                <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Share this link with your client — they can approve the plan or request changes.
+                After sending, use the ↻ button in the toolbar to check if they've responded.
+              </p>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
