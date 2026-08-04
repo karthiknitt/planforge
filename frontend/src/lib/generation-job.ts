@@ -8,7 +8,9 @@ export interface JobStatus {
 }
 
 export const POLL_INTERVAL_MS = 2000;
-export const MAX_POLLS = 150; // 5 minutes — past this, surface a timeout error
+// Poll-count cap, not a fixed wall-clock window — poll-backoff.ts grows the
+// interval over time, so 150 polls take longer than the original flat 5min.
+export const MAX_POLLS = 150;
 
 export function jobPhase(job: JobStatus | null): JobPhase {
   if (!job) return "idle";

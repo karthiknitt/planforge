@@ -67,13 +67,7 @@ import {
   redoHistory,
   undoHistory,
 } from "@/lib/edit-history";
-import {
-  type JobStatus,
-  jobPhase,
-  MAX_POLLS,
-  POLL_INTERVAL_MS,
-  stageLabel,
-} from "@/lib/generation-job";
+import { type JobStatus, jobPhase, MAX_POLLS, stageLabel } from "@/lib/generation-job";
 import type {
   ComplianceData,
   FloorPlanData,
@@ -83,6 +77,7 @@ import type {
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
 import { tierAtLeast } from "@/lib/plan";
+import { startPolling } from "@/lib/poll-backoff";
 import {
   buildRenderImageUrl,
   classifyRenderStatus,
@@ -357,32 +352,33 @@ function FloorRenderSection({
 
   const renderJobPhase = jobPhase(job);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s (layoutKey is a legitimate re-arm trigger and stays in the deps)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the poll loop on every tick (layoutKey is a legitimate re-arm trigger and stays in the deps)
   useEffect(() => {
     if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
     // This poll belongs to the layout viewed when it was armed; if the user
     // switches layouts, a late-resolving fetch must not setJob for the wrong one.
     const dispatchKey = layoutKey;
-    const t = setInterval(async () => {
-      pollCountRef.current += 1;
-      if (pollCountRef.current > MAX_POLLS) {
+    const stop = startPolling({
+      pollCountRef,
+      maxPolls: MAX_POLLS,
+      tick: async () => {
+        try {
+          const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+          // Ignore a response that resolved after a layout switch.
+          if (layoutKeyRef.current !== dispatchKey) return;
+          if (res.ok) setJob(await res.json());
+        } catch {
+          /* transient poll failure — keep polling */
+        }
+      },
+      onTimeout: () => {
         setError("Render is taking unusually long — try again.");
         setPhase("error");
         setBusy(false);
         showErrorToast("Render is taking unusually long — try again.");
-        clearInterval(t);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
-        // Ignore a response that resolved after a layout switch.
-        if (layoutKeyRef.current !== dispatchKey) return;
-        if (res.ok) setJob(await res.json());
-      } catch {
-        /* transient poll failure — keep polling */
-      }
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(t);
+      },
+    });
+    return stop;
   }, [job?.id, renderJobPhase, projectId, layoutKey]);
 
   useEffect(() => {
@@ -631,25 +627,26 @@ function GenerationPanel({
 
   const phase = jobPhase(job);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the poll loop on every tick
   useEffect(() => {
     if (!job || phase === "done" || phase === "failed") return;
-    const t = setInterval(async () => {
-      pollCountRef.current += 1;
-      if (pollCountRef.current > MAX_POLLS) {
+    const stop = startPolling({
+      pollCountRef,
+      maxPolls: MAX_POLLS,
+      tick: async () => {
+        try {
+          const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
+          if (res.ok) setJob(await res.json());
+        } catch {
+          /* transient poll failure — keep polling */
+        }
+      },
+      onTimeout: () => {
         setError("Generation is taking unusually long — try refreshing the page.");
         showErrorToast("Generation is taking unusually long — try refreshing the page.");
-        clearInterval(t);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
-        if (res.ok) setJob(await res.json());
-      } catch {
-        /* transient poll failure — keep polling */
-      }
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(t);
+      },
+    });
+    return stop;
   }, [job?.id, phase, projectId]);
 
   useEffect(() => {
