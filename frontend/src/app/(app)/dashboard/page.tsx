@@ -22,6 +22,7 @@ import {
   DashboardTitle,
   ProjectCard,
 } from "./dashboard-strings";
+import { fetchHasGeneratedLayout } from "./fetch-has-generated-layout";
 import { OnboardingChecklist } from "./onboarding-checklist";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -66,22 +67,28 @@ export default async function DashboardPage() {
   const planTier = userRows[0]?.planTier ?? "free";
   const badge = TIER_BADGE[planTier] ?? TIER_BADGE.free;
 
-  // Onboarding checklist steps. Step 1 is exact (`projects.length`). Steps 2
-  // and 3 have no dedicated status field to read: layout-generation results
-  // live in the backend's `StoredLayout` table (SQLAlchemy-only, joined into
-  // neither this Drizzle query nor the `ProjectRead` list schema), and mere
-  // viewing/generating a layout never writes to the `project` row — only
-  // edits (rename, room edits, approval requests, annotations) do. So step 2
-  // uses "project touched since creation" as the closest available proxy for
-  // having gone past creation into generation/review, and step 3 reuses
-  // `approvalStatus` (a share-for-approval implies export/share happened).
-  // Both are imperfect: a user who only ever views a freshly generated
-  // layout without touching anything else won't trip step 2.
+  // Onboarding checklist steps. Step 1 is exact (`projects.length`). Step 3
+  // reuses `approvalStatus` (a share-for-approval implies export/share
+  // happened — already selected by the `db.select()` above, no extra call).
+  // Step 2 ("generated and reviewing a layout") has no field on the Drizzle
+  // project row or the backend's `ProjectRead` list schema — generation
+  // results live in the backend-only `layouts` table, and mere viewing never
+  // writes to the `project` row (only renames/annotations/approval do). The
+  // `GET /api/projects` list endpoint now sets `has_layouts` per project (a
+  // cheap indexed EXISTS join over `layouts`, added to that existing route —
+  // see backend/app/api/routes/projects.py) so step 2 reads real data
+  // instead of an approximation. Only fetched when it can actually change
+  // the outcome (not already dismissed, and the user has a project to check)
+  // — it's a non-critical progress hint, so `fetchHasGeneratedLayout` times
+  // out short and falls back to `false` rather than blocking the dashboard
+  // on a cold backend.
+  const dismissedOnboarding = !!userRows[0]?.hasSeenOnboarding;
   const step1Done = projects.length > 0;
-  const step2Done = projects.some((p) => p.updatedAt.getTime() !== p.createdAt.getTime());
+  const step2Done =
+    !dismissedOnboarding && step1Done ? await fetchHasGeneratedLayout(session.user.id) : false;
   const step3Done = projects.some((p) => p.approvalStatus !== null);
   const onboardingComplete = step1Done && step2Done && step3Done;
-  const showOnboarding = !userRows[0]?.hasSeenOnboarding && !onboardingComplete;
+  const showOnboarding = !dismissedOnboarding && !onboardingComplete;
 
   const firstName = session.user.name.split(" ")[0];
 
