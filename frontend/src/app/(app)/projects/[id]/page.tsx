@@ -159,15 +159,16 @@ function GeneratingFallback() {
         ))}
       </div>
 
-      {/* Skeleton cards for layout buttons */}
+      {/* Skeleton cards for layout buttons — h-11 (44px) matches the real
+          "Layout {id} — {name}" buttons' min-h-[44px] in layout-viewer.tsx */}
       <div className="flex gap-3 pt-2">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-9 w-32 rounded-lg" />
+        {["w-28", "w-36", "w-32"].map((w) => (
+          <Skeleton key={w} className={`h-11 ${w} rounded-lg`} />
         ))}
       </div>
 
-      {/* SVG area skeleton */}
-      <Skeleton className="h-72 rounded-xl bg-muted/60" />
+      {/* SVG area skeleton — width matches FloorPlanSVG's "w-full md:max-w-xl" */}
+      <Skeleton className="h-72 w-full rounded-xl bg-muted/60 md:max-w-xl" />
 
       <style>{`
         @keyframes progress-indeterminate {

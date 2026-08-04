@@ -404,7 +404,8 @@ function FloorRenderSection({
       <p className="font-medium text-sm">{label}</p>
       {phase === "checking" && (
         <>
-          <Skeleton className="h-64 w-full max-w-xl rounded-xl" />
+          {/* 8:5 matches the render service's fixed 1280x800 output (backend/app/services/render_providers.py) — keeps the skeleton box the same size as the loaded image. */}
+          <Skeleton className="aspect-[8/5] h-auto w-full max-w-xl rounded-xl" />
           {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
           {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
           <img
@@ -423,7 +424,7 @@ function FloorRenderSection({
           <img
             src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
             alt={`AI render — ${label}`}
-            className="w-full max-w-xl rounded-xl border"
+            className="aspect-[8/5] w-full max-w-xl rounded-xl border object-cover"
           />
         </>
       )}
@@ -2904,16 +2905,17 @@ export function LayoutViewer({
               3D view
             </Button>
           </div>
-          <div className="w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
+          {/* No documented fixed output size for this canvas capture — 4:3 is a sensible default that keeps the skeleton and loaded capture the same box. */}
+          <div className="aspect-[4/3] w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
             {r3fPngs[floor] ? (
               // biome-ignore lint/performance/noImgElement: captured canvas PNG, not a next/image candidate
               <img
                 src={r3fPngs[floor] ?? undefined}
                 alt={`Geometric view — ${currentFloorEntry.label}`}
-                className="w-full"
+                className="h-full w-full object-contain"
               />
             ) : (
-              <Skeleton className="h-64 w-full rounded-none" />
+              <Skeleton className="h-full w-full rounded-none" />
             )}
           </div>
           <div className="flex w-fit flex-wrap gap-2">
