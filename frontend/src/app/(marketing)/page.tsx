@@ -226,8 +226,8 @@ export default function LandingPage() {
         {/* Blueprint grid overlay */}
         <div className="absolute inset-0 bg-blueprint-grid opacity-100" />
         {/* Radial glows */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_60%,rgba(249,115,22,0.10)_0%,transparent_55%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,rgba(249,115,22,0.13)_0%,transparent_50%)]" />
+        <div className="absolute inset-0 ambient-glow-orange-tl" />
+        <div className="absolute inset-0 ambient-glow-orange-tr" />
         <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28 w-full">
@@ -333,7 +333,7 @@ export default function LandingPage() {
 
       {/* ── FEATURES ── */}
       <section className="py-24 lg:py-32 bg-background relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(249,115,22,0.06)_0%,transparent_60%)]" />
+        <div className="absolute inset-0 ambient-glow-orange-top" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <FadeIn className="text-center mb-16">
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
@@ -423,7 +423,7 @@ export default function LandingPage() {
 
       {/* ── PRICING PREVIEW ── */}
       <section className="py-24 lg:py-32 bg-background relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(249,115,22,0.06)_0%,transparent_60%)]" />
+        <div className="absolute inset-0 ambient-glow-orange-bottom" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <FadeIn className="text-center mb-16">
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
@@ -537,7 +537,7 @@ export default function LandingPage() {
       {/* ── FINAL CTA ── */}
       <section className="py-24 lg:py-32 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-background border-t border-border/50">
         <div className="absolute inset-0 bg-blueprint-grid opacity-40" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,rgba(249,115,22,0.08)_0%,transparent_60%)]" />
+        <div className="absolute inset-0 ambient-glow-orange" />
         <FadeIn className="relative mx-auto max-w-3xl px-4 text-center">
           <Badge className="mb-6 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
             Get Started Today
