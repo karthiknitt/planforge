@@ -334,7 +334,15 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
         key={`${view}-${annotate}`} // camera props are initial-only — remount on view/annotate change
         gl={{ preserveDrawingBuffer: true, antialias: true }}
         camera={{ position: camPos, fov: 45, up: [0, 1, 0] }}
-        dpr={[1, 2]}
+        // "demand" (only re-render on invalidate, not a continuous 60fps loop)
+        // + dpr=1 (was [1,2]) — this scene is frequently mounted offscreen to
+        // serve captures, so it must not burn a full-rate render loop while
+        // invisible. drei's <OrbitControls> calls invalidate() on its own
+        // interaction changes, and CaptureRegistrar's capture() below does an
+        // explicit gl.render() before reading the canvas, so neither the
+        // interactive iso view nor a capture depends on the continuous loop.
+        frameloop="demand"
+        dpr={1}
         style={{ width: "100%", height: "100%" }}
       >
         <color attach="background" args={["#f3f4f6"]} />

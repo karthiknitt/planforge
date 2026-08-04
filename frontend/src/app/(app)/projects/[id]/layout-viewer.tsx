@@ -15,31 +15,24 @@ import {
   Link2,
   Lock,
   MessageSquare,
-  Pencil,
-  Redo2,
   RefreshCw,
   RotateCcw,
   Save,
-  Settings2,
-  Undo2,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { BOQViewer } from "@/components/boq-viewer";
-import { ChatPanel } from "@/components/chat-panel";
 import { DxfPreviewDialog } from "@/components/dxf-preview-dialog";
 import type { Annotation } from "@/components/floor-plan-svg";
-import { FloorPlanSVG } from "@/components/floor-plan-svg";
-import { LayoutCompareView } from "@/components/layout-compare-view";
 import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
-import { type Plan3DHandle, Plan3DScene, type Plan3DView } from "@/components/plan-3d-scene";
+import type { Plan3DHandle, Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
 import { StructuralLifecycleHeader } from "@/components/structural-lifecycle-header";
-import { type StructuralStatusResponse, StructuralViewer } from "@/components/structural-viewer";
+import type { StructuralStatusResponse } from "@/components/structural-viewer";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,7 +45,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,7 +59,6 @@ import {
   redoHistory,
   undoHistory,
 } from "@/lib/edit-history";
-import { type JobStatus, jobPhase, MAX_POLLS, stageLabel } from "@/lib/generation-job";
 import type {
   ComplianceData,
   FloorPlanData,
@@ -76,22 +67,28 @@ import type {
   RoomData,
 } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
-import { tierAtLeast } from "@/lib/plan";
-import { startPolling } from "@/lib/poll-backoff";
-import {
-  buildRenderImageUrl,
-  classifyRenderStatus,
-  floorKeyFromIndex,
-  type RenderFloorKey,
-} from "@/lib/render-tab";
+import { floorKeyFromIndex } from "@/lib/render-tab";
 import { buildShareUrl } from "@/lib/share-url";
-import {
-  isPreliminaryStatus,
-  type RenderSourceFallbackReason,
-  renderSourceFallbackNote,
-} from "@/lib/structural-status";
+import type { RenderSourceFallbackReason } from "@/lib/structural-status";
 import { type TabId, visibleTabs } from "@/lib/tabs";
 import { showErrorToast, showToast } from "@/lib/toast";
+import { GenerationPanel } from "./tabs/generation-panel";
+import { PlanTab } from "./tabs/plan-tab";
+import { R3fTab } from "./tabs/r3f-tab";
+
+const BOQViewer = dynamic(() => import("@/components/boq-viewer").then((m) => m.BOQViewer));
+const StructuralViewer = dynamic(() =>
+  import("@/components/structural-viewer").then((m) => m.StructuralViewer)
+);
+const LayoutCompareView = dynamic(() =>
+  import("@/components/layout-compare-view").then((m) => m.LayoutCompareView)
+);
+const RenderTab = dynamic(() => import("./tabs/render-tab").then((m) => m.RenderTab));
+const ChatTab = dynamic(() => import("./tabs/chat-tab").then((m) => m.ChatTab));
+// ssr:false — R3F/three.js touches WebGL/canvas APIs that don't exist server-side.
+const Plan3DScene = dynamic(() => import("@/components/plan-3d-scene").then((m) => m.Plan3DScene), {
+  ssr: false,
+});
 
 interface RevisionListItem {
   id: number;
@@ -190,290 +187,6 @@ function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKe
     >
       {cadQualityLabel(quality)}
     </span>
-  );
-}
-
-// ── Render tab — generate + view AI renders per floor, Pro-gated ──────────────
-// One FloorRenderSection per available floor: "checking" probes the GET
-// endpoint (via a hidden <img>) to see if a render already exists; "busy"
-// tracks an in-flight POST separately so a regenerate can keep showing the
-// last successful image.
-type RenderPhase = "checking" | "none" | "ready" | "upsell" | "unavailable" | "error";
-
-function RenderTab({
-  projectId,
-  layoutKey,
-  planTier,
-  floors,
-  r3fPngs,
-  registerTrigger,
-}: {
-  projectId: string;
-  layoutKey: string;
-  planTier: string;
-  floors: { label: string; index: number }[];
-  r3fPngs: Record<number, string | null>;
-  registerTrigger?: (fn: (floorIndex: number, png?: string | null) => void) => void;
-}) {
-  const isPro = tierAtLeast(planTier, "pro");
-  const sectionTriggers = useRef<Record<string, (png?: string | null) => void>>({});
-  useEffect(() => {
-    registerTrigger?.((floorIndex: number, png?: string | null) => {
-      sectionTriggers.current[floorKeyFromIndex(floorIndex)]?.(png);
-    });
-  }, [registerTrigger]);
-
-  if (!isPro) {
-    return (
-      <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-        <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-        <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-        <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
-        <Button asChild className="mt-4" size="sm" variant="outline">
-          <Link href="/pricing">Upgrade to Pro</Link>
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-8">
-      {floors.map((f) => (
-        <FloorRenderSection
-          key={f.index}
-          projectId={projectId}
-          layoutKey={layoutKey}
-          floorKey={floorKeyFromIndex(f.index)}
-          label={f.label}
-          r3fPng={r3fPngs[f.index]}
-          register={(fn) => {
-            sectionTriggers.current[floorKeyFromIndex(f.index)] = fn;
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function FloorRenderSection({
-  projectId,
-  layoutKey,
-  floorKey,
-  label,
-  r3fPng,
-  register,
-}: {
-  projectId: string;
-  layoutKey: string;
-  floorKey: RenderFloorKey;
-  label: string;
-  r3fPng?: string | null;
-  register?: (fn: (png?: string | null) => void) => void;
-}) {
-  const [phase, setPhase] = useState<RenderPhase>("checking");
-  const [busy, setBusy] = useState(false);
-  const [version, setVersion] = useState(0);
-  const [error, setError] = useState("");
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const pollCountRef = useRef(0);
-  // Always-current layout key, so an in-flight poll dispatched for the
-  // previously-viewed layout can detect it resolved late (after a layout
-  // switch) and drop its stale setJob instead of flipping phase to "ready".
-  const layoutKeyRef = useRef(layoutKey);
-  layoutKeyRef.current = layoutKey;
-
-  // Latest generate fn, so the parent's trigger always calls the current closure.
-  const handleGenRef = useRef<(png?: string | null) => void>(() => {});
-  handleGenRef.current = (png?: string | null) => {
-    void handleGenerate(png);
-  };
-  useEffect(() => {
-    register?.((png?: string | null) => handleGenRef.current(png));
-  }, [register]);
-
-  // Reset and re-check whenever the viewed project/layout changes — the
-  // version cache-buster must reset too, or a previous project's cached
-  // image URL could be shown (the stale-render bug).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: projectId/layoutKey are intentional re-check triggers, not read in the body
-  useEffect(() => {
-    setPhase("checking");
-    setError("");
-    setJob(null);
-    setVersion(0);
-  }, [projectId, layoutKey]);
-
-  async function handleGenerate(overridePng?: string | null) {
-    setBusy(true);
-    setError("");
-    setJob(null);
-    pollCountRef.current = 0;
-    try {
-      const fd = new FormData();
-      const png = overridePng !== undefined ? overridePng : r3fPng;
-      if (png) {
-        const blob = await (await fetch(png)).blob();
-        fd.append("reference", blob, "r3f.png");
-      }
-      const res = await fetch(
-        `/api/backend/projects/${projectId}/layouts/${layoutKey}/render-jobs?floor=${floorKey}`,
-        { method: "POST", body: fd }
-      );
-      const outcome = classifyRenderStatus(res.status);
-      if (outcome === "upsell") {
-        setPhase("upsell");
-        setBusy(false);
-        return;
-      }
-      if (outcome === "unavailable") {
-        setPhase("unavailable");
-        setBusy(false);
-        return;
-      }
-      if (outcome !== "ready") {
-        const data = await res.json().catch(() => ({}));
-        const message = (data as { detail?: string })?.detail ?? `Render failed (${res.status})`;
-        setError(message);
-        setPhase("error");
-        setBusy(false);
-        showErrorToast(message);
-        return;
-      }
-      // 200 (inline fallback, already resolved) or 202 (queued) — either way
-      // the job-status poll below drives phase from here; busy stays true
-      // until the job resolves.
-      setJob(await res.json());
-    } catch {
-      setError("Render failed — is the backend running?");
-      setPhase("error");
-      setBusy(false);
-      showErrorToast("Render failed — is the backend running?");
-    }
-  }
-
-  const renderJobPhase = jobPhase(job);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the poll loop on every tick (layoutKey is a legitimate re-arm trigger and stays in the deps)
-  useEffect(() => {
-    if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
-    // This poll belongs to the layout viewed when it was armed; if the user
-    // switches layouts, a late-resolving fetch must not setJob for the wrong one.
-    const dispatchKey = layoutKey;
-    const stop = startPolling({
-      pollCountRef,
-      maxPolls: MAX_POLLS,
-      tick: async () => {
-        try {
-          const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
-          // Ignore a response that resolved after a layout switch.
-          if (layoutKeyRef.current !== dispatchKey) return;
-          if (res.ok) setJob(await res.json());
-        } catch {
-          /* transient poll failure — keep polling */
-        }
-      },
-      onTimeout: () => {
-        setError("Render is taking unusually long — try again.");
-        setPhase("error");
-        setBusy(false);
-        showErrorToast("Render is taking unusually long — try again.");
-      },
-    });
-    return stop;
-  }, [job?.id, renderJobPhase, projectId, layoutKey]);
-
-  useEffect(() => {
-    if (renderJobPhase === "done") {
-      setVersion((v) => v + 1);
-      setPhase("ready");
-      setBusy(false);
-    } else if (renderJobPhase === "failed") {
-      const message = job?.error ?? "Render failed.";
-      setError(message);
-      setPhase("error");
-      setBusy(false);
-      showErrorToast(message);
-    }
-  }, [renderJobPhase, job?.error]);
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="font-medium text-sm">{label}</p>
-      {phase === "checking" && (
-        <>
-          {/* 8:5 matches the render service's fixed 1280x800 output (backend/app/services/render_providers.py) — keeps the skeleton box the same size as the loaded image. */}
-          <Skeleton className="aspect-[8/5] h-auto w-full max-w-xl rounded-xl" />
-          {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
-          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
-          <img
-            src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
-            alt=""
-            className="hidden"
-            onLoad={() => setPhase("ready")}
-            onError={() => setPhase("none")}
-          />
-        </>
-      )}
-
-      {phase === "ready" && (
-        <>
-          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
-          <img
-            src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
-            alt={`AI render — ${label}`}
-            className="aspect-[8/5] w-full max-w-xl rounded-xl border object-cover"
-          />
-        </>
-      )}
-
-      {phase === "none" && (
-        <p className="text-sm text-muted-foreground">
-          No render yet for the {label.toLowerCase()} of this layout. Generate an AI-rendered
-          visualisation from the current floor plan.
-        </p>
-      )}
-
-      {phase === "unavailable" && (
-        <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-          <p className="font-medium">Rendering isn't configured on this server yet.</p>
-        </div>
-      )}
-
-      {phase === "upsell" && (
-        <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-          <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-          <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-          <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
-          <Button asChild className="mt-4" size="sm" variant="outline">
-            <Link href="/pricing">Upgrade to Pro</Link>
-          </Button>
-        </div>
-      )}
-
-      {error && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      {(phase === "none" || phase === "ready" || phase === "error") && (
-        <Button
-          size="sm"
-          variant={phase === "ready" ? "outline" : "default"}
-          className="w-fit gap-1.5"
-          onClick={() => void handleGenerate()}
-          disabled={busy}
-        >
-          <RefreshCw className="h-3 w-3" />
-          {busy
-            ? "Generating…"
-            : phase === "ready"
-              ? "Regenerate"
-              : phase === "error"
-                ? "Retry"
-                : "Generate render"}
-        </Button>
-      )}
-    </div>
   );
 }
 
@@ -579,103 +292,6 @@ interface LayoutViewerProps {
   municipality?: string | null;
   shareToken?: string | null;
   initialApproval?: ApprovalInfo;
-}
-
-// ── Generation panel — polls a generate-job to completion, then refreshes ──
-function GenerationPanel({
-  projectId,
-  autoStart,
-  onDone,
-}: {
-  projectId: string;
-  autoStart: boolean;
-  onDone?: () => void;
-}) {
-  const router = useRouter();
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const [error, setError] = useState("");
-  const startedRef = useRef(false);
-  const pollCountRef = useRef(0);
-
-  const start = useCallback(async () => {
-    setError("");
-    setJob(null);
-    pollCountRef.current = 0;
-    try {
-      const res = await fetch(`/api/backend/projects/${projectId}/generate-jobs`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const message = `Could not start generation (HTTP ${res.status}).`;
-        setError(message);
-        showErrorToast(message);
-        return;
-      }
-      setJob(await res.json());
-    } catch {
-      setError("Could not reach the layout engine.");
-      showErrorToast("Could not reach the layout engine.");
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    if (autoStart && !startedRef.current) {
-      startedRef.current = true;
-      start();
-    }
-  }, [autoStart, start]);
-
-  const phase = jobPhase(job);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the poll loop on every tick
-  useEffect(() => {
-    if (!job || phase === "done" || phase === "failed") return;
-    const stop = startPolling({
-      pollCountRef,
-      maxPolls: MAX_POLLS,
-      tick: async () => {
-        try {
-          const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
-          if (res.ok) setJob(await res.json());
-        } catch {
-          /* transient poll failure — keep polling */
-        }
-      },
-      onTimeout: () => {
-        setError("Generation is taking unusually long — try refreshing the page.");
-        showErrorToast("Generation is taking unusually long — try refreshing the page.");
-      },
-    });
-    return stop;
-  }, [job?.id, phase, projectId]);
-
-  useEffect(() => {
-    if (phase !== "done") return;
-    fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).finally(() => {
-      onDone?.();
-      router.refresh();
-    });
-  }, [phase, projectId, router, onDone]);
-
-  if (error || phase === "failed") {
-    return (
-      <div className="rounded-lg border border-destructive/40 p-6 text-center">
-        <p className="text-sm text-destructive">{error || job?.error || "Generation failed."}</p>
-        <Button variant="outline" size="sm" className="mt-3" onClick={start}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-lg border border-dashed p-10 text-center">
-      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      <p className="mt-3 font-medium">Generating your 3 layouts</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {job ? stageLabel(job.stage) : "Starting…"}
-      </p>
-    </div>
-  );
 }
 
 export function LayoutViewer({
@@ -826,6 +442,12 @@ export function LayoutViewer({
   useEffect(() => {
     setMounted(true);
   }, []);
+  // Plan3DScene ships ~150KB of three.js — deferred via next/dynamic and only
+  // mounted the first time it's actually needed (visiting the r3f/"Render" or
+  // render/"AI Render" tab). Once mounted it stays mounted for the rest of the
+  // session (never gated back off on tab-switch) so its offscreen PNG capture
+  // keeps working from any tab — see the capture-trigger call sites below.
+  const [plan3dMounted, setPlan3dMounted] = useState(false);
   const [floor, setFloor] = useState(0);
   // Snapshots are per layout AND per render source — drop them when the
   // viewed layout changes, or when the architectural/structural toggle
@@ -835,10 +457,18 @@ export function LayoutViewer({
     setR3fPngs({});
   }, [selectedId, renderSource]);
   const captureR3f = useCallback(() => {
+    // Defensive fallback: a capture requested before the scene has ever been
+    // mounted (no current call site does this, but a future one might) can't
+    // return a PNG synchronously — arm the mount for next render instead of
+    // reading from a null ref.
+    if (!plan3dMounted) {
+      setPlan3dMounted(true);
+      return null;
+    }
     const png = plan3dApiRef.current?.capture() ?? null;
     if (png) setR3fPngs((prev) => ({ ...prev, [floor]: png }));
     return png;
-  }, [floor]);
+  }, [floor, plan3dMounted]);
 
   // Single invalidation routine for every geometry-mutating action (manual
   // room edit, AI chat edit). The backend reverts Approved→Draft and marks
@@ -873,17 +503,27 @@ export function LayoutViewer({
   const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
   const tabs = visibleTabs(agentChatEnabled);
   const [activeTab, setActiveTab] = useState<TabId>("plan");
+  // First-mount trigger: visiting either the "r3f" (3D "Render") tab or the
+  // "render" ("AI Render") tab mounts the offscreen Plan3DScene if it hasn't
+  // been already. It then stays mounted, so a later capture triggered from
+  // any other tab (e.g. Structural) keeps working without needing to revisit
+  // either tab.
+  useEffect(() => {
+    if ((activeTab === "r3f" || activeTab === "render") && mounted) {
+      setPlan3dMounted(true);
+    }
+  }, [activeTab, mounted]);
   // Auto-capture the offscreen R3F view when the Render tab opens, the
   // viewed floor / camera view changes, or the architectural/structural
   // geometry source toggle flips (structuralGeometry is read via the
   // offscreen Plan3DScene's floorPlan prop, not directly in this body).
   // biome-ignore lint/correctness/useExhaustiveDependencies: r3fView/renderSource/structuralGeometry are intentional re-capture triggers, not read in the body
   useEffect(() => {
-    if (activeTab === "r3f" && mounted) {
+    if (activeTab === "r3f" && plan3dMounted) {
       const t = setTimeout(() => captureR3f(), 500);
       return () => clearTimeout(t);
     }
-  }, [activeTab, mounted, captureR3f, r3fView, renderSource, structuralGeometry]);
+  }, [activeTab, plan3dMounted, captureR3f, r3fView, renderSource, structuralGeometry]);
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -2236,8 +1876,12 @@ export function LayoutViewer({
       )}
 
       {/* ── Offscreen R3F engine ──────────────────────────────────────────── */}
-      {/* Geometric truth that conditions the AI render. Mounted once, offscreen,
-          so its PNG can be captured from any tab (Render or AI Render).
+      {/* Geometric truth that conditions the AI render. Mounted once — the
+          FIRST time the user visits the r3f ("Render") or render ("AI
+          Render") tab, see plan3dMounted above — then kept mounted offscreen
+          for the rest of the session so its PNG can still be captured from
+          any other tab. Code-split via next/dynamic so the ~150KB three.js
+          bundle never loads for users who never touch either tab.
           Top-down captures are label-annotated (room names + dims, north
           arrow, plot dimensions) so the conditioning image is self-describing
           — this is what gets sent as reference_png; if capture ever fails
@@ -2254,7 +1898,7 @@ export function LayoutViewer({
           pointerEvents: "none",
         }}
       >
-        {mounted && (
+        {mounted && plan3dMounted && (
           <Plan3DScene
             ref={plan3dApiRef}
             floorPlan={r3fFloorPlan}
@@ -2309,408 +1953,65 @@ export function LayoutViewer({
       </Tabs>
 
       {activeTab === "plan" && (
-        <div className="flex flex-col gap-3">
-          {isPreliminaryStatus(structStatus?.status) && (
-            <output className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-              PRELIMINARY — for planning only, not for construction
-            </output>
-          )}
-          {/* Dynamic floor toggle + mobile Options sheet trigger side-by-side */}
-          <div className="flex items-center gap-2">
-            {/* Floor toggle */}
-            <Tabs
-              value={String(floor)}
-              onValueChange={(v) => setFloor(Number(v))}
-              className="flex-1 min-w-0"
-            >
-              <TabsList
-                variant="line"
-                className="w-full overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)]"
-              >
-                {availableFloors.map((f) => (
-                  <TabsTrigger
-                    key={f.index}
-                    value={String(f.index)}
-                    className="min-h-[40px] shrink-0 flex-none px-3"
-                  >
-                    {f.label}
-                    {f.plan.needs_mech_ventilation && (
-                      <AlertTriangle
-                        className="ml-1 h-3 w-3 text-amber-600 shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {f.plan.needs_mech_ventilation && (
-                      <span className="sr-only">Mechanical ventilation required</span>
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-
-            {/* Mobile: Options Sheet trigger — visible on < md */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <button
-                  type="button"
-                  className="md:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40 text-muted-foreground hover:bg-muted transition-colors"
-                  aria-label="View options"
-                >
-                  <Settings2 className="h-4 w-4" />
-                </button>
-              </SheetTrigger>
-              <SheetContent
-                side="bottom"
-                className="h-auto max-h-[70vh] overflow-y-auto rounded-t-2xl px-4 pt-4 pb-8"
-              >
-                <p className="text-sm font-semibold text-foreground mb-4">View Options</p>
-                {/* Same toggles, listed vertically for mobile */}
-                <div className="flex flex-col gap-2">
-                  {vastuEnabled && (
-                    <button
-                      type="button"
-                      onClick={() => setShowVastuZones((v) => !v)}
-                      className={[
-                        "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                        showVastuZones
-                          ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
-                          : "border-border bg-transparent text-muted-foreground",
-                      ].join(" ")}
-                    >
-                      {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowFurniture((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      showFurniture
-                        ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    {showFurniture ? "Hide Furniture" : "Show Furniture"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowElectrical((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      showElectrical
-                        ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    {showElectrical ? "Hide Electrical" : "Show Electrical"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowPlumbing((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      showPlumbing
-                        ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    {showPlumbing ? "Hide Plumbing" : "Show Plumbing"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnnotationMode((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      annotationMode
-                        ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    <MessageSquare className="h-4 w-4" />
-                    {annotationMode ? "Exit Annotate" : "Annotate"}
-                    {annotationCount > 0 && (
-                      <span className="ml-1 rounded-full bg-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
-                        {annotationCount}
-                      </span>
-                    )}
-                  </button>
-                  {tierAtLeast(planTier, "pro") ? (
-                    <button
-                      type="button"
-                      onClick={handleToggleEditMode}
-                      className={[
-                        "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                        editMode
-                          ? "border-blue-600/70 bg-blue-600/15 text-blue-700 dark:text-blue-400"
-                          : "border-border bg-transparent text-muted-foreground",
-                      ].join(" ")}
-                    >
-                      {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-                      {editMode ? "Exit Edit Mode" : "Edit Rooms"}
-                    </button>
-                  ) : (
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium min-h-[44px]"
-                    >
-                      <Link href="/pricing">
-                        <Lock className="h-4 w-4" />
-                        Edit Rooms (Pro)
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
-
-          {/* Floor plan toolbar: visible on desktop, hidden on mobile (moved to sheet above) */}
-          <div className="hidden md:flex flex-wrap gap-2">
-            {vastuEnabled && (
-              <button
-                type="button"
-                onClick={() => setShowVastuZones((v) => !v)}
-                className={[
-                  "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                  showVastuZones
-                    ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
-                    : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-                ].join(" ")}
-              >
-                {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowFurniture((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showFurniture
-                  ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              {showFurniture ? "Hide Furniture" : "Furnish"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowElectrical((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showElectrical
-                  ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              {showElectrical ? "Hide Electrical" : "Electrical"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPlumbing((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showPlumbing
-                  ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              {showPlumbing ? "Hide Plumbing" : "Plumbing"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAnnotationMode((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                annotationMode
-                  ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-              title={
-                annotationMode
-                  ? "Click a room to add/edit a note. Click again to exit."
-                  : "Enter annotation mode to attach notes to rooms"
-              }
-            >
-              <MessageSquare className="h-3 w-3" />
-              {annotationMode ? "Exit Annotate" : "Annotate"}
-              {annotationCount > 0 && (
-                <span className="ml-1 rounded-full bg-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
-                  {annotationCount}
-                </span>
-              )}
-            </button>
-            {tierAtLeast(planTier, "pro") ? (
-              <button
-                type="button"
-                onClick={handleToggleEditMode}
-                className={[
-                  "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                  editMode
-                    ? "border-blue-600/70 bg-blue-600/15 text-blue-700 dark:text-blue-400"
-                    : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-                ].join(" ")}
-                title={
-                  editMode
-                    ? "Exit edit mode and discard changes"
-                    : "Enter edit mode — drag shared walls to resize rooms"
-                }
-              >
-                {editMode ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-                {editMode ? "Exit Edit" : "Edit Rooms"}
-              </button>
-            ) : (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="w-fit gap-1.5 text-xs"
-                title="Upgrade to Pro to enable manual room editing"
-              >
-                <Link href="/pricing">
-                  <Lock className="h-3 w-3" />
-                  Edit Rooms
-                </Link>
-              </Button>
-            )}
-          </div>
-
-          {annotationMode && (
-            <p className="text-xs text-yellow-700 dark:text-yellow-400 rounded-lg border border-yellow-500/30 bg-yellow-500/8 px-3 py-1.5">
-              Click any room to add or edit a note. Notes persist across sessions and appear in PDF
-              exports.
-            </p>
-          )}
-
-          {editMode && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 flex items-center gap-1.5">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
-                Drag shared walls (blue lines) to resize rooms. Changes are not saved automatically.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={handleUndo}
-                  disabled={!editHistory || !canUndo(editHistory)}
-                  title="Undo (Ctrl/Cmd+Z)"
-                >
-                  <Undo2 className="h-3 w-3" />
-                  Undo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={handleRedo}
-                  disabled={!editHistory || !canRedo(editHistory)}
-                  title="Redo (Ctrl/Cmd+Shift+Z)"
-                >
-                  <Redo2 className="h-3 w-3" />
-                  Redo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={() => {
-                    const roomsToCheck = editedRooms ?? floorPlan.rooms;
-                    const currentFloorCode =
-                      floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
-                    void runComplianceCheck(roomsToCheck, currentFloorCode);
-                  }}
-                  disabled={!session}
-                  title="Check compliance for current room layout"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Check Compliance
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={handleResetRooms}
-                  title="Restore rooms to the original generated layout"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Reset
-                </Button>
-                <Button
-                  size="sm"
-                  className="gap-1.5 text-xs h-7 px-2.5 bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={() => {
-                    const roomsToSave = editedRooms ?? floorPlan.rooms;
-                    void handleSaveEditedRooms(roomsToSave);
-                  }}
-                  disabled={editSaving || !session || !editedRooms}
-                  title="Save the edited room layout to the project"
-                >
-                  <Save className="h-3 w-3" />
-                  {editSaving ? "Saving…" : "Save Changes"}
-                </Button>
-              </div>
-              {editSaveError && (
-                <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
-                  {editSaveError}
-                </p>
-              )}
-              {Object.keys(complianceIssues).length > 0 && (
-                <p className="text-xs text-red-700 dark:text-red-400 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-1.5 flex items-center gap-1.5">
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                  {Object.keys(complianceIssues).length} room
-                  {Object.keys(complianceIssues).length !== 1 ? "s have" : " has"} compliance issues
-                  — highlighted in red.
-                </p>
-              )}
-            </div>
-          )}
-
-          <FloorPlanSVG
-            floorPlan={
-              editMode ? { ...floorPlan, rooms: editedRooms ?? floorPlan.rooms } : floorPlan
-            }
-            plotWidth={plotWidth}
-            plotLength={plotLength}
-            roadSide={roadSide}
-            className="w-full md:max-w-xl rounded-xl border"
-            plotShape={plotShape}
-            plotFrontWidth={plotFrontWidth}
-            plotRearWidth={plotRearWidth}
-            plotCorners={plotCorners}
-            cutoutCorner={cutoutCorner}
-            cutoutWidth={cutoutWidth}
-            cutoutHeight={cutoutHeight}
-            showVastuZones={showVastuZones}
-            showFurniture={showFurniture}
-            showElectrical={showElectrical}
-            showPlumbing={showPlumbing}
-            annotationMode={annotationMode}
-            annotations={annotationList}
-            onAnnotationClick={handleAnnotationClick}
-            locale={locale}
-            editMode={editMode}
-            onRoomsChange={(rooms) => {
-              const currentFloorCode =
-                floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
-              handleRoomsChange(rooms, currentFloorCode);
-            }}
-            complianceIssues={complianceIssues}
-          />
-
-          {/* Room legend */}
-          <div className="flex flex-wrap gap-3">
-            {presentTypes.map((type) => (
-              <div key={type} className="flex items-center gap-1.5">
-                <div
-                  className={["size-3 rounded-sm border", SWATCH[type] ?? SWATCH.utility].join(" ")}
-                />
-                <span className="text-xs text-muted-foreground">{TYPE_LABELS[type] ?? type}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PlanTab
+          structStatusStatus={structStatus?.status}
+          availableFloors={availableFloors}
+          floor={floor}
+          onFloorChange={setFloor}
+          vastuEnabled={vastuEnabled}
+          showVastuZones={showVastuZones}
+          onToggleVastuZones={() => setShowVastuZones((v) => !v)}
+          showFurniture={showFurniture}
+          onToggleFurniture={() => setShowFurniture((v) => !v)}
+          showElectrical={showElectrical}
+          onToggleElectrical={() => setShowElectrical((v) => !v)}
+          showPlumbing={showPlumbing}
+          onTogglePlumbing={() => setShowPlumbing((v) => !v)}
+          annotationMode={annotationMode}
+          onToggleAnnotationMode={() => setAnnotationMode((v) => !v)}
+          annotationCount={annotationCount}
+          planTier={planTier}
+          editMode={editMode}
+          onToggleEditMode={handleToggleEditMode}
+          editHistory={editHistory}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canCheckCompliance={!!session}
+          onCheckCompliance={() => {
+            const roomsToCheck = editedRooms ?? floorPlan.rooms;
+            const currentFloorCode =
+              floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
+            void runComplianceCheck(roomsToCheck, currentFloorCode);
+          }}
+          onResetRooms={handleResetRooms}
+          editSaving={editSaving}
+          editedRooms={editedRooms}
+          onSaveEditedRooms={(rooms) => void handleSaveEditedRooms(rooms)}
+          editSaveError={editSaveError}
+          complianceIssues={complianceIssues}
+          floorPlan={floorPlan}
+          plotWidth={plotWidth}
+          plotLength={plotLength}
+          roadSide={roadSide}
+          plotShape={plotShape}
+          plotFrontWidth={plotFrontWidth}
+          plotRearWidth={plotRearWidth}
+          plotCorners={plotCorners}
+          cutoutCorner={cutoutCorner}
+          cutoutWidth={cutoutWidth}
+          cutoutHeight={cutoutHeight}
+          annotationList={annotationList}
+          onAnnotationClick={handleAnnotationClick}
+          locale={locale}
+          onRoomsChange={(rooms) => {
+            const currentFloorCode =
+              floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
+            handleRoomsChange(rooms, currentFloorCode);
+          }}
+          presentTypes={presentTypes}
+          typeLabels={TYPE_LABELS}
+          swatch={SWATCH}
+        />
       )}
 
       {activeTab === "section" && (
@@ -2766,61 +2067,30 @@ export function LayoutViewer({
         />
       )}
 
-      {activeTab === "chat" &&
-        agentChatEnabled &&
-        (tierAtLeast(planTier, "pro") ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Left: live floor plan preview — hidden on mobile to save screen space */}
-            <div className="hidden md:flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">Live Layout Preview</p>
-                {liveLayout && (
-                  <span className="text-xs text-green-600 dark:text-green-400 font-medium">
-                    ● AI updated
-                  </span>
-                )}
-              </div>
-              <FloorPlanSVG
-                floorPlan={floor === 1 ? layout.first_floor : layout.ground_floor}
-                plotWidth={plotWidth}
-                plotLength={plotLength}
-                roadSide={roadSide}
-                className="rounded-xl border"
-                plotShape={plotShape}
-                plotFrontWidth={plotFrontWidth}
-                plotRearWidth={plotRearWidth}
-                plotCorners={plotCorners}
-                cutoutCorner={cutoutCorner}
-                cutoutWidth={cutoutWidth}
-                cutoutHeight={cutoutHeight}
-                locale={locale}
-              />
-              <p className="text-xs text-muted-foreground">
-                Showing {floor === 1 ? "First" : "Ground"} Floor — switches in the Floor Plan tab
-              </p>
-            </div>
-            {/* Right: chat panel */}
-            <ChatPanel
-              projectId={projectId}
-              currentLayout={layout}
-              onLayoutUpdate={(updated) => {
-                setLiveLayout(updated);
-                invalidateAfterGeometryEdit();
-              }}
-            />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-            <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-            <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Conversational layout editing with AI is a Pro feature.
-            </p>
-            <Button asChild className="mt-4" size="sm" variant="outline">
-              <Link href="/pricing">Upgrade to Pro</Link>
-            </Button>
-          </div>
-        ))}
+      {activeTab === "chat" && agentChatEnabled && (
+        <ChatTab
+          projectId={projectId}
+          planTier={planTier}
+          layout={layout}
+          floor={floor}
+          liveLayout={liveLayout}
+          plotWidth={plotWidth}
+          plotLength={plotLength}
+          roadSide={roadSide}
+          plotShape={plotShape}
+          plotFrontWidth={plotFrontWidth}
+          plotRearWidth={plotRearWidth}
+          plotCorners={plotCorners}
+          cutoutCorner={cutoutCorner}
+          cutoutWidth={cutoutWidth}
+          cutoutHeight={cutoutHeight}
+          locale={locale}
+          onLayoutUpdate={(updated) => {
+            setLiveLayout(updated);
+            invalidateAfterGeometryEdit();
+          }}
+        />
+      )}
 
       {activeTab === "render" && (
         <RenderTab
@@ -2836,103 +2106,29 @@ export function LayoutViewer({
       )}
 
       {activeTab === "r3f" && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Geometric plan view of the selected floor, built from the exact plan dimensions. Use it
-            to condition the photorealistic AI render — one render per floor.
-          </p>
-          {(structStatus?.status === "designed" ||
-            structStatus?.status === "designed_with_warnings") && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Geometry source:</span>
-              <Button
-                size="sm"
-                variant={renderSource === "architectural" ? "default" : "outline"}
-                onClick={() => handleRenderSourceChange("architectural")}
-              >
-                Architectural
-              </Button>
-              <Button
-                size="sm"
-                variant={renderSource === "structural" ? "default" : "outline"}
-                onClick={() => handleRenderSourceChange("structural")}
-                disabled={structuralGeometryLoading}
-              >
-                {structuralGeometryLoading ? "Loading…" : "Structural"}
-              </Button>
-              {renderSource === "structural" && structuralGeometry && (
-                <span className="text-green-600 dark:text-green-400">
-                  Showing the structural design&apos;s adjusted geometry.
-                </span>
-              )}
-              {renderSource === "structural" &&
-                !structuralGeometry &&
-                !structuralGeometryLoading &&
-                structuralGeometryFallback && (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    {renderSourceFallbackNote(structuralGeometryFallback)}
-                  </span>
-                )}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            {availableFloors.map((f) => (
-              <Button
-                key={f.index}
-                size="sm"
-                variant={floor === f.index ? "default" : "outline"}
-                onClick={() => setFloor(f.index)}
-              >
-                {f.label}
-              </Button>
-            ))}
-            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-            <Button
-              size="sm"
-              variant={r3fView === "top" ? "default" : "outline"}
-              onClick={() => setR3fView("top")}
-            >
-              Plan view
-            </Button>
-            <Button
-              size="sm"
-              variant={r3fView === "iso" ? "default" : "outline"}
-              onClick={() => setR3fView("iso")}
-            >
-              3D view
-            </Button>
-          </div>
-          {/* No documented fixed output size for this canvas capture — 4:3 is a sensible default that keeps the skeleton and loaded capture the same box. */}
-          <div className="aspect-[4/3] w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
-            {r3fPngs[floor] ? (
-              // biome-ignore lint/performance/noImgElement: captured canvas PNG, not a next/image candidate
-              <img
-                src={r3fPngs[floor] ?? undefined}
-                alt={`Geometric view — ${currentFloorEntry.label}`}
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <Skeleton className="h-full w-full rounded-none" />
-            )}
-          </div>
-          <div className="flex w-fit flex-wrap gap-2">
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => captureR3f()}>
-              <RefreshCw className="h-3 w-3" />
-              Refresh view
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() => {
-                const png = captureR3f();
-                setActiveTab("render");
-                renderTriggerRef.current(floor, png);
-              }}
-            >
-              Generate AI Render — {currentFloorEntry.label}
-            </Button>
-          </div>
-        </div>
+        <R3fTab
+          structuralDesigned={
+            structStatus?.status === "designed" || structStatus?.status === "designed_with_warnings"
+          }
+          renderSource={renderSource}
+          onRenderSourceChange={handleRenderSourceChange}
+          structuralGeometryLoading={structuralGeometryLoading}
+          structuralGeometry={structuralGeometry}
+          structuralGeometryFallback={structuralGeometryFallback}
+          availableFloors={availableFloors}
+          floor={floor}
+          onFloorChange={setFloor}
+          r3fView={r3fView}
+          onR3fViewChange={setR3fView}
+          r3fPng={r3fPngs[floor]}
+          currentFloorLabel={currentFloorEntry.label}
+          onRefreshCapture={() => captureR3f()}
+          onGenerateAiRender={() => {
+            const png = captureR3f();
+            setActiveTab("render");
+            renderTriggerRef.current(floor, png);
+          }}
+        />
       )}
 
       {/* ── Restored revision banner ─────────────────────────────────────── */}
