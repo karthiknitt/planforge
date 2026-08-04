@@ -149,8 +149,12 @@
   --accent: oklch(0.22 0.028 252); /* Neutral dark surface */
   --accent-foreground: oklch(0.92 0.012 252);
   --destructive: oklch(0.65 0.22 27);
-  --border: oklch(0.36 0.05 252);
-  --input: oklch(0.4 0.055 252);
+  --border: oklch(
+    0.48 0.05 252
+  ); /* 3.18:1 vs --background, was 1.91:1 below the UI-component AA floor */
+  --input: oklch(
+    0.52 0.055 252
+  ); /* 3.78:1 vs --background, was 2.26:1 below the UI-component AA floor */
   --ring: oklch(0.55 0.22 45);
   --chart-1: oklch(0.58 0.19 230);
   --chart-2: oklch(0.68 0.22 45);
@@ -245,6 +249,16 @@
 }
 .section-view-svg .svg-bg {
   fill: var(--svg-bg);
+}
+
+/* ─── Annotation-mode room focus ring ────────────────────────────────────── */
+/* The <g> suppresses the native outline (inconsistent across browsers for SVG),
+   so :focus-visible restyles the room's own <rect> stroke as the visible indicator
+   instead — CSS wins over the rect's presentation attributes. */
+.annotation-room:focus-visible > rect {
+  stroke: var(--ring);
+  stroke-width: 3px;
+  stroke-dasharray: none;
 }
 
 /* ─── Animation keyframes ────────────────────────────────────────────────── */
