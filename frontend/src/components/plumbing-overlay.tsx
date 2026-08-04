@@ -21,8 +21,11 @@ function mkPx(offsetX: number, offsetY: number, plotHeightPx: number, scale: num
   };
 }
 
-const SUPPLY_STROKE = "#3b82f6"; // blue for water supply
-const DRAIN_STROKE = "#6b7280"; // grey for drain
+const SUPPLY_STROKE = "#3b82f6"; // blue for water supply — already >=4.5:1 on both themes
+// Grey for drain. Routed through --svg-ink-secondary: the original #6b7280
+// fell to 3.76:1 against the dark canvas (--svg-bg #0d1529), below the 4.5:1
+// AA text threshold needed for the "Trap"/label text that reuses this color.
+const DRAIN_STROKE = "var(--svg-ink-secondary)";
 const PLUMB_OPACITY = 0.8;
 const SUPPLY_SW = 1;
 const DRAIN_SW = 1.5;
