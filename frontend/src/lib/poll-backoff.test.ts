@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { MAX_POLLS } from "./generation-job";
 import { backoffDelayMs, startPolling } from "./poll-backoff";
 
 describe("backoffDelayMs", () => {
@@ -24,6 +25,25 @@ describe("backoffDelayMs", () => {
     ];
     expect(backoffDelayMs(0, tiers)).toBe(100);
     expect(backoffDelayMs(2, tiers)).toBe(300);
+  });
+});
+
+describe("wall-clock timeout ceiling", () => {
+  it("keeps MAX_POLLS's real backoff-tiered ceiling close to the original flat-2s ~5min window", () => {
+    // The timeout fires after sum_{i=0}^{MAX_POLLS-1} backoffDelayMs(i) — see
+    // startPolling: each tick's delay is computed from pollCountRef.current
+    // *before* that tick runs, and there are MAX_POLLS such delays before
+    // pollCountRef exceeds MAX_POLLS and onTimeout fires.
+    let totalMs = 0;
+    for (let i = 0; i < MAX_POLLS; i++) {
+      totalMs += backoffDelayMs(i);
+    }
+    // Original flat POLL_INTERVAL_MS (2000) * 150 polls = 300_000ms (5 min).
+    // With backoff, MAX_POLLS=36 keeps the ceiling within a minute of that,
+    // instead of the ~24min it would be if MAX_POLLS were left at 150.
+    expect(totalMs).toBe(295_000);
+    expect(totalMs).toBeLessThan(6 * 60 * 1000);
+    expect(totalMs).toBeGreaterThan(4 * 60 * 1000);
   });
 });
 
