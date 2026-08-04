@@ -6,6 +6,7 @@ import { ApprovalActions } from "@/components/approval-actions";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
+import { SWATCH, TYPE_LABELS } from "@/lib/room-type-labels";
 
 // ── Types returned by the backend share endpoint ─────────────────────────────
 
@@ -67,48 +68,6 @@ export async function generateMetadata({
 function metresToFeet(metres: number): string {
   return (Math.round((metres / 0.3048) * 10) / 10).toFixed(1);
 }
-
-const TYPE_LABELS: Record<string, string> = {
-  living: "Living / Hall",
-  bedroom: "Bedroom",
-  master_bedroom: "Master Bedroom",
-  kitchen: "Kitchen",
-  toilet: "Toilet",
-  staircase: "Staircase",
-  parking: "Parking",
-  utility: "Utility / Other",
-  pooja: "Pooja Room",
-  study: "Study",
-  balcony: "Balcony",
-  dining: "Dining",
-  servant_quarter: "Servant Quarter",
-  home_office: "Home Office",
-  gym: "Gym",
-  store_room: "Store Room",
-  garage: "Garage",
-  passage: "Passage",
-};
-
-const SWATCH: Record<string, string> = {
-  living: "bg-yellow-100 border-yellow-400",
-  bedroom: "bg-violet-100 border-violet-500",
-  master_bedroom: "bg-purple-100 border-purple-500",
-  kitchen: "bg-green-100 border-green-600",
-  toilet: "bg-sky-100 border-sky-500",
-  staircase: "bg-slate-100 border-slate-400",
-  parking: "bg-slate-50 border-slate-300",
-  utility: "bg-slate-50 border-slate-300",
-  pooja: "bg-orange-50 border-orange-400",
-  study: "bg-emerald-50 border-emerald-500",
-  balcony: "bg-blue-50 border-blue-400",
-  dining: "bg-yellow-50 border-yellow-500",
-  servant_quarter: "bg-orange-50 border-orange-500",
-  home_office: "bg-green-50 border-green-500",
-  gym: "bg-red-50 border-red-400",
-  store_room: "bg-slate-50 border-slate-400",
-  garage: "bg-blue-50 border-blue-500",
-  passage: "bg-slate-100 border-slate-400",
-};
 
 // ── Read-only layout viewer (server-compatible, no interactivity) ─────────────
 
