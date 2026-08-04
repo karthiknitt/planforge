@@ -5,11 +5,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db";
 import { project as projectTable, teamMember, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { fetchLayouts } from "./fetch-layouts";
+import { GeneratingFallback } from "./generating-fallback";
 import { LayoutViewer } from "./layout-viewer";
 
 export async function generateMetadata({
@@ -107,81 +107,6 @@ async function LayoutSection({
         updatedAt: approvalUpdatedAt ? approvalUpdatedAt.toISOString() : null,
       }}
     />
-  );
-}
-
-// ── Generating fallback (shown while solver runs) ───────────────────────────
-
-function GeneratingFallback() {
-  const steps = [
-    { label: "Solving layout constraints", detail: "CP-SAT solver · 3 variants" },
-    { label: "Scoring layouts", detail: "Light · Adjacency · Vastu" },
-    { label: "Checking compliance", detail: "NBC / local rules" },
-  ];
-
-  return (
-    <div className="flex flex-col gap-6 rounded-2xl border border-dashed border-border bg-muted/20 px-8 py-10">
-      {/* Progress bar */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-foreground">Generating floor plans…</span>
-          <span className="text-xs text-muted-foreground animate-pulse">Running</span>
-        </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{
-              width: "60%",
-              animation: "progress-indeterminate 1.8s ease-in-out infinite",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Step indicators */}
-      <div className="flex flex-col gap-3">
-        {steps.map((step, i) => (
-          <div key={step.label} className="flex items-center gap-3">
-            <div
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border"
-              style={{
-                borderColor: "var(--primary)",
-                animation: `pulse-step 1.8s ease-in-out ${i * 0.4}s infinite`,
-              }}
-            >
-              <div className="h-2 w-2 rounded-full bg-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">{step.label}</p>
-              <p className="text-xs text-muted-foreground">{step.detail}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Skeleton cards for layout buttons — h-11 (44px) matches the real
-          "Layout {id} — {name}" buttons' min-h-[44px] in layout-viewer.tsx */}
-      <div className="flex gap-3 pt-2">
-        {["w-28", "w-36", "w-32"].map((w) => (
-          <Skeleton key={w} className={`h-11 ${w} rounded-lg`} />
-        ))}
-      </div>
-
-      {/* SVG area skeleton — width matches FloorPlanSVG's "w-full md:max-w-xl" */}
-      <Skeleton className="h-72 w-full rounded-xl bg-muted/60 md:max-w-xl" />
-
-      <style>{`
-        @keyframes progress-indeterminate {
-          0%   { transform: translateX(-100%); width: 50%; }
-          50%  { transform: translateX(50%);   width: 60%; }
-          100% { transform: translateX(200%);  width: 50%; }
-        }
-        @keyframes pulse-step {
-          0%, 100% { opacity: 0.4; }
-          50%       { opacity: 1; }
-        }
-      `}</style>
-    </div>
   );
 }
 
