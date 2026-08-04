@@ -10,8 +10,8 @@ describe("visibleTabs", () => {
       "section",
       "boq",
       "structural",
-      "compare",
       "r3f",
       "render",
+      "compare",
     ]));
 });

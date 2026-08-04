@@ -3,10 +3,10 @@ export const ALL_TABS = [
   "section",
   "boq",
   "structural",
-  "compare",
-  "chat",
   "r3f",
   "render",
+  "compare",
+  "chat",
 ] as const;
 export type TabId = (typeof ALL_TABS)[number];
 
