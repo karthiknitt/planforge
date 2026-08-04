@@ -95,7 +95,7 @@ export function GenerationPanel({
     );
   }
   return (
-    <div role="status" className="rounded-lg border border-dashed p-10 text-center">
+    <output className="block rounded-lg border border-dashed p-10 text-center">
       <div
         aria-hidden="true"
         className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
@@ -104,6 +104,6 @@ export function GenerationPanel({
       <p className="mt-1 text-sm text-muted-foreground">
         {job ? stageLabel(job.stage) : "Starting…"}
       </p>
-    </div>
+    </output>
   );
 }

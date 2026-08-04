@@ -18,7 +18,8 @@ export function MobileNav() {
         variant="ghost"
         size="sm"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Toggle menu"
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
       >
         {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>

@@ -70,7 +70,7 @@ export default async function DashboardPage() {
   const firstName = session.user.name.split(" ")[0];
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
       <Suspense fallback={null}>
         <DashboardPaymentToast />
       </Suspense>
@@ -131,6 +131,6 @@ export default async function DashboardPage() {
       )}
       {/* Mobile FAB — fixed bottom-right, replaces top-right button on small screens */}
       <DashboardMobileFAB />
-    </main>
+    </div>
   );
 }

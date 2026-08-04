@@ -30,6 +30,12 @@ const rooms = [
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to main content
+      </a>
       {/* ── Left brand panel (lg+) ────────────────────────────── */}
       <aside className="hidden lg:flex lg:w-[46%] xl:w-[44%] flex-col bg-card border-r border-border/60 relative overflow-hidden">
         {/* Technical grid overlay */}
@@ -200,7 +206,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </aside>
 
       {/* ── Right form panel ──────────────────────────────────── */}
-      <div className="flex flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:py-16 relative overflow-hidden bg-background">
+      <main
+        id="main-content"
+        className="flex flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:py-16 relative overflow-hidden bg-background"
+      >
         {/* Blueprint grid always visible as subtle bg */}
         <div className="absolute inset-0 bg-blueprint-grid opacity-[0.15] pointer-events-none" />
 
@@ -214,7 +223,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             {children}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

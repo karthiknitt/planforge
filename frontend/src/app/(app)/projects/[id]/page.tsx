@@ -231,14 +231,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const widthFt = metresToFeet(project.plotWidth);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-5 md:py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-5 md:py-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm min-w-0">
         <Button variant="ghost" size="sm" asChild className="-ml-2 shrink-0">
           <Link href="/dashboard">← Dashboard</Link>
         </Button>
         <span className="text-muted-foreground shrink-0">/</span>
-        <span className="font-semibold truncate min-w-0">{project.name}</span>
+        <h1 className="font-semibold truncate min-w-0">{project.name}</h1>
         <Button variant="outline" size="sm" asChild className="ml-auto shrink-0">
           <Link href={`/projects/${id}/edit`}>Edit</Link>
         </Button>
@@ -346,6 +346,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           approvalUpdatedAt={project.approvalUpdatedAt}
         />
       </Suspense>
-    </main>
+    </div>
   );
 }

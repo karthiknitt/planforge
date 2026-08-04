@@ -3,7 +3,7 @@
 import { LayoutDashboard, Menu, Plus, Star, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -15,11 +15,32 @@ const NAV_LINKS = [
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes the drawer and returns focus to the hamburger button —
+  // matches the X-button close path below.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        hamburgerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  const closeAndReturnFocus = () => {
+    setOpen(false);
+    hamburgerRef.current?.focus();
+  };
 
   return (
     <>
       {/* Hamburger button — mobile only */}
       <button
+        ref={hamburgerRef}
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}
         aria-expanded={open}
@@ -45,6 +66,10 @@ export function MobileNav() {
           open ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
         aria-hidden={!open}
+        // `aria-hidden` alone leaves the drawer's links/close-button in the
+        // tab order while closed (off-screen but still focusable) — `inert`
+        // removes them from both the a11y tree and the tab order in one step.
+        inert={!open}
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 h-14 border-b border-border/60">
@@ -57,7 +82,7 @@ export function MobileNav() {
           <button
             type="button"
             aria-label="Close menu"
-            onClick={() => setOpen(false)}
+            onClick={closeAndReturnFocus}
             className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-muted transition-colors"
           >
             <X className="h-5 w-5" />
@@ -72,7 +97,7 @@ export function MobileNav() {
               <Link
                 key={href}
                 href={href}
-                onClick={() => setOpen(false)}
+                onClick={closeAndReturnFocus}
                 className={[
                   "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                   active

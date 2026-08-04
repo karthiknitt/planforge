@@ -35,6 +35,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <LocaleProvider initialLocale={initialLocale} initialMessages={initialMessages}>
       <div className="min-h-screen bg-background flex flex-col">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+        >
+          Skip to main content
+        </a>
         <InviteClaimer />
         <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 h-14 md:h-16">
@@ -89,7 +95,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
-        <div className="flex-1">{children}</div>
+        <main id="main-content" className="flex-1">
+          {children}
+        </main>
       </div>
     </LocaleProvider>
   );

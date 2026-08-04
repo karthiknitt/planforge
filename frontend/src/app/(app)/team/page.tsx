@@ -31,7 +31,7 @@ export default async function TeamPage() {
 
   if (memberships.length === 0) {
     return (
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
         <FadeIn>
           <div className="flex items-center gap-3 mb-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/25">
@@ -65,7 +65,7 @@ export default async function TeamPage() {
             <Link href="/dashboard">← Dashboard</Link>
           </Button>
         </FadeIn>
-      </main>
+      </div>
     );
   }
 
@@ -80,7 +80,7 @@ export default async function TeamPage() {
   const currentTeam = teamRows[0];
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       <FadeIn>
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/25">
@@ -183,6 +183,6 @@ export default async function TeamPage() {
           <Link href="/dashboard">← Dashboard</Link>
         </Button>
       </FadeIn>
-    </main>
+    </div>
   );
 }

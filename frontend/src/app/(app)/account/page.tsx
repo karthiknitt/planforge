@@ -59,7 +59,7 @@ export default async function AccountPage() {
     .slice(0, 2);
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       {/* Avatar + heading */}
       <FadeIn>
         <div className="flex items-center gap-4 mb-2">
@@ -227,6 +227,6 @@ export default async function AccountPage() {
           )}
         </div>
       </FadeIn>
-    </main>
+    </div>
   );
 }
