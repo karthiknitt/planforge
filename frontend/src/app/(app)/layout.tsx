@@ -5,15 +5,24 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
-import type { Locale } from "@/lib/locale-context";
-import { LocaleProvider } from "@/lib/locale-context";
+import type { Locale, Messages } from "@/lib/locale-context";
+import { isLocale, LocaleProvider } from "@/lib/locale-context";
 import { MobileNav } from "./mobile-nav";
 import { UserMenu } from "./user-menu";
 
 const LOCALE_COOKIE = "pf_locale";
 
-function isLocale(value: string | undefined): value is Locale {
-  return value === "en" || value === "ta" || value === "hi";
+// Deliberately not reusing locale-context.tsx's loadMessages() here: that
+// file is "use client", and calling one of its plain function exports from
+// a Server Component crosses an RSC boundary whose behavior for non-component
+// exports isn't something to rely on. A local dynamic import of the JSON
+// (no client-boundary involved — JSON files aren't marked "use client")
+// keeps this request-time resolution unambiguous. "en" needs no import at
+// all — LocaleProvider already has it statically bundled as the fallback.
+export async function loadInitialMessages(locale: Locale): Promise<Messages | undefined> {
+  if (locale === "ta") return (await import("../../../messages/ta.json")).default;
+  if (locale === "hi") return (await import("../../../messages/hi.json")).default;
+  return undefined;
 }
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -21,9 +30,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const cookieStore = await cookies();
   const localeCookie = cookieStore.get(LOCALE_COOKIE)?.value;
   const initialLocale: Locale = isLocale(localeCookie) ? localeCookie : "en";
+  const initialMessages = await loadInitialMessages(initialLocale);
 
   return (
-    <LocaleProvider initialLocale={initialLocale}>
+    <LocaleProvider initialLocale={initialLocale} initialMessages={initialMessages}>
       <div className="min-h-screen bg-background flex flex-col">
         <InviteClaimer />
         <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-xl">

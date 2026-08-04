@@ -6,7 +6,7 @@ import en from "../../messages/en.json";
 export type Locale = "en" | "ta" | "hi";
 
 // Nested key access: t('nav.dashboard') → string
-type Messages = typeof en;
+export type Messages = typeof en;
 
 // Flatten nested object keys with dot notation
 type DotPaths<T, Prefix extends string = ""> = {
@@ -75,15 +75,33 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 export function LocaleProvider({
   children,
   initialLocale,
+  initialMessages,
 }: {
   children: React.ReactNode;
   initialLocale?: Locale;
+  // Resolved server-side (see (app)/layout.tsx) so the FIRST render — the
+  // one that produces the SSR HTML — already has the correct strings for a
+  // non-English `initialLocale`. Without this, SSR would always render "en"
+  // (the only dictionary statically bundled), since the lazy-load effect
+  // below never runs during server rendering.
+  initialMessages?: Messages;
 }) {
+  // Idempotent cache warm: mirrors what (app)/layout.tsx already resolved
+  // server-side into this client module's own cache, so the mount effect
+  // below sees it as already-loaded and skips a redundant re-fetch of the
+  // same dictionary the server just sent down.
+  if (initialLocale && initialMessages && !dictionaryCache[initialLocale]) {
+    dictionaryCache[initialLocale] = initialMessages;
+  }
+
   const [locale, setLocaleState] = useState<Locale>(initialLocale ?? "en");
-  // Seeded from whatever dictionary is already cached for `locale` (always
-  // true for "en"); otherwise starts on the "en" fallback strings until the
-  // effect below resolves the real dictionary — never an empty object.
-  const [messages, setMessages] = useState<Messages>(dictionaryCache[locale] ?? en);
+  // Seeded from the server-resolved dictionary when available, otherwise
+  // whatever's already cached for `locale` (always true for "en"); as a
+  // last resort starts on "en" until the effect below resolves the real
+  // dictionary — never an empty object.
+  const [messages, setMessages] = useState<Messages>(
+    initialMessages ?? dictionaryCache[locale] ?? en
+  );
 
   // Defensive client-side fallback for the rare case a <LocaleProvider> is
   // mounted without a server-provided `initialLocale` (e.g. outside the root
