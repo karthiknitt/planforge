@@ -2,7 +2,6 @@ import {
   ArrowRight,
   Building2,
   CheckCircle,
-  ChevronDown,
   FileText,
   LayoutGrid,
   MapPin,
@@ -16,6 +15,12 @@ import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { FadeIn } from "@/components/motion/fade-in";
 import { StaggerChildren, StaggerItem } from "@/components/motion/stagger-children";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -508,17 +513,23 @@ export default function LandingPage() {
             </h2>
           </FadeIn>
           <StaggerChildren className="space-y-3">
-            {faqs.map(({ q, a }) => (
-              <StaggerItem key={q}>
-                <details className="group rounded-xl border border-border/60 bg-card px-5 py-4 cursor-pointer">
-                  <summary className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground list-none select-none">
-                    {q}
-                    <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform group-open:rotate-180" />
-                  </summary>
-                  <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{a}</p>
-                </details>
-              </StaggerItem>
-            ))}
+            <Accordion type="single" collapsible className="space-y-3">
+              {faqs.map(({ q, a }) => (
+                <StaggerItem key={q}>
+                  <AccordionItem
+                    value={q}
+                    className="border border-border/60 bg-card rounded-xl px-5"
+                  >
+                    <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline">
+                      {q}
+                    </AccordionTrigger>
+                    <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                      {a}
+                    </AccordionContent>
+                  </AccordionItem>
+                </StaggerItem>
+              ))}
+            </Accordion>
           </StaggerChildren>
         </div>
       </section>
