@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { TIER_BADGE } from "@/lib/tier-badge";
+import { DashboardProjectGrid } from "./dashboard-project-grid";
 import {
   DashboardEmptyState,
   DashboardMobileFAB,
@@ -20,9 +21,9 @@ import {
   DashboardPaymentToast,
   DashboardProjectCount,
   DashboardTitle,
-  ProjectCard,
 } from "./dashboard-strings";
 import { fetchHasGeneratedLayout } from "./fetch-has-generated-layout";
+import { fetchProjectLayoutMap } from "./fetch-project-layout-map";
 import { OnboardingChecklist } from "./onboarding-checklist";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -84,8 +85,16 @@ export default async function DashboardPage() {
   // on a cold backend.
   const dismissedOnboarding = !!userRows[0]?.hasSeenOnboarding;
   const step1Done = projects.length > 0;
-  const step2Done =
-    !dismissedOnboarding && step1Done ? await fetchHasGeneratedLayout(session.user.id) : false;
+  // hasLayoutsMap powers the dashboard-card status chip (T23) — a separate
+  // bulk fetch from fetchHasGeneratedLayout's single boolean (see
+  // fetch-project-layout-map.ts's header comment for why it isn't reused
+  // as-is), run in parallel with it rather than sequentially after.
+  const [hasLayoutsMap, step2Done] = await Promise.all([
+    step1Done ? fetchProjectLayoutMap(session.user.id) : Promise.resolve({}),
+    !dismissedOnboarding && step1Done
+      ? fetchHasGeneratedLayout(session.user.id)
+      : Promise.resolve(false),
+  ]);
   const step3Done = projects.some((p) => p.approvalStatus !== null);
   const onboardingComplete = step1Done && step2Done && step3Done;
   const showOnboarding = !dismissedOnboarding && !onboardingComplete;
@@ -132,11 +141,7 @@ export default async function DashboardPage() {
           <DashboardEmptyState />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p, i) => (
-            <ProjectCard key={p.id} project={p} variant="own" animationDelayMs={100 + i * 60} />
-          ))}
-        </div>
+        <DashboardProjectGrid projects={projects} hasLayoutsMap={hasLayoutsMap} variant="own" />
       )}
 
       {/* Team Projects section */}
@@ -152,11 +157,7 @@ export default async function DashboardPage() {
             </h2>
             <span className="text-xs text-muted-foreground">({teamProjects.length})</span>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {teamProjects.map((p, i) => (
-              <ProjectCard key={p.id} project={p} variant="team" animationDelayMs={100 + i * 60} />
-            ))}
-          </div>
+          <DashboardProjectGrid projects={teamProjects} hasLayoutsMap={{}} variant="team" />
         </div>
       )}
       {/* Mobile FAB — fixed bottom-right, replaces top-right button on small screens */}
