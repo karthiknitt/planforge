@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type JobStatus, jobPhase, MAX_POLLS } from "@/lib/generation-job";
+import { type JobStatus, jobPhase, MAX_POLLS, stageLabel } from "@/lib/generation-job";
 import { tierAtLeast } from "@/lib/plan";
 import { startPolling } from "@/lib/poll-backoff";
 import {
@@ -31,6 +31,7 @@ export function RenderTab({
   floors,
   r3fPngs,
   registerTrigger,
+  capturing,
 }: {
   projectId: string;
   layoutKey: string;
@@ -38,6 +39,8 @@ export function RenderTab({
   floors: { label: string; index: number }[];
   r3fPngs: Record<number, string | null>;
   registerTrigger?: (fn: (floorIndex: number, png?: string | null) => void) => void;
+  /** True while layout-viewer.tsx is capturing a fresh 3D-view PNG — see r3f-tab.tsx for the primary UI. */
+  capturing?: boolean;
 }) {
   const isPro = tierAtLeast(planTier, "pro");
   const sectionTriggers = useRef<Record<string, (png?: string | null) => void>>({});
@@ -62,6 +65,15 @@ export function RenderTab({
 
   return (
     <div className="flex flex-col gap-8">
+      <p className="text-sm text-muted-foreground">
+        Visit the 3D View tab first — its geometric capture conditions each floor&apos;s
+        photorealistic render. Generating without it still works, just from the plan alone.
+      </p>
+      {capturing && (
+        <p className="text-xs text-muted-foreground">
+          Capturing the 3D view for reference — generating now will pick it up once ready.
+        </p>
+      )}
       {floors.map((f) => (
         <FloorRenderSection
           key={f.index}
@@ -246,10 +258,33 @@ function FloorRenderSection({
             alt={`AI render — ${label}`}
             className="aspect-[8/5] w-full max-w-xl rounded-xl border object-cover"
           />
+          {/* Regenerate in flight — the image above is deliberately still the
+              last successful render (see FloorRenderSection's top comment),
+              not hidden behind a skeleton; this line is the only signal that
+              a new one is on the way. */}
+          {busy && (
+            <p className="text-xs text-muted-foreground">
+              {job ? stageLabel(job.stage) : "Starting…"} — showing the previous render until this
+              one finishes.
+            </p>
+          )}
         </>
       )}
 
-      {phase === "none" && (
+      {busy && phase !== "ready" && (
+        <>
+          {/* 8:5 matches the render service's fixed 1280x800 output — same
+              rationale as the "checking" skeleton above. Shown here (instead
+              of an empty state) because there's no previous image to keep
+              displaying while this floor's first/retry render is in flight. */}
+          <Skeleton className="aspect-[8/5] h-auto w-full max-w-xl rounded-xl" />
+          <p className="text-xs text-muted-foreground">
+            {job ? stageLabel(job.stage) : "Starting…"}
+          </p>
+        </>
+      )}
+
+      {phase === "none" && !busy && (
         <p className="text-sm text-muted-foreground">
           No render yet for the {label.toLowerCase()} of this layout. Generate an AI-rendered
           visualisation from the current floor plan.
@@ -292,7 +327,9 @@ function FloorRenderSection({
         >
           <RefreshCw className="h-3 w-3" />
           {busy
-            ? "Generating…"
+            ? job
+              ? stageLabel(job.stage)
+              : "Starting…"
             : phase === "ready"
               ? "Regenerate"
               : phase === "error"
