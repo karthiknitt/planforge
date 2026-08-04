@@ -30,7 +30,7 @@ import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
 import type { Plan3DHandle, Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
-import { StructuralLifecycleHeader } from "@/components/structural-lifecycle-header";
+import { StatusRail } from "@/components/status-rail";
 import type { StructuralStatusResponse } from "@/components/structural-viewer";
 import {
   AlertDialog,
@@ -77,13 +77,7 @@ import {
   redoHistory,
   undoHistory,
 } from "@/lib/edit-history";
-import type {
-  ComplianceData,
-  FloorPlanData,
-  GenerateResponse,
-  LayoutData,
-  RoomData,
-} from "@/lib/layout-types";
+import type { FloorPlanData, GenerateResponse, LayoutData, RoomData } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
 import { floorKeyFromIndex } from "@/lib/render-tab";
 import { buildShareUrl } from "@/lib/share-url";
@@ -205,79 +199,6 @@ function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKe
     >
       {cadQualityLabel(quality)}
     </span>
-  );
-}
-
-// ── Vastu badge with popover for details ──────────────────────────────────────
-function VastuBadge({ compliance }: { compliance: ComplianceData }) {
-  const vastuViolations = compliance.violations.filter((v) => v.startsWith("[Vastu]"));
-  const vastuWarnings = compliance.warnings.filter((w) => w.startsWith("[Vastu]"));
-  const allIssues = [...vastuViolations, ...vastuWarnings];
-
-  let badgeClass: string;
-  let label: string;
-  if (vastuViolations.length > 0) {
-    badgeClass =
-      "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-500/15";
-    label = `${vastuViolations.length} Vastu Violation${vastuViolations.length !== 1 ? "s" : ""}`;
-  } else if (vastuWarnings.length > 0) {
-    badgeClass =
-      "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15";
-    label = `${vastuWarnings.length} Vastu Warning${vastuWarnings.length !== 1 ? "s" : ""}`;
-  } else {
-    badgeClass =
-      "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/15";
-    label = "Vastu Compliant";
-  }
-
-  if (allIssues.length === 0) {
-    return (
-      <span
-        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${badgeClass}`}
-      >
-        {label}
-      </span>
-    );
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer ${badgeClass}`}
-        >
-          {label}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 text-sm" align="start">
-        <p className="font-semibold mb-2 text-foreground">Vastu Issues</p>
-        {vastuViolations.length > 0 && (
-          <div className="mb-2">
-            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Violations</p>
-            <ul className="space-y-1">
-              {vastuViolations.map((v) => (
-                <li key={v} className="text-xs text-muted-foreground">
-                  {v.replace("[Vastu] ", "")}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {vastuWarnings.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Warnings</p>
-            <ul className="space-y-1">
-              {vastuWarnings.map((w) => (
-                <li key={w} className="text-xs text-muted-foreground">
-                  {w.replace("[Vastu] ", "")}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
   );
 }
 
@@ -1803,91 +1724,23 @@ export function LayoutViewer({
         </p>
       )}
 
-      {/* Score breakdown for selected layout */}
-      {layout.score && (
-        <div className="flex flex-wrap gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs">
-          <span className="font-semibold text-foreground">
-            Score {layout.score.total.toFixed(0)}/100
-          </span>
-          <span className="text-muted-foreground">
-            Light {layout.score.natural_light.toFixed(0)}
-          </span>
-          <span className="text-muted-foreground">Adj {layout.score.adjacency.toFixed(0)}</span>
-          <span className="text-muted-foreground">AR {layout.score.aspect_ratio.toFixed(0)}</span>
-          <span className="text-muted-foreground">Fill {layout.score.circulation.toFixed(0)}</span>
-          <span className="text-muted-foreground">Vastu {layout.score.vastu.toFixed(0)}</span>
-        </div>
-      )}
-
-      {/* Vastu compliance summary (shown only when vastu_enabled) */}
-      {vastuEnabled && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Vastu
-          </span>
-          <VastuBadge compliance={layout.compliance} />
-          {layout.score && (
-            <span className="text-xs text-muted-foreground">
-              Score: {layout.score.vastu.toFixed(0)}/100
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Compliance badge */}
-      <div
-        className={[
-          "flex flex-col gap-1.5 rounded-lg border p-3 text-sm",
-          layout.compliance.passed
-            ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
-            : "border-red-500/40 bg-red-500/8 text-red-700 dark:text-red-400",
-        ].join(" ")}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold flex items-center gap-2">
-            {layout.compliance.passed ? (
-              <>
-                <Check className="h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
-                <span>Compliance passed</span>
-                <span className="sr-only">Compliance check passed</span>
-              </>
-            ) : (
-              <>
-                <X className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
-                <span>Compliance failed</span>
-                <span className="sr-only">Compliance check failed</span>
-              </>
-            )}
-          </span>
-          {municipality && (
-            <span className="text-xs font-normal text-muted-foreground opacity-80">
-              Validated against: {municipality}
-            </span>
-          )}
-        </div>
-
-        {layout.compliance.violations.length > 0 && (
-          <ul className="list-inside list-disc space-y-0.5 text-red-600 dark:text-red-400">
-            {layout.compliance.violations.map((v) => (
-              <li key={v}>{v}</li>
-            ))}
-          </ul>
-        )}
-
-        {layout.compliance.warnings.length > 0 && (
-          <details className="mt-1">
-            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-400 font-medium">
-              {layout.compliance.warnings.length} warning
-              {layout.compliance.warnings.length !== 1 ? "s" : ""}
-            </summary>
-            <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-700 dark:text-amber-400 text-xs">
-              {layout.compliance.warnings.map((w) => (
-                <li key={w}>{w}</li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
+      {/* Status rail: score breakdown, Vastu, compliance, structural lifecycle,
+          approval notice, restored-revision banner — consolidated into one
+          collapsible rail so the floor plan tab stays above the fold. */}
+      <StatusRail
+        score={layout.score}
+        vastuEnabled={vastuEnabled}
+        compliance={layout.compliance}
+        municipality={municipality}
+        structStatus={structStatus?.status}
+        structChangelog={structStatus?.design?.changelog ?? []}
+        approvingStructural={approvingStructural}
+        onApproveStructural={handleApproveStructural}
+        onRunStructuralDesign={() => setActiveTab("structural")}
+        alreadyApprovedNotice={alreadyApprovedNotice}
+        restoredRevisionActive={Boolean(restoredData)}
+        onClearRestore={handleClearRestore}
+      />
 
       {/* Space utilisation notes */}
       {layout.space_notes && layout.space_notes.length > 0 && (
@@ -1939,18 +1792,6 @@ export function LayoutViewer({
           />
         )}
       </div>
-
-      {/* Stage 2 structural lifecycle — draft/approved/designed badge + action, per selected layout */}
-      <StructuralLifecycleHeader
-        status={structStatus?.status}
-        changelog={structStatus?.design?.changelog ?? []}
-        approving={approvingStructural}
-        onApprove={handleApproveStructural}
-        onRunDesign={() => setActiveTab("structural")}
-      />
-      {alreadyApprovedNotice && (
-        <p className="text-xs text-muted-foreground">Plan was already approved.</p>
-      )}
 
       {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
       {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
@@ -2158,22 +1999,6 @@ export function LayoutViewer({
             renderTriggerRef.current(floor, png);
           }}
         />
-      )}
-
-      {/* ── Restored revision banner ─────────────────────────────────────── */}
-      {restoredData && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-500/8 px-4 py-2.5 text-sm">
-          <span className="text-amber-700 dark:text-amber-400 font-medium">
-            Viewing a restored revision — this is a preview only, not the current saved state.
-          </span>
-          <button
-            type="button"
-            onClick={handleClearRestore}
-            className="ml-4 shrink-0 rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-500/15 transition-colors"
-          >
-            Back to current
-          </button>
-        </div>
       )}
 
       {/* ── Version History panel ────────────────────────────────────────── */}
