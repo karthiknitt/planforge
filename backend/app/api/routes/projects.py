@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
+from app.models.layout import StoredLayout
 from app.models.project import Project
 from app.models.team import TeamMember
 from app.models.user import User
@@ -190,7 +191,23 @@ async def list_projects(
             .where(Project.user_id == user_id)
             .order_by(Project.created_at.desc())
         )
-    return list(result.scalars().all())
+    projects = list(result.scalars().all())
+
+    # `has_layouts` isn't a mapped column — set as a plain instance attribute
+    # so ProjectRead's from_attributes read picks it up. One indexed bulk
+    # query, not N+1: dashboard onboarding needs to know whether *any*
+    # project has completed generation, without a per-project round trip.
+    if projects:
+        layout_result = await db.execute(
+            select(StoredLayout.project_id)
+            .distinct()
+            .where(StoredLayout.project_id.in_([p.id for p in projects]))
+        )
+        generated_ids = set(layout_result.scalars().all())
+        for p in projects:
+            p.has_layouts = p.id in generated_ids
+
+    return projects
 
 
 # ── Annotation routes ─────────────────────────────────────────────────────────
