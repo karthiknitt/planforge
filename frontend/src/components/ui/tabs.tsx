@@ -81,7 +81,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
         // shadow for default active
         "group-data-[variant=default]/tabs-list:data-[state=active]:shadow-sm group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none",
         // focus
-        "focus-visible:border-ring focus-visible:ring-ring/40 focus-visible:ring-[3px]",
+        "focus-visible:border-ring focus-visible:ring-ring/90 dark:focus-visible:ring-ring/40 focus-visible:ring-[3px]",
         "disabled:pointer-events-none disabled:opacity-40",
         className
       )}

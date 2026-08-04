@@ -11,7 +11,7 @@ function Select({ className, children, ...props }: React.ComponentProps<"select"
         "bg-background text-foreground placeholder:text-muted-foreground",
         "transition-[border-color,box-shadow,background-color] duration-200",
         "hover:border-ring/60 hover:dark:border-ring/50",
-        "focus-visible:border-ring focus-visible:ring-ring/40 focus-visible:ring-[3px] focus-visible:dark:bg-input/30",
+        "focus-visible:border-ring focus-visible:ring-ring/90 dark:focus-visible:ring-ring/40 focus-visible:ring-[3px] focus-visible:dark:bg-input/30",
         "disabled:cursor-not-allowed disabled:opacity-40",
         "[&>option]:bg-popover [&>option]:text-popover-foreground",
         className

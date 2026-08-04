@@ -16,7 +16,7 @@ function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxP
         "transition-[border-color,box-shadow,background-color,transform] duration-200",
         "hover:border-ring/70 hover:dark:border-ring/60 hover:scale-105",
         "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary",
-        "focus-visible:border-ring focus-visible:ring-ring/40 focus-visible:ring-[3px]",
+        "focus-visible:border-ring focus-visible:ring-ring/90 dark:focus-visible:ring-ring/40 focus-visible:ring-[3px]",
         "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
         "disabled:cursor-not-allowed disabled:opacity-40",
         className
