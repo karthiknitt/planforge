@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useSession } from "@/lib/auth-client";
 import { changelogCount } from "@/lib/structural-status";
 import { showErrorToast, showToast } from "@/lib/toast";
@@ -186,33 +196,27 @@ export function StructuralViewer({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-muted-foreground">Safe bearing capacity (kPa)</span>
-          <input
+        <div className="flex flex-col gap-1 text-sm">
+          <Label htmlFor="sbc" className="text-muted-foreground">
+            Safe bearing capacity (kPa)
+          </Label>
+          <Input
+            id="sbc"
             type="number"
             min={50}
             max={600}
             value={sbc}
             onChange={(e) => setSbc(Number(e.target.value))}
-            className="w-36 rounded-md border bg-background px-3 py-2"
+            className="w-36"
           />
-        </label>
-        <button
-          type="button"
-          onClick={() => runDesign()}
-          disabled={loading}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-        >
+        </div>
+        <Button onClick={() => runDesign()} disabled={loading}>
           {loading ? "Designing… (can take up to a minute)" : "Run structural design"}
-        </button>
+        </Button>
         {pdf && (
-          <button
-            type="button"
-            onClick={() => downloadArtifact(pdf)}
-            className="rounded-md border px-4 py-2 text-sm"
-          >
+          <Button variant="outline" onClick={() => downloadArtifact(pdf)}>
             Download PDF report
-          </button>
+          </Button>
         )}
       </div>
 
@@ -300,24 +304,24 @@ export function StructuralViewer({
           {q && (
             <div className="rounded-md border p-3 text-sm">
               <p className="mb-2 font-medium">Quantities ({q.grade})</p>
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-muted-foreground">
-                    <th className="py-1">Element</th>
-                    <th className="py-1">Concrete (m³)</th>
-                    <th className="py-1">Steel (kg)</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow className="text-muted-foreground">
+                    <TableHead>Element</TableHead>
+                    <TableHead>Concrete (m³)</TableHead>
+                    <TableHead>Steel (kg)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {["slabs", "beams", "columns", "footings", "total"].map((k) => (
-                    <tr key={k} className={k === "total" ? "font-medium" : ""}>
-                      <td className="py-1 capitalize">{k}</td>
-                      <td className="py-1">{q.concrete_m3?.[k] ?? "—"}</td>
-                      <td className="py-1">{q.steel_kg?.[k] ?? "—"}</td>
-                    </tr>
+                    <TableRow key={k} className={k === "total" ? "font-medium" : ""}>
+                      <TableCell className="capitalize">{k}</TableCell>
+                      <TableCell>{q.concrete_m3?.[k] ?? "—"}</TableCell>
+                      <TableCell>{q.steel_kg?.[k] ?? "—"}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
 
