@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -18,7 +17,6 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
-  X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -150,6 +148,20 @@ const SWATCH: Record<string, string> = {
   store_room: "bg-slate-50 border-slate-400",
   garage: "bg-blue-50 border-blue-500",
   passage: "bg-slate-100 border-slate-400",
+};
+
+// Visual grouping for the tab bar — Plan / Analyze / Visualize / Chat.
+// Purely cosmetic (divider placement); tab order/keyboard-nav is governed
+// by ALL_TABS in src/lib/tabs.ts, which is already sorted to match.
+const TAB_GROUP: Record<TabId, string> = {
+  plan: "plan",
+  section: "analyze",
+  boq: "analyze",
+  structural: "analyze",
+  r3f: "visualize",
+  render: "visualize",
+  compare: "visualize",
+  chat: "chat",
 };
 
 function ScoreBadge({ score }: { score: number }) {
@@ -1202,37 +1214,6 @@ export function LayoutViewer({
             >
               Layout {l.id} — {l.name}
               {l.score && <ScoreBadge score={l.score.total} />}
-              <CadQualityBadge layoutKey={l.id} projectId={projectId} />
-              {vastuEnabled && (
-                <span
-                  className={[
-                    "ml-1 rounded-sm border px-1 py-0.5 text-xs flex items-center gap-1",
-                    l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
-                      ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
-                      : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
-                        ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                        : "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
-                  ].join(" ")}
-                >
-                  <span>Vastu</span>
-                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]")) ? (
-                    <>
-                      <X className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Vastu violation</span>
-                    </>
-                  ) : l.compliance.warnings.some((w) => w.startsWith("[Vastu]")) ? (
-                    <>
-                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Vastu warning</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Vastu passed</span>
-                    </>
-                  )}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -1724,6 +1705,14 @@ export function LayoutViewer({
         </p>
       )}
 
+      {/* CAD drawing-quality badge for the selected layout only — moved out
+          of the per-pill row (T13/P1.4) so N layouts no longer pop in N
+          independent async badges; now there's exactly one, here. */}
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span>CAD quality</span>
+        <CadQualityBadge projectId={projectId} layoutKey={layout.id} />
+      </div>
+
       {/* Status rail: score breakdown, Vastu, compliance, structural lifecycle,
           approval notice, restored-revision banner — consolidated into one
           collapsible rail so the floor plan tab stays above the fold. */}
@@ -1800,25 +1789,40 @@ export function LayoutViewer({
           variant="line"
           className="w-full justify-start overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)] md:w-fit md:[mask-image:none]"
         >
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab} value={tab} className="min-h-[40px] shrink-0 flex-none px-4">
-              {tab === "plan"
-                ? "Floor Plan"
-                : tab === "section"
-                  ? "Section"
-                  : tab === "boq"
-                    ? "BOQ"
-                    : tab === "structural"
-                      ? "Structural"
-                      : tab === "compare"
-                        ? "Compare"
-                        : tab === "chat"
-                          ? "Chat"
-                          : tab === "r3f"
-                            ? "Render"
-                            : "AI Render"}
-            </TabsTrigger>
-          ))}
+          {tabs.map((tab, i) => {
+            // Visual-only group boundaries — plan | section,boq,structural |
+            // r3f,render,compare | chat. One flat TabsList underneath so
+            // Radix's roving tabindex still moves Left/Right through every
+            // tab in this array order regardless of the divider markup.
+            const prevGroup = TAB_GROUP[tabs[i - 1] as TabId];
+            const groupChanged = i > 0 && prevGroup !== TAB_GROUP[tab];
+            return (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className={[
+                  "min-h-[40px] shrink-0 flex-none px-4",
+                  groupChanged ? "ml-2 border-l border-border pl-4" : "",
+                ].join(" ")}
+              >
+                {tab === "plan"
+                  ? "Floor Plan"
+                  : tab === "section"
+                    ? "Section"
+                    : tab === "boq"
+                      ? "BOQ"
+                      : tab === "structural"
+                        ? "Structural"
+                        : tab === "compare"
+                          ? "Compare"
+                          : tab === "chat"
+                            ? "Chat"
+                            : tab === "r3f"
+                              ? "3D View"
+                              : "AI Render"}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
       </Tabs>
 
