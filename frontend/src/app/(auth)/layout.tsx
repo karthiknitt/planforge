@@ -89,7 +89,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <span className="h-2 w-2 rounded-full bg-yellow-500/50" />
               <span className="h-2 w-2 rounded-full bg-green-500/50" />
               <span
-                className="text-[10px] text-muted-foreground/50 ml-1"
+                className="text-[10px] text-muted-foreground ml-1"
                 style={{ fontFamily: "var(--font-mono)" }}
               >
                 Layout A · Bangalore · 2BHK
@@ -193,7 +193,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground/60 mt-5">
+          <p className="text-xs text-muted-foreground mt-5">
             © {new Date().getFullYear()} PlanForge. Trusted by builders across India.
           </p>
         </div>

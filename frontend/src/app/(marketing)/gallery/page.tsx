@@ -138,7 +138,7 @@ export default async function GalleryPage() {
               Generate a Custom Plan
             </Button>
           </Link>
-          <p className="mt-4 text-xs text-muted-foreground/60">
+          <p className="mt-4 text-xs text-muted-foreground">
             Powered by{" "}
             <Link href="/" className="text-primary hover:underline underline-offset-4">
               PlanForge

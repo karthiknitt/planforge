@@ -230,7 +230,7 @@ export default function PricingPage() {
                         )}
                         <span
                           className={`text-sm ${
-                            f.included ? "text-foreground/85" : "text-muted-foreground/50"
+                            f.included ? "text-foreground/85" : "text-muted-foreground"
                           }`}
                         >
                           {f.text}

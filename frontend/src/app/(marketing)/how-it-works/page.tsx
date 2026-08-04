@@ -48,7 +48,7 @@ const steps = [
     ],
     visual: (
       <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-6 space-y-4">
-        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
           Plot Details
         </p>
         <div className="grid grid-cols-2 gap-3">
@@ -63,7 +63,7 @@ const steps = [
             ["Optional", "Pooja, Study"],
           ].map(([label, val]) => (
             <div key={label} className="flex flex-col">
-              <span className="text-xs text-muted-foreground/60">{label}</span>
+              <span className="text-xs text-muted-foreground">{label}</span>
               <span className="text-sm font-semibold text-foreground">{val}</span>
             </div>
           ))}
@@ -94,7 +94,7 @@ const steps = [
     ],
     visual: (
       <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
-        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
           Generated Layouts
         </p>
         {[
@@ -211,7 +211,7 @@ const steps = [
     ],
     visual: (
       <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
-        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
           Export Options
         </p>
         {[
@@ -315,7 +315,7 @@ export default function HowItWorksPage() {
           >
             From Plot to Plan in 4 Steps
           </h1>
-          <p className="text-lg text-muted-foreground/70 leading-relaxed max-w-xl mx-auto">
+          <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto">
             PlanForge takes your site data and delivers NBC-compliant floor plans ready for
             construction or client handover.
           </p>

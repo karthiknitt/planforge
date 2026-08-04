@@ -514,7 +514,7 @@ export default function NewProjectPage() {
         >
           {t("project.newProject")}
         </h1>
-        <p className="text-sm text-muted-foreground/60">{t("project.newProjectHint")}</p>
+        <p className="text-sm text-muted-foreground">{t("project.newProjectHint")}</p>
       </div>
 
       <form

@@ -212,7 +212,7 @@ export function ProjectCard({
         )}
 
         <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
-          <span className="text-[11px] text-muted-foreground/70">
+          <span className="text-[11px] text-muted-foreground">
             {new Date(project.createdAt).toLocaleDateString("en-IN", {
               day: "numeric",
               month: "short",

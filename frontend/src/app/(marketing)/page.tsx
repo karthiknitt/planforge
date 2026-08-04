@@ -274,7 +274,7 @@ export default function LandingPage() {
                   </Button>
                 </Link>
               </div>
-              <p className="animate-fade-up delay-500 text-sm text-muted-foreground/70">
+              <p className="animate-fade-up delay-500 text-sm text-muted-foreground">
                 No credit card required &nbsp;·&nbsp; Free forever plan available
               </p>
             </div>
@@ -490,7 +490,7 @@ export default function LandingPage() {
               </StaggerItem>
             ))}
           </StaggerChildren>
-          <p className="text-center text-sm text-muted-foreground/70 mt-8">
+          <p className="text-center text-sm text-muted-foreground mt-8">
             <Link href="/pricing" className="text-primary hover:underline underline-offset-4">
               See full pricing details &rarr;
             </Link>
