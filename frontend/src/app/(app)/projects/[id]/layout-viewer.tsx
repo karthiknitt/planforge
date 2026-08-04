@@ -358,6 +358,17 @@ export function LayoutViewer({
   // session (never gated back off on tab-switch) so its offscreen PNG capture
   // keeps working from any tab — see the capture-trigger call sites below.
   const [plan3dMounted, setPlan3dMounted] = useState(false);
+  // True while an R3F capture is in flight — set true right before a
+  // capture is scheduled/attempted, false once it settles. capture() itself
+  // (see plan-3d-scene.tsx's Plan3DHandle) is synchronous (draws + reads
+  // back the WebGL canvas on the main thread), so a bare
+  // setCapturing(true)/captureR3f()/setCapturing(false) sequence in the same
+  // synchronous call would batch into a single render and never actually
+  // paint the "true" state. runCapture() below defers the real capture work
+  // one frame (requestAnimationFrame) so the "capturing" UI has a chance to
+  // render first — the auto-capture effect has a real 500ms gap already and
+  // doesn't need this.
+  const [capturing, setCapturing] = useState(false);
   const [floor, setFloor] = useState(0);
   // Snapshots are per layout AND per render source — drop them when the
   // viewed layout changes, or when the architectural/structural toggle
@@ -379,6 +390,20 @@ export function LayoutViewer({
     if (png) setR3fPngs((prev) => ({ ...prev, [floor]: png }));
     return png;
   }, [floor, plan3dMounted]);
+
+  // Manual-trigger capture wrapper (Refresh view / Generate AI Render
+  // buttons) — see the `capturing` state comment above for why this defers
+  // via requestAnimationFrame rather than calling captureR3f() inline.
+  const runCapture = useCallback((): Promise<string | null> => {
+    setCapturing(true);
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        const png = captureR3f();
+        setCapturing(false);
+        resolve(png);
+      });
+    });
+  }, [captureR3f]);
 
   // Single invalidation routine for every geometry-mutating action (manual
   // room edit, AI chat edit). The backend reverts Approved→Draft and marks
@@ -430,8 +455,15 @@ export function LayoutViewer({
   // biome-ignore lint/correctness/useExhaustiveDependencies: r3fView/renderSource/structuralGeometry are intentional re-capture triggers, not read in the body
   useEffect(() => {
     if (activeTab === "r3f" && plan3dMounted) {
-      const t = setTimeout(() => captureR3f(), 500);
-      return () => clearTimeout(t);
+      setCapturing(true);
+      const t = setTimeout(() => {
+        captureR3f();
+        setCapturing(false);
+      }, 500);
+      return () => {
+        clearTimeout(t);
+        setCapturing(false);
+      };
     }
   }, [activeTab, plan3dMounted, captureR3f, r3fView, renderSource, structuralGeometry]);
   const [showVastuZones, setShowVastuZones] = useState(false);
@@ -1944,6 +1976,7 @@ export function LayoutViewer({
           registerTrigger={(fn) => {
             renderTriggerRef.current = fn;
           }}
+          capturing={capturing}
         />
       )}
 
@@ -1964,11 +1997,13 @@ export function LayoutViewer({
           onR3fViewChange={setR3fView}
           r3fPng={r3fPngs[floor]}
           currentFloorLabel={currentFloorEntry.label}
-          onRefreshCapture={() => captureR3f()}
+          capturing={capturing}
+          onRefreshCapture={() => void runCapture()}
           onGenerateAiRender={() => {
-            const png = captureR3f();
-            setActiveTab("render");
-            renderTriggerRef.current(floor, png);
+            void runCapture().then((png) => {
+              setActiveTab("render");
+              renderTriggerRef.current(floor, png);
+            });
           }}
         />
       )}

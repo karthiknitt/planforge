@@ -27,6 +27,7 @@ export function R3fTab({
   onR3fViewChange,
   r3fPng,
   currentFloorLabel,
+  capturing,
   onRefreshCapture,
   onGenerateAiRender,
 }: {
@@ -43,6 +44,8 @@ export function R3fTab({
   onR3fViewChange: (view: Plan3DView) => void;
   r3fPng: string | null | undefined;
   currentFloorLabel: string;
+  /** True while layout-viewer.tsx is (re)capturing this floor's offscreen 3D-view PNG. */
+  capturing?: boolean;
   onRefreshCapture: () => void;
   onGenerateAiRender: () => void;
 }) {
@@ -113,7 +116,7 @@ export function R3fTab({
         </Button>
       </div>
       {/* No documented fixed output size for this canvas capture — 4:3 is a sensible default that keeps the skeleton and loaded capture the same box. */}
-      <div className="aspect-[4/3] w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
+      <div className="relative aspect-[4/3] w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
         {r3fPng ? (
           // biome-ignore lint/performance/noImgElement: captured canvas PNG, not a next/image candidate
           <img
@@ -123,6 +126,16 @@ export function R3fTab({
           />
         ) : (
           <Skeleton className="h-full w-full rounded-none" />
+        )}
+        {/* Distinguishes "never captured yet" (bare skeleton above, no
+            overlay) from "a capture is actively in progress" — previously
+            both looked identical. A stale PNG stays visible underneath
+            while a re-capture runs, dimmed by the overlay, rather than
+            flashing to an empty skeleton. */}
+        {capturing && (
+          <output className="absolute inset-0 flex items-center justify-center bg-background/60 text-xs font-medium text-foreground">
+            Capturing 3D view…
+          </output>
         )}
       </div>
       <div className="flex w-fit flex-wrap gap-2">
