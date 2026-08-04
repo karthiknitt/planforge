@@ -1,0 +1,12 @@
+{
+  "ci": {
+    "collect": {
+      "staticDistDir": "./.next",
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/dashboard",
+        "http://localhost:3000/project/1"
+      ]
+    }
+  }
+}
