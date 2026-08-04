@@ -2,7 +2,8 @@
 
 import { OrbitControls, Text } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
+import { useTheme } from "next-themes";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { FloorPlanData, Opening, RoomData, WallSegment } from "@/lib/layout-types";
 import { buildRoomLabels, northUnitVector, plotDimensionLabel } from "@/lib/render-annotations";
 
@@ -295,6 +296,14 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
     captureImpl.current = fn;
   }, []);
 
+  // three.js reads `args` as a raw color at the WebGL level, not through the
+  // CSS cascade — a --svg-bg var() string won't work here the way it does in
+  // the SVG components, so this one has to be a genuine useTheme() read.
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const bgColor = mounted && resolvedTheme === "dark" ? "#0d1529" : "#f3f4f6";
+
   useImperativeHandle(
     ref,
     () => ({
@@ -345,7 +354,7 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
         dpr={1}
         style={{ width: "100%", height: "100%" }}
       >
-        <color attach="background" args={["#f3f4f6"]} />
+        <color attach="background" args={[bgColor]} />
         <SceneContents
           floorPlan={floorPlan}
           plotWidth={plotWidth}
