@@ -1729,6 +1729,7 @@ export function FloorPlanSVG({
             return (
               <g
                 key={room.id}
+                className="annotation-room"
                 tabIndex={0}
                 style={{ cursor: "pointer", outline: "none" }}
                 onClick={handleAnnotClick}
