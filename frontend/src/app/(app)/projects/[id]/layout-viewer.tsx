@@ -437,8 +437,7 @@ export function LayoutViewer({
     void fetchStructuralStatus();
     if (renderSource === "structural") void fetchStructuralGeometry();
   }, [fetchStructuralStatus, fetchStructuralGeometry, renderSource]);
-  const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
-  const tabs = visibleTabs(agentChatEnabled);
+  const tabs = visibleTabs();
   const [activeTab, setActiveTab] = useState<TabId>("plan");
   // First-mount trigger: visiting either the "r3f" (3D "Render") tab or the
   // "render" ("AI Render") tab mounts the offscreen Plan3DScene if it hasn't
@@ -1986,7 +1985,7 @@ export function LayoutViewer({
         />
       )}
 
-      {activeTab === "chat" && agentChatEnabled && (
+      {activeTab === "chat" && (
         <ChatTab
           projectId={projectId}
           planTier={planTier}

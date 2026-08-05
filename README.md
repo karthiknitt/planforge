@@ -202,7 +202,6 @@ To actually see a change working, push to a branch: Vercel builds a preview depl
 | `BACKEND_URL` | ✓ | Cloud Run backend URL (server-side only — proxy route, `fetchBackend`) |
 | `INTERNAL_AUTH_SECRET` | ✓ | Must match the backend's value exactly |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | optional | Razorpay test key |
-| `NEXT_PUBLIC_AGENT_CHAT` | optional | `1` to show the agent chat tab |
 | `OPENAI_API_KEY` | optional | Voice transcription (Whisper) + agent chat fallback |
 | `ANTHROPIC_API_KEY` | optional | Agentic chat (Claude) |
 | `OPENROUTER_API_KEY` | optional | Agentic chat via OpenRouter (any model) |

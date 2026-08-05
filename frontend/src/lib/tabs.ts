@@ -10,6 +10,9 @@ export const ALL_TABS = [
 ] as const;
 export type TabId = (typeof ALL_TABS)[number];
 
-export function visibleTabs(agentChatEnabled: boolean): TabId[] {
-  return ALL_TABS.filter((t) => t !== "chat" || agentChatEnabled);
+export function visibleTabs(): TabId[] {
+  // Chat is always visible; the Pro-tier gate lives inside ChatTab itself
+  // (a friendly "Pro plan required" upsell), so hiding the tab at this
+  // layer would just duplicate that gate in a worse, less discoverable way.
+  return [...ALL_TABS];
 }
