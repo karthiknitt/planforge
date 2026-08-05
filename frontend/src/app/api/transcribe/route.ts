@@ -2,7 +2,7 @@ import { cookies, headers } from "next/headers";
 import OpenAI from "openai";
 import { arcjetEnabled, rateLimitedClientWithBotDetection } from "@/lib/arcjet";
 import { auth } from "@/lib/auth";
-import { isLocale } from "@/lib/locale-context";
+import { isLocale } from "@/lib/locale";
 
 export const maxDuration = 30;
 
