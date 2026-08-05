@@ -1,6 +1,6 @@
 "use client";
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "framer-motion";
+import { type HTMLMotionProps, m, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
 interface SlideInProps extends Omit<HTMLMotionProps<"div">, "children"> {
@@ -24,14 +24,16 @@ export function SlideIn({
   const shouldReduceMotion = useReducedMotion();
 
   const initial = {
-    opacity: 0,
-    x: from === "left" ? -distance : from === "right" ? distance : 0,
-    y: from === "bottom" ? distance : 0,
+    // opacity stays 1 in the SSR'd/no-JS state — only x/y offset animates,
+    // so content never renders invisible if JS is delayed or disabled
+    opacity: 1,
+    x: shouldReduceMotion ? 0 : from === "left" ? -distance : from === "right" ? distance : 0,
+    y: shouldReduceMotion ? 0 : from === "bottom" ? distance : 0,
   };
 
   return (
-    <motion.div
-      initial={shouldReduceMotion ? { opacity: 1 } : initial}
+    <m.div
+      initial={initial}
       whileInView={{ opacity: 1, x: 0, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{
@@ -43,6 +45,6 @@ export function SlideIn({
       {...props}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

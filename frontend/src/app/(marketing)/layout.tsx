@@ -1,17 +1,18 @@
-import { headers } from "next/headers";
 import Link from "next/link";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
-import { auth } from "@/lib/auth";
-import { UserMenu } from "../(app)/user-menu";
 import { MobileNav } from "./mobile-nav";
+import { FooterSessionLinks, NavSessionActions } from "./nav-session-actions";
 
-export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-
+export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to main content
+      </a>
       {/* ── Sticky Nav ── */}
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -21,10 +22,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:shadow-orange-500/50 group-hover:scale-105">
                 <PlanForgeIcon className="h-5 w-5 text-white" />
               </div>
-              <span
-                className="text-2xl font-black tracking-tight"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
+              <span className="text-2xl font-black tracking-tight font-display">
                 Plan<span className="text-primary">Forge</span>
               </span>
             </Link>
@@ -54,53 +52,22 @@ export default async function MarketingLayout({ children }: { children: React.Re
             {/* Right actions — visible from md+ */}
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               <ThemeToggle />
-              {session ? (
-                <>
-                  <Link href="/dashboard">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-foreground font-medium"
-                    >
-                      Dashboard
-                    </Button>
-                  </Link>
-                  <UserMenu name={session.user.name} email={session.user.email} />
-                </>
-              ) : (
-                <>
-                  <Link href="/sign-in">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-foreground font-medium"
-                    >
-                      Sign In
-                    </Button>
-                  </Link>
-                  <Link href="/sign-up">
-                    <Button
-                      size="sm"
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold btn-shine shadow-md shadow-primary/25 px-5"
-                    >
-                      Get Started Free
-                    </Button>
-                  </Link>
-                </>
-              )}
+              <NavSessionActions />
             </div>
 
             {/* Mobile — only on < md */}
             <div className="flex md:hidden items-center gap-2">
               <ThemeToggle />
-              <MobileNav isAuthenticated={!!session} />
+              <MobileNav />
             </div>
           </div>
         </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1">{children}</main>
+      <main id="main-content" className="flex-1">
+        {children}
+      </main>
 
       {/* Footer */}
       <footer className="border-t border-border bg-card/30">
@@ -112,7 +79,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-md shadow-orange-500/20 transition-all group-hover:scale-105">
                   <PlanForgeIcon className="h-4 w-4 text-white" />
                 </div>
-                <span className="text-xl font-black" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="text-xl font-black font-display">
                   Plan<span className="text-primary">Forge</span>
                 </span>
               </Link>
@@ -155,39 +122,17 @@ export default async function MarketingLayout({ children }: { children: React.Re
                 Account
               </p>
               <nav className="flex flex-col gap-2">
-                {session ? (
-                  <Link
-                    href="/dashboard"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Dashboard
-                  </Link>
-                ) : (
-                  <>
-                    <Link
-                      href="/sign-in"
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Sign In
-                    </Link>
-                    <Link
-                      href="/sign-up"
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Sign Up Free
-                    </Link>
-                  </>
-                )}
+                <FooterSessionLinks />
               </nav>
             </div>
           </div>
 
           {/* Bottom bar */}
           <div className="pt-8 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground/60">
+            <p className="text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} PlanForge. All rights reserved.
             </p>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground/50">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <Link href="/privacy" className="hover:text-muted-foreground transition-colors">
                 Privacy Policy
               </Link>

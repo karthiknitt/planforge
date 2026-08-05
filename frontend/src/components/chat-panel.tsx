@@ -211,7 +211,12 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+      <div
+        ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3"
+      >
         {messages.length === 0 && !isLoading && (
           <div className="text-center text-muted-foreground text-sm py-12">
             <p className="font-medium">Start a conversation</p>
@@ -270,7 +275,10 @@ export function ChatPanel({ projectId, currentLayout, onLayoutUpdate }: ChatPane
 
       {/* Agent / voice errors */}
       {bannerError && (
-        <div className="px-4 py-2 text-xs text-destructive border-t border-border bg-destructive/5">
+        <div
+          role="alert"
+          className="px-4 py-2 text-xs text-destructive border-t border-border bg-destructive/5"
+        >
           <p className="font-medium">{bannerError.title}</p>
           {bannerError.detail && <p className="mt-0.5 opacity-80">{bannerError.detail}</p>}
         </div>

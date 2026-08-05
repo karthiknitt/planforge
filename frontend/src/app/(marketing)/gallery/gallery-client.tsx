@@ -192,10 +192,7 @@ function PlanCard({ plan }: { plan: GalleryPlan }) {
       <div className="flex flex-col flex-1 p-4 gap-3">
         {/* Title + BHK badge */}
         <div className="flex items-start justify-between gap-2">
-          <h3
-            className="text-sm font-bold text-foreground leading-tight"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h3 className="text-sm font-bold text-foreground leading-tight font-display">
             {plan.name}
           </h3>
           <Badge className="flex-shrink-0 bg-primary/10 text-primary border-primary/25 text-xs px-2 py-0.5">

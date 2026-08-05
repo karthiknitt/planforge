@@ -1,26 +1,27 @@
+import { domAnimation, LazyMotion } from "framer-motion";
 import type { Metadata } from "next";
 import { JetBrains_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { LocaleProvider } from "@/lib/locale-context";
+import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import "./globals.css";
 
 const displayFont = Outfit({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
+  weight: "variable",
 });
 
 const bodyFont = Plus_Jakarta_Sans({
   variable: "--font-body",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "variable",
 });
 
 const monoFont = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: "variable",
 });
 
 export const metadata: Metadata = {
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
     template: "%s | PlanForge",
   },
   description:
-    "Generate NBC 2016-compliant G+1 residential floor plans instantly. Enter plot dimensions, get 5 layout variations, export PDF & DXF. Built for Indian civil engineers and small builders.",
+    "Generate NBC 2016-compliant G+1 residential floor plans instantly. Enter plot dimensions, get 3 layout variations, export PDF & DXF. Built for Indian civil engineers and small builders.",
   keywords: [
     "floor plan generator India",
     "G+1 floor plan",
@@ -90,13 +91,16 @@ export default function RootLayout({
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
+          defaultTheme="system"
+          enableSystem
           disableTransitionOnChange
         >
-          <LocaleProvider>{children}</LocaleProvider>
-          <Toaster richColors position="top-right" />
+          <LazyMotion features={domAnimation} strict>
+            {children}
+            <Toaster richColors position="top-right" />
+          </LazyMotion>
         </ThemeProvider>
+        <WebVitalsReporter />
       </body>
     </html>
   );

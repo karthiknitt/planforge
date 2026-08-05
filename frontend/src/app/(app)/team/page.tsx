@@ -14,7 +14,7 @@ import { CreateTeamForm } from "./create-team-form";
 import { InviteMemberForm } from "./invite-member-form";
 import { RemoveMemberButton } from "./remove-member-button";
 
-export const metadata: Metadata = { title: "Team — PlanForge" };
+export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -31,18 +31,13 @@ export default async function TeamPage() {
 
   if (memberships.length === 0) {
     return (
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
         <FadeIn>
           <div className="flex items-center gap-3 mb-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/25">
               <Users className="h-5 w-5 text-primary" />
             </div>
-            <h1
-              className="text-2xl font-black text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Your Firm
-            </h1>
+            <h1 className="text-2xl font-black text-foreground font-display">Your Firm</h1>
           </div>
           <p className="text-sm text-muted-foreground mb-6">
             Create a team to share projects across your engineering firm. Requires a{" "}
@@ -65,7 +60,7 @@ export default async function TeamPage() {
             <Link href="/dashboard">← Dashboard</Link>
           </Button>
         </FadeIn>
-      </main>
+      </div>
     );
   }
 
@@ -80,19 +75,14 @@ export default async function TeamPage() {
   const currentTeam = teamRows[0];
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       <FadeIn>
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/25">
             <Users className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1
-              className="text-2xl font-black text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              {currentTeam.name}
-            </h1>
+            <h1 className="text-2xl font-black text-foreground font-display">{currentTeam.name}</h1>
             <p className="text-xs text-muted-foreground capitalize">
               {currentTeam.planTier} plan
               {currentTeam.planExpiresAt &&
@@ -183,6 +173,6 @@ export default async function TeamPage() {
           <Link href="/dashboard">← Dashboard</Link>
         </Button>
       </FadeIn>
-    </main>
+    </div>
   );
 }

@@ -9,27 +9,9 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { teamMember as teamMemberTable, team as teamTable, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { TIER_BADGE } from "@/lib/tier-badge";
 
-export const metadata: Metadata = { title: "Account — PlanForge" };
-
-const TIER_BADGE: Record<string, { label: string; className: string }> = {
-  free: {
-    label: "Free",
-    className: "bg-muted text-muted-foreground border border-border",
-  },
-  basic: {
-    label: "Basic",
-    className: "bg-primary/10 text-primary/70 border border-primary/20",
-  },
-  pro: {
-    label: "Pro",
-    className: "bg-primary/15 text-primary border border-primary/25",
-  },
-  firm: {
-    label: "Firm",
-    className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-  },
-};
+export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -77,7 +59,7 @@ export default async function AccountPage() {
     .slice(0, 2);
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       {/* Avatar + heading */}
       <FadeIn>
         <div className="flex items-center gap-4 mb-2">
@@ -85,12 +67,7 @@ export default async function AccountPage() {
             {initials}
           </div>
           <div>
-            <h1
-              className="text-2xl font-black text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Account
-            </h1>
+            <h1 className="text-2xl font-black text-foreground font-display">Account</h1>
             <p className="text-sm text-muted-foreground">Manage your profile and subscription.</p>
           </div>
         </div>
@@ -245,6 +222,6 @@ export default async function AccountPage() {
           )}
         </div>
       </FadeIn>
-    </main>
+    </div>
   );
 }

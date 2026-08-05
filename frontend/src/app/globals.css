@@ -54,6 +54,7 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --font-display: var(--font-display);
 }
 
 /* ─── Light Mode ─────────────────────────────────────────────────────────── */
@@ -65,7 +66,7 @@
   --card-foreground: oklch(0.13 0.025 255);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.025 255);
-  --primary: oklch(0.68 0.22 45); /* Orange #f97316 */
+  --primary: oklch(0.55 0.22 45); /* Orange, darkened for AA contrast */
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.94 0.01 250);
   --secondary-foreground: oklch(0.27 0.09 248);
@@ -76,7 +77,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.87 0.015 255);
   --input: oklch(0.87 0.015 255);
-  --ring: oklch(0.68 0.22 45);
+  --ring: oklch(0.55 0.22 45);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -84,12 +85,12 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.97 0.005 255);
   --sidebar-foreground: oklch(0.13 0.025 255);
-  --sidebar-primary: oklch(0.68 0.22 45);
+  --sidebar-primary: oklch(0.55 0.22 45);
   --sidebar-primary-foreground: oklch(0.97 0 0);
   --sidebar-accent: oklch(0.94 0.01 250);
   --sidebar-accent-foreground: oklch(0.27 0.09 248);
   --sidebar-border: oklch(0.87 0.015 255);
-  --sidebar-ring: oklch(0.68 0.22 45);
+  --sidebar-ring: oklch(0.55 0.22 45);
 
   /* ─── Surface layers ─────────────────────────────────────────────────────── */
   --surface-1: oklch(0.96 0.004 255);
@@ -117,6 +118,18 @@
   --svg-plot-stroke: #cbd5e1;
   --svg-road-fill: #cbd5e1;
   --svg-north-bg: white;
+  --svg-wall-external: #1e293b;
+  --svg-wall-internal: #475569;
+  --svg-ink-secondary: #64748b;
+  --svg-material-foundation: #92400e;
+
+  /* ─── Paper-blueprint ambient tokens (light) ─────────────────────────────── */
+  /* Warm amber/ink tones tuned for a cream-paper feel, not just a lighter navy */
+  --grid-ink-rgb: 194, 65, 12; /* orange-700 — reads as fine ink on paper */
+  --glow-orange-rgb:
+    217, 119, 6; /* amber-600 — deeper than dark mode so it survives the near-white bg */
+  --glow-blue-rgb: 29, 78, 216; /* blue-700 */
+  --glow-alpha-scale: 2.2; /* light bg needs much higher alpha than dark to read as warmth, not a smudge */
 }
 
 /* ─── Dark Mode — Blueprint Dark ─────────────────────────────────────────── */
@@ -128,7 +141,7 @@
   --card-foreground: oklch(0.92 0.012 252);
   --popover: oklch(0.13 0.022 252);
   --popover-foreground: oklch(0.92 0.012 252);
-  --primary: oklch(0.68 0.22 45); /* Orange #f97316 */
+  --primary: oklch(0.55 0.22 45); /* Orange, darkened for AA contrast */
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.18 0.025 252);
   --secondary-foreground: oklch(0.92 0.012 252);
@@ -137,9 +150,13 @@
   --accent: oklch(0.22 0.028 252); /* Neutral dark surface */
   --accent-foreground: oklch(0.92 0.012 252);
   --destructive: oklch(0.65 0.22 27);
-  --border: oklch(0.36 0.05 252);
-  --input: oklch(0.4 0.055 252);
-  --ring: oklch(0.68 0.22 45);
+  --border: oklch(
+    0.48 0.05 252
+  ); /* 3.18:1 vs --background, was 1.91:1 below the UI-component AA floor */
+  --input: oklch(
+    0.52 0.055 252
+  ); /* 3.78:1 vs --background, was 2.26:1 below the UI-component AA floor */
+  --ring: oklch(0.55 0.22 45);
   --chart-1: oklch(0.58 0.19 230);
   --chart-2: oklch(0.68 0.22 45);
   --chart-3: oklch(0.7 0.15 162);
@@ -147,12 +164,12 @@
   --chart-5: oklch(0.65 0.22 27);
   --sidebar: oklch(0.13 0.022 252);
   --sidebar-foreground: oklch(0.92 0.012 252);
-  --sidebar-primary: oklch(0.68 0.22 45);
+  --sidebar-primary: oklch(0.55 0.22 45);
   --sidebar-primary-foreground: oklch(0.97 0 0);
   --sidebar-accent: oklch(0.18 0.025 252);
   --sidebar-accent-foreground: oklch(0.92 0.012 252);
   --sidebar-border: oklch(0.36 0.05 252);
-  --sidebar-ring: oklch(0.68 0.22 45);
+  --sidebar-ring: oklch(0.55 0.22 45);
 
   /* ─── Surface layers ─────────────────────────────────────────────────────── */
   --surface-1: oklch(0.1 0.018 255);
@@ -174,6 +191,16 @@
   --svg-plot-stroke: #2a4a7f;
   --svg-road-fill: #1a2744;
   --svg-north-bg: #1a2744;
+  --svg-wall-external: #cbd5e1;
+  --svg-wall-internal: #94a3b8;
+  --svg-ink-secondary: #94a3b8;
+  --svg-material-foundation: #df6820;
+
+  /* ─── Paper-blueprint ambient tokens (dark) ──────────────────────────────── */
+  --grid-ink-rgb: 249, 115, 22;
+  --glow-orange-rgb: 249, 115, 22;
+  --glow-blue-rgb: 96, 165, 250;
+  --glow-alpha-scale: 1; /* dark navy bg already shows these glows at their authored alpha */
 }
 
 /* ─── Base styles ─────────────────────────────────────────────────────────── */
@@ -223,6 +250,16 @@
 }
 .section-view-svg .svg-bg {
   fill: var(--svg-bg);
+}
+
+/* ─── Annotation-mode room focus ring ────────────────────────────────────── */
+/* The <g> suppresses the native outline (inconsistent across browsers for SVG),
+   so :focus-visible restyles the room's own <rect> stroke as the visible indicator
+   instead — CSS wins over the rect's presentation attributes. */
+.annotation-room:focus-visible > rect {
+  stroke: var(--ring);
+  stroke-width: 3px;
+  stroke-dasharray: none;
 }
 
 /* ─── Animation keyframes ────────────────────────────────────────────────── */
@@ -332,13 +369,21 @@
 
 /* ─── Blueprint grid background ──────────────────────────────────────────── */
 .bg-blueprint-grid {
-  background-image: radial-gradient(circle, rgba(249, 115, 22, 0.05) 1px, transparent 1px);
+  background-image: radial-gradient(
+    circle,
+    rgba(var(--grid-ink-rgb), calc(0.05 * var(--glow-alpha-scale))) 1px,
+    transparent 1px
+  );
   background-size: 40px 40px;
   animation: grid-drift 30s linear infinite;
 }
 
 .bg-blueprint-grid-light {
-  background-image: radial-gradient(circle, rgba(249, 115, 22, 0.03) 1px, transparent 1px);
+  background-image: radial-gradient(
+    circle,
+    rgba(var(--grid-ink-rgb), calc(0.03 * var(--glow-alpha-scale))) 1px,
+    transparent 1px
+  );
   background-size: 40px 40px;
   animation: grid-drift 30s linear infinite;
 }
@@ -346,8 +391,15 @@
 /* ─── Technical line grid (auth left panel) ──────────────────────────────── */
 .bg-technical-grid {
   background-image:
-    linear-gradient(rgba(249, 115, 22, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(249, 115, 22, 0.025) 1px, transparent 1px);
+    linear-gradient(
+      rgba(var(--grid-ink-rgb), calc(0.025 * var(--glow-alpha-scale))) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--grid-ink-rgb), calc(0.025 * var(--glow-alpha-scale))) 1px,
+      transparent 1px
+    );
   background-size: 32px 32px;
 }
 
@@ -408,6 +460,18 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Forced-colors mode (Windows High Contrast) strips the gradient background
+   but leaves -webkit-text-fill-color: transparent in place, so the text
+   would otherwise render invisible — fall back to the system text color. */
+@media (forced-colors: active) {
+  .text-gradient-blue,
+  .text-gradient-orange {
+    background: none;
+    -webkit-text-fill-color: CanvasText;
+    color: CanvasText;
+  }
 }
 
 /* ─── Card glass (feature/pricing cards in dark mode) ───────────────────── */
@@ -487,12 +551,54 @@
 }
 
 /* ─── Ambient glow backgrounds ──────────────────────────────────────────── */
+/* Positioned via `at X% Y%`; alpha uses --glow-alpha-scale so light mode reads as
+   warm paper tint instead of a faint smudge, while dark mode keeps its original values. */
 .ambient-glow-orange {
-  background: radial-gradient(ellipse 60% 40% at 50% 50%, rgba(249, 115, 22, 0.08), transparent);
+  background: radial-gradient(
+    ellipse 60% 40% at 50% 50%,
+    rgba(var(--glow-orange-rgb), calc(0.08 * var(--glow-alpha-scale))),
+    transparent
+  );
+}
+
+.ambient-glow-orange-tl {
+  background: radial-gradient(
+    ellipse 55% 45% at 15% 60%,
+    rgba(var(--glow-orange-rgb), calc(0.1 * var(--glow-alpha-scale))),
+    transparent 55%
+  );
+}
+
+.ambient-glow-orange-tr {
+  background: radial-gradient(
+    ellipse 55% 45% at 85% 15%,
+    rgba(var(--glow-orange-rgb), calc(0.13 * var(--glow-alpha-scale))),
+    transparent 50%
+  );
+}
+
+.ambient-glow-orange-top {
+  background: radial-gradient(
+    ellipse 70% 50% at 50% 0%,
+    rgba(var(--glow-orange-rgb), calc(0.06 * var(--glow-alpha-scale))),
+    transparent 60%
+  );
+}
+
+.ambient-glow-orange-bottom {
+  background: radial-gradient(
+    ellipse 70% 50% at 50% 100%,
+    rgba(var(--glow-orange-rgb), calc(0.06 * var(--glow-alpha-scale))),
+    transparent 60%
+  );
 }
 
 .ambient-glow-blue {
-  background: radial-gradient(ellipse 50% 30% at 50% 50%, rgba(96, 165, 250, 0.06), transparent);
+  background: radial-gradient(
+    ellipse 50% 30% at 50% 50%,
+    rgba(var(--glow-blue-rgb), calc(0.06 * var(--glow-alpha-scale))),
+    transparent
+  );
 }
 
 /* ─── Glass surface (elevated) ──────────────────────────────────────────── */

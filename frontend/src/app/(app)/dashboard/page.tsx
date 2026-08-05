@@ -1,8 +1,7 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
-import { Building2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AnimatedFloorPlan } from "@/components/animated-floor-plan";
@@ -13,6 +12,8 @@ import {
   user as userTable,
 } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { TIER_BADGE } from "@/lib/tier-badge";
+import { DashboardProjectGrid } from "./dashboard-project-grid";
 import {
   DashboardEmptyState,
   DashboardMobileFAB,
@@ -20,32 +21,12 @@ import {
   DashboardPaymentToast,
   DashboardProjectCount,
   DashboardTitle,
-  ProjectCardApprovalBadge,
-  ProjectCardBuilding2Icon,
-  ProjectCardViewLink,
 } from "./dashboard-strings";
-import { OnboardingModal } from "./onboarding-modal";
+import { fetchHasGeneratedLayout } from "./fetch-has-generated-layout";
+import { fetchProjectLayoutMap } from "./fetch-project-layout-map";
+import { OnboardingChecklist } from "./onboarding-checklist";
 
 export const metadata: Metadata = { title: "Dashboard" };
-
-const TIER_BADGE: Record<string, { label: string; className: string }> = {
-  free: {
-    label: "Free",
-    className: "bg-muted/80 text-muted-foreground border border-border/60",
-  },
-  basic: {
-    label: "Basic",
-    className: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-  },
-  pro: {
-    label: "Pro",
-    className: "bg-primary/10 text-primary border border-primary/25",
-  },
-  firm: {
-    label: "Firm",
-    className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-  },
-};
 
 export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -86,16 +67,53 @@ export default async function DashboardPage() {
   const projects = myProjects;
   const planTier = userRows[0]?.planTier ?? "free";
   const badge = TIER_BADGE[planTier] ?? TIER_BADGE.free;
-  const showOnboarding = projects.length === 0 && !userRows[0]?.hasSeenOnboarding;
+
+  // Onboarding checklist steps. Step 1 is exact (`projects.length`). Step 3
+  // reuses `approvalStatus` (a share-for-approval implies export/share
+  // happened — already selected by the `db.select()` above, no extra call).
+  // Step 2 ("generated and reviewing a layout") has no field on the Drizzle
+  // project row or the backend's `ProjectRead` list schema — generation
+  // results live in the backend-only `layouts` table, and mere viewing never
+  // writes to the `project` row (only renames/annotations/approval do). The
+  // `GET /api/projects` list endpoint now sets `has_layouts` per project (a
+  // cheap indexed EXISTS join over `layouts`, added to that existing route —
+  // see backend/app/api/routes/projects.py) so step 2 reads real data
+  // instead of an approximation. Only fetched when it can actually change
+  // the outcome (not already dismissed, and the user has a project to check)
+  // — it's a non-critical progress hint, so `fetchHasGeneratedLayout` times
+  // out short and falls back to `false` rather than blocking the dashboard
+  // on a cold backend.
+  const dismissedOnboarding = !!userRows[0]?.hasSeenOnboarding;
+  const step1Done = projects.length > 0;
+  // hasLayoutsMap powers the dashboard-card status chip (T23) — a separate
+  // bulk fetch from fetchHasGeneratedLayout's single boolean (see
+  // fetch-project-layout-map.ts's header comment for why it isn't reused
+  // as-is), run in parallel with it rather than sequentially after.
+  const [hasLayoutsMap, step2Done] = await Promise.all([
+    step1Done ? fetchProjectLayoutMap(session.user.id) : Promise.resolve({}),
+    !dismissedOnboarding && step1Done
+      ? fetchHasGeneratedLayout(session.user.id)
+      : Promise.resolve(false),
+  ]);
+  const step3Done = projects.some((p) => p.approvalStatus !== null);
+  const onboardingComplete = step1Done && step2Done && step3Done;
+  const showOnboarding = !dismissedOnboarding && !onboardingComplete;
 
   const firstName = session.user.name.split(" ")[0];
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 sm:gap-10 px-4 sm:px-6 py-8 sm:py-14">
       <Suspense fallback={null}>
         <DashboardPaymentToast />
       </Suspense>
-      {showOnboarding && <OnboardingModal />}
+      {showOnboarding && (
+        <OnboardingChecklist
+          step1Done={step1Done}
+          step2Done={step2Done}
+          step3Done={step3Done}
+          firstProjectId={projects[0]?.id ?? null}
+        />
+      )}
       {/* Header */}
       <div className="animate-fade-up">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -123,57 +141,7 @@ export default async function DashboardPage() {
           <DashboardEmptyState />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p, i) => (
-            <Link
-              key={p.id}
-              href={`/projects/${p.id}`}
-              className="animate-fade-up block h-full group"
-              style={{ animationDelay: `${100 + i * 60}ms` }}
-            >
-              <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
-                {/* Project header */}
-                <div className="flex items-start justify-between gap-2">
-                  <ProjectCardBuilding2Icon name={p.name} />
-                </div>
-
-                {/* Tags */}
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.plotLength} &times; {p.plotWidth} m
-                  </span>
-                  <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.numBedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
-                  </span>
-                  {p.city && p.city !== "other" && (
-                    <span className="inline-flex items-center rounded-full bg-primary/8 text-primary/70 px-2 py-0.5 text-[11px] font-medium capitalize">
-                      {p.city}
-                    </span>
-                  )}
-                </div>
-
-                {/* Approval badge */}
-                {p.approvalStatus && (
-                  <div className="flex items-center gap-1.5">
-                    <ProjectCardApprovalBadge status={p.approvalStatus} />
-                  </div>
-                )}
-
-                {/* Footer */}
-                <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
-                  <span className="text-[11px] text-muted-foreground/70">
-                    {new Date(p.createdAt).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                  <ProjectCardViewLink />
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <DashboardProjectGrid projects={projects} hasLayoutsMap={hasLayoutsMap} variant="own" />
       )}
 
       {/* Team Projects section */}
@@ -181,65 +149,14 @@ export default async function DashboardPage() {
         <div className="animate-fade-up delay-300 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <h2
-              className="text-base font-bold text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Team Projects
-            </h2>
+            <h2 className="text-base font-bold text-foreground font-display">Team Projects</h2>
             <span className="text-xs text-muted-foreground">({teamProjects.length})</span>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {teamProjects.map((p, i) => (
-              <Link
-                key={p.id}
-                href={`/projects/${p.id}`}
-                className="animate-fade-up block h-full group"
-                style={{ animationDelay: `${100 + i * 60}ms` }}
-              >
-                <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/8 ring-1 ring-primary/15">
-                        <Building2 className="h-4 w-4 text-primary/70" />
-                      </div>
-                      <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {p.name}
-                      </span>
-                    </div>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 flex-shrink-0">
-                      <Users className="h-2.5 w-2.5" />
-                      Shared
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {p.plotLength} &times; {p.plotWidth} m
-                    </span>
-                    <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {p.numBedrooms} BHK &middot; {p.toilets}T{p.parking ? " \u00B7 P" : ""}
-                    </span>
-                  </div>
-                  <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
-                    <span className="text-[11px] text-muted-foreground/70">
-                      {new Date(p.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                    <span className="text-xs font-medium text-primary/70 group-hover:text-primary transition-colors">
-                      View &rarr;
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+          <DashboardProjectGrid projects={teamProjects} hasLayoutsMap={{}} variant="team" />
         </div>
       )}
       {/* Mobile FAB — fixed bottom-right, replaces top-right button on small screens */}
       <DashboardMobileFAB />
-    </main>
+    </div>
   );
 }

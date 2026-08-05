@@ -5,11 +5,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db";
 import { project as projectTable, teamMember, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import type { HintId } from "@/lib/hint-ids";
+import { parseDismissedHints } from "@/lib/hint-ids";
 import { fetchLayouts } from "./fetch-layouts";
+import { GeneratingFallback } from "./generating-fallback";
 import { LayoutViewer } from "./layout-viewer";
 
 export async function generateMetadata({
@@ -55,6 +57,7 @@ interface LayoutSectionProps {
   approvalStatus?: string | null;
   approvalNote?: string | null;
   approvalUpdatedAt?: Date | null;
+  dismissedHints: HintId[];
 }
 
 async function LayoutSection({
@@ -79,11 +82,13 @@ async function LayoutSection({
   approvalStatus,
   approvalNote,
   approvalUpdatedAt,
+  dismissedHints,
 }: LayoutSectionProps) {
   const generateData = await fetchLayouts(projectId, userId);
   return (
     <LayoutViewer
       generateData={generateData}
+      dismissedHints={dismissedHints}
       plotWidth={plotWidth}
       plotLength={plotLength}
       roadSide={roadSide}
@@ -110,123 +115,61 @@ async function LayoutSection({
   );
 }
 
-// ── Generating fallback (shown while solver runs) ───────────────────────────
-
-function GeneratingFallback() {
-  const steps = [
-    { label: "Solving layout constraints", detail: "CP-SAT solver · 3 variants" },
-    { label: "Scoring layouts", detail: "Light · Adjacency · Vastu" },
-    { label: "Checking compliance", detail: "NBC / local rules" },
-  ];
-
-  return (
-    <div className="flex flex-col gap-6 rounded-2xl border border-dashed border-border bg-muted/20 px-8 py-10">
-      {/* Progress bar */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-foreground">Generating floor plans…</span>
-          <span className="text-xs text-muted-foreground animate-pulse">Running</span>
-        </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{
-              width: "60%",
-              animation: "progress-indeterminate 1.8s ease-in-out infinite",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Step indicators */}
-      <div className="flex flex-col gap-3">
-        {steps.map((step, i) => (
-          <div key={step.label} className="flex items-center gap-3">
-            <div
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border"
-              style={{
-                borderColor: "var(--primary)",
-                animation: `pulse-step 1.8s ease-in-out ${i * 0.4}s infinite`,
-              }}
-            >
-              <div className="h-2 w-2 rounded-full bg-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">{step.label}</p>
-              <p className="text-xs text-muted-foreground">{step.detail}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Skeleton cards for layout buttons */}
-      <div className="flex gap-3 pt-2">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-9 w-32 rounded-lg" />
-        ))}
-      </div>
-
-      {/* SVG area skeleton */}
-      <Skeleton className="h-72 rounded-xl bg-muted/60" />
-
-      <style>{`
-        @keyframes progress-indeterminate {
-          0%   { transform: translateX(-100%); width: 50%; }
-          50%  { transform: translateX(50%);   width: 60%; }
-          100% { transform: translateX(200%);  width: 50%; }
-        }
-        @keyframes pulse-step {
-          0%, 100% { opacity: 0.4; }
-          50%       { opacity: 1; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  // Session read depends only on request headers, the project row select only
+  // on the route's `id` param — no data dependency between them, so run concurrently.
+  const requestHeaders = await headers();
+  const [session, rows] = await Promise.all([
+    auth.api.getSession({ headers: requestHeaders }),
+    db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1),
+  ]);
   if (!session) redirect("/sign-in");
 
-  const rows = await db.select().from(projectTable).where(eq(projectTable.id, id)).limit(1);
   const project = rows[0];
   if (!project) notFound();
 
   // Owner OR member of the project's team — matches the backend access rule
   let canAccess = project.userId === session.user.id;
-  if (!canAccess && project.teamId != null) {
-    const membership = await db
-      .select({ id: teamMember.id })
-      .from(teamMember)
-      .where(and(eq(teamMember.teamId, project.teamId), eq(teamMember.userId, session.user.id)))
-      .limit(1);
-    canAccess = membership.length > 0;
-  }
+  // Plan-tier only depends on session.user.id, not on canAccess, so it can run
+  // alongside the membership check — a small latency win on the common
+  // (authorized) path, at the cost of one wasted read-only query on the rare
+  // unauthorized path (which hits notFound() below and discards it).
+  const [membership, userRows] = await Promise.all([
+    !canAccess && project.teamId != null
+      ? db
+          .select({ id: teamMember.id })
+          .from(teamMember)
+          .where(and(eq(teamMember.teamId, project.teamId), eq(teamMember.userId, session.user.id)))
+          .limit(1)
+      : Promise.resolve([]),
+    db
+      .select({ planTier: userTable.planTier, dismissedHints: userTable.dismissedHints })
+      .from(userTable)
+      .where(eq(userTable.id, session.user.id))
+      .limit(1),
+  ]);
+  if (!canAccess) canAccess = membership.length > 0;
   if (!canAccess) notFound();
 
-  const userRows = await db
-    .select({ planTier: userTable.planTier })
-    .from(userTable)
-    .where(eq(userTable.id, session.user.id))
-    .limit(1);
   const planTier = userRows[0]?.planTier ?? "free";
+  const dismissedHints = parseDismissedHints(userRows[0]?.dismissedHints);
 
   const lengthFt = metresToFeet(project.plotLength);
   const widthFt = metresToFeet(project.plotWidth);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-5 md:py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-5 md:py-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm min-w-0">
         <Button variant="ghost" size="sm" asChild className="-ml-2 shrink-0">
           <Link href="/dashboard">← Dashboard</Link>
         </Button>
         <span className="text-muted-foreground shrink-0">/</span>
-        <span className="font-semibold truncate min-w-0">{project.name}</span>
+        <h1 className="font-semibold truncate min-w-0">{project.name}</h1>
         <Button variant="outline" size="sm" asChild className="ml-auto shrink-0">
           <Link href={`/projects/${id}/edit`}>Edit</Link>
         </Button>
@@ -332,8 +275,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           approvalStatus={project.approvalStatus}
           approvalNote={project.approvalNote}
           approvalUpdatedAt={project.approvalUpdatedAt}
+          dismissedHints={dismissedHints}
         />
       </Suspense>
-    </main>
+    </div>
   );
 }

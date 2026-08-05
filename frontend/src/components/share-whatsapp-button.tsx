@@ -4,35 +4,59 @@ import { Copy, Share2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { buildWhatsAppMessage, buildWhatsAppShareLink } from "@/lib/share-url";
+import { showErrorToast } from "@/lib/toast";
 
 interface ShareWhatsAppButtonProps {
   projectName: string;
   layoutId: string;
   message?: string;
+  /**
+   * Fetches (creating on demand, same as the Share dialog) the public,
+   * non-login-walled `/share/{token}` URL. Never fall back to
+   * `window.location.href` here — that's the app URL and is login-walled,
+   * so a recipient without an account can't open it.
+   */
+  getShareUrl: () => Promise<string>;
+  disabled?: boolean;
 }
 
-export function ShareWhatsAppButton({ projectName, layoutId, message }: ShareWhatsAppButtonProps) {
+export function ShareWhatsAppButton({
+  projectName,
+  layoutId,
+  message,
+  getShareUrl,
+  disabled,
+}: ShareWhatsAppButtonProps) {
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  function buildShareUrl(): string {
-    const pageUrl = typeof window !== "undefined" ? window.location.href : "";
-    const text =
-      message ?? `Check out this floor plan for ${projectName} (Layout ${layoutId}): ${pageUrl}`;
-    return `https://wa.me/?text=${encodeURIComponent(text)}`;
-  }
-
-  function handleWhatsApp() {
-    window.open(buildShareUrl(), "_blank", "noopener,noreferrer");
+  async function handleWhatsApp() {
+    setLoading(true);
+    try {
+      const shareUrl = await getShareUrl();
+      const text = message ?? buildWhatsAppMessage(projectName, layoutId, shareUrl);
+      window.open(buildWhatsAppShareLink(text), "_blank", "noopener,noreferrer");
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : "Could not generate share link";
+      showErrorToast(errMessage);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleCopy() {
-    const url = typeof window !== "undefined" ? window.location.href : "";
+    setLoading(true);
     try {
+      const url = await getShareUrl();
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard API unavailable — silently ignore
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : "Could not generate share link";
+      showErrorToast(errMessage);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -44,6 +68,7 @@ export function ShareWhatsAppButton({ projectName, layoutId, message }: ShareWha
           variant="outline"
           size="sm"
           onClick={handleWhatsApp}
+          disabled={disabled || loading}
           className="border-[#25D366]/50 text-[#128C7E] hover:bg-[#25D366]/10 hover:border-[#25D366] dark:text-[#25D366]"
           title="Share on WhatsApp"
         >
@@ -67,6 +92,7 @@ export function ShareWhatsAppButton({ projectName, layoutId, message }: ShareWha
               variant="outline"
               size="sm"
               onClick={handleCopy}
+              disabled={disabled || loading}
               className="border-border text-foreground hover:bg-muted"
               aria-label={copied ? "Copied to clipboard" : "Copy link"}
             >

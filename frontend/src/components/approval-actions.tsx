@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -115,12 +116,12 @@ export function ApprovalActions({
       .map((l) => `Layout ${l.id} — ${l.name}`);
 
     return (
-      <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-start gap-3">
-        <span className="text-green-600 text-lg mt-0.5">✅</span>
+      <div className="rounded-xl border border-success/40 bg-success/10 px-5 py-4 flex items-start gap-3">
+        <Check className="h-5 w-5 text-success mt-0.5" />
         <div className="flex flex-col gap-1">
-          <p className="font-semibold text-green-700 dark:text-green-400">You approved this plan</p>
+          <p className="font-semibold text-success">You approved this plan</p>
           {approvedNames.length > 0 && (
-            <ul className="text-sm text-green-700 dark:text-green-400 list-disc list-inside">
+            <ul className="text-sm text-success list-disc list-inside">
               {approvedNames.map((n) => (
                 <li key={n}>{n}</li>
               ))}
@@ -134,15 +135,15 @@ export function ApprovalActions({
 
   if (status === "changes_requested") {
     return (
-      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 flex items-start gap-3">
-        <span className="text-amber-600 text-lg mt-0.5">✏️</span>
+      <div className="rounded-xl border border-warning/40 bg-warning/10 px-5 py-4 flex items-start gap-3">
+        <span className="text-warning text-lg mt-0.5">✏️</span>
         <div>
-          <p className="font-semibold text-amber-700 dark:text-amber-400">Changes requested</p>
+          <p className="font-semibold text-warning">Changes requested</p>
           {updatedAt && (
             <p className="text-sm text-muted-foreground mt-0.5">on {formatDate(updatedAt)}</p>
           )}
           {note && (
-            <p className="mt-2 text-sm text-foreground border border-amber-400/40 bg-amber-50 dark:bg-amber-900/10 rounded-lg px-3 py-2">
+            <p className="mt-2 text-sm text-foreground border border-warning/40 bg-warning/10 rounded-lg px-3 py-2">
               {note}
             </p>
           )}
@@ -179,7 +180,7 @@ export function ApprovalActions({
                   "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
                   "min-w-[180px] flex-1 sm:flex-none",
                   selected
-                    ? "border-green-500 bg-green-500/10 text-green-700 dark:text-green-400"
+                    ? "border-success bg-success/10 text-success"
                     : "border-border hover:border-ring/60 hover:bg-muted/50",
                 ].join(" ")}
               >
@@ -188,7 +189,7 @@ export function ApprovalActions({
                   className={[
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
                     selected
-                      ? "border-green-500 bg-green-500 text-white"
+                      ? "border-success bg-success text-success-foreground"
                       : "border-muted-foreground/40",
                   ].join(" ")}
                 >
@@ -238,7 +239,7 @@ export function ApprovalActions({
             <Button
               onClick={handleRequestChanges}
               disabled={loading === "changes"}
-              className="bg-amber-500 hover:bg-amber-600 text-white"
+              className="bg-warning hover:bg-warning/90 text-warning-foreground"
             >
               {loading === "changes" ? "Sending…" : "Send Request"}
             </Button>
@@ -259,19 +260,24 @@ export function ApprovalActions({
           <Button
             onClick={handleApprove}
             disabled={loading !== null || selectedLayouts.length === 0}
-            className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-40"
+            className="bg-success hover:bg-success/90 text-success-foreground disabled:opacity-40"
           >
-            {loading === "approve"
-              ? "Approving…"
-              : selectedLayouts.length === 0
-                ? "✅ Approve (select a layout first)"
-                : `✅ Approve ${selectedLayouts.length === 1 ? `Layout ${selectedLayouts[0]}` : `${selectedLayouts.length} layouts`}`}
+            {loading === "approve" ? (
+              "Approving…"
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                {selectedLayouts.length === 0
+                  ? "Approve (select a layout first)"
+                  : `Approve ${selectedLayouts.length === 1 ? `Layout ${selectedLayouts[0]}` : `${selectedLayouts.length} layouts`}`}
+              </>
+            )}
           </Button>
           <Button
             variant="outline"
             onClick={() => setShowNoteInput(true)}
             disabled={loading !== null}
-            className="border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+            className="border-warning/50 text-warning hover:bg-warning/10"
           >
             ✏️ Request Changes
           </Button>

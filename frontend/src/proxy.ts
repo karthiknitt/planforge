@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { ajShield, arcjetEnabled } from "@/lib/arcjet";
+import { resolveAuthenticatedRedirect } from "@/lib/auth-redirect";
 
 const PROTECTED_PATHS = ["/dashboard", "/projects", "/account"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
@@ -38,9 +39,12 @@ export async function proxy(request: NextRequest) {
     // Network/parse error — treat as unauthenticated (fail open for UX)
   }
 
-  // Authenticated user visiting /sign-in or /sign-up → send to dashboard
+  // Authenticated user visiting /sign-in or /sign-up → send to dashboard,
+  // preserving a `?template=` param (e.g. from the gallery CTA) so it
+  // survives this redirect instead of being silently dropped.
   if (hasValidSession && isAuthPath) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const target = resolveAuthenticatedRedirect(request.nextUrl.searchParams);
+    return NextResponse.redirect(new URL(target, request.url));
   }
 
   // Unauthenticated user visiting a protected route → send to sign-in

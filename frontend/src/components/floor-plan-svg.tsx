@@ -1,5 +1,6 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { ElectricalOverlay } from "@/components/electrical-overlay";
 import { FurnitureOverlay } from "@/components/furniture-overlay";
@@ -60,7 +61,40 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   open_terrace: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
 };
 
-const color = (type: string) => PALETTE[type] ?? PALETTE.utility;
+// Dark-mode counterpart of PALETTE — same room-type keys, values chosen so
+// every fill sits near the --svg-plot-fill dark tone (~L21%) while text/stroke
+// stay hue-matched to their light variant but lifted for AA contrast against
+// that fill (text ≥7.5:1, stroke ≥3:1, verified against #0d1529/#111e35).
+const PALETTE_DARK: Record<string, { fill: string; stroke: string; text: string }> = {
+  living: { fill: "#4c481f", stroke: "#f0bb4c", text: "#f2e5d9" },
+  bedroom: { fill: "#281f4c", stroke: "#894def", text: "#e7d9f2" },
+  master_bedroom: { fill: "#351f4c", stroke: "#a24fed", text: "#e7d9f2" },
+  kitchen: { fill: "#1f4c2f", stroke: "#54e88b", text: "#d9f2e3" },
+  toilet: { fill: "#1f3a4c", stroke: "#4cb8f0", text: "#d9e9f2" },
+  wc_only: { fill: "#1f3d4c", stroke: "#4cb8f0", text: "#d9e9f2" },
+  bathroom_master: { fill: "#1f334c", stroke: "#547be8", text: "#d9dff2" },
+  staircase: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  parking: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  parking_4w: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  parking_2w: { fill: "#383534", stroke: "#a39d99", text: "#e7e6e4" },
+  utility: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  pooja: { fill: "#4c381f", stroke: "#f0844c", text: "#f2dfd9" },
+  study: { fill: "#1f4c2d", stroke: "#59e48d", text: "#d9f2e3" },
+  balcony: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  dining: { fill: "#4c481f", stroke: "#f0ad4c", text: "#f2e5d9" },
+  servant_quarter: { fill: "#4c381f", stroke: "#f0844c", text: "#f2dfd9" },
+  home_office: { fill: "#1f4c2d", stroke: "#59e48d", text: "#d9f2e3" },
+  gym: { fill: "#4c1f22", stroke: "#e95374", text: "#f2d9e1" },
+  store_room: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  garage: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  passage: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  open_terrace: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+};
+
+const color = (type: string, dark = false) => {
+  const palette = dark ? PALETTE_DARK : PALETTE;
+  return palette[type] ?? palette.utility;
+};
 
 // ── North arrow ───────────────────────────────────────────────────────────────
 const NORTH_ROTATION: Record<string, number> = { S: 0, N: 180, W: 90, E: 270 };
@@ -68,10 +102,22 @@ const NORTH_ROTATION: Record<string, number> = { S: 0, N: 180, W: 90, E: 270 };
 function NorthArrow({ x, y, rotation = 0 }: { x: number; y: number; rotation?: number }) {
   return (
     <g transform={`translate(${x},${y})`}>
-      <circle r={14} fill="white" stroke="#94A3B8" strokeWidth={1} className="svg-north-circle" />
+      <circle
+        r={14}
+        fill="white"
+        stroke="var(--svg-ink-secondary)"
+        strokeWidth={1}
+        className="svg-north-circle"
+      />
       <g transform={`rotate(${rotation})`}>
-        <polygon points="0,-10 -4,4 0,1 4,4" fill="#1E293B" />
-        <text y={-14} textAnchor="middle" fontSize={9} fill="#64748B" fontFamily="sans-serif">
+        <polygon points="0,-10 -4,4 0,1 4,4" fill="var(--svg-wall-external)" />
+        <text
+          y={-14}
+          textAnchor="middle"
+          fontSize={9}
+          fill="var(--svg-ink-secondary)"
+          fontFamily="sans-serif"
+        >
           N
         </text>
       </g>
@@ -85,15 +131,22 @@ function ScaleBar({ x, y, scale }: { x: number; y: number; scale: number }) {
   const barPx = barM * scale;
   return (
     <g transform={`translate(${x},${y})`}>
-      <line x1={0} y1={0} x2={barPx} y2={0} stroke="#64748B" strokeWidth={2} />
-      <line x1={0} y1={-4} x2={0} y2={4} stroke="#64748B" strokeWidth={1.5} />
-      <line x1={barPx} y1={-4} x2={barPx} y2={4} stroke="#64748B" strokeWidth={1.5} />
+      <line x1={0} y1={0} x2={barPx} y2={0} stroke="var(--svg-ink-secondary)" strokeWidth={2} />
+      <line x1={0} y1={-4} x2={0} y2={4} stroke="var(--svg-ink-secondary)" strokeWidth={1.5} />
+      <line
+        x1={barPx}
+        y1={-4}
+        x2={barPx}
+        y2={4}
+        stroke="var(--svg-ink-secondary)"
+        strokeWidth={1.5}
+      />
       <text
         x={barPx / 2}
         y={14}
         textAnchor="middle"
         fontSize={9}
-        fill="#64748B"
+        fill="var(--svg-ink-secondary)"
         fontFamily="sans-serif"
       >
         {barM} m
@@ -109,12 +162,14 @@ function RoomLabel({
   py,
   scale,
   locale = "en",
+  dark = false,
 }: {
   room: RoomData;
   px: (v: number) => number;
   py: (v: number) => number;
   scale: number;
   locale?: Locale;
+  dark?: boolean;
 }) {
   const cx = px(room.x + room.width / 2);
   const cy = py(room.y + room.depth / 2);
@@ -124,7 +179,7 @@ function RoomLabel({
   if (roomPxW < 28 || roomPxH < 22) return null;
 
   const fs = Math.max(7, Math.min(11, roomPxW / 8, roomPxH / 4));
-  const c = color(room.type);
+  const c = color(room.type, dark);
   const displayName = getRoomName(room.type, locale);
   const lines =
     roomPxH >= 44 ? [displayName, `${room.area} m²`] : [`${displayName} · ${room.area}m²`];
@@ -633,7 +688,7 @@ function DimLine({
   if (horizontal) {
     const dy = y1 - offset;
     return (
-      <g stroke="#94A3B8" strokeWidth={0.5} fill="#94A3B8">
+      <g stroke="var(--svg-ink-secondary)" strokeWidth={0.5} fill="var(--svg-ink-secondary)">
         <line x1={x1} y1={y1} x2={x1} y2={dy - 4} />
         <line x1={x2} y1={y1} x2={x2} y2={dy - 4} />
         <line x1={x1} y1={dy} x2={x2} y2={dy} />
@@ -652,7 +707,7 @@ function DimLine({
   }
   const dx = x1 - offset;
   return (
-    <g stroke="#94A3B8" strokeWidth={0.5} fill="#94A3B8">
+    <g stroke="var(--svg-ink-secondary)" strokeWidth={0.5} fill="var(--svg-ink-secondary)">
       <line x1={x1} y1={y1} x2={dx - 4} y2={y1} />
       <line x1={x1} y1={y2} x2={dx - 4} y2={y2} />
       <line x1={dx} y1={y1} x2={dx} y2={y2} />
@@ -690,7 +745,7 @@ function DrawingWall({
   scale: number;
 }) {
   const half = (wall.thickness / 2) * scale;
-  const fill = wall.kind === "external" ? "#1E293B" : "#475569";
+  const fill = wall.kind === "external" ? "var(--svg-wall-external)" : "var(--svg-wall-internal)";
   if (Math.abs(wall.x1 - wall.x2) < 1e-6) {
     const x = px(wall.x1);
     const yA = py(wall.y1);
@@ -782,7 +837,7 @@ function DrawingDoorSymbol({
   const mid = angJ + delta / 2;
 
   return (
-    <g stroke="#64748B" strokeWidth={0.75} fill="none">
+    <g stroke="var(--svg-ink-secondary)" strokeWidth={0.75} fill="none">
       <line x1={hx} y1={hy} x2={ex} y2={ey} />
       <path d={`M ${jx} ${jy} A ${r} ${r} 0 0 ${sweepFlag} ${ex} ${ey}`} />
       <text
@@ -792,7 +847,7 @@ function DrawingDoorSymbol({
         dominantBaseline="middle"
         fontSize={6}
         fontWeight="700"
-        fill="#64748B"
+        fill="var(--svg-ink-secondary)"
         stroke="none"
         fontFamily="sans-serif"
       >
@@ -806,7 +861,7 @@ function DrawingDoorSymbol({
           dominantBaseline="middle"
           fontSize={5}
           fontWeight="700"
-          fill="#64748B"
+          fill="var(--svg-ink-secondary)"
           stroke="none"
           fontFamily="sans-serif"
         >
@@ -831,7 +886,7 @@ function DrawingStairSymbol({
   const [ux, uy] = stair.up_label_xy;
   return (
     <g>
-      <g stroke="#94A3B8" strokeWidth={0.6}>
+      <g stroke="var(--svg-ink-secondary)" strokeWidth={0.6}>
         {stair.treads.map(([x1, y1, x2, y2], i) => (
           <line
             key={`tread-${i}-${x1}-${y1}-${x2}-${y2}`}
@@ -847,18 +902,25 @@ function DrawingStairSymbol({
         y1={py(by1)}
         x2={px(bx2)}
         y2={py(by2)}
-        stroke="#64748B"
+        stroke="var(--svg-ink-secondary)"
         strokeWidth={1.2}
         strokeDasharray="4 2"
       />
-      <line x1={px(ax1)} y1={py(ay1)} x2={px(ax2)} y2={py(ay2)} stroke="#64748B" strokeWidth={1} />
+      <line
+        x1={px(ax1)}
+        y1={py(ay1)}
+        x2={px(ax2)}
+        y2={py(ay2)}
+        stroke="var(--svg-ink-secondary)"
+        strokeWidth={1}
+      />
       <text
         x={px(ux)}
         y={py(uy)}
         textAnchor="middle"
         fontSize={7}
         fontFamily="sans-serif"
-        fill="#64748B"
+        fill="var(--svg-ink-secondary)"
         fontWeight="600"
       >
         UP
@@ -1155,6 +1217,17 @@ export function FloorPlanSVG({
   complianceIssues = {},
 }: FloorPlanSVGProps) {
   const northRotation = NORTH_ROTATION[roadSide] ?? 0;
+
+  // Room fill/stroke/text palette needs a JS theme read (23 room types × 3
+  // properties would mean 69 new CSS custom properties — impractical per the
+  // token-budget guidance, so this one piece of the drawing switches palette
+  // objects instead of routing through CSS vars like the rest of the file).
+  // `mounted` avoids an SSR/CSR palette mismatch; expect one paint at the
+  // light palette before the dark palette takes over on first client render.
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === "dark";
 
   // ── Edit mode drag state ────────────────────────────────────────────────────
   interface DragState {
@@ -1471,6 +1544,7 @@ export function FloorPlanSVG({
         viewBox={`0 0 ${VP_W} ${VP_H}`}
         className={["floor-plan-svg", className].filter(Boolean).join(" ")}
         style={{ width: "100%", height: "auto", cursor: annotationMode ? "crosshair" : undefined }}
+        role="img"
         aria-label={
           showFurniture || showPlumbing
             ? "Floor plan diagram with furniture and fixture layout"
@@ -1484,7 +1558,7 @@ export function FloorPlanSVG({
         <defs>
           {/* Masonry wall hatch — 45° diagonal, for external walls */}
           <pattern id="wall-hatch-floor" width="4" height="4" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="4" x2="4" y2="0" stroke="#94a3b8" strokeWidth="0.5" />
+            <line x1="0" y1="4" x2="4" y2="0" stroke="var(--svg-ink-secondary)" strokeWidth="0.5" />
           </pattern>
           {/* Internal wall hatch — lighter diagonal */}
           <pattern id="int-wall-hatch" width="3" height="3" patternUnits="userSpaceOnUse">
@@ -1511,7 +1585,7 @@ export function FloorPlanSVG({
           textAnchor="middle"
           fontSize={9}
           fontFamily="sans-serif"
-          fill="#475569"
+          fill="var(--svg-wall-internal)"
           letterSpacing={2}
         >
           ROAD ({roadSide})
@@ -1655,6 +1729,7 @@ export function FloorPlanSVG({
             return (
               <g
                 key={room.id}
+                className="annotation-room"
                 tabIndex={0}
                 style={{ cursor: "pointer", outline: "none" }}
                 onClick={handleAnnotClick}
@@ -1668,8 +1743,8 @@ export function FloorPlanSVG({
                   y={ry}
                   width={rw}
                   height={rh}
-                  fill={color(room.type).fill}
-                  stroke={color(room.type).stroke}
+                  fill={color(room.type, isDark).fill}
+                  stroke={color(room.type, isDark).stroke}
                   strokeWidth={1.5}
                   strokeDasharray="3 2"
                 />
@@ -1707,7 +1782,7 @@ export function FloorPlanSVG({
               y={ry}
               width={rw}
               height={rh}
-              fill={color(room.type).fill}
+              fill={color(room.type, isDark).fill}
               stroke={isSelected ? "#1d4ed8" : undefined}
               strokeWidth={isSelected ? 2.5 : undefined}
               {...roomMouseDownProps}
@@ -1772,7 +1847,7 @@ export function FloorPlanSVG({
               y={py(col.cy) - colPx / 2}
               width={colPx}
               height={colPx}
-              fill="#1E293B"
+              fill="var(--svg-wall-external)"
               opacity={drawingOpacity}
             />
           );
@@ -1787,6 +1862,7 @@ export function FloorPlanSVG({
             py={py}
             scale={scale}
             locale={locale}
+            dark={isDark}
           />
         ))}
 

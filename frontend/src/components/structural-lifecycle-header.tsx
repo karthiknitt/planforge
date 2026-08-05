@@ -15,11 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { needsApproval, type StatusTone, statusBadgeInfo } from "@/lib/structural-status";
 
-const TONE_CLASS: Record<StatusTone, string> = {
+export const TONE_CLASS: Record<StatusTone, string> = {
   muted: "border-border bg-muted text-muted-foreground",
-  info: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400",
-  success: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
-  warning: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  info: "border-info/40 bg-info/10 text-info",
+  success: "border-success/40 bg-success/10 text-success",
+  warning: "border-warning/40 bg-warning/10 text-warning",
 };
 
 const TONE_ICON: Record<StatusTone, typeof Circle> = {

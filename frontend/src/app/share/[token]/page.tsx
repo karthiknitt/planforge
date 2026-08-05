@@ -6,6 +6,7 @@ import { ApprovalActions } from "@/components/approval-actions";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import type { FloorPlanData, GenerateResponse, LayoutData } from "@/lib/layout-types";
+import { SWATCH, TYPE_LABELS } from "@/lib/room-type-labels";
 
 // ── Types returned by the backend share endpoint ─────────────────────────────
 
@@ -68,48 +69,6 @@ function metresToFeet(metres: number): string {
   return (Math.round((metres / 0.3048) * 10) / 10).toFixed(1);
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  living: "Living / Hall",
-  bedroom: "Bedroom",
-  master_bedroom: "Master Bedroom",
-  kitchen: "Kitchen",
-  toilet: "Toilet",
-  staircase: "Staircase",
-  parking: "Parking",
-  utility: "Utility / Other",
-  pooja: "Pooja Room",
-  study: "Study",
-  balcony: "Balcony",
-  dining: "Dining",
-  servant_quarter: "Servant Quarter",
-  home_office: "Home Office",
-  gym: "Gym",
-  store_room: "Store Room",
-  garage: "Garage",
-  passage: "Passage",
-};
-
-const SWATCH: Record<string, string> = {
-  living: "bg-yellow-100 border-yellow-400",
-  bedroom: "bg-violet-100 border-violet-500",
-  master_bedroom: "bg-purple-100 border-purple-500",
-  kitchen: "bg-green-100 border-green-600",
-  toilet: "bg-sky-100 border-sky-500",
-  staircase: "bg-slate-100 border-slate-400",
-  parking: "bg-slate-50 border-slate-300",
-  utility: "bg-slate-50 border-slate-300",
-  pooja: "bg-orange-50 border-orange-400",
-  study: "bg-emerald-50 border-emerald-500",
-  balcony: "bg-blue-50 border-blue-400",
-  dining: "bg-yellow-50 border-yellow-500",
-  servant_quarter: "bg-orange-50 border-orange-500",
-  home_office: "bg-green-50 border-green-500",
-  gym: "bg-red-50 border-red-400",
-  store_room: "bg-slate-50 border-slate-400",
-  garage: "bg-blue-50 border-blue-500",
-  passage: "bg-slate-100 border-slate-400",
-};
-
 // ── Read-only layout viewer (server-compatible, no interactivity) ─────────────
 
 function ReadOnlyLayoutCard({
@@ -149,8 +108,8 @@ function ReadOnlyLayoutCard({
           className={[
             "rounded-md border px-2 py-0.5 text-xs font-semibold",
             layout.compliance.passed
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700",
+              ? "border-success/40 bg-success/10 text-success"
+              : "border-destructive/40 bg-destructive/10 text-destructive",
           ].join(" ")}
         >
           {layout.compliance.passed ? "Compliant" : "Non-compliant"}
@@ -159,7 +118,7 @@ function ReadOnlyLayoutCard({
 
       {/* Compliance violations */}
       {layout.compliance.violations.length > 0 && (
-        <ul className="list-inside list-disc space-y-0.5 text-sm text-red-600">
+        <ul className="list-inside list-disc space-y-0.5 text-sm text-destructive">
           {layout.compliance.violations.map((v) => (
             <li key={v}>{v}</li>
           ))}
@@ -253,7 +212,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
       <main className="mx-auto max-w-5xl px-4 py-8 flex flex-col gap-8">
         {/* Project summary */}
         <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
+          <h1 className="text-2xl font-black text-foreground">{project.name}</h1>
           <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/40 px-5 py-4 text-sm">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

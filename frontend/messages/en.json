@@ -20,6 +20,11 @@
     "awaiting": "Awaiting client",
     "approved": "Approved",
     "changesRequested": "Changes requested",
+    "notGenerated": "Not generated",
+    "generateAction": "Generate",
+    "continueAction": "Continue",
+    "reviewAction": "Review",
+    "clientNoteLabel": "Client note",
     "upgradeForFeatures": "Upgrade",
     "upgradeHint": "for DXF + BOQ",
     "onboardingTitle": "Welcome to PlanForge",
@@ -27,7 +32,10 @@
     "onboardingStep2": "Generate 3 NBC-compliant layout variations instantly",
     "onboardingStep3": "Export standard or approval-ready PDF, DXF, and BOQ",
     "onboardingBrowseTemplates": "Browse templates",
-    "onboardingStartProject": "Start a project"
+    "onboardingStartProject": "Start a project",
+    "onboardingContinue": "Continue",
+    "onboardingProgressLabel": "steps complete",
+    "onboardingDismiss": "Dismiss checklist"
   },
   "project": {
     "newProject": "New Project",
@@ -101,7 +109,29 @@
     "frontLeft": "Front-Left (fixed)",
     "frontRight": "Front-Right",
     "rearRight": "Rear-Right",
-    "rearLeft": "Rear-Left"
+    "rearLeft": "Rear-Left",
+    "wizardStepPlot": "Plot",
+    "wizardStepOrientation": "Orientation",
+    "wizardStepFloors": "Floors",
+    "wizardStepRooms": "Rooms",
+    "wizardStepReview": "Review & Generate",
+    "wizardStep": "Step",
+    "wizardOf": "of",
+    "wizardNext": "Next",
+    "wizardBack": "Back",
+    "wizardPreviewShow": "Show plot preview",
+    "wizardPreviewHide": "Hide plot preview",
+    "setbackHelp": "The minimum distance a structure must maintain from the plot boundary — required by local building rules.",
+    "stiltHelp": "A stilt floor leaves the ground floor open for parking; living spaces start from the floor above.",
+    "municipalityHelp": "The local authority (e.g. CMDA, BBMP, GHMC) whose building code and setback/FAR rules apply to your plot.",
+    "quadUnitsHelp": "Quadrilateral corners are entered directly in metres — every other measurement on this form uses feet.",
+    "templateLoadFailed": "Couldn't load the template — starting with a blank form instead.",
+    "reviewTitle": "Review your project",
+    "reviewEditStep": "Edit",
+    "reviewPlot": "Plot",
+    "reviewOrientation": "Orientation & setbacks",
+    "reviewFloors": "Floors",
+    "reviewRooms": "Rooms"
   },
   "rooms": {
     "bedroom": "Bedroom",
@@ -145,5 +175,16 @@
     "title": "Bill of Quantities",
     "totalCost": "Total Estimated Cost",
     "city": "Rates for City"
+  },
+  "hints": {
+    "gotIt": "Got it",
+    "chatTitle": "Talk to your plan",
+    "chatBody": "Ask for changes in plain English — \"make the master bedroom larger\" — and see them applied to the layout.",
+    "overlaysTitle": "See more than walls",
+    "overlaysBody": "Toggle furniture, electrical, and plumbing overlays on top of the floor plan.",
+    "compareTitle": "Compare layouts side by side",
+    "compareBody": "Line up two generated layouts to see how they differ before you choose one.",
+    "historyTitle": "Every version is saved",
+    "historyBody": "Save a snapshot before a big edit, or roll back to an earlier version any time."
   }
 }

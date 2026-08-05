@@ -1,6 +1,6 @@
 "use client";
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "framer-motion";
+import { type HTMLMotionProps, m, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
 interface FadeInProps extends Omit<HTMLMotionProps<"div">, "children"> {
@@ -24,8 +24,10 @@ export function FadeIn({
   const y = direction === "up" ? 24 : direction === "down" ? -24 : 0;
 
   return (
-    <motion.div
-      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y }}
+    <m.div
+      // opacity stays 1 in the SSR'd/no-JS state — only the y offset animates,
+      // so content never renders invisible if JS is delayed or disabled
+      initial={{ opacity: 1, y: shouldReduceMotion ? 0 : y }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{
@@ -37,6 +39,6 @@ export function FadeIn({
       {...props}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

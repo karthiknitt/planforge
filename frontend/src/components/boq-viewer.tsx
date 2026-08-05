@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useSession } from "@/lib/auth-client";
 import { boqBasisLabel, shouldShowPreliminaryBanner } from "@/lib/boq-provenance";
 import type { BOQResponse } from "@/lib/layout-types";
@@ -259,62 +268,54 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">S.No</th>
-              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">
-                Item Description
-              </th>
-              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Basis</th>
-              <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground">
-                Quantity
-              </th>
-              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Unit</th>
-              <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground">
-                Rate (₹)
-              </th>
-              <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground">
-                Amount (₹)
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="rounded-xl border">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="text-muted-foreground">S.No</TableHead>
+              <TableHead className="text-muted-foreground">Item Description</TableHead>
+              <TableHead className="text-muted-foreground">Basis</TableHead>
+              <TableHead className="text-right text-muted-foreground">Quantity</TableHead>
+              <TableHead className="text-muted-foreground">Unit</TableHead>
+              <TableHead className="text-right text-muted-foreground">Rate (₹)</TableHead>
+              <TableHead className="text-right text-muted-foreground">Amount (₹)</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {boq.items.map((item, idx) => (
-              <tr key={item.item} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
-                <td className="px-4 py-2 text-muted-foreground">{item.item}</td>
-                <td className="px-4 py-2">{item.description}</td>
-                <td className="px-4 py-2">
+              <TableRow key={item.item} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                <TableCell className="text-muted-foreground">{item.item}</TableCell>
+                <TableCell className="whitespace-normal">{item.description}</TableCell>
+                <TableCell>
                   <Badge
                     variant={item.basis === "designed" ? "default" : "outline"}
                     className="text-[10px]"
                   >
                     {boqBasisLabel(item.basis)}
                   </Badge>
-                </td>
-                <td className="px-4 py-2 text-right font-mono">{item.quantity.toFixed(2)}</td>
-                <td className="px-4 py-2 text-muted-foreground">{item.unit}</td>
-                <td className="px-4 py-2 text-right font-mono text-muted-foreground">
+                </TableCell>
+                <TableCell className="text-right font-mono">{item.quantity.toFixed(2)}</TableCell>
+                <TableCell className="text-muted-foreground">{item.unit}</TableCell>
+                <TableCell className="text-right font-mono text-muted-foreground">
                   {item.rate > 0 ? item.rate.toFixed(0) : "—"}
-                </td>
-                <td className="px-4 py-2 text-right font-mono">
+                </TableCell>
+                <TableCell className="text-right font-mono">
                   {item.amount > 0 ? item.amount.toLocaleString("en-IN") : "—"}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t bg-muted/50 font-semibold">
-              <td colSpan={6} className="px-4 py-2.5 text-right">
+          </TableBody>
+          <TableFooter>
+            <TableRow className="font-semibold">
+              <TableCell colSpan={6} className="text-right">
                 Total Estimated Cost
-              </td>
-              <td className="px-4 py-2.5 text-right font-mono">
+              </TableCell>
+              <TableCell className="text-right font-mono">
                 {boq.total_cost.toLocaleString("en-IN")}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
       </div>
 
       <p className="text-xs text-muted-foreground">

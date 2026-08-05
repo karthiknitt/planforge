@@ -1,0 +1,8 @@
+{
+  "ci": {
+    "collect": {
+      "startServerCommand": "next start",
+      "url": ["http://localhost:3000/"]
+    }
+  }
+}

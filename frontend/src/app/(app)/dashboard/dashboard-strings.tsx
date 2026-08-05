@@ -1,12 +1,16 @@
 "use client";
 
-import { Building2, Plus } from "lucide-react";
+import { Building2, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { useLocale } from "@/lib/locale-context";
+import type { project } from "@/db/schema";
+import { type CardStatus, deriveCardStatus } from "@/lib/dashboard-card-status";
+import { type TranslationKey, useLocale } from "@/lib/locale-context";
 import { showToast } from "@/lib/toast";
+
+type Project = typeof project.$inferSelect;
 
 // Confirms a Razorpay checkout that redirected back here — the checkout
 // buttons themselves unmount on navigation, so success can only be
@@ -60,10 +64,7 @@ export function DashboardEmptyState() {
   const { t } = useLocale();
   return (
     <>
-      <h3
-        className="text-lg font-bold text-foreground mb-2"
-        style={{ fontFamily: "var(--font-display)" }}
-      >
+      <h3 className="text-lg font-bold text-foreground mb-2 font-display">
         {t("dashboard.noProjects")}
       </h3>
       <p className="text-sm text-muted-foreground mb-8 max-w-xs">{t("dashboard.noProjectsHint")}</p>
@@ -83,10 +84,7 @@ export function DashboardEmptyState() {
 export function DashboardTitle({ firstName }: { firstName: string }) {
   const { t } = useLocale();
   return (
-    <h1
-      className="text-2xl sm:text-3xl font-black text-foreground"
-      style={{ fontFamily: "var(--font-display)" }}
-    >
+    <h1 className="text-2xl sm:text-3xl font-black text-foreground font-display">
       {t("dashboard.welcomeBack")}, <span className="text-gradient-orange">{firstName}</span>
     </h1>
   );
@@ -105,12 +103,12 @@ export function DashboardUpgradeHint() {
   );
 }
 
-export function ProjectCardApprovalBadge({ status }: { status: string }) {
+export function ProjectCardApprovalBadge({ status }: { status: CardStatus }) {
   const { t } = useLocale();
   if (status === "approved") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-400">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+      <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+        <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
         {t("dashboard.approved")}
       </span>
     );
@@ -123,6 +121,14 @@ export function ProjectCardApprovalBadge({ status }: { status: string }) {
       </span>
     );
   }
+  if (status === "not_generated") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] font-medium text-muted-foreground/70">
+        <span className="inline-block h-1.5 w-1.5 rounded-full border border-muted-foreground/40" />
+        {t("dashboard.notGenerated")}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
@@ -131,11 +137,44 @@ export function ProjectCardApprovalBadge({ status }: { status: string }) {
   );
 }
 
-export function ProjectCardViewLink() {
+// Short truncated preview of a client's changes-requested note — dashboard
+// card real estate, not the full project page. Actual note text is
+// user-generated content (whatever language the client typed in) so it is
+// never passed through t().
+const CLIENT_NOTE_PREVIEW_LENGTH = 80;
+
+export function ProjectCardClientNote({ note }: { note: string }) {
+  const { t } = useLocale();
+  const preview =
+    note.length > CLIENT_NOTE_PREVIEW_LENGTH
+      ? `${note.slice(0, CLIENT_NOTE_PREVIEW_LENGTH).trimEnd()}…`
+      : note;
+  return (
+    <p className="text-[11px] text-muted-foreground line-clamp-2">
+      <span className="font-medium text-orange-700 dark:text-orange-400">
+        {t("dashboard.clientNoteLabel")}:
+      </span>{" "}
+      {preview}
+    </p>
+  );
+}
+
+const VIEW_LINK_COPY: Record<CardStatus, TranslationKey> = {
+  not_generated: "dashboard.generateAction",
+  awaiting: "dashboard.continueAction",
+  approved: "dashboard.viewProject",
+  changes_requested: "dashboard.reviewAction",
+};
+
+// Every state currently deep-links to the same `/projects/${id}` — the
+// project page has no `?tab=` (or similar) query-param routing today (only
+// in-memory tab state in layout-viewer.tsx), so "Continue" can only differ
+// in copy, not destination. See task-23-report.md for the full note.
+export function ProjectCardViewLink({ status }: { status: CardStatus }) {
   const { t } = useLocale();
   return (
     <span className="text-xs font-medium text-primary/70 group-hover:text-primary transition-colors">
-      {t("dashboard.viewProject")} &rarr;
+      {t(VIEW_LINK_COPY[status])} &rarr;
     </span>
   );
 }
@@ -159,5 +198,89 @@ export function ProjectCardBuilding2Icon({ name }: { name: string }) {
         {name}
       </span>
     </div>
+  );
+}
+
+export function ProjectCard({
+  project,
+  variant,
+  animationDelayMs,
+  hasLayouts = false,
+  approvalStatus = project.approvalStatus,
+  approvalNote = project.approvalNote,
+}: {
+  project: Project;
+  variant: "own" | "team";
+  animationDelayMs: number;
+  // Backend-only field (not a Drizzle column) — the caller fetches it in
+  // bulk (see fetch-project-layout-map.ts) and passes it down; defaults to
+  // `false` ("not generated") for callers that haven't fetched it (e.g. team
+  // cards, which don't render a status chip at all — see below).
+  hasLayouts?: boolean;
+  // Overridable so a client-island poller (dashboard-project-grid.tsx) can
+  // pass fresher, live-polled values without this component needing to know
+  // about polling itself. Defaults to the server-fetched Drizzle row.
+  approvalStatus?: string | null;
+  approvalNote?: string | null;
+}) {
+  const cardStatus = deriveCardStatus(hasLayouts, approvalStatus);
+  return (
+    <Link
+      href={`/projects/${project.id}`}
+      className="animate-fade-up block h-full group"
+      style={{ animationDelay: `${animationDelayMs}ms` }}
+    >
+      <div className="feature-card rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 flex flex-col gap-3 h-full">
+        <div className="flex items-start justify-between gap-2">
+          <ProjectCardBuilding2Icon name={project.name} />
+          {variant === "team" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 flex-shrink-0">
+              <Users className="h-2.5 w-2.5" />
+              Shared
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {project.plotLength} &times; {project.plotWidth} m
+          </span>
+          <span className="inline-flex items-center rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {project.numBedrooms} BHK &middot; {project.toilets}T{project.parking ? " · P" : ""}
+          </span>
+          {variant === "own" && project.city && project.city !== "other" && (
+            <span className="inline-flex items-center rounded-full bg-primary/8 text-primary/70 px-2 py-0.5 text-[11px] font-medium capitalize">
+              {project.city}
+            </span>
+          )}
+        </div>
+
+        {variant === "own" && (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <ProjectCardApprovalBadge status={cardStatus} />
+            </div>
+            {cardStatus === "changes_requested" && approvalNote && (
+              <ProjectCardClientNote note={approvalNote} />
+            )}
+          </div>
+        )}
+
+        <div className="mt-auto pt-2 flex items-center justify-between border-t border-border/30">
+          <span className="text-[11px] text-muted-foreground">
+            {new Date(project.createdAt).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+          {variant === "own" ? (
+            <ProjectCardViewLink status={cardStatus} />
+          ) : (
+            <ProjectCardViewLink status="approved" />
+          )}
+        </div>
+      </div>
+    </Link>
   );
 }

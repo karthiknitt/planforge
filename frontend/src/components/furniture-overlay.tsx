@@ -21,8 +21,11 @@ function mkPx(offsetX: number, offsetY: number, plotHeightPx: number, scale: num
   };
 }
 
-const FURN_STROKE = "#94a3b8";
-const FURN_FILL = "#f8fafc";
+// Reuse the floor-plan's --svg-ink-secondary / --svg-bg tokens (globals.css)
+// so furniture outlines/labels and the default silhouette fill stay
+// legible/consistent whichever theme the parent FloorPlanSVG is in.
+const FURN_STROKE = "var(--svg-ink-secondary)";
+const FURN_FILL = "var(--svg-bg)";
 const FURN_OPACITY = 0.75;
 const FURN_SW = 0.5;
 
@@ -35,7 +38,7 @@ function FurnLabel({ x, y, text }: { x: number; y: number; text: string }) {
       textAnchor="middle"
       fontSize={5}
       fontFamily="sans-serif"
-      fill="#64748b"
+      fill="var(--svg-ink-secondary)"
       stroke="none"
     >
       {text}
@@ -442,7 +445,7 @@ function WashbasinSymbol({
       {/* Basin bowl circle */}
       <circle cx={rx + rw / 2} cy={ry + rh / 2} r={Math.min(rw, rh) * 0.35} />
       {/* Tap dot */}
-      <circle cx={rx + rw / 2} cy={ry + rh * 0.12} r={2} fill="#94a3b8" />
+      <circle cx={rx + rw / 2} cy={ry + rh * 0.12} r={2} fill="var(--svg-ink-secondary)" />
       <FurnLabel x={rx + rw / 2} y={ry + rh + 6} text="Basin" />
     </g>
   );

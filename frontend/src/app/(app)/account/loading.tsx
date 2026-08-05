@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AccountLoading() {
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       <div className="mb-2 flex items-center gap-4">
         <Skeleton className="h-14 w-14 rounded-2xl" />
         <div className="space-y-2">
@@ -17,6 +17,6 @@ export default function AccountLoading() {
           <Skeleton className="h-4 w-2/3" />
         </div>
       ))}
-    </main>
+    </div>
   );
 }

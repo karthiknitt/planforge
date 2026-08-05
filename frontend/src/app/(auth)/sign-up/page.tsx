@@ -42,10 +42,7 @@ function SignUpForm() {
     <div className="flex flex-col">
       {/* Heading */}
       <div className="animate-fade-up mb-8">
-        <h1
-          className="text-2xl font-black text-foreground mb-1.5"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
+        <h1 className="text-2xl font-black text-foreground mb-1.5 font-display">
           Create your account
         </h1>
         <p className="text-sm text-muted-foreground">Free to start. No credit card required.</p>
@@ -111,7 +108,10 @@ function SignUpForm() {
         </div>
 
         {error && (
-          <p className="rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-destructive"
+          >
             {error}
           </p>
         )}

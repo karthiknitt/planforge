@@ -4,13 +4,12 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth-client";
+import { navSessionState } from "@/lib/nav-session-state";
 
-interface MobileNavProps {
-  isAuthenticated?: boolean;
-}
-
-export function MobileNav({ isAuthenticated = false }: MobileNavProps) {
+export function MobileNav() {
   const [open, setOpen] = useState(false);
+  const sessionState = navSessionState(useSession());
 
   return (
     <div className="md:hidden">
@@ -19,7 +18,8 @@ export function MobileNav({ isAuthenticated = false }: MobileNavProps) {
         variant="ghost"
         size="sm"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Toggle menu"
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
       >
         {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
@@ -48,7 +48,8 @@ export function MobileNav({ isAuthenticated = false }: MobileNavProps) {
             >
               Pricing
             </Link>
-            {isAuthenticated ? (
+            {sessionState === "pending" && <div className="h-[52px]" aria-hidden="true" />}
+            {sessionState === "authenticated" && (
               <div className="pt-2 pb-1">
                 <Link href="/dashboard" onClick={() => setOpen(false)}>
                   <Button
@@ -59,7 +60,8 @@ export function MobileNav({ isAuthenticated = false }: MobileNavProps) {
                   </Button>
                 </Link>
               </div>
-            ) : (
+            )}
+            {sessionState === "anonymous" && (
               <>
                 <Link
                   href="/sign-in"

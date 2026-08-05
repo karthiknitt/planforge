@@ -14,104 +14,19 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getFaqsForPage, pricingTiers } from "@/lib/marketing-content";
 
 export const metadata: Metadata = {
-  title: "Pricing — Free, ₹499 & ₹999/month",
+  title: "Pricing — Free, ₹499, ₹999 & ₹2,999/month",
   description:
-    "PlanForge pricing: Free (3 projects, PDF export), Basic ₹499/month (unlimited projects + DXF), Pro ₹999/month (BOQ Excel + priority support). No AutoCAD needed. Cancel anytime.",
+    "PlanForge pricing: Free (3 projects, PDF export), Basic ₹499/month (unlimited projects + DXF), Pro ₹999/month (BOQ Excel + priority support), Firm ₹2,999/month (5 engineers + team dashboard). No AutoCAD needed. Cancel anytime.",
   openGraph: {
-    title: "PlanForge Pricing — Free, Basic & Pro Plans for Indian Builders",
+    title: "PlanForge Pricing — Free, Basic, Pro & Firm Plans for Indian Builders",
     description:
-      "Start free with 3 projects and PDF export. Upgrade to Basic (₹499/mo) for DXF export or Pro (₹999/mo) for BOQ Excel. NBC 2016 compliant floor plan generator.",
+      "Start free with 3 projects and PDF export. Upgrade to Basic (₹499/mo) for DXF export, Pro (₹999/mo) for BOQ Excel, or Firm (₹2,999/mo) for a multi-engineer team dashboard. NBC 2016 compliant floor plan generator.",
   },
   alternates: { canonical: "/pricing" },
 };
-
-const plans: Array<{
-  name: string;
-  price: string;
-  period: string;
-  tagline: string;
-  highlight: boolean;
-  cta: string;
-  checkoutPlan: "basic" | "pro" | "firm" | null;
-  features: Array<{ text: string; included: boolean }>;
-}> = [
-  {
-    name: "Free",
-    price: "₹0",
-    period: "/month",
-    tagline: "Try it out, no commitment.",
-    highlight: false,
-    cta: "Get Started Free",
-    checkoutPlan: null,
-    features: [
-      { text: "3 saved projects", included: true },
-      { text: "All 5 layout archetypes", included: true },
-      { text: "NBC 2016 compliance checks", included: true },
-      { text: "PDF export (1:100 scale)", included: true },
-      { text: "DXF export for AutoCAD", included: false },
-      { text: "BOQ Excel export", included: false },
-      { text: "Priority support", included: false },
-    ],
-  },
-  {
-    name: "Basic",
-    price: "₹499",
-    period: "/month",
-    tagline: "For active builders and designers.",
-    highlight: true,
-    cta: "Subscribe — ₹499/mo",
-    checkoutPlan: "basic",
-    features: [
-      { text: "Unlimited saved projects", included: true },
-      { text: "All 5 layout archetypes", included: true },
-      { text: "NBC 2016 compliance checks", included: true },
-      { text: "PDF export (1:100 scale)", included: true },
-      { text: "DXF export for AutoCAD", included: true },
-      { text: "BOQ Excel export", included: false },
-      { text: "Priority support", included: false },
-    ],
-  },
-  {
-    name: "Pro",
-    price: "₹999",
-    period: "/month",
-    tagline: "For professionals delivering to clients.",
-    highlight: false,
-    cta: "Subscribe — ₹999/mo",
-    checkoutPlan: "pro",
-    features: [
-      { text: "Unlimited saved projects", included: true },
-      { text: "All 5 layout archetypes", included: true },
-      { text: "NBC 2016 compliance checks", included: true },
-      { text: "PDF export (1:100 scale)", included: true },
-      { text: "DXF export for AutoCAD", included: true },
-      { text: "BOQ Excel export", included: true },
-      { text: "Priority support", included: true },
-      { text: "Team / multi-seat access", included: false },
-    ],
-  },
-  {
-    name: "Firm",
-    price: "₹2,999",
-    period: "/month",
-    tagline: "For civil engineering firms with multiple engineers.",
-    highlight: false,
-    cta: "Subscribe — ₹2,999/mo",
-    checkoutPlan: "firm",
-    features: [
-      { text: "Everything in Pro", included: true },
-      { text: "Up to 5 engineers", included: true },
-      { text: "Shared project pool", included: true },
-      { text: "Team admin dashboard", included: true },
-      { text: "DXF export for AutoCAD", included: true },
-      { text: "BOQ Excel export", included: true },
-      { text: "Priority support", included: true },
-      { text: "Team / multi-seat access", included: true },
-    ],
-  },
-];
 
 const creditPacks: Array<{
   packId: "pack_1" | "pack_3" | "pack_7";
@@ -124,28 +39,7 @@ const creditPacks: Array<{
   { packId: "pack_7", credits: 7, price: "₹499" },
 ];
 
-const faqs = [
-  {
-    q: "Do I need AutoCAD to use PlanForge?",
-    a: "No. PlanForge runs entirely in your browser — no software to install. DXF export is available for Basic and Pro subscribers who want to open plans in AutoCAD, BricsCAD, or any other CAD tool.",
-  },
-  {
-    q: "Which cities are supported?",
-    a: "Bangalore, Chennai, Delhi, Hyderabad, Pune, and a generic Indian standard option that applies NBC 2016 defaults. City-specific setbacks and FAR tables are baked in for each supported city.",
-  },
-  {
-    q: "What compliance standards are used?",
-    a: "PlanForge enforces NBC 2016 for room areas, minimum widths, stair tread/riser dimensions, and ventilation ratios. City-specific setbacks and floor area ratios (FAR) are applied on top of the national baseline.",
-  },
-  {
-    q: "Can I cancel anytime?",
-    a: "Yes. You can cancel your subscription at any time from your account settings. Your access continues until the end of the current billing period, and you won't be charged again.",
-  },
-  {
-    q: "What is a BOQ?",
-    a: "A Bill of Quantities (BOQ) is a breakdown of construction materials with estimated quantities — masonry, concrete, structural steel, plaster, flooring, and more. PlanForge auto-calculates 11 quantity line items and lets you export them to Excel for cost estimation.",
-  },
-];
+const faqs = getFaqsForPage("pricing");
 
 export default function PricingPage() {
   const faqJsonLd = {
@@ -168,10 +62,7 @@ export default function PricingPage() {
           <Badge className="mb-5 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15 px-4 py-1.5">
             Transparent pricing
           </Badge>
-          <h1
-            className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-foreground mb-4"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-foreground mb-4 font-display">
             Simple, Transparent Pricing
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground">
@@ -183,8 +74,8 @@ export default function PricingPage() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Pricing cards */}
         <StaggerChildren className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto py-16 lg:py-20">
-          {plans.map((plan) => (
-            <StaggerItem key={plan.name}>
+          {pricingTiers.map((plan) => (
+            <StaggerItem key={plan.id}>
               <div
                 className={`relative flex flex-col rounded-2xl border h-full transition-all ${
                   plan.highlight
@@ -205,10 +96,7 @@ export default function PricingPage() {
                     {plan.name}
                   </p>
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span
-                      className="text-5xl font-extrabold text-foreground"
-                      style={{ fontFamily: "var(--font-display)" }}
-                    >
+                    <span className="text-5xl font-extrabold text-foreground font-display">
                       {plan.price}
                     </span>
                     <span className="text-muted-foreground text-sm">{plan.period}</span>
@@ -230,7 +118,7 @@ export default function PricingPage() {
                         )}
                         <span
                           className={`text-sm ${
-                            f.included ? "text-foreground/85" : "text-muted-foreground/50"
+                            f.included ? "text-foreground/85" : "text-muted-foreground"
                           }`}
                         >
                           {f.text}
@@ -272,10 +160,7 @@ export default function PricingPage() {
               <div className="px-8 py-6 border-b border-border/60 bg-muted/30 flex items-center gap-3">
                 <Package className="h-5 w-5 text-primary flex-shrink-0" />
                 <div>
-                  <h2
-                    className="text-lg font-extrabold text-foreground"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
+                  <h2 className="text-lg font-extrabold text-foreground font-display">
                     Pay Per Project — No subscription needed
                   </h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
@@ -302,10 +187,7 @@ export default function PricingPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-4">
-                      <span
-                        className="text-2xl font-extrabold text-foreground"
-                        style={{ fontFamily: "var(--font-display)" }}
-                      >
+                      <span className="text-2xl font-extrabold text-foreground font-display">
                         {pack.price}
                       </span>
                       <div className="w-32">
@@ -334,10 +216,7 @@ export default function PricingPage() {
         {/* FAQ */}
         <div className="max-w-3xl mx-auto pb-20">
           <FadeIn>
-            <h2
-              className="text-2xl md:text-3xl font-extrabold text-foreground mb-10 text-center"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
+            <h2 className="text-2xl md:text-3xl font-extrabold text-foreground mb-10 text-center font-display">
               Frequently Asked Questions
             </h2>
           </FadeIn>
@@ -364,10 +243,7 @@ export default function PricingPage() {
       <section className="py-20 lg:py-24 relative overflow-hidden bg-gradient-to-br from-primary/10 via-muted/20 to-background border-t border-border/50">
         <div className="absolute inset-0 bg-blueprint-grid opacity-30" />
         <FadeIn className="relative text-center px-4">
-          <h2
-            className="text-2xl md:text-3xl font-extrabold text-foreground mb-3"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h2 className="text-2xl md:text-3xl font-extrabold text-foreground mb-3 font-display">
             Still have questions?
           </h2>
           <p className="text-muted-foreground mb-8 text-lg">

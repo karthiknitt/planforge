@@ -217,5 +217,10 @@ class ProjectRead(BaseModel):
     team_id: int | None = None
     created_at: datetime
     updated_at: datetime
+    # Computed by list_projects — True if at least one row exists for this
+    # project in the `layouts` table (i.e. generation has actually run and
+    # produced a stored layout, regardless of the sync or async job path).
+    # Not a mapped column, so it's only populated where the route sets it.
+    has_layouts: bool = False
 
     model_config = {"from_attributes": True}

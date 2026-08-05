@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TeamLoading() {
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       <div className="mb-2 flex items-center gap-3">
         <Skeleton className="h-10 w-10 rounded-xl" />
         <div className="space-y-2">
@@ -19,6 +19,6 @@ export default function TeamLoading() {
           </div>
         ))}
       </div>
-    </main>
+    </div>
   );
 }

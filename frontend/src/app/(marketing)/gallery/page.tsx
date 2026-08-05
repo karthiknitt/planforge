@@ -66,10 +66,7 @@ export default async function GalleryPage() {
           <Badge className="mb-5 bg-primary/10 text-primary border-primary/30 hover:bg-primary/15 px-4 py-1.5">
             Template Gallery
           </Badge>
-          <h1
-            className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-tight mb-5"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-tight mb-5 font-display">
             Browse Floor Plans
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
@@ -104,7 +101,7 @@ export default async function GalleryPage() {
           {plans.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-muted-foreground mb-4">
-                Gallery is loading. Please start the backend server.
+                No templates available yet — check back soon.
               </p>
               <Link href="/sign-up">
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
@@ -121,10 +118,7 @@ export default async function GalleryPage() {
       {/* ── BOTTOM CTA ── */}
       <section className="py-16 lg:py-20 bg-muted/20 border-t border-border/50">
         <FadeIn className="mx-auto max-w-3xl px-4 text-center">
-          <h2
-            className="text-2xl md:text-3xl font-black text-foreground mb-3"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h2 className="text-2xl md:text-3xl font-black text-foreground mb-3 font-display">
             Don&apos;t see your plot size?
           </h2>
           <p className="text-muted-foreground text-base mb-7">
@@ -138,7 +132,7 @@ export default async function GalleryPage() {
               Generate a Custom Plan
             </Button>
           </Link>
-          <p className="mt-4 text-xs text-muted-foreground/60">
+          <p className="mt-4 text-xs text-muted-foreground">
             Powered by{" "}
             <Link href="/" className="text-primary hover:underline underline-offset-4">
               PlanForge

@@ -30,6 +30,12 @@ const rooms = [
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to main content
+      </a>
       {/* ── Left brand panel (lg+) ────────────────────────────── */}
       <aside className="hidden lg:flex lg:w-[46%] xl:w-[44%] flex-col bg-card border-r border-border/60 relative overflow-hidden">
         {/* Technical grid overlay */}
@@ -44,10 +50,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:scale-105">
               <PlanForgeIcon className="h-5 w-5 text-white" />
             </div>
-            <span
-              className="text-2xl font-black tracking-tight"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
+            <span className="text-2xl font-black tracking-tight font-display">
               Plan<span className="text-primary">Forge</span>
             </span>
           </Link>
@@ -57,10 +60,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-4">
               For Indian Builders
             </p>
-            <h2
-              className="text-3xl xl:text-[2.25rem] font-black text-foreground leading-[1.12] mb-5"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
+            <h2 className="text-3xl xl:text-[2.25rem] font-extrabold text-foreground leading-[1.12] mb-5 font-display">
               Plot dimensions in.
               <br />
               Floor plans <span className="text-primary">out.</span>
@@ -89,7 +89,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <span className="h-2 w-2 rounded-full bg-yellow-500/50" />
               <span className="h-2 w-2 rounded-full bg-green-500/50" />
               <span
-                className="text-[10px] text-muted-foreground/50 ml-1"
+                className="text-[10px] text-muted-foreground ml-1"
                 style={{ fontFamily: "var(--font-mono)" }}
               >
                 Layout A · Bangalore · 2BHK
@@ -193,14 +193,17 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground/60 mt-5">
+          <p className="text-xs text-muted-foreground mt-5">
             © {new Date().getFullYear()} PlanForge. Trusted by builders across India.
           </p>
         </div>
       </aside>
 
       {/* ── Right form panel ──────────────────────────────────── */}
-      <div className="flex flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:py-16 relative overflow-hidden bg-background">
+      <main
+        id="main-content"
+        className="flex flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:py-16 relative overflow-hidden bg-background"
+      >
         {/* Blueprint grid always visible as subtle bg */}
         <div className="absolute inset-0 bg-blueprint-grid opacity-[0.15] pointer-events-none" />
 
@@ -214,7 +217,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             {children}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

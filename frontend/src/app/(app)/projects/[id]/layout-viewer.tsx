@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -15,31 +14,35 @@ import {
   Link2,
   Lock,
   MessageSquare,
-  Pencil,
-  Redo2,
   RefreshCw,
   RotateCcw,
   Save,
-  Settings2,
-  Undo2,
-  X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-import { BOQViewer } from "@/components/boq-viewer";
-import { ChatPanel } from "@/components/chat-panel";
 import { DxfPreviewDialog } from "@/components/dxf-preview-dialog";
 import type { Annotation } from "@/components/floor-plan-svg";
-import { FloorPlanSVG } from "@/components/floor-plan-svg";
-import { LayoutCompareView } from "@/components/layout-compare-view";
+import { FirstVisitHint } from "@/components/hints/first-visit-hint";
+import { HintsProvider } from "@/components/hints/hints-context";
 import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
-import { type Plan3DHandle, Plan3DScene, type Plan3DView } from "@/components/plan-3d-scene";
+import type { Plan3DHandle, Plan3DView } from "@/components/plan-3d-scene";
 import { SectionViewSVG } from "@/components/section-view-svg";
 import { ShareWhatsAppButton } from "@/components/share-whatsapp-button";
-import { StructuralLifecycleHeader } from "@/components/structural-lifecycle-header";
-import { type StructuralStatusResponse, StructuralViewer } from "@/components/structural-viewer";
+import { StatusRail } from "@/components/status-rail";
+import type { StructuralStatusResponse } from "@/components/structural-viewer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -49,13 +52,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { APPROVAL_POLL_MAX_POLLS, isAwaitingApprovalResponse } from "@/lib/approval-poll";
 import { useSession } from "@/lib/auth-client";
 import { type CadQuality, cadQualityLabel, cadQualityTone } from "@/lib/cad-quality";
 import {
@@ -67,35 +78,33 @@ import {
   redoHistory,
   undoHistory,
 } from "@/lib/edit-history";
-import {
-  type JobStatus,
-  jobPhase,
-  MAX_POLLS,
-  POLL_INTERVAL_MS,
-  stageLabel,
-} from "@/lib/generation-job";
-import type {
-  ComplianceData,
-  FloorPlanData,
-  GenerateResponse,
-  LayoutData,
-  RoomData,
-} from "@/lib/layout-types";
+import type { HintId } from "@/lib/hint-ids";
+import type { FloorPlanData, GenerateResponse, LayoutData, RoomData } from "@/lib/layout-types";
 import { useLocale } from "@/lib/locale-context";
-import { tierAtLeast } from "@/lib/plan";
-import {
-  buildRenderImageUrl,
-  classifyRenderStatus,
-  floorKeyFromIndex,
-  type RenderFloorKey,
-} from "@/lib/render-tab";
-import {
-  isPreliminaryStatus,
-  type RenderSourceFallbackReason,
-  renderSourceFallbackNote,
-} from "@/lib/structural-status";
+import { startPolling } from "@/lib/poll-backoff";
+import { floorKeyFromIndex } from "@/lib/render-tab";
+import { SWATCH, TYPE_LABELS } from "@/lib/room-type-labels";
+import { buildShareUrl } from "@/lib/share-url";
+import type { RenderSourceFallbackReason } from "@/lib/structural-status";
 import { type TabId, visibleTabs } from "@/lib/tabs";
 import { showErrorToast, showToast } from "@/lib/toast";
+import { GenerationPanel } from "./tabs/generation-panel";
+import { PlanTab } from "./tabs/plan-tab";
+import { R3fTab } from "./tabs/r3f-tab";
+
+const BOQViewer = dynamic(() => import("@/components/boq-viewer").then((m) => m.BOQViewer));
+const StructuralViewer = dynamic(() =>
+  import("@/components/structural-viewer").then((m) => m.StructuralViewer)
+);
+const LayoutCompareView = dynamic(() =>
+  import("@/components/layout-compare-view").then((m) => m.LayoutCompareView)
+);
+const RenderTab = dynamic(() => import("./tabs/render-tab").then((m) => m.RenderTab));
+const ChatTab = dynamic(() => import("./tabs/chat-tab").then((m) => m.ChatTab));
+// ssr:false — R3F/three.js touches WebGL/canvas APIs that don't exist server-side.
+const Plan3DScene = dynamic(() => import("@/components/plan-3d-scene").then((m) => m.Plan3DScene), {
+  ssr: false,
+});
 
 interface RevisionListItem {
   id: number;
@@ -105,46 +114,18 @@ interface RevisionListItem {
   created_at: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  living: "Living / Hall",
-  bedroom: "Bedroom",
-  master_bedroom: "Master Bedroom",
-  kitchen: "Kitchen",
-  toilet: "Toilet",
-  staircase: "Staircase",
-  parking: "Parking",
-  utility: "Utility / Other",
-  pooja: "Pooja Room",
-  study: "Study",
-  balcony: "Balcony",
-  dining: "Dining",
-  servant_quarter: "Servant Quarter",
-  home_office: "Home Office",
-  gym: "Gym",
-  store_room: "Store Room",
-  garage: "Garage",
-  passage: "Passage",
-};
-
-const SWATCH: Record<string, string> = {
-  living: "bg-yellow-100 border-yellow-400",
-  bedroom: "bg-violet-100 border-violet-500",
-  master_bedroom: "bg-purple-100 border-purple-500",
-  kitchen: "bg-green-100 border-green-600",
-  toilet: "bg-sky-100 border-sky-500",
-  staircase: "bg-slate-100 border-slate-400",
-  parking: "bg-slate-50 border-slate-300",
-  utility: "bg-slate-50 border-slate-300",
-  pooja: "bg-orange-50 border-orange-400",
-  study: "bg-emerald-50 border-emerald-500",
-  balcony: "bg-blue-50 border-blue-400",
-  dining: "bg-yellow-50 border-yellow-500",
-  servant_quarter: "bg-orange-50 border-orange-500",
-  home_office: "bg-green-50 border-green-500",
-  gym: "bg-red-50 border-red-400",
-  store_room: "bg-slate-50 border-slate-400",
-  garage: "bg-blue-50 border-blue-500",
-  passage: "bg-slate-100 border-slate-400",
+// Visual grouping for the tab bar — Plan / Analyze / Visualize / Chat.
+// Purely cosmetic (divider placement); tab order/keyboard-nav is governed
+// by ALL_TABS in src/lib/tabs.ts, which is already sorted to match.
+const TAB_GROUP: Record<TabId, string> = {
+  plan: "plan",
+  section: "analyze",
+  boq: "analyze",
+  structural: "analyze",
+  r3f: "visualize",
+  render: "visualize",
+  compare: "visualize",
+  chat: "chat",
 };
 
 function ScoreBadge({ score }: { score: number }) {
@@ -197,361 +178,6 @@ function CadQualityBadge({ projectId, layoutKey }: { projectId: string; layoutKe
   );
 }
 
-// ── Render tab — generate + view AI renders per floor, Pro-gated ──────────────
-// One FloorRenderSection per available floor: "checking" probes the GET
-// endpoint (via a hidden <img>) to see if a render already exists; "busy"
-// tracks an in-flight POST separately so a regenerate can keep showing the
-// last successful image.
-type RenderPhase = "checking" | "none" | "ready" | "upsell" | "unavailable" | "error";
-
-function RenderTab({
-  projectId,
-  layoutKey,
-  planTier,
-  floors,
-  r3fPngs,
-  registerTrigger,
-}: {
-  projectId: string;
-  layoutKey: string;
-  planTier: string;
-  floors: { label: string; index: number }[];
-  r3fPngs: Record<number, string | null>;
-  registerTrigger?: (fn: (floorIndex: number, png?: string | null) => void) => void;
-}) {
-  const isPro = tierAtLeast(planTier, "pro");
-  const sectionTriggers = useRef<Record<string, (png?: string | null) => void>>({});
-  useEffect(() => {
-    registerTrigger?.((floorIndex: number, png?: string | null) => {
-      sectionTriggers.current[floorKeyFromIndex(floorIndex)]?.(png);
-    });
-  }, [registerTrigger]);
-
-  if (!isPro) {
-    return (
-      <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-        <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-        <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-        <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
-        <Button asChild className="mt-4" size="sm" variant="outline">
-          <Link href="/pricing">Upgrade to Pro</Link>
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-8">
-      {floors.map((f) => (
-        <FloorRenderSection
-          key={f.index}
-          projectId={projectId}
-          layoutKey={layoutKey}
-          floorKey={floorKeyFromIndex(f.index)}
-          label={f.label}
-          r3fPng={r3fPngs[f.index]}
-          register={(fn) => {
-            sectionTriggers.current[floorKeyFromIndex(f.index)] = fn;
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function FloorRenderSection({
-  projectId,
-  layoutKey,
-  floorKey,
-  label,
-  r3fPng,
-  register,
-}: {
-  projectId: string;
-  layoutKey: string;
-  floorKey: RenderFloorKey;
-  label: string;
-  r3fPng?: string | null;
-  register?: (fn: (png?: string | null) => void) => void;
-}) {
-  const [phase, setPhase] = useState<RenderPhase>("checking");
-  const [busy, setBusy] = useState(false);
-  const [version, setVersion] = useState(0);
-  const [error, setError] = useState("");
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const pollCountRef = useRef(0);
-  // Always-current layout key, so an in-flight poll dispatched for the
-  // previously-viewed layout can detect it resolved late (after a layout
-  // switch) and drop its stale setJob instead of flipping phase to "ready".
-  const layoutKeyRef = useRef(layoutKey);
-  layoutKeyRef.current = layoutKey;
-
-  // Latest generate fn, so the parent's trigger always calls the current closure.
-  const handleGenRef = useRef<(png?: string | null) => void>(() => {});
-  handleGenRef.current = (png?: string | null) => {
-    void handleGenerate(png);
-  };
-  useEffect(() => {
-    register?.((png?: string | null) => handleGenRef.current(png));
-  }, [register]);
-
-  // Reset and re-check whenever the viewed project/layout changes — the
-  // version cache-buster must reset too, or a previous project's cached
-  // image URL could be shown (the stale-render bug).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: projectId/layoutKey are intentional re-check triggers, not read in the body
-  useEffect(() => {
-    setPhase("checking");
-    setError("");
-    setJob(null);
-    setVersion(0);
-  }, [projectId, layoutKey]);
-
-  async function handleGenerate(overridePng?: string | null) {
-    setBusy(true);
-    setError("");
-    setJob(null);
-    pollCountRef.current = 0;
-    try {
-      const fd = new FormData();
-      const png = overridePng !== undefined ? overridePng : r3fPng;
-      if (png) {
-        const blob = await (await fetch(png)).blob();
-        fd.append("reference", blob, "r3f.png");
-      }
-      const res = await fetch(
-        `/api/backend/projects/${projectId}/layouts/${layoutKey}/render-jobs?floor=${floorKey}`,
-        { method: "POST", body: fd }
-      );
-      const outcome = classifyRenderStatus(res.status);
-      if (outcome === "upsell") {
-        setPhase("upsell");
-        setBusy(false);
-        return;
-      }
-      if (outcome === "unavailable") {
-        setPhase("unavailable");
-        setBusy(false);
-        return;
-      }
-      if (outcome !== "ready") {
-        const data = await res.json().catch(() => ({}));
-        const message = (data as { detail?: string })?.detail ?? `Render failed (${res.status})`;
-        setError(message);
-        setPhase("error");
-        setBusy(false);
-        showErrorToast(message);
-        return;
-      }
-      // 200 (inline fallback, already resolved) or 202 (queued) — either way
-      // the job-status poll below drives phase from here; busy stays true
-      // until the job resolves.
-      setJob(await res.json());
-    } catch {
-      setError("Render failed — is the backend running?");
-      setPhase("error");
-      setBusy(false);
-      showErrorToast("Render failed — is the backend running?");
-    }
-  }
-
-  const renderJobPhase = jobPhase(job);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s (layoutKey is a legitimate re-arm trigger and stays in the deps)
-  useEffect(() => {
-    if (!job || renderJobPhase === "done" || renderJobPhase === "failed") return;
-    // This poll belongs to the layout viewed when it was armed; if the user
-    // switches layouts, a late-resolving fetch must not setJob for the wrong one.
-    const dispatchKey = layoutKey;
-    const t = setInterval(async () => {
-      pollCountRef.current += 1;
-      if (pollCountRef.current > MAX_POLLS) {
-        setError("Render is taking unusually long — try again.");
-        setPhase("error");
-        setBusy(false);
-        showErrorToast("Render is taking unusually long — try again.");
-        clearInterval(t);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
-        // Ignore a response that resolved after a layout switch.
-        if (layoutKeyRef.current !== dispatchKey) return;
-        if (res.ok) setJob(await res.json());
-      } catch {
-        /* transient poll failure — keep polling */
-      }
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [job?.id, renderJobPhase, projectId, layoutKey]);
-
-  useEffect(() => {
-    if (renderJobPhase === "done") {
-      setVersion((v) => v + 1);
-      setPhase("ready");
-      setBusy(false);
-    } else if (renderJobPhase === "failed") {
-      const message = job?.error ?? "Render failed.";
-      setError(message);
-      setPhase("error");
-      setBusy(false);
-      showErrorToast(message);
-    }
-  }, [renderJobPhase, job?.error]);
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="font-medium text-sm">{label}</p>
-      {phase === "checking" && (
-        <>
-          <Skeleton className="h-64 w-full max-w-xl rounded-xl" />
-          {/* Invisible probe: an existing render loads silently; a missing one (404) flips to "none". */}
-          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
-          <img
-            src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
-            alt=""
-            className="hidden"
-            onLoad={() => setPhase("ready")}
-            onError={() => setPhase("none")}
-          />
-        </>
-      )}
-
-      {phase === "ready" && (
-        <>
-          {/* biome-ignore lint/performance/noImgElement: proxied backend PNG of unknown dimensions, not a next/image candidate */}
-          <img
-            src={buildRenderImageUrl(projectId, layoutKey, version, floorKey)}
-            alt={`AI render — ${label}`}
-            className="w-full max-w-xl rounded-xl border"
-          />
-        </>
-      )}
-
-      {phase === "none" && (
-        <p className="text-sm text-muted-foreground">
-          No render yet for the {label.toLowerCase()} of this layout. Generate an AI-rendered
-          visualisation from the current floor plan.
-        </p>
-      )}
-
-      {phase === "unavailable" && (
-        <div className="rounded-2xl border border-dashed border-border p-16 text-center text-muted-foreground">
-          <p className="font-medium">Rendering isn't configured on this server yet.</p>
-        </div>
-      )}
-
-      {phase === "upsell" && (
-        <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-          <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-          <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-          <p className="mt-1 text-sm text-muted-foreground">AI renders are a Pro feature.</p>
-          <Button asChild className="mt-4" size="sm" variant="outline">
-            <Link href="/pricing">Upgrade to Pro</Link>
-          </Button>
-        </div>
-      )}
-
-      {error && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      {(phase === "none" || phase === "ready" || phase === "error") && (
-        <Button
-          size="sm"
-          variant={phase === "ready" ? "outline" : "default"}
-          className="w-fit gap-1.5"
-          onClick={() => void handleGenerate()}
-          disabled={busy}
-        >
-          <RefreshCw className="h-3 w-3" />
-          {busy
-            ? "Generating…"
-            : phase === "ready"
-              ? "Regenerate"
-              : phase === "error"
-                ? "Retry"
-                : "Generate render"}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-// ── Vastu badge with popover for details ──────────────────────────────────────
-function VastuBadge({ compliance }: { compliance: ComplianceData }) {
-  const vastuViolations = compliance.violations.filter((v) => v.startsWith("[Vastu]"));
-  const vastuWarnings = compliance.warnings.filter((w) => w.startsWith("[Vastu]"));
-  const allIssues = [...vastuViolations, ...vastuWarnings];
-
-  let badgeClass: string;
-  let label: string;
-  if (vastuViolations.length > 0) {
-    badgeClass =
-      "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-500/15";
-    label = `${vastuViolations.length} Vastu Violation${vastuViolations.length !== 1 ? "s" : ""}`;
-  } else if (vastuWarnings.length > 0) {
-    badgeClass =
-      "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15";
-    label = `${vastuWarnings.length} Vastu Warning${vastuWarnings.length !== 1 ? "s" : ""}`;
-  } else {
-    badgeClass =
-      "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/15";
-    label = "Vastu Compliant";
-  }
-
-  if (allIssues.length === 0) {
-    return (
-      <span
-        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${badgeClass}`}
-      >
-        {label}
-      </span>
-    );
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer ${badgeClass}`}
-        >
-          {label}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 text-sm" align="start">
-        <p className="font-semibold mb-2 text-foreground">Vastu Issues</p>
-        {vastuViolations.length > 0 && (
-          <div className="mb-2">
-            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Violations</p>
-            <ul className="space-y-1">
-              {vastuViolations.map((v) => (
-                <li key={v} className="text-xs text-muted-foreground">
-                  {v.replace("[Vastu] ", "")}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {vastuWarnings.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Warnings</p>
-            <ul className="space-y-1">
-              {vastuWarnings.map((w) => (
-                <li key={w} className="text-xs text-muted-foreground">
-                  {w.replace("[Vastu] ", "")}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 type ApprovalStatus = "approved" | "changes_requested" | "pending" | null;
 
 interface ApprovalInfo {
@@ -581,102 +207,7 @@ interface LayoutViewerProps {
   municipality?: string | null;
   shareToken?: string | null;
   initialApproval?: ApprovalInfo;
-}
-
-// ── Generation panel — polls a generate-job to completion, then refreshes ──
-function GenerationPanel({
-  projectId,
-  autoStart,
-  onDone,
-}: {
-  projectId: string;
-  autoStart: boolean;
-  onDone?: () => void;
-}) {
-  const router = useRouter();
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const [error, setError] = useState("");
-  const startedRef = useRef(false);
-  const pollCountRef = useRef(0);
-
-  const start = useCallback(async () => {
-    setError("");
-    setJob(null);
-    pollCountRef.current = 0;
-    try {
-      const res = await fetch(`/api/backend/projects/${projectId}/generate-jobs`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const message = `Could not start generation (HTTP ${res.status}).`;
-        setError(message);
-        showErrorToast(message);
-        return;
-      }
-      setJob(await res.json());
-    } catch {
-      setError("Could not reach the layout engine.");
-      showErrorToast("Could not reach the layout engine.");
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    if (autoStart && !startedRef.current) {
-      startedRef.current = true;
-      start();
-    }
-  }, [autoStart, start]);
-
-  const phase = jobPhase(job);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on job?.id deliberately, not the full job object — every poll tick replaces job with a new reference, and depending on it would tear down/recreate the interval every 2s
-  useEffect(() => {
-    if (!job || phase === "done" || phase === "failed") return;
-    const t = setInterval(async () => {
-      pollCountRef.current += 1;
-      if (pollCountRef.current > MAX_POLLS) {
-        setError("Generation is taking unusually long — try refreshing the page.");
-        showErrorToast("Generation is taking unusually long — try refreshing the page.");
-        clearInterval(t);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/backend/projects/${projectId}/jobs/${job.id}`);
-        if (res.ok) setJob(await res.json());
-      } catch {
-        /* transient poll failure — keep polling */
-      }
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [job?.id, phase, projectId]);
-
-  useEffect(() => {
-    if (phase !== "done") return;
-    fetch(`/api/projects/${projectId}/revalidate`, { method: "POST" }).finally(() => {
-      onDone?.();
-      router.refresh();
-    });
-  }, [phase, projectId, router, onDone]);
-
-  if (error || phase === "failed") {
-    return (
-      <div className="rounded-lg border border-destructive/40 p-6 text-center">
-        <p className="text-sm text-destructive">{error || job?.error || "Generation failed."}</p>
-        <Button variant="outline" size="sm" className="mt-3" onClick={start}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-lg border border-dashed p-10 text-center">
-      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      <p className="mt-3 font-medium">Generating your 3 layouts</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {job ? stageLabel(job.stage) : "Starting…"}
-      </p>
-    </div>
-  );
+  dismissedHints?: HintId[];
 }
 
 export function LayoutViewer({
@@ -699,9 +230,10 @@ export function LayoutViewer({
   municipality = null,
   shareToken = null,
   initialApproval,
+  dismissedHints = [],
 }: LayoutViewerProps) {
   const { data: session } = useSession();
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const router = useRouter();
   const [regenerating, setRegenerating] = useState(false);
   // Use the first layout's actual ID — IDs may be "S1","S2","D" etc, never assume "A"
@@ -827,6 +359,23 @@ export function LayoutViewer({
   useEffect(() => {
     setMounted(true);
   }, []);
+  // Plan3DScene ships ~150KB of three.js — deferred via next/dynamic and only
+  // mounted the first time it's actually needed (visiting the r3f/"Render" or
+  // render/"AI Render" tab). Once mounted it stays mounted for the rest of the
+  // session (never gated back off on tab-switch) so its offscreen PNG capture
+  // keeps working from any tab — see the capture-trigger call sites below.
+  const [plan3dMounted, setPlan3dMounted] = useState(false);
+  // True while an R3F capture is in flight — set true right before a
+  // capture is scheduled/attempted, false once it settles. capture() itself
+  // (see plan-3d-scene.tsx's Plan3DHandle) is synchronous (draws + reads
+  // back the WebGL canvas on the main thread), so a bare
+  // setCapturing(true)/captureR3f()/setCapturing(false) sequence in the same
+  // synchronous call would batch into a single render and never actually
+  // paint the "true" state. runCapture() below defers the real capture work
+  // one frame (requestAnimationFrame) so the "capturing" UI has a chance to
+  // render first — the auto-capture effect has a real 500ms gap already and
+  // doesn't need this.
+  const [capturing, setCapturing] = useState(false);
   const [floor, setFloor] = useState(0);
   // Snapshots are per layout AND per render source — drop them when the
   // viewed layout changes, or when the architectural/structural toggle
@@ -836,10 +385,32 @@ export function LayoutViewer({
     setR3fPngs({});
   }, [selectedId, renderSource]);
   const captureR3f = useCallback(() => {
+    // Defensive fallback: a capture requested before the scene has ever been
+    // mounted (no current call site does this, but a future one might) can't
+    // return a PNG synchronously — arm the mount for next render instead of
+    // reading from a null ref.
+    if (!plan3dMounted) {
+      setPlan3dMounted(true);
+      return null;
+    }
     const png = plan3dApiRef.current?.capture() ?? null;
     if (png) setR3fPngs((prev) => ({ ...prev, [floor]: png }));
     return png;
-  }, [floor]);
+  }, [floor, plan3dMounted]);
+
+  // Manual-trigger capture wrapper (Refresh view / Generate AI Render
+  // buttons) — see the `capturing` state comment above for why this defers
+  // via requestAnimationFrame rather than calling captureR3f() inline.
+  const runCapture = useCallback((): Promise<string | null> => {
+    setCapturing(true);
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        const png = captureR3f();
+        setCapturing(false);
+        resolve(png);
+      });
+    });
+  }, [captureR3f]);
 
   // Single invalidation routine for every geometry-mutating action (manual
   // room edit, AI chat edit). The backend reverts Approved→Draft and marks
@@ -871,20 +442,36 @@ export function LayoutViewer({
     void fetchStructuralStatus();
     if (renderSource === "structural") void fetchStructuralGeometry();
   }, [fetchStructuralStatus, fetchStructuralGeometry, renderSource]);
-  const agentChatEnabled = process.env.NEXT_PUBLIC_AGENT_CHAT === "1";
-  const tabs = visibleTabs(agentChatEnabled);
+  const tabs = visibleTabs();
   const [activeTab, setActiveTab] = useState<TabId>("plan");
+  // First-mount trigger: visiting either the "r3f" (3D "Render") tab or the
+  // "render" ("AI Render") tab mounts the offscreen Plan3DScene if it hasn't
+  // been already. It then stays mounted, so a later capture triggered from
+  // any other tab (e.g. Structural) keeps working without needing to revisit
+  // either tab.
+  useEffect(() => {
+    if ((activeTab === "r3f" || activeTab === "render") && mounted) {
+      setPlan3dMounted(true);
+    }
+  }, [activeTab, mounted]);
   // Auto-capture the offscreen R3F view when the Render tab opens, the
   // viewed floor / camera view changes, or the architectural/structural
   // geometry source toggle flips (structuralGeometry is read via the
   // offscreen Plan3DScene's floorPlan prop, not directly in this body).
   // biome-ignore lint/correctness/useExhaustiveDependencies: r3fView/renderSource/structuralGeometry are intentional re-capture triggers, not read in the body
   useEffect(() => {
-    if (activeTab === "r3f" && mounted) {
-      const t = setTimeout(() => captureR3f(), 500);
-      return () => clearTimeout(t);
+    if (activeTab === "r3f" && plan3dMounted) {
+      setCapturing(true);
+      const t = setTimeout(() => {
+        captureR3f();
+        setCapturing(false);
+      }, 500);
+      return () => {
+        clearTimeout(t);
+        setCapturing(false);
+      };
     }
-  }, [activeTab, mounted, captureR3f, r3fView, renderSource, structuralGeometry]);
+  }, [activeTab, plan3dMounted, captureR3f, r3fView, renderSource, structuralGeometry]);
   const [showVastuZones, setShowVastuZones] = useState(false);
   const [showFurniture, setShowFurniture] = useState(false);
   const [showElectrical, setShowElectrical] = useState(false);
@@ -922,6 +509,7 @@ export function LayoutViewer({
   const [approvalPdfPreviewOpen, setApprovalPdfPreviewOpen] = useState(false);
   const [dxfPreviewOpen, setDxfPreviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareTab, setShareTab] = useState<"link" | "approval">("link");
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
@@ -934,7 +522,6 @@ export function LayoutViewer({
     updatedAt: initialApproval?.updatedAt ?? null,
   });
   const [approvalFetching, setApprovalFetching] = useState(false);
-  const [sendForApprovalOpen, setSendForApprovalOpen] = useState(false);
   const [approvalShareUrl, setApprovalShareUrl] = useState(
     shareToken
       ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/${shareToken}`
@@ -943,9 +530,18 @@ export function LayoutViewer({
   const [approvalShareCopied, setApprovalShareCopied] = useState(false);
   const [approvalShareLoading, setApprovalShareLoading] = useState(false);
   const [approvalShareError, setApprovalShareError] = useState("");
+  // Ref (not just the `approvalFetching` state) so the guard below is always
+  // read live from both the automatic poll tick's closure (captured once,
+  // when the poll effect mounts/re-mounts) and the manual "↻" button's
+  // closure (fresh every render) — a plain state read in the tick closure
+  // would stay frozen at whatever it was when the effect last ran, letting a
+  // manual click and an in-flight tick fire concurrently.
+  const approvalFetchingRef = useRef(false);
+  const approvalPollCountRef = useRef(0);
 
   async function fetchApprovalStatus() {
-    if (!session) return;
+    if (!session || approvalFetchingRef.current) return;
+    approvalFetchingRef.current = true;
     setApprovalFetching(true);
     try {
       const res = await fetch(`/api/backend/projects/${projectId}/approval-status`);
@@ -959,9 +555,33 @@ export function LayoutViewer({
     } catch {
       // silent — approval status is non-critical
     } finally {
+      approvalFetchingRef.current = false;
       setApprovalFetching(false);
     }
   }
+
+  // Replaces the old manual-refresh-only ritual with real polling, reusing
+  // the same lib/poll-backoff.ts engine as generation-panel.tsx/render-tab.tsx.
+  // Only runs while genuinely awaiting a response (shared + no status yet —
+  // see lib/approval-poll.ts, shared with the dashboard's poller so the two
+  // never drift on what "awaiting" means); stops itself the instant
+  // approval.status resolves to a non-null value, since that flips the
+  // condition below to false and the effect's cleanup fires.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fetchApprovalStatus is a plain function redefined every render (not memoized) and is intentionally excluded — including it would tear down/restart the poll loop on every fetch it triggers, since setApproval/setApprovalFetching inside it cause this component to re-render
+  useEffect(() => {
+    if (!isAwaitingApprovalResponse(shareToken, approval.status)) return;
+    approvalPollCountRef.current = 0;
+    const stop = startPolling({
+      pollCountRef: approvalPollCountRef,
+      maxPolls: APPROVAL_POLL_MAX_POLLS,
+      tick: fetchApprovalStatus,
+      onTimeout: () => {
+        // Silent — matches fetchApprovalStatus's own non-critical posture.
+        // The manual "↻" button below still works after this.
+      },
+    });
+    return () => stop();
+  }, [shareToken, approval.status]);
 
   // ── Annotation helpers ─────────────────────────────────────────────────────
 
@@ -1221,7 +841,8 @@ export function LayoutViewer({
       const json = await res.json();
       const fullUrl = `${window.location.origin}${json.share_url}`;
       setApprovalShareUrl(fullUrl);
-      setSendForApprovalOpen(true);
+      setShareTab("approval");
+      setShareOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not generate share link";
       setApprovalShareError(message);
@@ -1367,19 +988,31 @@ export function LayoutViewer({
     }
   }
 
+  // Fetch-or-create the public share URL for this project. The backend is
+  // idempotent (POST /share returns the existing token if one was already
+  // minted), so it's safe to call this from multiple entry points — the
+  // Share dialog, "Send for approval", and the WhatsApp share button — and
+  // reuse the cached `shareUrl` once created.
+  async function ensureShareUrl(): Promise<string> {
+    if (shareUrl) return shareUrl;
+    const res = await fetch(`/api/backend/projects/${projectId}/share`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.detail ?? `Failed to generate share link (${res.status})`);
+    }
+    const json = await res.json();
+    const fullUrl = buildShareUrl(window.location.origin, json.share_url);
+    setShareUrl(fullUrl);
+    return fullUrl;
+  }
+
   async function handleShare() {
     if (!session) return;
     setShareLoading(true);
     setShareError("");
     try {
-      const res = await fetch(`/api/backend/projects/${projectId}/share`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail ?? `Failed to generate share link (${res.status})`);
-      }
-      const json = await res.json();
-      const fullUrl = `${window.location.origin}${json.share_url}`;
-      setShareUrl(fullUrl);
+      await ensureShareUrl();
+      setShareTab("link");
       setShareOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not generate share link";
@@ -1387,6 +1020,17 @@ export function LayoutViewer({
       showErrorToast(message);
     } finally {
       setShareLoading(false);
+    }
+  }
+
+  // Lazily fetch each tab's link the first time it's viewed — avoids firing
+  // both `ensureShareUrl()` and `handleSendForApproval()` on every dialog open.
+  function handleShareTabChange(tab: string) {
+    setShareTab(tab as "link" | "approval");
+    if (tab === "link" && !shareUrl) {
+      handleShare();
+    } else if (tab === "approval" && !approvalShareUrl) {
+      handleSendForApproval();
     }
   }
 
@@ -1577,1089 +1221,733 @@ export function LayoutViewer({
   const r3fFloorPlan: FloorPlanData = r3fSourceLayout[floorKeyFromIndex(floor)] ?? floorPlan;
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      {/* Layout selector + export buttons */}
-      <div className="flex flex-col gap-3">
-        {/* Layout buttons — horizontal scroll on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:[mask-image:none]">
-          {activeData.layouts.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => {
-                setSelectedId(l.id);
-                setFloor(0);
-                setLiveLayout(null);
-              }}
-              className={[
-                "rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors shrink-0 min-h-[44px]",
-                selectedId === l.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-transparent hover:bg-muted",
-              ].join(" ")}
-            >
-              Layout {l.id} — {l.name}
-              {l.score && <ScoreBadge score={l.score.total} />}
-              <CadQualityBadge layoutKey={l.id} projectId={projectId} />
-              {vastuEnabled && (
-                <span
-                  className={[
-                    "ml-1 rounded-sm border px-1 py-0.5 text-xs flex items-center gap-1",
-                    l.compliance.violations.some((v) => v.startsWith("[Vastu]"))
-                      ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
-                      : l.compliance.warnings.some((w) => w.startsWith("[Vastu]"))
-                        ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                        : "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
-                  ].join(" ")}
-                >
-                  <span>Vastu</span>
-                  {l.compliance.violations.some((v) => v.startsWith("[Vastu]")) ? (
-                    <>
-                      <X className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Vastu violation</span>
-                    </>
-                  ) : l.compliance.warnings.some((w) => w.startsWith("[Vastu]")) ? (
-                    <>
-                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Vastu warning</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Vastu passed</span>
-                    </>
-                  )}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Export + share buttons — horizontal scroll on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:items-center md:[mask-image:none]">
-          {/* PDF — primary action, prominent on mobile */}
-          <Button
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 bg-primary text-primary-foreground hover:bg-primary/90 md:bg-transparent md:text-foreground md:border md:border-border md:hover:bg-muted md:shadow-none shadow-md md:variant-outline"
-            onClick={() => handleDownload("pdf")}
-            disabled={downloadingPdf || !session}
-          >
-            {downloadingPdf ? "…" : "⬇ PDF"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={() => setPdfPreviewOpen(true)}
-            disabled={!session}
-          >
-            Preview
-          </Button>
-          {planTier === "free" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              asChild
-              title="Upgrade to Basic for DXF export"
-            >
-              <Link href="/pricing">
-                <Lock className="h-3 w-3 mr-1.5" />
-                DXF
-              </Link>
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={() => handleDownload("dxf")}
-              disabled={downloadingDxf || !session}
-              title="DXF for AutoCAD / DraftSight"
-            >
-              {downloadingDxf ? "…" : "DXF"}
-            </Button>
-          )}
-          {planTier !== "free" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={() => setDxfPreviewOpen(true)}
-              disabled={!session}
-            >
-              Preview DXF
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={() => setApprovalDialogOpen(true)}
-            disabled={!session}
-            title="Download municipality approval drawing package (CMDA/BBMP/GHMC format)"
-          >
-            Approval
-          </Button>
-          {structStatus?.design?.status === "designed" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={handleGenerateStructDrawings}
-              disabled={generatingStructDrawings || !session}
-              title="Generate the 6-sheet structural drawing set (column & footing, plinth beam, roof beam & slab)"
-            >
-              <FileStack className="h-3 w-3 mr-1.5" />
-              {generatingStructDrawings ? "…" : "Structural Drawings"}
-            </Button>
-          )}
-          {structDrawingsBlob && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-              onClick={() => saveStructDrawings(structDrawingsBlob)}
-              disabled={!session}
-              title="Download the generated structural drawing set PDF"
-            >
-              <Download className="h-3 w-3 mr-1.5" />
-              Download Structural Drawings
-            </Button>
-          )}
-          <ShareWhatsAppButton projectName={projectName} layoutId={selectedId} />
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={handleShare}
-            disabled={shareLoading || !session}
-            title="Get a read-only share link for your client"
-          >
-            <Link2 className="h-3 w-3 mr-1.5" />
-            {shareLoading ? "…" : "Share"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={handleSendForApproval}
-            disabled={approvalShareLoading || !session}
-            title="Send this plan to client for approval"
-          >
-            <MessageSquare className="h-3 w-3 mr-1.5" />
-            {approvalShareLoading ? "…" : "Approve"}
-          </Button>
-          {/* Refresh approval status button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-muted-foreground hover:bg-muted"
-            onClick={fetchApprovalStatus}
-            disabled={approvalFetching || !session}
-            title="Refresh client approval status"
-          >
-            {approvalFetching ? "…" : "↻"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
-            onClick={() => setRegenerating(true)}
-            disabled={regenerating}
-            title="Re-run the layout engine for this project"
-          >
-            <RefreshCw className="h-3 w-3 mr-1.5" />
-            Regenerate layouts
-          </Button>
-        </div>
-      </div>
-
-      {regenerating && (
-        <GenerationPanel projectId={projectId} autoStart onDone={() => setRegenerating(false)} />
-      )}
-
-      {/* Share error */}
-      {shareError && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {shareError}
-        </p>
-      )}
-
-      {/* Annotation dialog */}
-      <Dialog
-        open={annDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAnnDialogOpen(false);
-            setAnnEditNote("");
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-yellow-600" />
-              {annEditRoomName}
-            </DialogTitle>
-            <DialogDescription>
-              Add an engineer note for this room. Notes appear as sticky icons on the floor plan and
-              in PDF exports.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 py-2">
-            <Textarea
-              value={annEditNote}
-              onChange={(e) => setAnnEditNote(e.target.value)}
-              placeholder="e.g. Client wants wardrobe here, Confirm column clearance with structural engineer…"
-              className="min-h-[90px] resize-none text-sm"
-              autoFocus
-            />
-          </div>
-          <DialogFooter className="flex items-center gap-2">
-            {annotations[annEditRoomId] && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive mr-auto"
-                onClick={handleAnnotationDelete}
+    <HintsProvider initialDismissed={dismissedHints}>
+      <div className="flex flex-col gap-4 md:gap-6">
+        {/* Layout selector + export buttons */}
+        <div className="flex flex-col gap-3">
+          {/* Layout buttons — horizontal scroll on mobile */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:[mask-image:none]">
+            {activeData.layouts.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => {
+                  setSelectedId(l.id);
+                  setFloor(0);
+                  setLiveLayout(null);
+                }}
+                className={[
+                  "rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors shrink-0 min-h-[44px]",
+                  selectedId === l.id
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-transparent hover:bg-muted",
+                ].join(" ")}
               >
-                Delete note
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setAnnDialogOpen(false);
-                setAnnEditNote("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleAnnotationSave} disabled={annSaving}>
-              Save note
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Share link dialog */}
-      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Share floor plan with client</DialogTitle>
-            <DialogDescription>
-              Anyone with this link can view the floor plans in read-only mode — no login required.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              readOnly
-              value={shareUrl}
-              className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
-              onFocus={(e) => e.target.select()}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCopy}
-              className="shrink-0"
-              aria-label={copied ? "Copied to clipboard" : "Copy link"}
-            >
-              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          {copied && (
-            <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            The link shows all layout options with floor plans, section view, and compliance status.
-          </p>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approval share error */}
-      {approvalShareError && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {approvalShareError}
-        </p>
-      )}
-
-      {/* Send for Approval dialog */}
-      <Dialog open={sendForApprovalOpen} onOpenChange={setSendForApprovalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send for client approval</DialogTitle>
-            <DialogDescription>
-              Share this link with your client. They can approve the plan or request changes — no
-              login needed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              readOnly
-              value={approvalShareUrl}
-              className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm font-mono text-foreground"
-              onFocus={(e) => e.target.select()}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCopyApprovalLink}
-              className="shrink-0"
-              aria-label={approvalShareCopied ? "Copied to clipboard" : "Copy approval link"}
-            >
-              {approvalShareCopied ? (
-                <Check className="h-4 w-4 text-green-600" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          {approvalShareCopied && (
-            <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            After sending the link, use the ↻ button in the toolbar to check if the client has
-            responded.
-          </p>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approval status indicator */}
-      {(approval.status || shareToken) && (
-        <div
-          className={[
-            "flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm",
-            approval.status === "approved"
-              ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
-              : approval.status === "changes_requested"
-                ? "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-400"
-                : "border-border bg-muted/30 text-muted-foreground",
-          ].join(" ")}
-        >
-          {approval.status === "approved" ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-          ) : approval.status === "changes_requested" ? (
-            <MessageSquare className="h-4 w-4 shrink-0" />
-          ) : shareToken ? (
-            <Clock className="h-4 w-4 shrink-0" />
-          ) : (
-            <CircleDot className="h-4 w-4 shrink-0" />
-          )}
-          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-            <span className="font-medium">
-              {approval.status === "approved"
-                ? "Client Approved"
-                : approval.status === "changes_requested"
-                  ? "Changes Requested"
-                  : shareToken
-                    ? "Pending client review"
-                    : "Not sent for review"}
-            </span>
-            {approval.updatedAt && (
-              <span className="text-xs opacity-80">{formatApprovalDate(approval.updatedAt)}</span>
-            )}
-            {approval.status === "changes_requested" && approval.note && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="text-left text-xs underline underline-offset-2 opacity-80 hover:opacity-100 w-fit"
-                  >
-                    View note
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 text-sm" align="start">
-                  <p className="font-semibold mb-2 text-foreground">Client note</p>
-                  <p className="text-muted-foreground">{approval.note}</p>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Approval PDF dialog */}
-      <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Municipality Approval Drawing Package</DialogTitle>
-            <DialogDescription>
-              Generates a 4-page PDF formatted for CMDA / BBMP / GHMC submission. Fill in the
-              project details required by the municipality.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="apr-owner">Owner Name</Label>
-                <Input
-                  id="apr-owner"
-                  value={approvalForm.owner_name}
-                  onChange={(e) => setApprovalForm((f) => ({ ...f, owner_name: e.target.value }))}
-                  placeholder="e.g. Rajan Kumar"
-                  className="text-base"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="apr-survey">Survey / Plot No.</Label>
-                <Input
-                  id="apr-survey"
-                  value={approvalForm.survey_number}
-                  onChange={(e) =>
-                    setApprovalForm((f) => ({ ...f, survey_number: e.target.value }))
-                  }
-                  placeholder="e.g. 42/A"
-                  className="text-base"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="apr-locality">Locality / Area</Label>
-              <Input
-                id="apr-locality"
-                value={approvalForm.locality}
-                onChange={(e) => setApprovalForm((f) => ({ ...f, locality: e.target.value }))}
-                placeholder="e.g. Anna Nagar, Chennai"
-                className="text-base"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="apr-engineer">Engineer / Architect Name</Label>
-                <Input
-                  id="apr-engineer"
-                  value={approvalForm.engineer_name}
-                  onChange={(e) =>
-                    setApprovalForm((f) => ({ ...f, engineer_name: e.target.value }))
-                  }
-                  placeholder="e.g. Er. S. Venkatesh"
-                  className="text-base"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="apr-license">License No.</Label>
-                <Input
-                  id="apr-license"
-                  value={approvalForm.license_number}
-                  onChange={(e) =>
-                    setApprovalForm((f) => ({ ...f, license_number: e.target.value }))
-                  }
-                  placeholder="e.g. TN/2024/1234"
-                  className="text-base"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="apr-municipality">Municipality / Authority</Label>
-              <Input
-                id="apr-municipality"
-                value={approvalForm.municipality}
-                onChange={(e) => setApprovalForm((f) => ({ ...f, municipality: e.target.value }))}
-                placeholder="e.g. Chennai (CMDA)"
-              />
-            </div>
-            {approvalPdfError && (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                {approvalPdfError}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setApprovalDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setApprovalPdfPreviewOpen(true)}
-              disabled={!session}
-            >
-              Preview
-            </Button>
-            <Button
-              onClick={handleDownloadApprovalPdf}
-              disabled={downloadingApprovalPdf || !session}
-            >
-              {downloadingApprovalPdf ? "Generating…" : "Download Approval PDF"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <PdfPreviewDialog
-        open={pdfPreviewOpen}
-        onOpenChange={setPdfPreviewOpen}
-        title="Standard PDF preview"
-        fetchPdf={() => fetchExportBlob("pdf")}
-        onDownload={() => handleDownload("pdf")}
-        downloading={downloadingPdf}
-      />
-      <PdfPreviewDialog
-        open={approvalPdfPreviewOpen}
-        onOpenChange={setApprovalPdfPreviewOpen}
-        title="Approval PDF preview"
-        fetchPdf={fetchApprovalPdfBlob}
-        onDownload={handleDownloadApprovalPdf}
-        downloading={downloadingApprovalPdf}
-      />
-      <DxfPreviewDialog
-        open={dxfPreviewOpen}
-        onOpenChange={setDxfPreviewOpen}
-        fetchDxf={() => fetchExportBlob("dxf")}
-        onDownload={() => handleDownload("dxf")}
-        downloading={downloadingDxf}
-      />
-
-      {/* Download error */}
-      {downloadError && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {downloadError}
-        </p>
-      )}
-
-      {/* Score breakdown for selected layout */}
-      {layout.score && (
-        <div className="flex flex-wrap gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs">
-          <span className="font-semibold text-foreground">
-            Score {layout.score.total.toFixed(0)}/100
-          </span>
-          <span className="text-muted-foreground">
-            Light {layout.score.natural_light.toFixed(0)}
-          </span>
-          <span className="text-muted-foreground">Adj {layout.score.adjacency.toFixed(0)}</span>
-          <span className="text-muted-foreground">AR {layout.score.aspect_ratio.toFixed(0)}</span>
-          <span className="text-muted-foreground">Fill {layout.score.circulation.toFixed(0)}</span>
-          <span className="text-muted-foreground">Vastu {layout.score.vastu.toFixed(0)}</span>
-        </div>
-      )}
-
-      {/* Vastu compliance summary (shown only when vastu_enabled) */}
-      {vastuEnabled && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Vastu
-          </span>
-          <VastuBadge compliance={layout.compliance} />
-          {layout.score && (
-            <span className="text-xs text-muted-foreground">
-              Score: {layout.score.vastu.toFixed(0)}/100
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Compliance badge */}
-      <div
-        className={[
-          "flex flex-col gap-1.5 rounded-lg border p-3 text-sm",
-          layout.compliance.passed
-            ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
-            : "border-red-500/40 bg-red-500/8 text-red-700 dark:text-red-400",
-        ].join(" ")}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold flex items-center gap-2">
-            {layout.compliance.passed ? (
-              <>
-                <Check className="h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
-                <span>Compliance passed</span>
-                <span className="sr-only">Compliance check passed</span>
-              </>
-            ) : (
-              <>
-                <X className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
-                <span>Compliance failed</span>
-                <span className="sr-only">Compliance check failed</span>
-              </>
-            )}
-          </span>
-          {municipality && (
-            <span className="text-xs font-normal text-muted-foreground opacity-80">
-              Validated against: {municipality}
-            </span>
-          )}
-        </div>
-
-        {layout.compliance.violations.length > 0 && (
-          <ul className="list-inside list-disc space-y-0.5 text-red-600 dark:text-red-400">
-            {layout.compliance.violations.map((v) => (
-              <li key={v}>{v}</li>
+                Layout {l.id} — {l.name}
+                {l.score && <ScoreBadge score={l.score.total} />}
+              </button>
             ))}
-          </ul>
+          </div>
+
+          {/* Primary actions + Export/Share — horizontal scroll on mobile */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] md:mx-0 md:px-0 md:flex-wrap md:items-center md:[mask-image:none]">
+            {/* PDF — primary action, prominent on mobile */}
+            <Button
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 bg-primary text-primary-foreground hover:bg-primary/90 md:bg-transparent md:text-foreground md:border md:border-border md:hover:bg-muted md:shadow-none shadow-md"
+              onClick={() => handleDownload("pdf")}
+              disabled={downloadingPdf || !session}
+            >
+              {downloadingPdf ? "…" : "⬇ PDF"}
+            </Button>
+
+            {/* Export — everything else export-related, tucked behind one dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+                  disabled={!session}
+                >
+                  Export
+                  <ChevronDown className="h-3 w-3 ml-1.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuItem onClick={() => setPdfPreviewOpen(true)}>
+                  Preview PDF
+                </DropdownMenuItem>
+                {planTier === "free" ? (
+                  <DropdownMenuItem asChild title="Upgrade to Basic for DXF export">
+                    <Link href="/pricing">
+                      <Lock className="h-3 w-3" />
+                      DXF (upgrade required)
+                    </Link>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => handleDownload("dxf")}
+                    disabled={downloadingDxf}
+                    title="DXF for AutoCAD / DraftSight"
+                  >
+                    {downloadingDxf ? "Downloading DXF…" : "DXF"}
+                  </DropdownMenuItem>
+                )}
+                {planTier !== "free" && (
+                  <DropdownMenuItem onClick={() => setDxfPreviewOpen(true)}>
+                    Preview DXF
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setApprovalDialogOpen(true)}
+                  title="Download municipality approval drawing package (CMDA/BBMP/GHMC format)"
+                >
+                  Approval Package
+                </DropdownMenuItem>
+                {(structStatus?.design?.status === "designed" || structDrawingsBlob) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Structural drawings</DropdownMenuLabel>
+                    {structStatus?.design?.status === "designed" && (
+                      <DropdownMenuItem
+                        onClick={handleGenerateStructDrawings}
+                        disabled={generatingStructDrawings}
+                        title="Generate the 6-sheet structural drawing set (column & footing, plinth beam, roof beam & slab)"
+                      >
+                        <FileStack className="h-3 w-3" />
+                        {generatingStructDrawings ? "Generating…" : "Generate set"}
+                      </DropdownMenuItem>
+                    )}
+                    {structDrawingsBlob && (
+                      <DropdownMenuItem
+                        onClick={() => saveStructDrawings(structDrawingsBlob)}
+                        title="Download the generated structural drawing set PDF"
+                      >
+                        <Download className="h-3 w-3" />
+                        Download set
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <ShareWhatsAppButton
+              projectName={projectName}
+              layoutId={selectedId}
+              getShareUrl={ensureShareUrl}
+              disabled={!session}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+              onClick={handleShare}
+              disabled={shareLoading || approvalShareLoading || !session}
+              title="Get a read-only share link, or send this plan for client approval"
+            >
+              <Link2 className="h-3 w-3 mr-1.5" />
+              {shareLoading || approvalShareLoading ? "…" : "Share"}
+            </Button>
+            {/* Manual refresh — supplements the automatic poll above (see the
+              effect near fetchApprovalStatus's definition), it doesn't
+              replace it. approvalFetchingRef inside fetchApprovalStatus
+              blocks this from running concurrently with an in-flight
+              automatic tick; resetting the poll count here just fast-tracks
+              the *next* automatic tick back to the poll loop's shortest
+              backoff tier instead of waiting out whatever tier it had
+              climbed to. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 min-h-[40px] md:min-h-0 border-border text-muted-foreground hover:bg-muted"
+              onClick={() => {
+                approvalPollCountRef.current = 0;
+                fetchApprovalStatus();
+              }}
+              disabled={approvalFetching || !session}
+              title="Refresh client approval status"
+            >
+              {approvalFetching ? "…" : "↻"}
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 min-h-[40px] md:min-h-0 border-border text-foreground hover:bg-muted"
+                  disabled={regenerating}
+                  title="Re-run the layout engine for this project"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1.5" />
+                  Regenerate layouts
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Regenerate layouts?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will run the layout engine again and replace your current layouts.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => setRegenerating(true)}>
+                    Regenerate
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+
+        {regenerating && (
+          <GenerationPanel projectId={projectId} autoStart onDone={() => setRegenerating(false)} />
         )}
 
-        {layout.compliance.warnings.length > 0 && (
-          <details className="mt-1">
-            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-400 font-medium">
-              {layout.compliance.warnings.length} warning
-              {layout.compliance.warnings.length !== 1 ? "s" : ""}
+        {/* Annotation dialog */}
+        <Dialog
+          open={annDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAnnDialogOpen(false);
+              setAnnEditNote("");
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-yellow-600" />
+                {annEditRoomName}
+              </DialogTitle>
+              <DialogDescription>
+                Add an engineer note for this room. Notes appear as sticky icons on the floor plan
+                and in PDF exports.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 py-2">
+              <Textarea
+                value={annEditNote}
+                onChange={(e) => setAnnEditNote(e.target.value)}
+                placeholder="e.g. Client wants wardrobe here, Confirm column clearance with structural engineer…"
+                className="min-h-[90px] resize-none text-sm"
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="flex items-center gap-2">
+              {annotations[annEditRoomId] && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive mr-auto"
+                  onClick={handleAnnotationDelete}
+                >
+                  Delete note
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAnnDialogOpen(false);
+                  setAnnEditNote("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleAnnotationSave} disabled={annSaving}>
+                Save note
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Unified Share dialog — read-only link vs. send-for-approval, one trigger two tabs */}
+        <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Share with client</DialogTitle>
+              <DialogDescription>
+                Get a read-only link, or send this plan for client approval — no login needed on
+                their end either way.
+              </DialogDescription>
+            </DialogHeader>
+            <Tabs value={shareTab} onValueChange={handleShareTabChange}>
+              <TabsList className="w-full">
+                <TabsTrigger value="link">Share link</TabsTrigger>
+                <TabsTrigger value="approval">Send for Approval</TabsTrigger>
+              </TabsList>
+              <TabsContent value="link" className="flex flex-col gap-2">
+                {shareError && (
+                  <p
+                    role="alert"
+                    className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                  >
+                    {shareError}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    readOnly
+                    value={shareUrl}
+                    className="flex-1 bg-muted font-mono"
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCopy}
+                    className="shrink-0"
+                    aria-label={copied ? "Copied to clipboard" : "Copy link"}
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {copied && (
+                  <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Anyone with this link can view the floor plans in read-only mode — layout options,
+                  floor plans, section view, and compliance status.
+                </p>
+              </TabsContent>
+              <TabsContent value="approval" className="flex flex-col gap-2">
+                {approvalShareError && (
+                  <p
+                    role="alert"
+                    className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                  >
+                    {approvalShareError}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    readOnly
+                    value={approvalShareUrl}
+                    className="flex-1 bg-muted font-mono"
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCopyApprovalLink}
+                    className="shrink-0"
+                    aria-label={approvalShareCopied ? "Copied to clipboard" : "Copy approval link"}
+                  >
+                    {approvalShareCopied ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {approvalShareCopied && (
+                  <p className="text-xs text-green-600 dark:text-green-400">Copied to clipboard!</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Share this link with your client — they can approve the plan or request changes.
+                  After sending, use the ↻ button in the toolbar to check if they've responded.
+                </p>
+              </TabsContent>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
+
+        {/* Approval status indicator */}
+        {(approval.status || shareToken) && (
+          <div
+            className={[
+              "flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm",
+              approval.status === "approved"
+                ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
+                : approval.status === "changes_requested"
+                  ? "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-400"
+                  : "border-border bg-muted/30 text-muted-foreground",
+            ].join(" ")}
+          >
+            {approval.status === "approved" ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ) : approval.status === "changes_requested" ? (
+              <MessageSquare className="h-4 w-4 shrink-0" />
+            ) : shareToken ? (
+              <Clock className="h-4 w-4 shrink-0" />
+            ) : (
+              <CircleDot className="h-4 w-4 shrink-0" />
+            )}
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <span className="font-medium">
+                {approval.status === "approved"
+                  ? "Client Approved"
+                  : approval.status === "changes_requested"
+                    ? "Changes Requested"
+                    : shareToken
+                      ? "Pending client review"
+                      : "Not sent for review"}
+              </span>
+              {approval.updatedAt && (
+                <span className="text-xs opacity-80">{formatApprovalDate(approval.updatedAt)}</span>
+              )}
+              {approval.status === "changes_requested" && approval.note && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-left text-xs underline underline-offset-2 opacity-80 hover:opacity-100 w-fit"
+                    >
+                      View note
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 text-sm" align="start">
+                    <p className="font-semibold mb-2 text-foreground">Client note</p>
+                    <p className="text-muted-foreground">{approval.note}</p>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Approval PDF dialog */}
+        <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Municipality Approval Drawing Package</DialogTitle>
+              <DialogDescription>
+                Generates a 4-page PDF formatted for CMDA / BBMP / GHMC submission. Fill in the
+                project details required by the municipality.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="apr-owner">Owner Name</Label>
+                  <Input
+                    id="apr-owner"
+                    value={approvalForm.owner_name}
+                    onChange={(e) => setApprovalForm((f) => ({ ...f, owner_name: e.target.value }))}
+                    placeholder="e.g. Rajan Kumar"
+                    className="text-base"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="apr-survey">Survey / Plot No.</Label>
+                  <Input
+                    id="apr-survey"
+                    value={approvalForm.survey_number}
+                    onChange={(e) =>
+                      setApprovalForm((f) => ({ ...f, survey_number: e.target.value }))
+                    }
+                    placeholder="e.g. 42/A"
+                    className="text-base"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="apr-locality">Locality / Area</Label>
+                <Input
+                  id="apr-locality"
+                  value={approvalForm.locality}
+                  onChange={(e) => setApprovalForm((f) => ({ ...f, locality: e.target.value }))}
+                  placeholder="e.g. Anna Nagar, Chennai"
+                  className="text-base"
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="apr-engineer">Engineer / Architect Name</Label>
+                  <Input
+                    id="apr-engineer"
+                    value={approvalForm.engineer_name}
+                    onChange={(e) =>
+                      setApprovalForm((f) => ({ ...f, engineer_name: e.target.value }))
+                    }
+                    placeholder="e.g. Er. S. Venkatesh"
+                    className="text-base"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="apr-license">License No.</Label>
+                  <Input
+                    id="apr-license"
+                    value={approvalForm.license_number}
+                    onChange={(e) =>
+                      setApprovalForm((f) => ({ ...f, license_number: e.target.value }))
+                    }
+                    placeholder="e.g. TN/2024/1234"
+                    className="text-base"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="apr-municipality">Municipality / Authority</Label>
+                <Input
+                  id="apr-municipality"
+                  value={approvalForm.municipality}
+                  onChange={(e) => setApprovalForm((f) => ({ ...f, municipality: e.target.value }))}
+                  placeholder="e.g. Chennai (CMDA)"
+                />
+              </div>
+              {approvalPdfError && (
+                <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {approvalPdfError}
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setApprovalDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setApprovalPdfPreviewOpen(true)}
+                disabled={!session}
+              >
+                Preview
+              </Button>
+              <Button
+                onClick={handleDownloadApprovalPdf}
+                disabled={downloadingApprovalPdf || !session}
+              >
+                {downloadingApprovalPdf ? "Generating…" : "Download Approval PDF"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <PdfPreviewDialog
+          open={pdfPreviewOpen}
+          onOpenChange={setPdfPreviewOpen}
+          title="Standard PDF preview"
+          fetchPdf={() => fetchExportBlob("pdf")}
+          onDownload={() => handleDownload("pdf")}
+          downloading={downloadingPdf}
+        />
+        <PdfPreviewDialog
+          open={approvalPdfPreviewOpen}
+          onOpenChange={setApprovalPdfPreviewOpen}
+          title="Approval PDF preview"
+          fetchPdf={fetchApprovalPdfBlob}
+          onDownload={handleDownloadApprovalPdf}
+          downloading={downloadingApprovalPdf}
+        />
+        <DxfPreviewDialog
+          open={dxfPreviewOpen}
+          onOpenChange={setDxfPreviewOpen}
+          fetchDxf={() => fetchExportBlob("dxf")}
+          onDownload={() => handleDownload("dxf")}
+          downloading={downloadingDxf}
+        />
+
+        {/* Download error */}
+        {downloadError && (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            {downloadError}
+          </p>
+        )}
+
+        {/* CAD drawing-quality badge for the selected layout only — moved out
+          of the per-pill row (T13/P1.4) so N layouts no longer pop in N
+          independent async badges; now there's exactly one, here. */}
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span>CAD quality</span>
+          <CadQualityBadge projectId={projectId} layoutKey={layout.id} />
+        </div>
+
+        {/* Status rail: score breakdown, Vastu, compliance, structural lifecycle,
+          approval notice, restored-revision banner — consolidated into one
+          collapsible rail so the floor plan tab stays above the fold. */}
+        <StatusRail
+          score={layout.score}
+          vastuEnabled={vastuEnabled}
+          compliance={layout.compliance}
+          municipality={municipality}
+          structStatus={structStatus?.status}
+          structChangelog={structStatus?.design?.changelog ?? []}
+          approvingStructural={approvingStructural}
+          onApproveStructural={handleApproveStructural}
+          onRunStructuralDesign={() => setActiveTab("structural")}
+          alreadyApprovedNotice={alreadyApprovedNotice}
+          restoredRevisionActive={Boolean(restoredData)}
+          onClearRestore={handleClearRestore}
+        />
+
+        {/* Space utilisation notes */}
+        {layout.space_notes && layout.space_notes.length > 0 && (
+          <details className="rounded-lg border border-blue-400/30 bg-blue-500/8 p-3 text-sm">
+            <summary className="cursor-pointer font-medium text-blue-700 dark:text-blue-400">
+              ℹ️ {layout.space_notes.length} space optimisation
+              {layout.space_notes.length !== 1 ? "s" : ""} applied
             </summary>
-            <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-700 dark:text-amber-400 text-xs">
-              {layout.compliance.warnings.map((w) => (
-                <li key={w}>{w}</li>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-blue-700/80 dark:text-blue-400/80 text-xs">
+              {layout.space_notes.map((note) => (
+                <li key={note}>{note}</li>
               ))}
             </ul>
           </details>
         )}
-      </div>
 
-      {/* Space utilisation notes */}
-      {layout.space_notes && layout.space_notes.length > 0 && (
-        <details className="rounded-lg border border-blue-400/30 bg-blue-500/8 p-3 text-sm">
-          <summary className="cursor-pointer font-medium text-blue-700 dark:text-blue-400">
-            ℹ️ {layout.space_notes.length} space optimisation
-            {layout.space_notes.length !== 1 ? "s" : ""} applied
-          </summary>
-          <ul className="mt-2 list-inside list-disc space-y-1 text-blue-700/80 dark:text-blue-400/80 text-xs">
-            {layout.space_notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      {/* ── Offscreen R3F engine ──────────────────────────────────────────── */}
-      {/* Geometric truth that conditions the AI render. Mounted once, offscreen,
-          so its PNG can be captured from any tab (Render or AI Render).
+        {/* ── Offscreen R3F engine ──────────────────────────────────────────── */}
+        {/* Geometric truth that conditions the AI render. Mounted once — the
+          FIRST time the user visits the r3f ("Render") or render ("AI
+          Render") tab, see plan3dMounted above — then kept mounted offscreen
+          for the rest of the session so its PNG can still be captured from
+          any other tab. Code-split via next/dynamic so the ~150KB three.js
+          bundle never loads for users who never touch either tab.
           Top-down captures are label-annotated (room names + dims, north
           arrow, plot dimensions) so the conditioning image is self-describing
           — this is what gets sent as reference_png; if capture ever fails
           (e.g. font load), reference_png is omitted and the backend falls
           back to a rasterised PDF page (existing behaviour). */}
-      <div
-        aria-hidden
-        style={{
-          position: "fixed",
-          left: -10000,
-          top: 0,
-          width: 1280,
-          height: 800,
-          pointerEvents: "none",
-        }}
-      >
-        {mounted && (
-          <Plan3DScene
-            ref={plan3dApiRef}
-            floorPlan={r3fFloorPlan}
-            plotWidth={plotWidth}
-            plotLength={plotLength}
-            roadSide={roadSide}
-            view={r3fView}
-            annotate={r3fView === "top"}
-          />
-        )}
-      </div>
-
-      {/* Stage 2 structural lifecycle — draft/approved/designed badge + action, per selected layout */}
-      <StructuralLifecycleHeader
-        status={structStatus?.status}
-        changelog={structStatus?.design?.changelog ?? []}
-        approving={approvingStructural}
-        onApprove={handleApproveStructural}
-        onRunDesign={() => setActiveTab("structural")}
-      />
-      {alreadyApprovedNotice && (
-        <p className="text-xs text-muted-foreground">Plan was already approved.</p>
-      )}
-
-      {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
-      {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
-        <TabsList
-          variant="line"
-          className="w-full justify-start overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)] md:w-fit md:[mask-image:none]"
+        <div
+          aria-hidden
+          style={{
+            position: "fixed",
+            left: -10000,
+            top: 0,
+            width: 1280,
+            height: 800,
+            pointerEvents: "none",
+          }}
         >
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab} value={tab} className="min-h-[40px] shrink-0 flex-none px-4">
-              {tab === "plan"
-                ? "Floor Plan"
-                : tab === "section"
-                  ? "Section"
-                  : tab === "boq"
-                    ? "BOQ"
-                    : tab === "structural"
-                      ? "Structural"
-                      : tab === "compare"
-                        ? "Compare"
-                        : tab === "chat"
-                          ? "Chat"
-                          : tab === "r3f"
-                            ? "Render"
-                            : "AI Render"}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {activeTab === "plan" && (
-        <div className="flex flex-col gap-3">
-          {isPreliminaryStatus(structStatus?.status) && (
-            <output className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-              PRELIMINARY — for planning only, not for construction
-            </output>
+          {mounted && plan3dMounted && (
+            <Plan3DScene
+              ref={plan3dApiRef}
+              floorPlan={r3fFloorPlan}
+              plotWidth={plotWidth}
+              plotLength={plotLength}
+              roadSide={roadSide}
+              view={r3fView}
+              annotate={r3fView === "top"}
+            />
           )}
-          {/* Dynamic floor toggle + mobile Options sheet trigger side-by-side */}
-          <div className="flex items-center gap-2">
-            {/* Floor toggle */}
-            <Tabs
-              value={String(floor)}
-              onValueChange={(v) => setFloor(Number(v))}
-              className="flex-1 min-w-0"
-            >
-              <TabsList
-                variant="line"
-                className="w-full overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)]"
-              >
-                {availableFloors.map((f) => (
-                  <TabsTrigger
-                    key={f.index}
-                    value={String(f.index)}
-                    className="min-h-[40px] shrink-0 flex-none px-3"
-                  >
-                    {f.label}
-                    {f.plan.needs_mech_ventilation && (
-                      <AlertTriangle
-                        className="ml-1 h-3 w-3 text-amber-600 shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {f.plan.needs_mech_ventilation && (
-                      <span className="sr-only">Mechanical ventilation required</span>
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+        </div>
 
-            {/* Mobile: Options Sheet trigger — visible on < md */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <button
-                  type="button"
-                  className="md:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40 text-muted-foreground hover:bg-muted transition-colors"
-                  aria-label="View options"
+        {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
+        {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+          <TabsList
+            variant="line"
+            className="w-full justify-start overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_90%,transparent_100%)] md:w-fit md:[mask-image:none]"
+          >
+            {tabs.map((tab, i) => {
+              // Visual-only group boundaries — plan | section,boq,structural |
+              // r3f,render,compare | chat. One flat TabsList underneath so
+              // Radix's roving tabindex still moves Left/Right through every
+              // tab in this array order regardless of the divider markup.
+              const prevGroup = TAB_GROUP[tabs[i - 1] as TabId];
+              const groupChanged = i > 0 && prevGroup !== TAB_GROUP[tab];
+              const trigger = (
+                <TabsTrigger
+                  key={tab}
+                  value={tab}
+                  className={[
+                    "min-h-[40px] shrink-0 flex-none px-4",
+                    groupChanged ? "ml-2 border-l border-border pl-4" : "",
+                  ].join(" ")}
                 >
-                  <Settings2 className="h-4 w-4" />
-                </button>
-              </SheetTrigger>
-              <SheetContent
-                side="bottom"
-                className="h-auto max-h-[70vh] overflow-y-auto rounded-t-2xl px-4 pt-4 pb-8"
-              >
-                <p className="text-sm font-semibold text-foreground mb-4">View Options</p>
-                {/* Same toggles, listed vertically for mobile */}
-                <div className="flex flex-col gap-2">
-                  {vastuEnabled && (
-                    <button
-                      type="button"
-                      onClick={() => setShowVastuZones((v) => !v)}
-                      className={[
-                        "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                        showVastuZones
-                          ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
-                          : "border-border bg-transparent text-muted-foreground",
-                      ].join(" ")}
-                    >
-                      {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowFurniture((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      showFurniture
-                        ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
+                  {tab === "plan"
+                    ? "Floor Plan"
+                    : tab === "section"
+                      ? "Section"
+                      : tab === "boq"
+                        ? "BOQ"
+                        : tab === "structural"
+                          ? "Structural"
+                          : tab === "compare"
+                            ? "Compare"
+                            : tab === "chat"
+                              ? "Chat"
+                              : tab === "r3f"
+                                ? "3D View"
+                                : "AI Render"}
+                </TabsTrigger>
+              );
+              // First-visit emphasis for the two least-obvious tabs — Compare
+              // (equal visual footing with every other tab today, easy to
+              // scroll past) and Chat (was hidden behind an env flag until
+              // this task; now visible but new, so worth a nudge once).
+              if (tab === "compare") {
+                return (
+                  <FirstVisitHint
+                    key={tab}
+                    id="compare"
+                    title={t("hints.compareTitle")}
+                    body={t("hints.compareBody")}
+                    dismissLabel={t("hints.gotIt")}
                   >
-                    {showFurniture ? "Hide Furniture" : "Show Furniture"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowElectrical((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      showElectrical
-                        ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    {showElectrical ? "Hide Electrical" : "Show Electrical"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowPlumbing((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      showPlumbing
-                        ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    {showPlumbing ? "Hide Plumbing" : "Show Plumbing"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnnotationMode((v) => !v)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                      annotationMode
-                        ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                        : "border-border bg-transparent text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    <MessageSquare className="h-4 w-4" />
-                    {annotationMode ? "Exit Annotate" : "Annotate"}
-                    {annotationCount > 0 && (
-                      <span className="ml-1 rounded-full bg-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
-                        {annotationCount}
-                      </span>
-                    )}
-                  </button>
-                  {tierAtLeast(planTier, "pro") ? (
-                    <button
-                      type="button"
-                      onClick={handleToggleEditMode}
-                      className={[
-                        "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
-                        editMode
-                          ? "border-blue-600/70 bg-blue-600/15 text-blue-700 dark:text-blue-400"
-                          : "border-border bg-transparent text-muted-foreground",
-                      ].join(" ")}
-                    >
-                      {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-                      {editMode ? "Exit Edit Mode" : "Edit Rooms"}
-                    </button>
-                  ) : (
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium min-h-[44px]"
-                    >
-                      <Link href="/pricing">
-                        <Lock className="h-4 w-4" />
-                        Edit Rooms (Pro)
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
-
-          {/* Floor plan toolbar: visible on desktop, hidden on mobile (moved to sheet above) */}
-          <div className="hidden md:flex flex-wrap gap-2">
-            {vastuEnabled && (
-              <button
-                type="button"
-                onClick={() => setShowVastuZones((v) => !v)}
-                className={[
-                  "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                  showVastuZones
-                    ? "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400"
-                    : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-                ].join(" ")}
-              >
-                {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowFurniture((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showFurniture
-                  ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              {showFurniture ? "Hide Furniture" : "Furnish"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowElectrical((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showElectrical
-                  ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              {showElectrical ? "Hide Electrical" : "Electrical"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPlumbing((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                showPlumbing
-                  ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              {showPlumbing ? "Hide Plumbing" : "Plumbing"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAnnotationMode((v) => !v)}
-              className={[
-                "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                annotationMode
-                  ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-              ].join(" ")}
-              title={
-                annotationMode
-                  ? "Click a room to add/edit a note. Click again to exit."
-                  : "Enter annotation mode to attach notes to rooms"
+                    {trigger}
+                  </FirstVisitHint>
+                );
               }
-            >
-              <MessageSquare className="h-3 w-3" />
-              {annotationMode ? "Exit Annotate" : "Annotate"}
-              {annotationCount > 0 && (
-                <span className="ml-1 rounded-full bg-yellow-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
-                  {annotationCount}
-                </span>
-              )}
-            </button>
-            {tierAtLeast(planTier, "pro") ? (
-              <button
-                type="button"
-                onClick={handleToggleEditMode}
-                className={[
-                  "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                  editMode
-                    ? "border-blue-600/70 bg-blue-600/15 text-blue-700 dark:text-blue-400"
-                    : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-                ].join(" ")}
-                title={
-                  editMode
-                    ? "Exit edit mode and discard changes"
-                    : "Enter edit mode — drag shared walls to resize rooms"
-                }
-              >
-                {editMode ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-                {editMode ? "Exit Edit" : "Edit Rooms"}
-              </button>
-            ) : (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="w-fit gap-1.5 text-xs"
-                title="Upgrade to Pro to enable manual room editing"
-              >
-                <Link href="/pricing">
-                  <Lock className="h-3 w-3" />
-                  Edit Rooms
-                </Link>
-              </Button>
-            )}
-          </div>
+              if (tab === "chat") {
+                return (
+                  <FirstVisitHint
+                    key={tab}
+                    id="chat"
+                    title={t("hints.chatTitle")}
+                    body={t("hints.chatBody")}
+                    dismissLabel={t("hints.gotIt")}
+                  >
+                    {trigger}
+                  </FirstVisitHint>
+                );
+              }
+              return trigger;
+            })}
+          </TabsList>
+        </Tabs>
 
-          {annotationMode && (
-            <p className="text-xs text-yellow-700 dark:text-yellow-400 rounded-lg border border-yellow-500/30 bg-yellow-500/8 px-3 py-1.5">
-              Click any room to add or edit a note. Notes persist across sessions and appear in PDF
-              exports.
-            </p>
-          )}
-
-          {editMode && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 flex items-center gap-1.5">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
-                Drag shared walls (blue lines) to resize rooms. Changes are not saved automatically.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={handleUndo}
-                  disabled={!editHistory || !canUndo(editHistory)}
-                  title="Undo (Ctrl/Cmd+Z)"
-                >
-                  <Undo2 className="h-3 w-3" />
-                  Undo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={handleRedo}
-                  disabled={!editHistory || !canRedo(editHistory)}
-                  title="Redo (Ctrl/Cmd+Shift+Z)"
-                >
-                  <Redo2 className="h-3 w-3" />
-                  Redo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={() => {
-                    const roomsToCheck = editedRooms ?? floorPlan.rooms;
-                    const currentFloorCode =
-                      floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
-                    void runComplianceCheck(roomsToCheck, currentFloorCode);
-                  }}
-                  disabled={!session}
-                  title="Check compliance for current room layout"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Check Compliance
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs h-7 px-2.5"
-                  onClick={handleResetRooms}
-                  title="Restore rooms to the original generated layout"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Reset
-                </Button>
-                <Button
-                  size="sm"
-                  className="gap-1.5 text-xs h-7 px-2.5 bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={() => {
-                    const roomsToSave = editedRooms ?? floorPlan.rooms;
-                    void handleSaveEditedRooms(roomsToSave);
-                  }}
-                  disabled={editSaving || !session || !editedRooms}
-                  title="Save the edited room layout to the project"
-                >
-                  <Save className="h-3 w-3" />
-                  {editSaving ? "Saving…" : "Save Changes"}
-                </Button>
-              </div>
-              {editSaveError && (
-                <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
-                  {editSaveError}
-                </p>
-              )}
-              {Object.keys(complianceIssues).length > 0 && (
-                <p className="text-xs text-red-700 dark:text-red-400 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-1.5 flex items-center gap-1.5">
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                  {Object.keys(complianceIssues).length} room
-                  {Object.keys(complianceIssues).length !== 1 ? "s have" : " has"} compliance issues
-                  — highlighted in red.
-                </p>
-              )}
-            </div>
-          )}
-
-          <FloorPlanSVG
-            floorPlan={
-              editMode ? { ...floorPlan, rooms: editedRooms ?? floorPlan.rooms } : floorPlan
-            }
+        {activeTab === "plan" && (
+          <PlanTab
+            structStatusStatus={structStatus?.status}
+            availableFloors={availableFloors}
+            floor={floor}
+            onFloorChange={setFloor}
+            vastuEnabled={vastuEnabled}
+            showVastuZones={showVastuZones}
+            onToggleVastuZones={() => setShowVastuZones((v) => !v)}
+            showFurniture={showFurniture}
+            onToggleFurniture={() => setShowFurniture((v) => !v)}
+            showElectrical={showElectrical}
+            onToggleElectrical={() => setShowElectrical((v) => !v)}
+            showPlumbing={showPlumbing}
+            onTogglePlumbing={() => setShowPlumbing((v) => !v)}
+            annotationMode={annotationMode}
+            onToggleAnnotationMode={() => setAnnotationMode((v) => !v)}
+            annotationCount={annotationCount}
+            planTier={planTier}
+            editMode={editMode}
+            onToggleEditMode={handleToggleEditMode}
+            editHistory={editHistory}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canCheckCompliance={!!session}
+            onCheckCompliance={() => {
+              const roomsToCheck = editedRooms ?? floorPlan.rooms;
+              const currentFloorCode =
+                floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
+              void runComplianceCheck(roomsToCheck, currentFloorCode);
+            }}
+            onResetRooms={handleResetRooms}
+            editSaving={editSaving}
+            editedRooms={editedRooms}
+            onSaveEditedRooms={(rooms) => void handleSaveEditedRooms(rooms)}
+            editSaveError={editSaveError}
+            complianceIssues={complianceIssues}
+            floorPlan={floorPlan}
             plotWidth={plotWidth}
             plotLength={plotLength}
             roadSide={roadSide}
-            className="w-full md:max-w-xl rounded-xl border"
             plotShape={plotShape}
             plotFrontWidth={plotFrontWidth}
             plotRearWidth={plotRearWidth}
@@ -2667,396 +1955,291 @@ export function LayoutViewer({
             cutoutCorner={cutoutCorner}
             cutoutWidth={cutoutWidth}
             cutoutHeight={cutoutHeight}
-            showVastuZones={showVastuZones}
-            showFurniture={showFurniture}
-            showElectrical={showElectrical}
-            showPlumbing={showPlumbing}
-            annotationMode={annotationMode}
-            annotations={annotationList}
+            annotationList={annotationList}
             onAnnotationClick={handleAnnotationClick}
             locale={locale}
-            editMode={editMode}
             onRoomsChange={(rooms) => {
               const currentFloorCode =
                 floor === 1 ? "ff" : floor === 2 ? "sf" : floor === -1 ? "basement" : "gf";
               handleRoomsChange(rooms, currentFloorCode);
             }}
-            complianceIssues={complianceIssues}
+            presentTypes={presentTypes}
+            typeLabels={TYPE_LABELS}
+            swatch={SWATCH}
           />
+        )}
 
-          {/* Room legend */}
-          <div className="flex flex-wrap gap-3">
-            {presentTypes.map((type) => (
-              <div key={type} className="flex items-center gap-1.5">
-                <div
-                  className={["size-3 rounded-sm border", SWATCH[type] ?? SWATCH.utility].join(" ")}
-                />
-                <span className="text-xs text-muted-foreground">{TYPE_LABELS[type] ?? type}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === "section" && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Parametric section through the building. Dimensions are standard for Indian residential
-            construction.
-          </p>
-          <SectionViewSVG
-            buildingWidth={plotWidth}
-            className="w-full md:max-w-xl rounded-xl border"
-            stairTreadCount={layout.ground_floor.drawing?.stair?.tread_count}
-          />
-          <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
-            <span>Floor height: 3.0 m (each floor)</span>
-            <span>Slab thickness: 150 mm (RCC)</span>
-            <span>Parapet: 1.0 m above roof</span>
-            <span>External wall: 230 mm brick</span>
-            <span>Foundation: 600 mm below GL</span>
-            <span>Stair: 17R x 175 mm riser</span>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "boq" && (
-        <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
-      )}
-
-      {activeTab === "structural" && (
-        <StructuralViewer
-          projectId={projectId}
-          layoutId={selectedId}
-          status={structStatus}
-          approving={approvingStructural}
-          onApprove={handleApproveStructural}
-          onDesignComplete={handleDesignComplete}
-        />
-      )}
-
-      {activeTab === "compare" && (
-        <LayoutCompareView
-          layouts={activeData.layouts}
-          plotWidth={plotWidth}
-          plotLength={plotLength}
-          roadSide={roadSide}
-          plotShape={plotShape}
-          plotFrontWidth={plotFrontWidth}
-          plotRearWidth={plotRearWidth}
-          plotCorners={plotCorners}
-          cutoutCorner={cutoutCorner}
-          cutoutWidth={cutoutWidth}
-          cutoutHeight={cutoutHeight}
-        />
-      )}
-
-      {activeTab === "chat" &&
-        agentChatEnabled &&
-        (tierAtLeast(planTier, "pro") ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Left: live floor plan preview — hidden on mobile to save screen space */}
-            <div className="hidden md:flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">Live Layout Preview</p>
-                {liveLayout && (
-                  <span className="text-xs text-green-600 dark:text-green-400 font-medium">
-                    ● AI updated
-                  </span>
-                )}
-              </div>
-              <FloorPlanSVG
-                floorPlan={floor === 1 ? layout.first_floor : layout.ground_floor}
-                plotWidth={plotWidth}
-                plotLength={plotLength}
-                roadSide={roadSide}
-                className="rounded-xl border"
-                plotShape={plotShape}
-                plotFrontWidth={plotFrontWidth}
-                plotRearWidth={plotRearWidth}
-                plotCorners={plotCorners}
-                cutoutCorner={cutoutCorner}
-                cutoutWidth={cutoutWidth}
-                cutoutHeight={cutoutHeight}
-                locale={locale}
-              />
-              <p className="text-xs text-muted-foreground">
-                Showing {floor === 1 ? "First" : "Ground"} Floor — switches in the Floor Plan tab
-              </p>
-            </div>
-            {/* Right: chat panel */}
-            <ChatPanel
-              projectId={projectId}
-              currentLayout={layout}
-              onLayoutUpdate={(updated) => {
-                setLiveLayout(updated);
-                invalidateAfterGeometryEdit();
-              }}
-            />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-8 text-center">
-            <Lock className="mx-auto mb-3 h-6 w-6 text-amber-600" />
-            <p className="font-semibold text-amber-700 dark:text-amber-400">Pro plan required</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Conversational layout editing with AI is a Pro feature.
+        {activeTab === "section" && (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              Parametric section through the building. Dimensions are standard for Indian
+              residential construction.
             </p>
-            <Button asChild className="mt-4" size="sm" variant="outline">
-              <Link href="/pricing">Upgrade to Pro</Link>
-            </Button>
-          </div>
-        ))}
-
-      {activeTab === "render" && (
-        <RenderTab
-          projectId={projectId}
-          layoutKey={selectedId}
-          planTier={planTier}
-          floors={availableFloors.map((f) => ({ label: f.label, index: f.index }))}
-          r3fPngs={r3fPngs}
-          registerTrigger={(fn) => {
-            renderTriggerRef.current = fn;
-          }}
-        />
-      )}
-
-      {activeTab === "r3f" && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Geometric plan view of the selected floor, built from the exact plan dimensions. Use it
-            to condition the photorealistic AI render — one render per floor.
-          </p>
-          {(structStatus?.status === "designed" ||
-            structStatus?.status === "designed_with_warnings") && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Geometry source:</span>
-              <Button
-                size="sm"
-                variant={renderSource === "architectural" ? "default" : "outline"}
-                onClick={() => handleRenderSourceChange("architectural")}
-              >
-                Architectural
-              </Button>
-              <Button
-                size="sm"
-                variant={renderSource === "structural" ? "default" : "outline"}
-                onClick={() => handleRenderSourceChange("structural")}
-                disabled={structuralGeometryLoading}
-              >
-                {structuralGeometryLoading ? "Loading…" : "Structural"}
-              </Button>
-              {renderSource === "structural" && structuralGeometry && (
-                <span className="text-green-600 dark:text-green-400">
-                  Showing the structural design&apos;s adjusted geometry.
-                </span>
-              )}
-              {renderSource === "structural" &&
-                !structuralGeometry &&
-                !structuralGeometryLoading &&
-                structuralGeometryFallback && (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    {renderSourceFallbackNote(structuralGeometryFallback)}
-                  </span>
-                )}
+            <SectionViewSVG
+              buildingWidth={plotWidth}
+              className="w-full md:max-w-xl rounded-xl border"
+              stairTreadCount={layout.ground_floor.drawing?.stair?.tread_count}
+            />
+            <div className="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
+              <span>Floor height: 3.0 m (each floor)</span>
+              <span>Slab thickness: 150 mm (RCC)</span>
+              <span>Parapet: 1.0 m above roof</span>
+              <span>External wall: 230 mm brick</span>
+              <span>Foundation: 600 mm below GL</span>
+              <span>Stair: 17R x 175 mm riser</span>
             </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            {availableFloors.map((f) => (
-              <Button
-                key={f.index}
-                size="sm"
-                variant={floor === f.index ? "default" : "outline"}
-                onClick={() => setFloor(f.index)}
-              >
-                {f.label}
-              </Button>
-            ))}
-            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-            <Button
-              size="sm"
-              variant={r3fView === "top" ? "default" : "outline"}
-              onClick={() => setR3fView("top")}
-            >
-              Plan view
-            </Button>
-            <Button
-              size="sm"
-              variant={r3fView === "iso" ? "default" : "outline"}
-              onClick={() => setR3fView("iso")}
-            >
-              3D view
-            </Button>
           </div>
-          <div className="w-full max-w-xl overflow-hidden rounded-xl border bg-muted/30">
-            {r3fPngs[floor] ? (
-              // biome-ignore lint/performance/noImgElement: captured canvas PNG, not a next/image candidate
-              <img
-                src={r3fPngs[floor] ?? undefined}
-                alt={`Geometric view — ${currentFloorEntry.label}`}
-                className="w-full"
-              />
-            ) : (
-              <Skeleton className="h-64 w-full rounded-none" />
-            )}
-          </div>
-          <div className="flex w-fit flex-wrap gap-2">
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => captureR3f()}>
-              <RefreshCw className="h-3 w-3" />
-              Refresh view
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() => {
-                const png = captureR3f();
+        )}
+
+        {activeTab === "boq" && (
+          <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
+        )}
+
+        {activeTab === "structural" && (
+          <StructuralViewer
+            projectId={projectId}
+            layoutId={selectedId}
+            status={structStatus}
+            approving={approvingStructural}
+            onApprove={handleApproveStructural}
+            onDesignComplete={handleDesignComplete}
+          />
+        )}
+
+        {activeTab === "compare" && (
+          <LayoutCompareView
+            layouts={activeData.layouts}
+            plotWidth={plotWidth}
+            plotLength={plotLength}
+            roadSide={roadSide}
+            plotShape={plotShape}
+            plotFrontWidth={plotFrontWidth}
+            plotRearWidth={plotRearWidth}
+            plotCorners={plotCorners}
+            cutoutCorner={cutoutCorner}
+            cutoutWidth={cutoutWidth}
+            cutoutHeight={cutoutHeight}
+          />
+        )}
+
+        {activeTab === "chat" && (
+          <ChatTab
+            projectId={projectId}
+            planTier={planTier}
+            layout={layout}
+            floor={floor}
+            liveLayout={liveLayout}
+            plotWidth={plotWidth}
+            plotLength={plotLength}
+            roadSide={roadSide}
+            plotShape={plotShape}
+            plotFrontWidth={plotFrontWidth}
+            plotRearWidth={plotRearWidth}
+            plotCorners={plotCorners}
+            cutoutCorner={cutoutCorner}
+            cutoutWidth={cutoutWidth}
+            cutoutHeight={cutoutHeight}
+            locale={locale}
+            onLayoutUpdate={(updated) => {
+              setLiveLayout(updated);
+              invalidateAfterGeometryEdit();
+            }}
+          />
+        )}
+
+        {activeTab === "render" && (
+          <RenderTab
+            projectId={projectId}
+            layoutKey={selectedId}
+            planTier={planTier}
+            floors={availableFloors.map((f) => ({ label: f.label, index: f.index }))}
+            r3fPngs={r3fPngs}
+            registerTrigger={(fn) => {
+              renderTriggerRef.current = fn;
+            }}
+            capturing={capturing}
+          />
+        )}
+
+        {activeTab === "r3f" && (
+          <R3fTab
+            structuralDesigned={
+              structStatus?.status === "designed" ||
+              structStatus?.status === "designed_with_warnings"
+            }
+            renderSource={renderSource}
+            onRenderSourceChange={handleRenderSourceChange}
+            structuralGeometryLoading={structuralGeometryLoading}
+            structuralGeometry={structuralGeometry}
+            structuralGeometryFallback={structuralGeometryFallback}
+            availableFloors={availableFloors}
+            floor={floor}
+            onFloorChange={setFloor}
+            r3fView={r3fView}
+            onR3fViewChange={setR3fView}
+            r3fPng={r3fPngs[floor]}
+            currentFloorLabel={currentFloorEntry.label}
+            capturing={capturing}
+            onRefreshCapture={() => void runCapture()}
+            onGenerateAiRender={() => {
+              void runCapture().then((png) => {
                 setActiveTab("render");
                 renderTriggerRef.current(floor, png);
-              }}
-            >
-              Generate AI Render — {currentFloorEntry.label}
-            </Button>
-          </div>
-        </div>
-      )}
+              });
+            }}
+          />
+        )}
 
-      {/* ── Restored revision banner ─────────────────────────────────────── */}
-      {restoredData && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-500/8 px-4 py-2.5 text-sm">
-          <span className="text-amber-700 dark:text-amber-400 font-medium">
-            Viewing a restored revision — this is a preview only, not the current saved state.
-          </span>
-          <button
-            type="button"
-            onClick={handleClearRestore}
-            className="ml-4 shrink-0 rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-500/15 transition-colors"
+        {/* ── Version History panel ────────────────────────────────────────── */}
+        <div className="rounded-xl border border-border">
+          <FirstVisitHint
+            id="history"
+            title={t("hints.historyTitle")}
+            body={t("hints.historyBody")}
+            dismissLabel={t("hints.gotIt")}
+            side="top"
           >
-            Back to current
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={handleHistoryToggle}
+              className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors rounded-xl"
+            >
+              <span className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                Version History
+              </span>
+              {historyOpen ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+          </FirstVisitHint>
 
-      {/* ── Version History panel ────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border">
-        <button
-          type="button"
-          onClick={handleHistoryToggle}
-          className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors rounded-xl"
-        >
-          <span className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            Version History
-          </span>
-          {historyOpen ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
-
-        {historyOpen && (
-          <div className="border-t border-border px-4 pb-4 pt-3 flex flex-col gap-3">
-            {/* Save snapshot row */}
-            <div className="flex items-center gap-2">
-              {showSnapshotInput ? (
-                <>
-                  <input
-                    type="text"
-                    value={snapshotLabel}
-                    onChange={(e) => setSnapshotLabel(e.target.value)}
-                    placeholder="Label (optional, e.g. Before plot resize)"
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSaveSnapshot();
-                      if (e.key === "Escape") setShowSnapshotInput(false);
-                    }}
-                  />
+          {historyOpen && (
+            <div className="border-t border-border px-4 pb-4 pt-3 flex flex-col gap-3">
+              {/* Save snapshot row */}
+              <div className="flex items-center gap-2">
+                {showSnapshotInput ? (
+                  <>
+                    <Input
+                      type="text"
+                      value={snapshotLabel}
+                      onChange={(e) => setSnapshotLabel(e.target.value)}
+                      placeholder="Label (optional, e.g. Before plot resize)"
+                      className="flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveSnapshot();
+                        if (e.key === "Escape") setShowSnapshotInput(false);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleSaveSnapshot}
+                      disabled={savingSnapshot}
+                    >
+                      {savingSnapshot ? "Saving…" : "Save"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowSnapshotInput(false)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={handleSaveSnapshot}
-                    disabled={savingSnapshot}
+                    className="gap-1.5"
+                    onClick={() => setShowSnapshotInput(true)}
+                    disabled={!session}
                   >
-                    {savingSnapshot ? "Saving…" : "Save"}
+                    <Save className="h-3.5 w-3.5" />
+                    Save Snapshot
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowSnapshotInput(false)}>
-                    Cancel
-                  </Button>
-                </>
+                )}
+              </div>
+
+              {/* Error message */}
+              {revisionsError && (
+                <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
+                  {revisionsError}
+                </p>
+              )}
+
+              {/* Revisions list */}
+              {revisionsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-10 rounded-lg" />
+                  ))}
+                </div>
+              ) : revisions.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">
+                  No saved revisions yet. Click "Save Snapshot" to create one, or revisions are
+                  auto-created when you regenerate layouts.
+                </p>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => setShowSnapshotInput(true)}
-                  disabled={!session}
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  Save Snapshot
-                </Button>
+                <ul className="divide-y divide-border">
+                  {revisions.map((rev) => (
+                    <li key={rev.id} className="flex items-center justify-between py-2.5 gap-3">
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-sm font-medium text-foreground truncate">
+                          v{rev.version}
+                          {rev.label ? ` — ${rev.label}` : ""}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(rev.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 h-7 px-2 text-xs"
+                          onClick={() => handleRestore(rev.version)}
+                          disabled={restoringVersion === rev.version}
+                          title="Preview this revision without overwriting current state"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          {restoringVersion === rev.version ? "Loading…" : "Restore"}
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button
+                              type="button"
+                              className="h-7 w-7 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors text-xs"
+                              title="Delete this revision"
+                              aria-label={`Delete revision v${rev.version}`}
+                            >
+                              ×
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete revision v{rev.version}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => void handleDeleteRevision(rev.version)}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-
-            {/* Error message */}
-            {revisionsError && (
-              <p className="text-xs text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5">
-                {revisionsError}
-              </p>
-            )}
-
-            {/* Revisions list */}
-            {revisionsLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-10 rounded-lg" />
-                ))}
-              </div>
-            ) : revisions.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2">
-                No saved revisions yet. Click "Save Snapshot" to create one, or revisions are
-                auto-created when you regenerate layouts.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {revisions.map((rev) => (
-                  <li key={rev.id} className="flex items-center justify-between py-2.5 gap-3">
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <span className="text-sm font-medium text-foreground truncate">
-                        v{rev.version}
-                        {rev.label ? ` — ${rev.label}` : ""}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(rev.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 h-7 px-2 text-xs"
-                        onClick={() => handleRestore(rev.version)}
-                        disabled={restoringVersion === rev.version}
-                        title="Preview this revision without overwriting current state"
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                        {restoringVersion === rev.version ? "Loading…" : "Restore"}
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRevision(rev.version)}
-                        className="h-7 w-7 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors text-xs"
-                        title="Delete this revision"
-                        aria-label={`Delete revision v${rev.version}`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </HintsProvider>
   );
 }
