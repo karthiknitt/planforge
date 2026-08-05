@@ -17,14 +17,14 @@ export function SectionHeader({
   align = "center",
 }: SectionHeaderProps) {
   return (
-    <div className={cn("mb-14", align === "center" && "text-center", className)}>
+    <div className={cn("mb-16", align === "center" && "text-center", className)}>
       {badge && (
         <Badge className="mb-4 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
           {badge}
         </Badge>
       )}
       <h2
-        className="text-3xl lg:text-4xl font-extrabold text-foreground mb-3"
+        className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-foreground mb-4"
         style={{ fontFamily: "var(--font-display)" }}
       >
         {title}
