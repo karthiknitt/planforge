@@ -155,11 +155,9 @@ export default function LandingPage() {
       <JsonLd data={faqJsonLd} />
       {/* ── HERO ── */}
       <section className="relative overflow-hidden bg-background border-b border-border/50 min-h-[90vh] flex items-center">
-        {/* Blueprint grid overlay */}
-        <div className="absolute inset-0 bg-blueprint-grid opacity-100" />
-        {/* Radial glows */}
-        <div className="absolute inset-0 ambient-glow-orange-tl" />
-        <div className="absolute inset-0 ambient-glow-orange-tr" />
+        {/* Consolidated ambient treatment (single placement, page's only bg-blueprint-grid + glow) */}
+        <div className="absolute inset-0 bg-blueprint-grid" />
+        <div className="absolute inset-0 ambient-glow-orange-top" />
         <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28 w-full">
@@ -266,7 +264,6 @@ export default function LandingPage() {
 
       {/* ── FEATURES ── */}
       <section className="py-24 lg:py-32 bg-background relative">
-        <div className="absolute inset-0 ambient-glow-orange-top" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <FadeIn className="text-center mb-16">
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
@@ -356,7 +353,6 @@ export default function LandingPage() {
 
       {/* ── PRICING PREVIEW ── */}
       <section className="py-24 lg:py-32 bg-background relative">
-        <div className="absolute inset-0 ambient-glow-orange-bottom" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <FadeIn className="text-center mb-16">
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
@@ -468,9 +464,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FINAL CTA ── */}
-      <section className="py-24 lg:py-32 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-background border-t border-border/50">
-        <div className="absolute inset-0 bg-blueprint-grid opacity-40" />
-        <div className="absolute inset-0 ambient-glow-orange" />
+      <section className="py-24 lg:py-32 relative overflow-hidden bg-background border-t border-border/50">
         <FadeIn className="relative mx-auto max-w-3xl px-4 text-center">
           <Badge className="mb-6 bg-primary/10 text-primary border-primary/25 hover:bg-primary/15">
             Get Started Today
