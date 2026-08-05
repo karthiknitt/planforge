@@ -90,7 +90,7 @@
   --sidebar-accent: oklch(0.94 0.01 250);
   --sidebar-accent-foreground: oklch(0.27 0.09 248);
   --sidebar-border: oklch(0.87 0.015 255);
-  --sidebar-ring: oklch(0.68 0.22 45);
+  --sidebar-ring: oklch(0.55 0.22 45);
 
   /* ─── Surface layers ─────────────────────────────────────────────────────── */
   --surface-1: oklch(0.96 0.004 255);

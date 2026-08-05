@@ -60,7 +60,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-4">
               For Indian Builders
             </p>
-            <h2 className="text-3xl xl:text-[2.25rem] font-black text-foreground leading-[1.12] mb-5 font-display">
+            <h2 className="text-3xl xl:text-[2.25rem] font-extrabold text-foreground leading-[1.12] mb-5 font-display">
               Plot dimensions in.
               <br />
               Floor plans <span className="text-primary">out.</span>
