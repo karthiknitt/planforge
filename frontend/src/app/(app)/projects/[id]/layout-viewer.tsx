@@ -1897,6 +1897,7 @@ export function LayoutViewer({
                     title={t("hints.chatTitle")}
                     body={t("hints.chatBody")}
                     dismissLabel={t("hints.gotIt")}
+                    waitFor="compare"
                   >
                     {trigger}
                   </FirstVisitHint>
@@ -1992,7 +1993,16 @@ export function LayoutViewer({
         )}
 
         {activeTab === "boq" && (
-          <BOQViewer projectId={projectId} layoutId={selectedId} planTier={planTier} />
+          <BOQViewer
+            projectId={projectId}
+            layoutId={selectedId}
+            planTier={planTier}
+            structuralDesigned={
+              structStatus?.status === "designed" ||
+              structStatus?.status === "designed_with_warnings"
+            }
+            onRunStructuralDesign={() => setActiveTab("structural")}
+          />
         )}
 
         {activeTab === "structural" && (

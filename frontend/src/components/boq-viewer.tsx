@@ -50,9 +50,20 @@ interface BOQViewerProps {
   projectId: string;
   layoutId: string;
   planTier?: string;
+  // BOQ needs sized beams/columns/footings from a structural design to
+  // produce real quantities — gated hard rather than falling back to an
+  // architectural-only estimate (see structural-boq-gating-and-hints plan).
+  structuralDesigned: boolean;
+  onRunStructuralDesign: () => void;
 }
 
-export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerProps) {
+export function BOQViewer({
+  projectId,
+  layoutId,
+  planTier = "free",
+  structuralDesigned,
+  onRunStructuralDesign,
+}: BOQViewerProps) {
   const { data: session } = useSession();
   const [boq, setBOQ] = useState<BOQResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -133,6 +144,26 @@ export function BOQViewer({ projectId, layoutId, planTier = "free" }: BOQViewerP
     } finally {
       setDownloading(false);
     }
+  }
+
+  if (!structuralDesigned) {
+    return (
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-4 text-sm">
+        <p className="font-medium">Run structural design first</p>
+        <p className="text-muted-foreground">
+          The Bill of Quantities needs sized beams, columns and footings from the structural design
+          to produce accurate quantities and costs. Run structural design, then come back to this
+          tab.
+        </p>
+        <button
+          type="button"
+          onClick={onRunStructuralDesign}
+          className="w-fit rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+        >
+          Go to Structural tab
+        </button>
+      </div>
+    );
   }
 
   if (!boq) {
