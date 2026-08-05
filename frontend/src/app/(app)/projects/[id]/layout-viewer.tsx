@@ -116,16 +116,17 @@ interface RevisionListItem {
 
 // Visual grouping for the tab bar — Plan / Analyze / Visualize / Chat.
 // Purely cosmetic (divider placement); tab order/keyboard-nav is governed
-// by ALL_TABS in src/lib/tabs.ts, which is already sorted to match.
+// by ALL_TABS in src/lib/tabs.ts, which is already sorted to match:
+// Floor Plan, Section | Compare | Chat | Structural, BOQ | 3D View, AI Render.
 const TAB_GROUP: Record<TabId, string> = {
   plan: "plan",
-  section: "analyze",
-  boq: "analyze",
+  section: "plan",
+  compare: "compare",
+  chat: "chat",
   structural: "analyze",
+  boq: "analyze",
   r3f: "visualize",
   render: "visualize",
-  compare: "visualize",
-  chat: "chat",
 };
 
 function ScoreBadge({ score }: { score: number }) {
@@ -1832,7 +1833,7 @@ export function LayoutViewer({
           )}
         </div>
 
-        {/* Tabs: Floor Plan | Section | BOQ | Compare | Chat | Render | AI Render */}
+        {/* Tabs: Floor Plan | Section | Compare | Chat | Structural | BOQ | 3D View | AI Render */}
         {/* Mobile: full-width scrollable tab row; Desktop: w-fit pill group */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
           <TabsList

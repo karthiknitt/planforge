@@ -7,11 +7,11 @@ describe("visibleTabs", () => {
     expect(visibleTabs()).toEqual([
       "plan",
       "section",
-      "boq",
-      "structural",
-      "r3f",
-      "render",
       "compare",
       "chat",
+      "structural",
+      "boq",
+      "r3f",
+      "render",
     ]));
 });
