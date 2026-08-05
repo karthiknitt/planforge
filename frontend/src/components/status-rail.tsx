@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, X } from "lucide-react";
 import { useState } from "react";
-import { StructuralLifecycleHeader } from "@/components/structural-lifecycle-header";
+import { StructuralLifecycleHeader, TONE_CLASS } from "@/components/structural-lifecycle-header";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ComplianceData, LayoutScoreData } from "@/lib/layout-types";
@@ -17,16 +17,13 @@ function VastuBadge({ compliance }: { compliance: ComplianceData }) {
   let badgeClass: string;
   let label: string;
   if (vastuViolations.length > 0) {
-    badgeClass =
-      "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-500/15";
+    badgeClass = "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15";
     label = `${vastuViolations.length} Vastu Violation${vastuViolations.length !== 1 ? "s" : ""}`;
   } else if (vastuWarnings.length > 0) {
-    badgeClass =
-      "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15";
+    badgeClass = "border-warning/50 bg-warning/10 text-warning hover:bg-warning/15";
     label = `${vastuWarnings.length} Vastu Warning${vastuWarnings.length !== 1 ? "s" : ""}`;
   } else {
-    badgeClass =
-      "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/15";
+    badgeClass = "border-success/50 bg-success/10 text-success hover:bg-success/15";
     label = "Vastu Compliant";
   }
 
@@ -54,7 +51,7 @@ function VastuBadge({ compliance }: { compliance: ComplianceData }) {
         <p className="font-semibold mb-2 text-foreground">Vastu Issues</p>
         {vastuViolations.length > 0 && (
           <div className="mb-2">
-            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Violations</p>
+            <p className="text-xs font-medium text-destructive mb-1">Violations</p>
             <ul className="space-y-1">
               {vastuViolations.map((v) => (
                 <li key={v} className="text-xs text-muted-foreground">
@@ -66,7 +63,7 @@ function VastuBadge({ compliance }: { compliance: ComplianceData }) {
         )}
         {vastuWarnings.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Warnings</p>
+            <p className="text-xs font-medium text-warning mb-1">Warnings</p>
             <ul className="space-y-1">
               {vastuWarnings.map((w) => (
                 <li key={w} className="text-xs text-muted-foreground">
@@ -159,13 +156,7 @@ export function StatusRail({
         <span
           className={[
             "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
-            structBadge.tone === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
-              : structBadge.tone === "warning"
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                : structBadge.tone === "info"
-                  ? "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                  : "border-border bg-muted text-muted-foreground",
+            TONE_CLASS[structBadge.tone],
           ].join(" ")}
         >
           {structBadge.label}
@@ -183,8 +174,8 @@ export function StatusRail({
           className={[
             "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
             compliance.passed
-              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400",
+              ? "border-success/40 bg-success/10 text-success"
+              : "border-destructive/40 bg-destructive/10 text-destructive",
           ].join(" ")}
         >
           {compliance.passed ? (
@@ -196,7 +187,7 @@ export function StatusRail({
         </span>
 
         {restoredRevisionActive && (
-          <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning">
             Restored revision
           </span>
         )}
@@ -213,14 +204,14 @@ export function StatusRail({
       {expanded && (
         <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
           {restoredRevisionActive && (
-            <div className="flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-500/8 px-4 py-2.5 text-sm">
-              <span className="text-amber-700 dark:text-amber-400 font-medium">
+            <div className="flex items-center justify-between rounded-lg border border-warning/40 bg-warning/8 px-4 py-2.5 text-sm">
+              <span className="text-warning font-medium">
                 Viewing a restored revision — this is a preview only, not the current saved state.
               </span>
               <button
                 type="button"
                 onClick={onClearRestore}
-                className="ml-4 shrink-0 rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-500/15 transition-colors"
+                className="ml-4 shrink-0 rounded-md border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/15 transition-colors"
               >
                 Back to current
               </button>
@@ -276,24 +267,21 @@ export function StatusRail({
             className={[
               "flex flex-col gap-1.5 rounded-lg border p-3 text-sm",
               compliance.passed
-                ? "border-green-500/40 bg-green-500/8 text-green-700 dark:text-green-400"
-                : "border-red-500/40 bg-red-500/8 text-red-700 dark:text-red-400",
+                ? "border-success/40 bg-success/8 text-success"
+                : "border-destructive/40 bg-destructive/8 text-destructive",
             ].join(" ")}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold flex items-center gap-2">
                 {compliance.passed ? (
                   <>
-                    <Check
-                      className="h-4 w-4 text-green-600 dark:text-green-400"
-                      aria-hidden="true"
-                    />
+                    <Check className="h-4 w-4 text-success" aria-hidden="true" />
                     <span>Compliance passed</span>
                     <span className="sr-only">Compliance check passed</span>
                   </>
                 ) : (
                   <>
-                    <X className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+                    <X className="h-4 w-4 text-destructive" aria-hidden="true" />
                     <span>Compliance failed</span>
                     <span className="sr-only">Compliance check failed</span>
                   </>
@@ -307,7 +295,7 @@ export function StatusRail({
             </div>
 
             {compliance.violations.length > 0 && (
-              <ul className="list-inside list-disc space-y-0.5 text-red-600 dark:text-red-400">
+              <ul className="list-inside list-disc space-y-0.5 text-destructive">
                 {compliance.violations.map((v) => (
                   <li key={v}>{v}</li>
                 ))}
@@ -316,11 +304,11 @@ export function StatusRail({
 
             {compliance.warnings.length > 0 && (
               <details className="mt-1">
-                <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-400 font-medium">
+                <summary className="cursor-pointer text-xs text-warning font-medium">
                   {compliance.warnings.length} warning
                   {compliance.warnings.length !== 1 ? "s" : ""}
                 </summary>
-                <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-700 dark:text-amber-400 text-xs">
+                <ul className="mt-1 list-inside list-disc space-y-0.5 text-warning text-xs">
                   {compliance.warnings.map((w) => (
                     <li key={w}>{w}</li>
                   ))}

@@ -107,8 +107,8 @@ export function ProjectCardApprovalBadge({ status }: { status: CardStatus }) {
   const { t } = useLocale();
   if (status === "approved") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-400">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+      <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+        <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
         {t("dashboard.approved")}
       </span>
     );

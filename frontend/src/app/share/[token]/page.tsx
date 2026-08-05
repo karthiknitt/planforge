@@ -108,8 +108,8 @@ function ReadOnlyLayoutCard({
           className={[
             "rounded-md border px-2 py-0.5 text-xs font-semibold",
             layout.compliance.passed
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700",
+              ? "border-success/40 bg-success/10 text-success"
+              : "border-destructive/40 bg-destructive/10 text-destructive",
           ].join(" ")}
         >
           {layout.compliance.passed ? "Compliant" : "Non-compliant"}
@@ -118,7 +118,7 @@ function ReadOnlyLayoutCard({
 
       {/* Compliance violations */}
       {layout.compliance.violations.length > 0 && (
-        <ul className="list-inside list-disc space-y-0.5 text-sm text-red-600">
+        <ul className="list-inside list-disc space-y-0.5 text-sm text-destructive">
           {layout.compliance.violations.map((v) => (
             <li key={v}>{v}</li>
           ))}

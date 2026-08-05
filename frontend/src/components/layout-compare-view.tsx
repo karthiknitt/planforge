@@ -62,9 +62,9 @@ function getAvailableFloors(layout: LayoutData): FloorEntry[] {
 // ── Score colour helper ───────────────────────────────────────────────────────
 
 function scoreColour(score: number): string {
-  if (score >= 75) return "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/40";
-  if (score >= 55) return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40";
-  return "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/40";
+  if (score >= 75) return "bg-success/15 text-success border-success/40";
+  if (score >= 55) return "bg-warning/15 text-warning border-warning/40";
+  return "bg-destructive/15 text-destructive border-destructive/40";
 }
 
 // ── Total area calculation ────────────────────────────────────────────────────
@@ -158,8 +158,8 @@ function LayoutPanel({
           variant="outline"
           className={
             layout.compliance.passed
-              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400"
+              ? "border-success/40 bg-success/10 text-success"
+              : "border-destructive/40 bg-destructive/10 text-destructive"
           }
         >
           <div className="flex items-center gap-1.5">
@@ -180,10 +180,7 @@ function LayoutPanel({
           </div>
         </Badge>
         {layout.compliance.warnings.length > 0 && (
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-          >
+          <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning">
             <div className="flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
@@ -202,10 +199,7 @@ function LayoutPanel({
             <TabsTrigger key={f.key} value={f.key} className="flex-none px-3 py-1">
               {f.label}
               {f.plan.needs_mech_ventilation && (
-                <AlertTriangle
-                  className="ml-1 h-3 w-3 text-amber-600 shrink-0"
-                  aria-hidden="true"
-                />
+                <AlertTriangle className="ml-1 h-3 w-3 text-warning shrink-0" aria-hidden="true" />
               )}
               {f.plan.needs_mech_ventilation && (
                 <span className="sr-only">Mechanical ventilation required</span>
@@ -266,12 +260,12 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
     {
       metric: "Compliance",
       left: leftLayout.compliance.passed ? (
-        <span className="text-green-700 dark:text-green-400 font-medium flex items-center gap-1.5">
+        <span className="text-success font-medium flex items-center gap-1.5">
           <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>Pass</span>
         </span>
       ) : (
-        <span className="text-red-700 dark:text-red-400 font-medium flex items-center gap-1.5">
+        <span className="text-destructive font-medium flex items-center gap-1.5">
           <X className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
             {leftLayout.compliance.violations.length} violation
@@ -280,12 +274,12 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
         </span>
       ),
       right: rightLayout.compliance.passed ? (
-        <span className="text-green-700 dark:text-green-400 font-medium flex items-center gap-1.5">
+        <span className="text-success font-medium flex items-center gap-1.5">
           <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>Pass</span>
         </span>
       ) : (
-        <span className="text-red-700 dark:text-red-400 font-medium flex items-center gap-1.5">
+        <span className="text-destructive font-medium flex items-center gap-1.5">
           <X className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
             {rightLayout.compliance.violations.length} violation
@@ -300,7 +294,7 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
         leftLayout.compliance.warnings.length === 0 ? (
           <span className="text-muted-foreground">None</span>
         ) : (
-          <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+          <span className="text-warning flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{leftLayout.compliance.warnings.length}</span>
           </span>
@@ -309,7 +303,7 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
         rightLayout.compliance.warnings.length === 0 ? (
           <span className="text-muted-foreground">None</span>
         ) : (
-          <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+          <span className="text-warning flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{rightLayout.compliance.warnings.length}</span>
           </span>
