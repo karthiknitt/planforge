@@ -23,6 +23,12 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  ARCHETYPE_COUNT,
+  getFaqsForPage,
+  howItWorksSteps,
+  pricingTiers,
+} from "@/lib/marketing-content";
 
 /* ──────────────────────────────────────────────────────────────
    Feature cards
@@ -35,7 +41,7 @@ const features = [
   },
   {
     icon: LayoutGrid,
-    title: "3 Layout Variations",
+    title: `${ARCHETYPE_COUNT} Layout Variations`,
     desc: "Front, centre, rear, corner, and open-plan archetypes generated instantly from your plot dimensions.",
   },
   {
@@ -61,97 +67,22 @@ const features = [
 ];
 
 /* ──────────────────────────────────────────────────────────────
-   Steps
+   Steps, pricing tiers, and FAQ now come from the single-source
+   marketing content module (lib/marketing-content.ts) shared with
+   the pricing and how-it-works pages — see that file for the
+   canonical data. Landing shows all of howItWorksSteps rather than
+   an invented shorter subset.
 ────────────────────────────────────────────────────────────── */
-const steps = [
-  {
-    num: "01",
-    title: "Enter Plot Details",
-    desc: "Input dimensions, city, setbacks on all 4 sides, road-facing direction, BHK count, and optional rooms.",
-  },
-  {
-    num: "02",
-    title: "Get 3 Layouts",
-    desc: "Engine generates all archetypes simultaneously and checks each against NBC + city-specific rules.",
-  },
-  {
-    num: "03",
-    title: "Export & Build",
-    desc: "Download PDF, DXF for AutoCAD, or BOQ Excel — all from a single click.",
-  },
-];
-
-/* ──────────────────────────────────────────────────────────────
-   Pricing
-────────────────────────────────────────────────────────────── */
-const plans = [
-  {
-    name: "Free",
-    price: "₹0",
-    period: "/month",
-    tagline: "Try it out",
-    perks: ["3 projects", "All 3 layout archetypes", "PDF export"],
-    cta: "Get Started",
-    highlight: false,
-  },
-  {
-    name: "Basic",
-    price: "₹499",
-    period: "/month",
-    tagline: "For active builders",
-    perks: ["Unlimited projects", "PDF + DXF export", "NBC compliance checks"],
-    cta: "Subscribe",
-    highlight: true,
-  },
-  {
-    name: "Pro",
-    price: "₹999",
-    period: "/month",
-    tagline: "For professionals",
-    perks: ["Everything in Basic", "BOQ Excel export", "Priority support"],
-    cta: "Subscribe",
-    highlight: false,
-  },
-];
+const faqs = getFaqsForPage("landing");
 
 /* ──────────────────────────────────────────────────────────────
    Social proof stats
 ────────────────────────────────────────────────────────────── */
 const stats = [
-  { value: "3", label: "Layout archetypes" },
+  { value: String(ARCHETYPE_COUNT), label: "Layout archetypes" },
   { value: "6+", label: "Indian cities" },
   { value: "NBC", label: "2016 compliant" },
   { value: "Minutes", label: "Generation time" },
-];
-
-/* ──────────────────────────────────────────────────────────────
-   FAQ
-────────────────────────────────────────────────────────────── */
-const faqs = [
-  {
-    q: "Do I need AutoCAD or any software to use PlanForge?",
-    a: "No. PlanForge runs entirely in your browser — nothing to install. You can view, edit, and export floor plans from any laptop or phone on the construction site.",
-  },
-  {
-    q: "Which Indian cities are supported?",
-    a: "Bangalore, Chennai, Delhi, Hyderabad, Pune, and a generic Indian option that applies NBC 2016 national defaults. City-specific setbacks and FAR tables are baked in.",
-  },
-  {
-    q: "Is the free plan really free?",
-    a: "Yes — no credit card required. The free plan lets you create up to 3 projects with all 3 layout variations and PDF export. Upgrade to Basic (₹499/mo) for DXF export or Pro (₹999/mo) for BOQ Excel.",
-  },
-  {
-    q: "What compliance standard does PlanForge use?",
-    a: "PlanForge enforces NBC 2016 (National Building Code) for room areas, stair dimensions, and ventilation ratios. City-specific setbacks and FAR limits are applied on top.",
-  },
-  {
-    q: "Can I use PlanForge for L-shaped or irregular plots?",
-    a: "Currently PlanForge supports rectangular and L-shaped plots. Quadrilateral and fully irregular plot support is on the roadmap.",
-  },
-  {
-    q: "What file formats can I export?",
-    a: "PDF (1:100 scale, A3/A4 with title block) on all plans. DXF for AutoCAD with 9 named layers on Basic+. BOQ Excel with 11 quantity line items on Pro.",
-  },
 ];
 
 /* ──────────────────────────────────────────────────────────────
@@ -161,7 +92,7 @@ export const metadata: Metadata = {
   // The root layout applies `template: "%s | PlanForge"`, so do NOT repeat the suffix here.
   title: "G+1 Floor Plan Generator for Indian Builders — NBC 2016 Compliant",
   description:
-    "Generate 3 NBC 2016-compliant G+1 floor plan variations in minutes. Enter plot dimensions, get PDF, DXF & BOQ export. Free plan available. No AutoCAD needed.",
+    "Generate 5 NBC 2016-compliant G+1 floor plan variations in minutes. Enter plot dimensions, get PDF, DXF & BOQ export. Free plan available. No AutoCAD needed.",
   keywords: [
     "G+1 floor plan generator",
     "floor plan generator India",
@@ -175,7 +106,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PlanForge — Generate G+1 Floor Plans in Minutes",
     description:
-      "3 NBC-compliant layout variations from your plot dimensions. PDF, DXF & BOQ export. Free to start. Built for Indian civil engineers.",
+      "5 NBC-compliant layout variations from your plot dimensions. PDF, DXF & BOQ export. Free to start. Built for Indian civil engineers.",
   },
   alternates: { canonical: "/" },
 };
@@ -189,21 +120,22 @@ export default function LandingPage() {
     operatingSystem: "Web",
     url: "https://planforge.in",
     description:
-      "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 3 layout variations, PDF & DXF export.",
+      "G+1 residential floor plan generator for Indian builders. NBC 2016 compliant. 5 layout variations, PDF & DXF export.",
     screenshot: "https://planforge.in/opengraph-image",
     featureList: [
       "NBC 2016 compliance checks",
-      "3 layout archetypes (front, centre, rear, corner, open-plan)",
+      `${ARCHETYPE_COUNT} layout archetypes (front, centre, rear, corner, open-plan)`,
       "PDF export at 1:100 scale",
       "DXF export with 9 named layers",
       "BOQ Excel with 11 quantity items",
       "City-specific rules for Bangalore, Chennai, Delhi, Hyderabad, Pune",
     ],
-    offers: [
-      { "@type": "Offer", price: "0", priceCurrency: "INR", name: "Free" },
-      { "@type": "Offer", price: "499", priceCurrency: "INR", name: "Basic" },
-      { "@type": "Offer", price: "999", priceCurrency: "INR", name: "Pro" },
-    ],
+    offers: pricingTiers.map((tier) => ({
+      "@type": "Offer",
+      price: tier.price.replace(/[₹,]/g, "") || "0",
+      priceCurrency: "INR",
+      name: tier.name,
+    })),
     author: { "@type": "Organization", name: "PlanForge", url: "https://planforge.in" },
   };
 
@@ -251,8 +183,9 @@ export default function LandingPage() {
                 <span className="text-gradient-orange">in Minutes</span>
               </h1>
               <p className="animate-fade-up delay-300 text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-lg">
-                Input your plot dimensions, get 3 layout variations instantly — each NBC-compliant,
-                export-ready as PDF or DXF. Built for Indian civil engineers and small builders.
+                Input your plot dimensions, get {ARCHETYPE_COUNT} layout variations instantly — each
+                NBC-compliant, export-ready as PDF or DXF. Built for Indian civil engineers and
+                small builders.
               </p>
               <div className="animate-fade-up delay-400 flex flex-wrap gap-3 mb-6">
                 <Link href="/sign-up">
@@ -305,7 +238,7 @@ export default function LandingPage() {
                 />
               </div>
               <div className="absolute -top-3 -right-3 bg-primary text-primary-foreground text-xs font-bold px-3 py-1.5 rounded-full shadow-lg shadow-primary/30 animate-float">
-                3 layouts
+                {ARCHETYPE_COUNT} layouts
               </div>
               {/* Decorative glow behind the card */}
               <div className="absolute -inset-4 bg-primary/5 rounded-3xl blur-2xl -z-10" />
@@ -381,16 +314,16 @@ export default function LandingPage() {
               className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Three steps from plot to plan
+              {howItWorksSteps.length} steps from plot to plan
             </h2>
             <p className="text-muted-foreground text-lg">Simple. Fast. Built for builders.</p>
           </FadeIn>
-          <StaggerChildren className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {steps.map((step, i) => (
+          <StaggerChildren className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
+            {howItWorksSteps.map((step, i) => (
               <StaggerItem key={step.num}>
                 <div className="relative flex flex-col items-center text-center">
-                  {i < steps.length - 1 && (
-                    <div className="hidden md:block absolute top-6 left-[calc(50%+2.5rem)] w-[calc(100%-5rem)] h-px bg-gradient-to-r from-primary/40 to-primary/10" />
+                  {i < howItWorksSteps.length - 1 && (
+                    <div className="hidden lg:block absolute top-6 left-[calc(50%+2.5rem)] w-[calc(100%-5rem)] h-px bg-gradient-to-r from-primary/40 to-primary/10" />
                   )}
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-amber-600 text-primary-foreground font-extrabold text-lg mb-5 z-10 shadow-xl shadow-primary/25">
                     {step.num}
@@ -401,7 +334,7 @@ export default function LandingPage() {
                   >
                     {step.title}
                   </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
                 </div>
               </StaggerItem>
             ))}
@@ -437,9 +370,9 @@ export default function LandingPage() {
             </h2>
             <p className="text-muted-foreground text-lg">Start free. Upgrade when you need more.</p>
           </FadeIn>
-          <StaggerChildren className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {plans.map((plan) => (
-              <StaggerItem key={plan.name}>
+          <StaggerChildren className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {pricingTiers.map((plan) => (
+              <StaggerItem key={plan.id}>
                 <div
                   className={`relative flex flex-col rounded-2xl border p-7 h-full transition-all ${
                     plan.highlight
