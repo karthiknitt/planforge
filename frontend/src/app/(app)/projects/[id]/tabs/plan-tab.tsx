@@ -18,6 +18,7 @@ import { useState } from "react";
 
 import type { Annotation } from "@/components/floor-plan-svg";
 import { FloorPlanSVG } from "@/components/floor-plan-svg";
+import { FirstVisitHint } from "@/components/hints/first-visit-hint";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +36,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { canRedo, canUndo, type History as EditHistory } from "@/lib/edit-history";
 import type { FloorPlanData, RoomData } from "@/lib/layout-types";
 import type { Locale } from "@/lib/locale-context";
+import { useLocale } from "@/lib/locale-context";
 import { tierAtLeast } from "@/lib/plan";
 import { isPreliminaryStatus } from "@/lib/structural-status";
 
@@ -143,6 +145,7 @@ export function PlanTab({
   typeLabels: Record<string, string>;
   swatch: Record<string, string>;
 }) {
+  const { t } = useLocale();
   // Exiting edit mode with unsaved room edits silently discarded the edit —
   // only prompt when there's actually something to lose.
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
@@ -356,19 +359,26 @@ export function PlanTab({
             {showVastuZones ? "Hide Vastu Zones" : "Show Vastu Zones"}
           </button>
         )}
-        <button
-          type="button"
-          onClick={onToggleFurniture}
-          aria-pressed={showFurniture}
-          className={[
-            "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-            showFurniture
-              ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-              : "border-border bg-transparent text-muted-foreground hover:bg-muted",
-          ].join(" ")}
+        <FirstVisitHint
+          id="overlays"
+          title={t("hints.overlaysTitle")}
+          body={t("hints.overlaysBody")}
+          dismissLabel={t("hints.gotIt")}
         >
-          {showFurniture ? "Hide Furniture" : "Furnish"}
-        </button>
+          <button
+            type="button"
+            onClick={onToggleFurniture}
+            aria-pressed={showFurniture}
+            className={[
+              "flex w-fit items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+              showFurniture
+                ? "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400"
+                : "border-border bg-transparent text-muted-foreground hover:bg-muted",
+            ].join(" ")}
+          >
+            {showFurniture ? "Hide Furniture" : "Furnish"}
+          </button>
+        </FirstVisitHint>
         <button
           type="button"
           onClick={onToggleElectrical}

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { project as projectTable, teamMember, user as userTable } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import type { HintId } from "@/lib/hint-ids";
+import { parseDismissedHints } from "@/lib/hint-ids";
 import { fetchLayouts } from "./fetch-layouts";
 import { GeneratingFallback } from "./generating-fallback";
 import { LayoutViewer } from "./layout-viewer";
@@ -55,6 +57,7 @@ interface LayoutSectionProps {
   approvalStatus?: string | null;
   approvalNote?: string | null;
   approvalUpdatedAt?: Date | null;
+  dismissedHints: HintId[];
 }
 
 async function LayoutSection({
@@ -79,11 +82,13 @@ async function LayoutSection({
   approvalStatus,
   approvalNote,
   approvalUpdatedAt,
+  dismissedHints,
 }: LayoutSectionProps) {
   const generateData = await fetchLayouts(projectId, userId);
   return (
     <LayoutViewer
       generateData={generateData}
+      dismissedHints={dismissedHints}
       plotWidth={plotWidth}
       plotLength={plotLength}
       roadSide={roadSide}
@@ -142,7 +147,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           .limit(1)
       : Promise.resolve([]),
     db
-      .select({ planTier: userTable.planTier })
+      .select({ planTier: userTable.planTier, dismissedHints: userTable.dismissedHints })
       .from(userTable)
       .where(eq(userTable.id, session.user.id))
       .limit(1),
@@ -151,6 +156,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   if (!canAccess) notFound();
 
   const planTier = userRows[0]?.planTier ?? "free";
+  const dismissedHints = parseDismissedHints(userRows[0]?.dismissedHints);
 
   const lengthFt = metresToFeet(project.plotLength);
   const widthFt = metresToFeet(project.plotWidth);
@@ -269,6 +275,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           approvalStatus={project.approvalStatus}
           approvalNote={project.approvalNote}
           approvalUpdatedAt={project.approvalUpdatedAt}
+          dismissedHints={dismissedHints}
         />
       </Suspense>
     </div>

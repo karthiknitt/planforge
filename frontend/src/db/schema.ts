@@ -22,6 +22,13 @@ export const user = pgTable("user", {
   planExpiresAt: timestamp("plan_expires_at"),
   projectCredits: integer("project_credits").default(0).notNull(),
   hasSeenOnboarding: boolean("has_seen_onboarding").default(false).notNull(),
+  // JSON-encoded array of dismissed first-visit hint ids (see
+  // lib/hint-ids.ts) — one column for all per-feature hints (chat/voice,
+  // overlays, compare, version history) rather than a boolean column per
+  // hint, since the hint set is expected to grow. Same
+  // read-as-JSON/write-whole-array pattern as hasSeenOnboarding above, just
+  // multi-valued.
+  dismissedHints: text("dismissed_hints").default("[]").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

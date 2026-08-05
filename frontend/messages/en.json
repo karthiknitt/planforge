@@ -175,5 +175,16 @@
     "title": "Bill of Quantities",
     "totalCost": "Total Estimated Cost",
     "city": "Rates for City"
+  },
+  "hints": {
+    "gotIt": "Got it",
+    "chatTitle": "Talk to your plan",
+    "chatBody": "Ask for changes in plain English — \"make the master bedroom larger\" — and see them applied to the layout.",
+    "overlaysTitle": "See more than walls",
+    "overlaysBody": "Toggle furniture, electrical, and plumbing overlays on top of the floor plan.",
+    "compareTitle": "Compare layouts side by side",
+    "compareBody": "Line up two generated layouts to see how they differ before you choose one.",
+    "historyTitle": "Every version is saved",
+    "historyBody": "Save a snapshot before a big edit, or roll back to an earlier version any time."
   }
 }
