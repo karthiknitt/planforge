@@ -11,7 +11,7 @@
  */
 import type { LucideIcon } from "lucide-react";
 import { Download, Eye, Settings2, Zap } from "lucide-react";
-import { TIER_ORDER } from "@/lib/plan";
+import type { TIER_ORDER } from "@/lib/plan";
 
 /* ──────────────────────────────────────────────────────────────
    Archetype count — the one fact both pricing tiers and the

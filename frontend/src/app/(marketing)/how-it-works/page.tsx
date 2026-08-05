@@ -1,13 +1,4 @@
-import {
-  ArrowRight,
-  CheckCircle,
-  Download,
-  Eye,
-  FileSpreadsheet,
-  FileText,
-  Settings2,
-  Zap,
-} from "lucide-react";
+import { ArrowRight, CheckCircle, FileSpreadsheet, FileText, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
@@ -15,9 +6,10 @@ import { FadeIn } from "@/components/motion/fade-in";
 import { SlideIn } from "@/components/motion/slide-in";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ARCHETYPE_COUNT, howItWorksSteps } from "@/lib/marketing-content";
 
 export const metadata: Metadata = {
-  title: "How PlanForge Works — G+1 Floor Plan Generation in 4 Steps",
+  title: `How PlanForge Works — G+1 Floor Plan Generation in ${howItWorksSteps.length} Steps`,
   description:
     "Enter your plot dimensions, road-facing direction, and BHK count — PlanForge generates 5 NBC 2016-compliant G+1 layout variations in under 1 second. Export as PDF, DXF, or BOQ Excel.",
   openGraph: {
@@ -29,235 +21,171 @@ export const metadata: Metadata = {
 };
 
 /* ──────────────────────────────────────────────────────────────
-   Step sections (alternating layout)
+   Step visuals (page-specific presentational JSX, keyed by step
+   num) — text content (title/subtitle/text/points) comes from the
+   shared howItWorksSteps in lib/marketing-content.ts.
 ────────────────────────────────────────────────────────────── */
-const steps = [
-  {
-    num: "01",
-    icon: Settings2,
-    title: "Enter Your Plot",
-    subtitle: "All the details that drive the layout engine",
-    points: [
-      "Plot length × width in metres",
-      "Setbacks on all 4 sides (N/S/E/W)",
-      "Road-facing direction and north orientation",
-      "City (Bangalore, Chennai, Delhi, Hyderabad, Pune, or Other)",
-      "Road width for FAR calculation",
-      "BHK count (1, 2, 3, or 4)",
-      "Optional rooms: pooja room, study, balcony",
-    ],
-    visual: (
-      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-6 space-y-4">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-          Plot Details
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            ["Length", "9.0 m"],
-            ["Width", "12.0 m"],
-            ["City", "Bangalore"],
-            ["BHK", "3 BHK"],
-            ["Front setback", "1.5 m"],
-            ["Rear setback", "1.5 m"],
-            ["Road width", "9.0 m"],
-            ["Optional", "Pooja, Study"],
-          ].map(([label, val]) => (
-            <div key={label} className="flex flex-col">
-              <span className="text-xs text-muted-foreground">{label}</span>
-              <span className="text-sm font-semibold text-foreground">{val}</span>
-            </div>
-          ))}
-        </div>
-        <div className="pt-2">
-          <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm">
-            Generate Layouts
-            <Zap className="ml-2 h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-    ),
-  },
-  {
-    num: "02",
-    icon: Zap,
-    title: "Instant Layout Generation",
-    subtitle: "5 archetypes, each NBC-checked in under a second",
-    points: [
-      "Layout A — Front staircase (road-facing stair)",
-      "Layout B — Centre staircase (internal core)",
-      "Layout C — Rear staircase (maximises front depth)",
-      "Layout D — Corner entry (side-access plots)",
-      "Layout E — Open-plan kitchen/dining",
-      "Each layout checked against NBC 2016 room-area rules",
-      "City-specific setbacks and FAR validated per Bangalore/Chennai/Delhi rules",
-      "Compliance warnings shown per layout (not blocking — informational)",
-    ],
-    visual: (
-      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-          Generated Layouts
-        </p>
+const stepVisuals: Record<string, React.ReactNode> = {
+  "01": (
+    <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-6 space-y-4">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+        Plot Details
+      </p>
+      <div className="grid grid-cols-2 gap-3">
         {[
-          "A — Front Staircase",
-          "B — Centre Staircase",
-          "C — Rear Staircase",
-          "D — Corner Entry",
-          "E — Open Plan",
-        ].map((name) => (
-          <div
-            key={name}
-            className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
-          >
-            <span className="text-sm font-medium text-foreground">{name}</span>
-            <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 text-xs">
-              NBC ✓
-            </Badge>
+          ["Length", "9.0 m"],
+          ["Width", "12.0 m"],
+          ["City", "Bangalore"],
+          ["BHK", "3 BHK"],
+          ["Front setback", "1.5 m"],
+          ["Rear setback", "1.5 m"],
+          ["Road width", "9.0 m"],
+          ["Optional", "Pooja, Study"],
+        ].map(([label, val]) => (
+          <div key={label} className="flex flex-col">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-sm font-semibold text-foreground">{val}</span>
           </div>
         ))}
       </div>
-    ),
-  },
-  {
-    num: "03",
-    icon: Eye,
-    title: "Review in Browser",
-    subtitle: "Interactive CAD-grade SVG preview",
-    points: [
-      "Colour-coded rooms for instant identification",
-      "Double-line walls — 230 mm external, 115 mm internal",
-      "Door swing arcs and window frame symbols",
-      "Dimension lines with mm measurements",
-      "Column markers at structural intersections",
-      "North arrow and title block on every drawing",
-      "Toggle between Ground Floor and First Floor",
-      "Room labels with area in sqm",
-    ],
-    visual: (
-      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-4">
-        <div className="flex gap-2 mb-3">
-          <button
-            type="button"
-            className="px-3 py-1 rounded bg-primary text-primary-foreground text-xs font-semibold"
-          >
-            Ground Floor
-          </button>
-          <button
-            type="button"
-            className="px-3 py-1 rounded bg-muted text-muted-foreground text-xs font-semibold"
-          >
-            First Floor
-          </button>
-        </div>
-        {/* Mini floor plan — dark-mode friendly */}
-        <svg
-          viewBox="0 0 200 160"
-          className="w-full"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-label="Floor plan preview"
-          role="img"
+      <div className="pt-2">
+        <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm">
+          Generate Layouts
+          <Zap className="ml-2 h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  ),
+  "02": (
+    <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+        Generated Layouts
+      </p>
+      {[
+        "A — Front Staircase",
+        "B — Centre Staircase",
+        "C — Rear Staircase",
+        "D — Corner Entry",
+        "E — Open Plan",
+      ].map((name) => (
+        <div
+          key={name}
+          className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
         >
-          <rect width="200" height="160" fill="#0d1424" rx="4" />
-          <rect
-            x="10"
-            y="10"
-            width="180"
-            height="140"
-            fill="none"
-            stroke="#60a5fa"
-            strokeWidth="2.5"
-          />
-          <line x1="100" y1="10" x2="100" y2="100" stroke="#60a5fa" strokeWidth="1.2" />
-          <line x1="10" y1="100" x2="190" y2="100" stroke="#60a5fa" strokeWidth="1.2" />
-          <rect x="12" y="12" width="86" height="86" fill="#1e40af" fillOpacity="0.3" />
-          <rect x="102" y="12" width="86" height="86" fill="#166534" fillOpacity="0.3" />
-          <rect x="12" y="102" width="86" height="46" fill="#9f1239" fillOpacity="0.3" />
-          <rect x="102" y="102" width="86" height="46" fill="#4c1d95" fillOpacity="0.3" />
-          <text x="55" y="58" textAnchor="middle" fontSize="7" fill="#93c5fd" fontWeight="600">
-            Living
-          </text>
-          <text x="145" y="58" textAnchor="middle" fontSize="7" fill="#86efac" fontWeight="600">
-            Bedroom 1
-          </text>
-          <text x="55" y="126" textAnchor="middle" fontSize="7" fill="#fda4af" fontWeight="600">
-            Kitchen
-          </text>
-          <text x="145" y="126" textAnchor="middle" fontSize="7" fill="#c4b5fd" fontWeight="600">
-            Bedroom 2
-          </text>
-          <rect x="85" y="10" width="30" height="2.5" fill="#60a5fa" />
-          <polygon
-            points="190,14 193,20 190,18 187,20"
-            fill="#f97316"
-            transform="translate(-5, 0)"
-          />
-          <text x="185" y="28" fontSize="6" fill="#f97316" fontWeight="700">
-            N
-          </text>
-        </svg>
+          <span className="text-sm font-medium text-foreground">{name}</span>
+          <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 text-xs">
+            NBC ✓
+          </Badge>
+        </div>
+      ))}
+    </div>
+  ),
+  "03": (
+    <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-4">
+      <div className="flex gap-2 mb-3">
+        <button
+          type="button"
+          className="px-3 py-1 rounded bg-primary text-primary-foreground text-xs font-semibold"
+        >
+          Ground Floor
+        </button>
+        <button
+          type="button"
+          className="px-3 py-1 rounded bg-muted text-muted-foreground text-xs font-semibold"
+        >
+          First Floor
+        </button>
       </div>
-    ),
-  },
-  {
-    num: "04",
-    icon: Download,
-    title: "Export & Build",
-    subtitle: "Everything you need to move from screen to site",
-    points: [
-      "PDF — 1:100 scale, A3 or A4, with title block and dimensions",
-      "DXF — AutoCAD-ready with 9 named layers (A-WALL-BRICK, A-DOOR, S-COLUMN, DIM-LINE, …)",
-      "BOQ Excel — 11 quantity line items: masonry, concrete, steel, plaster, flooring, excavation",
-      "Download all from the project view — no extra steps",
-      "Works on Free plan (PDF only) — DXF and BOQ with Basic/Pro",
-    ],
-    visual: (
-      <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-          Export Options
-        </p>
-        {[
-          {
-            icon: FileText,
-            label: "PDF — 1:100 scale",
-            badge: "Free",
-            color: "bg-muted text-muted-foreground",
-          },
-          {
-            icon: FileText,
-            label: "DXF — 9 named layers",
-            badge: "Basic+",
-            color: "bg-primary/10 text-primary/70 border border-primary/20",
-          },
-          {
-            icon: FileSpreadsheet,
-            label: "BOQ Excel — 11 items",
-            badge: "Pro",
-            color: "bg-primary/15 text-primary border border-primary/25",
-          },
-        ].map(({ icon: Icon, label, badge, color }) => (
-          <div
-            key={label}
-            className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
-          >
-            <div className="flex items-center gap-2">
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">{label}</span>
-            </div>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>
-              {badge}
-            </span>
+      {/* Mini floor plan — dark-mode friendly */}
+      <svg
+        viewBox="0 0 200 160"
+        className="w-full"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-label="Floor plan preview"
+        role="img"
+      >
+        <rect width="200" height="160" fill="#0d1424" rx="4" />
+        <rect
+          x="10"
+          y="10"
+          width="180"
+          height="140"
+          fill="none"
+          stroke="#60a5fa"
+          strokeWidth="2.5"
+        />
+        <line x1="100" y1="10" x2="100" y2="100" stroke="#60a5fa" strokeWidth="1.2" />
+        <line x1="10" y1="100" x2="190" y2="100" stroke="#60a5fa" strokeWidth="1.2" />
+        <rect x="12" y="12" width="86" height="86" fill="#1e40af" fillOpacity="0.3" />
+        <rect x="102" y="12" width="86" height="86" fill="#166534" fillOpacity="0.3" />
+        <rect x="12" y="102" width="86" height="46" fill="#9f1239" fillOpacity="0.3" />
+        <rect x="102" y="102" width="86" height="46" fill="#4c1d95" fillOpacity="0.3" />
+        <text x="55" y="58" textAnchor="middle" fontSize="7" fill="#93c5fd" fontWeight="600">
+          Living
+        </text>
+        <text x="145" y="58" textAnchor="middle" fontSize="7" fill="#86efac" fontWeight="600">
+          Bedroom 1
+        </text>
+        <text x="55" y="126" textAnchor="middle" fontSize="7" fill="#fda4af" fontWeight="600">
+          Kitchen
+        </text>
+        <text x="145" y="126" textAnchor="middle" fontSize="7" fill="#c4b5fd" fontWeight="600">
+          Bedroom 2
+        </text>
+        <rect x="85" y="10" width="30" height="2.5" fill="#60a5fa" />
+        <polygon points="190,14 193,20 190,18 187,20" fill="#f97316" transform="translate(-5, 0)" />
+        <text x="185" y="28" fontSize="6" fill="#f97316" fontWeight="700">
+          N
+        </text>
+      </svg>
+    </div>
+  ),
+  "04": (
+    <div className="rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-5 space-y-3">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+        Export Options
+      </p>
+      {[
+        {
+          icon: FileText,
+          label: "PDF — 1:100 scale",
+          badge: "Free",
+          color: "bg-muted text-muted-foreground",
+        },
+        {
+          icon: FileText,
+          label: "DXF — 9 named layers",
+          badge: "Basic+",
+          color: "bg-primary/10 text-primary/70 border border-primary/20",
+        },
+        {
+          icon: FileSpreadsheet,
+          label: "BOQ Excel — 11 items",
+          badge: "Pro",
+          color: "bg-primary/15 text-primary border border-primary/25",
+        },
+      ].map(({ icon: Icon, label, badge, color }) => (
+        <div
+          key={label}
+          className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
+        >
+          <div className="flex items-center gap-2">
+            <Icon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">{label}</span>
           </div>
-        ))}
-      </div>
-    ),
-  },
-];
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{badge}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
 
 /* ──────────────────────────────────────────────────────────────
    Technical specs table
 ────────────────────────────────────────────────────────────── */
 const specs = [
   ["Plot type", "Rectangular"],
-  ["Layouts per run", "5 variations (A–E)"],
+  ["Layouts per run", `${ARCHETYPE_COUNT} variations (A–E)`],
   ["BHK range", "1–4 BHK"],
   ["Compliance", "NBC 2016 + city-specific rules"],
   ["PDF scale", "1:100"],
@@ -271,30 +199,12 @@ const howToJsonLd = {
   "@context": "https://schema.org",
   "@type": "HowTo",
   name: "How to Generate an NBC-Compliant G+1 Floor Plan with PlanForge",
-  description:
-    "Generate 5 NBC 2016-compliant G+1 residential floor plan variations from your plot dimensions in under a second.",
-  step: [
-    {
-      "@type": "HowToStep",
-      name: "Enter Your Plot Details",
-      text: "Input plot dimensions, city, setbacks on all 4 sides, road-facing direction, BHK count (1–4), and optional rooms.",
-    },
-    {
-      "@type": "HowToStep",
-      name: "Generate 5 Layout Variations",
-      text: "PlanForge generates all 5 archetypes simultaneously and checks each against NBC 2016 and city-specific rules.",
-    },
-    {
-      "@type": "HowToStep",
-      name: "Review in Browser",
-      text: "Inspect colour-coded rooms, double-line walls, door arcs, dimension lines, and north arrow in the interactive SVG preview.",
-    },
-    {
-      "@type": "HowToStep",
-      name: "Export PDF, DXF, or BOQ Excel",
-      text: "Download a 1:100 scale PDF, AutoCAD DXF with 9 named layers, or BOQ Excel with 11 quantity line items.",
-    },
-  ],
+  description: `Generate ${ARCHETYPE_COUNT} NBC 2016-compliant G+1 residential floor plan variations from your plot dimensions in under a second.`,
+  step: howItWorksSteps.map((step) => ({
+    "@type": "HowToStep",
+    name: step.title,
+    text: step.text,
+  })),
   tool: [{ "@type": "HowToTool", name: "PlanForge web app — no installation required" }],
   totalTime: "PT1M",
 };
@@ -313,7 +223,7 @@ export default function HowItWorksPage() {
             className="text-4xl lg:text-5xl font-black text-foreground mb-4"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            From Plot to Plan in 4 Steps
+            From Plot to Plan in {howItWorksSteps.length} Steps
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto">
             PlanForge takes your site data and delivers NBC-compliant floor plans ready for
@@ -326,7 +236,7 @@ export default function HowItWorksPage() {
       <section className="py-20 lg:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="space-y-28 lg:space-y-32">
-            {steps.map((step, i) => {
+            {howItWorksSteps.map((step, i) => {
               const Icon = step.icon;
               const reverse = i % 2 !== 0;
               return (
@@ -370,7 +280,7 @@ export default function HowItWorksPage() {
                     delay={0.1}
                     className={reverse ? "lg:col-start-1" : ""}
                   >
-                    {step.visual}
+                    {stepVisuals[step.num]}
                   </SlideIn>
                 </div>
               );
