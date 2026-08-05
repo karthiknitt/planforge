@@ -215,14 +215,9 @@ export default function LandingPage() {
             {/* Right: floor plan preview */}
             <div className="relative">
               <div className="rounded-2xl border border-border/60 shadow-2xl shadow-black/50 overflow-hidden bg-card">
-                <div className="px-4 pt-3 pb-2 border-b border-border/50 bg-muted/30 flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-                  </div>
+                <div className="px-4 pt-3 pb-2 border-b border-border/50 bg-muted/30">
                   <span
-                    className="text-xs font-medium text-muted-foreground ml-1"
+                    className="text-xs font-medium text-muted-foreground"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
                     Layout A · Front Staircase · 2BHK · Bangalore
