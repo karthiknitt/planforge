@@ -5,10 +5,11 @@ import Script from "next/script";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
+import type { CheckoutPlan } from "@/lib/marketing-content";
 import { showErrorToast } from "@/lib/toast";
 
 interface PricingCheckoutButtonProps {
-  plan: "basic" | "pro" | "firm";
+  plan: CheckoutPlan;
   label: string;
   highlight?: boolean;
 }
