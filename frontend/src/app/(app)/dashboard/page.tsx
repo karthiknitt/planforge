@@ -149,12 +149,7 @@ export default async function DashboardPage() {
         <div className="animate-fade-up delay-300 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <h2
-              className="text-base font-bold text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Team Projects
-            </h2>
+            <h2 className="text-base font-bold text-foreground font-display">Team Projects</h2>
             <span className="text-xs text-muted-foreground">({teamProjects.length})</span>
           </div>
           <DashboardProjectGrid projects={teamProjects} hasLayoutsMap={{}} variant="team" />

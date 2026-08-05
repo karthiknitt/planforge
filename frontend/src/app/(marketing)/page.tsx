@@ -172,10 +172,7 @@ export default function LandingPage() {
                   NBC 2016 Compliant · AI-Powered
                 </Badge>
               </div>
-              <h1
-                className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-foreground leading-[1.05] mb-6"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-foreground leading-[1.05] mb-6 font-display">
                 Generate G+1
                 <br />
                 Floor Plans
@@ -245,10 +242,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 border border-border/50 rounded-2xl bg-card/50 backdrop-blur-sm p-6 lg:p-8">
               {stats.map(({ value, label }) => (
                 <div key={label} className="text-center">
-                  <div
-                    className="text-3xl lg:text-4xl font-black text-primary mb-1"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
+                  <div className="text-3xl lg:text-4xl font-black text-primary mb-1 font-display">
                     {value}
                   </div>
                   <div className="text-sm text-muted-foreground">{label}</div>
@@ -275,10 +269,7 @@ export default function LandingPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20 mb-5 group-hover:bg-primary/15 group-hover:ring-primary/30 transition-colors">
                   <Icon className="h-5 w-5 text-primary" />
                 </div>
-                <h3
-                  className="text-base font-semibold text-foreground mb-2"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
+                <h3 className="text-base font-semibold text-foreground mb-2 font-display">
                   {title}
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
@@ -307,10 +298,7 @@ export default function LandingPage() {
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-amber-600 text-primary-foreground font-extrabold text-lg mb-5 z-10 shadow-xl shadow-primary/25">
                   {step.num}
                 </div>
-                <h3
-                  className="text-xl font-bold text-foreground mb-3"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
+                <h3 className="text-xl font-bold text-foreground mb-3 font-display">
                   {step.title}
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
@@ -362,10 +350,7 @@ export default function LandingPage() {
                   </p>
                   <p className="text-sm text-muted-foreground mb-4">{plan.tagline}</p>
                   <div className="flex items-baseline gap-1 mb-6">
-                    <span
-                      className="text-4xl font-black text-foreground"
-                      style={{ fontFamily: "var(--font-display)" }}
-                    >
+                    <span className="text-4xl font-black text-foreground font-display">
                       {plan.price}
                     </span>
                     <span className="text-muted-foreground text-sm">{plan.period}</span>

@@ -75,10 +75,7 @@ export function MobileNav() {
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 h-14 border-b border-border/60">
-          <span
-            className="text-base font-black tracking-tight"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <span className="text-base font-black tracking-tight font-display">
             Plan<span className="text-primary">Forge</span>
           </span>
           <button

@@ -66,10 +66,7 @@ export default async function GalleryPage() {
           <Badge className="mb-5 bg-primary/10 text-primary border-primary/30 hover:bg-primary/15 px-4 py-1.5">
             Template Gallery
           </Badge>
-          <h1
-            className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-tight mb-5"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-tight mb-5 font-display">
             Browse Floor Plans
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
@@ -121,10 +118,7 @@ export default async function GalleryPage() {
       {/* ── BOTTOM CTA ── */}
       <section className="py-16 lg:py-20 bg-muted/20 border-t border-border/50">
         <FadeIn className="mx-auto max-w-3xl px-4 text-center">
-          <h2
-            className="text-2xl md:text-3xl font-black text-foreground mb-3"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h2 className="text-2xl md:text-3xl font-black text-foreground mb-3 font-display">
             Don&apos;t see your plot size?
           </h2>
           <p className="text-muted-foreground text-base mb-7">

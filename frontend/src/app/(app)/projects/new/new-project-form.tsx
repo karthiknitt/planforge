@@ -117,10 +117,7 @@ function PlotCompass({ roadSide }: { roadSide: string }) {
 function StepHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span
-        className="text-sm font-bold text-foreground tracking-wide uppercase"
-        style={{ fontFamily: "var(--font-display)" }}
-      >
+      <span className="text-sm font-bold text-foreground tracking-wide uppercase font-display">
         {title}
       </span>
       <Separator className="flex-1 bg-border/40" />
@@ -759,10 +756,7 @@ export default function NewProjectPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 py-10 sm:py-14">
       <div className="mb-8">
-        <h1
-          className="text-2xl sm:text-3xl font-black text-foreground mb-2"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
+        <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2 font-display">
           {t("project.newProject")}
         </h1>
         <p className="text-sm text-muted-foreground">{t("project.newProjectHint")}</p>

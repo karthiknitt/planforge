@@ -37,12 +37,7 @@ export default async function TeamPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/25">
               <Users className="h-5 w-5 text-primary" />
             </div>
-            <h1
-              className="text-2xl font-black text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Your Firm
-            </h1>
+            <h1 className="text-2xl font-black text-foreground font-display">Your Firm</h1>
           </div>
           <p className="text-sm text-muted-foreground mb-6">
             Create a team to share projects across your engineering firm. Requires a{" "}
@@ -87,12 +82,7 @@ export default async function TeamPage() {
             <Users className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1
-              className="text-2xl font-black text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              {currentTeam.name}
-            </h1>
+            <h1 className="text-2xl font-black text-foreground font-display">{currentTeam.name}</h1>
             <p className="text-xs text-muted-foreground capitalize">
               {currentTeam.planTier} plan
               {currentTeam.planExpiresAt &&

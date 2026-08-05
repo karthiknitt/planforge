@@ -67,12 +67,7 @@ export default async function AccountPage() {
             {initials}
           </div>
           <div>
-            <h1
-              className="text-2xl font-black text-foreground"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Account
-            </h1>
+            <h1 className="text-2xl font-black text-foreground font-display">Account</h1>
             <p className="text-sm text-muted-foreground">Manage your profile and subscription.</p>
           </div>
         </div>

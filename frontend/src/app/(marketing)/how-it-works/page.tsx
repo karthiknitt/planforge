@@ -219,10 +219,7 @@ export default function HowItWorksPage() {
           <p className="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-4">
             How It Works
           </p>
-          <h1
-            className="text-4xl lg:text-5xl font-black text-foreground mb-4"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h1 className="text-4xl lg:text-5xl font-black text-foreground mb-4 font-display">
             From Plot to Plan in {howItWorksSteps.length} Steps
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto">
@@ -257,10 +254,7 @@ export default function HowItWorksPage() {
                         <Icon className="h-5 w-5 text-primary/70" />
                       </div>
                     </div>
-                    <h2
-                      className="text-2xl font-black text-foreground mb-2"
-                      style={{ fontFamily: "var(--font-display)" }}
-                    >
+                    <h2 className="text-2xl font-black text-foreground mb-2 font-display">
                       {step.title}
                     </h2>
                     <p className="text-muted-foreground mb-6">{step.subtitle}</p>
@@ -293,10 +287,7 @@ export default function HowItWorksPage() {
       <section className="py-20 bg-card/20 border-y border-border/30">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <h2
-              className="text-2xl font-extrabold text-foreground mb-8 text-center"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
+            <h2 className="text-2xl font-extrabold text-foreground mb-8 text-center font-display">
               Technical Specifications
             </h2>
           </FadeIn>
@@ -328,10 +319,7 @@ export default function HowItWorksPage() {
       <section className="py-20 lg:py-24 relative overflow-hidden bg-gradient-to-br from-primary/[0.06] via-card/20 to-background border-t border-border/30">
         <div className="absolute inset-0 bg-blueprint-grid opacity-40" />
         <FadeIn className="relative mx-auto max-w-3xl px-4 text-center">
-          <h2
-            className="text-3xl font-extrabold text-foreground mb-3"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h2 className="text-3xl font-extrabold text-foreground mb-3 font-display">
             Start planning your first project
           </h2>
           <p className="text-muted-foreground mb-8">

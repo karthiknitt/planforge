@@ -22,10 +22,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:shadow-orange-500/50 group-hover:scale-105">
                 <PlanForgeIcon className="h-5 w-5 text-white" />
               </div>
-              <span
-                className="text-2xl font-black tracking-tight"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
+              <span className="text-2xl font-black tracking-tight font-display">
                 Plan<span className="text-primary">Forge</span>
               </span>
             </Link>
@@ -82,7 +79,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-md shadow-orange-500/20 transition-all group-hover:scale-105">
                   <PlanForgeIcon className="h-4 w-4 text-white" />
                 </div>
-                <span className="text-xl font-black" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="text-xl font-black font-display">
                   Plan<span className="text-primary">Forge</span>
                 </span>
               </Link>

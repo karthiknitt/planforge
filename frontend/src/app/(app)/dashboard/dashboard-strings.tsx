@@ -64,10 +64,7 @@ export function DashboardEmptyState() {
   const { t } = useLocale();
   return (
     <>
-      <h3
-        className="text-lg font-bold text-foreground mb-2"
-        style={{ fontFamily: "var(--font-display)" }}
-      >
+      <h3 className="text-lg font-bold text-foreground mb-2 font-display">
         {t("dashboard.noProjects")}
       </h3>
       <p className="text-sm text-muted-foreground mb-8 max-w-xs">{t("dashboard.noProjectsHint")}</p>
@@ -87,10 +84,7 @@ export function DashboardEmptyState() {
 export function DashboardTitle({ firstName }: { firstName: string }) {
   const { t } = useLocale();
   return (
-    <h1
-      className="text-2xl sm:text-3xl font-black text-foreground"
-      style={{ fontFamily: "var(--font-display)" }}
-    >
+    <h1 className="text-2xl sm:text-3xl font-black text-foreground font-display">
       {t("dashboard.welcomeBack")}, <span className="text-gradient-orange">{firstName}</span>
     </h1>
   );

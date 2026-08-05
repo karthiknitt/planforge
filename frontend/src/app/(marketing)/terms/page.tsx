@@ -12,10 +12,7 @@ export default function TermsPage() {
   return (
     <div className="bg-background py-16 lg:py-24">
       <FadeIn className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-        <h1
-          className="text-3xl md:text-4xl font-black text-foreground mb-2"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
+        <h1 className="text-3xl md:text-4xl font-black text-foreground mb-2 font-display">
           Terms of Service
         </h1>
         <p className="text-sm text-muted-foreground mb-10">Last updated: March 2026</p>

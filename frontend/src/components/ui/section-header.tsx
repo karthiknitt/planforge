@@ -23,10 +23,7 @@ export function SectionHeader({
           {badge}
         </Badge>
       )}
-      <h2
-        className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-foreground mb-4"
-        style={{ fontFamily: "var(--font-display)" }}
-      >
+      <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-foreground mb-4 font-display">
         {title}
       </h2>
       {subtitle && (

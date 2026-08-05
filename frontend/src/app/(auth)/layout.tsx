@@ -50,10 +50,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/25 transition-all group-hover:scale-105">
               <PlanForgeIcon className="h-5 w-5 text-white" />
             </div>
-            <span
-              className="text-2xl font-black tracking-tight"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
+            <span className="text-2xl font-black tracking-tight font-display">
               Plan<span className="text-primary">Forge</span>
             </span>
           </Link>
@@ -63,10 +60,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-4">
               For Indian Builders
             </p>
-            <h2
-              className="text-3xl xl:text-[2.25rem] font-black text-foreground leading-[1.12] mb-5"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
+            <h2 className="text-3xl xl:text-[2.25rem] font-black text-foreground leading-[1.12] mb-5 font-display">
               Plot dimensions in.
               <br />
               Floor plans <span className="text-primary">out.</span>

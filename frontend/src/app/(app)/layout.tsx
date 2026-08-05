@@ -49,10 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/20 transition-all group-hover:shadow-orange-500/40 group-hover:scale-105">
                 <PlanForgeIcon className="h-3.5 w-3.5 md:h-4 md:w-4 text-white" />
               </div>
-              <span
-                className="text-base md:text-lg font-black tracking-tight"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
+              <span className="text-base md:text-lg font-black tracking-tight font-display">
                 Plan<span className="text-primary">Forge</span>
               </span>
             </Link>

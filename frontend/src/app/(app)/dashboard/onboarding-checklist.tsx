@@ -60,10 +60,7 @@ export function OnboardingChecklist({
     <div className="animate-fade-up rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5 sm:p-6 flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2
-            className="text-lg font-black text-foreground"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h2 className="text-lg font-black text-foreground font-display">
             {t("dashboard.onboardingTitle")}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
