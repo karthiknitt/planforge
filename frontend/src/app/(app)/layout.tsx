@@ -5,8 +5,9 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { PlanForgeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
-import type { Locale, Messages } from "@/lib/locale-context";
-import { isLocale, LocaleProvider } from "@/lib/locale-context";
+import { isLocale, type Locale } from "@/lib/locale";
+import type { Messages } from "@/lib/locale-context";
+import { LocaleProvider } from "@/lib/locale-context";
 import { MobileNav } from "./mobile-nav";
 import { UserMenu } from "./user-menu";
 
