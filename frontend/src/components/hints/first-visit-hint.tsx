@@ -17,6 +17,7 @@ export function FirstVisitHint({
   body,
   dismissLabel,
   side = "bottom",
+  waitFor,
   children,
 }: {
   id: HintId;
@@ -24,6 +25,10 @@ export function FirstVisitHint({
   body: string;
   dismissLabel: string;
   side?: "top" | "bottom" | "left" | "right";
+  // Another hint's id this one queues behind — stays closed until that one
+  // is dismissed, so two first-visit popovers never pop open at once and
+  // overlap on screen.
+  waitFor?: HintId;
   children: React.ReactNode;
 }) {
   const { isDismissed, dismiss } = useHints();
@@ -32,8 +37,10 @@ export function FirstVisitHint({
     return children;
   }
 
+  const open = waitFor ? isDismissed(waitFor) : true;
+
   return (
-    <Popover open={true}>
+    <Popover open={open}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent side={side} className="w-64">
         <p className="font-medium text-sm">{title}</p>

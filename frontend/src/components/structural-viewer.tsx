@@ -168,7 +168,10 @@ export function StructuralViewer({
         );
       }
       setResult((await res.json()) as StructuralResponse);
-      showToast("success", "Structural design complete");
+      showToast(
+        "success",
+        "Structural design complete — the drawing set is ready to generate & download from the Export menu"
+      );
       await onDesignComplete();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Structural design failed";
@@ -193,6 +196,14 @@ export function StructuralViewer({
   // — surface its changelog summary without re-running, per spec.
   const persistedDesign = !result ? status?.design : null;
 
+  // "draft" means no approved revision exists yet for this geometry (see
+  // structural_store.layout_status). Surface this the moment the tab opens
+  // rather than waiting for the user to click "Run" and hit the same 409
+  // the backend would return anyway.
+  const notApprovedYet =
+    gateError?.code === "not_approved" ||
+    (!gateError && !result && !persistedDesign && status?.status === "draft");
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -210,7 +221,11 @@ export function StructuralViewer({
             className="w-36"
           />
         </div>
-        <Button onClick={() => runDesign()} disabled={loading}>
+        <Button
+          onClick={() => runDesign()}
+          disabled={loading || notApprovedYet}
+          title={notApprovedYet ? "Approve the architectural plan first" : undefined}
+        >
           {loading ? "Designing… (can take up to a minute)" : "Run structural design"}
         </Button>
         {pdf && (
@@ -220,12 +235,15 @@ export function StructuralViewer({
         )}
       </div>
 
-      {gateError?.code === "not_approved" && (
+      {notApprovedYet && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <p className="font-medium text-amber-700 dark:text-amber-400">
             Architectural plan not approved yet
           </p>
-          <p className="mt-1 text-muted-foreground">{gateError.message}</p>
+          <p className="mt-1 text-muted-foreground">
+            {gateError?.message ??
+              "Structural design isn't enabled until the architectural plan is approved. Approve it below to continue."}
+          </p>
           <Button size="sm" className="mt-2" onClick={handleApproveThenRetry} disabled={approving}>
             {approving ? "Approving…" : "Approve plan and run design"}
           </Button>
@@ -380,7 +398,7 @@ export function StructuralViewer({
         </div>
       )}
 
-      {!result && !loading && !gateError && !persistedDesign && (
+      {!result && !loading && !gateError && !persistedDesign && !notApprovedYet && (
         <p className="text-sm text-muted-foreground">
           Runs an IS-code structural design (slabs, beams, columns, footings) for this layout&apos;s
           column grid via StructAgent — clause-referenced checks, quantities and a PDF report.
