@@ -58,6 +58,11 @@ experiments/
 Status.md
 Handover.md
 CLAUDE.md
+# ...except CLAUDE.md files inside the vendored structapi-service/ tree --
+# those are upstream's own directory-convention docs, byte-for-byte copied
+# from karthiknitt/structapi, and must stay tracked or verify-structapi-
+# vendor.sh reports a false drift (see PR #71).
+!structapi-service/**/CLAUDE.md
 docs/plans/
 docs/superpowers/plans/
 docs/archive/
