@@ -240,6 +240,27 @@ def _schedule_column_x(page_w: float, margin: float) -> float:
     return page_w - margin - SCHED_W
 
 
+_FLOOR_LABELS = {-1: "Basement", 0: "Ground Floor", 1: "First Floor", 2: "Second Floor"}
+
+
+def _floor_label(floor_plan) -> str:
+    return _FLOOR_LABELS.get(floor_plan.floor, f"Floor {floor_plan.floor}")
+
+
+def _ordered_floors(layout: Layout) -> list:
+    """All populated floors in build order (basement first)."""
+    return [
+        fp
+        for fp in (
+            layout.basement_floor,
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+        )
+        if fp is not None
+    ]
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -255,12 +276,10 @@ def render_pdf(
     """Return raw PDF bytes.
 
     Page order:
-      1. Ground Floor architectural plan
-      2. First Floor architectural plan
-      3. Ground Floor structural (beam & column) layout
-      4. First Floor structural (beam & column) layout
-      5. Section A-A
-      6. Front Elevation
+      1..N. Architectural pages, one per populated floor, basement first
+      N+1..2N. Structural pages (beam & column layout), same order
+      then Section A-A
+      then Front Elevation
 
     ``structural_design`` (optional): the persisted StructuralDesign surface
     -- {status, revision_id, changelog, structapi: {data, disclaimer}} --
@@ -275,32 +294,19 @@ def render_pdf(
     show_watermark = watermark_preliminary and structural_design is None
 
     # ── Architectural pages ────────────────────────────────────────────────────
-    for floor_plan in [layout.ground_floor, layout.first_floor]:
-        floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
+    for floor_plan in _ordered_floors(layout):
         _draw_floor_projected(
-            c,
-            floor_plan,
-            layout,
-            cfg,
-            project_name,
-            num_bedrooms,
-            floor_label,
-            annotations=annotations,
-            watermark_preliminary=show_watermark,
+            c, floor_plan, layout, cfg, project_name, num_bedrooms,
+            _floor_label(floor_plan),
+            annotations=annotations, watermark_preliminary=show_watermark,
         )
         c.showPage()
 
     # ── Structural pages ───────────────────────────────────────────────────────
-    for floor_plan in [layout.ground_floor, layout.first_floor]:
-        floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
+    for floor_plan in _ordered_floors(layout):
         _draw_structural_floor(
-            c,
-            floor_plan,
-            layout,
-            cfg,
-            project_name,
-            num_bedrooms,
-            floor_label,
+            c, floor_plan, layout, cfg, project_name, num_bedrooms,
+            _floor_label(floor_plan),
             structural_design=structural_design,
         )
         c.showPage()
