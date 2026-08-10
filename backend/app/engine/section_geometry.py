@@ -22,8 +22,13 @@ def _line_segments(geom: BaseGeometry) -> list[LineString]:
 
 
 def section_cut_line(rooms: list[Room], buildable: Polygon) -> tuple[LineString, bool]:
-    stair = next(r for r in rooms if r.type == "staircase")
+    stair = next((r for r in rooms if r.type == "staircase"), None)
     minx, miny, maxx, maxy = buildable.bounds
+    if stair is None:
+        # stair-less floor (single-story home, terrace-only top floor) —
+        # fall back to a plain vertical mid-line rather than crashing.
+        cx = (minx + maxx) / 2
+        return LineString([(cx, miny - 1.0), (cx, maxy + 1.0)]), True
     along_y = stair.depth >= stair.width
     if along_y:
         cx = stair.x + stair.width / 2
@@ -387,8 +392,10 @@ def derive_section(
     )
 
     # Rule 7 — stepped RCC stair profile through the staircase
-    stair_room = next(r for r in layout.ground_floor.rooms if r.type == "staircase")
-    stair_iv = room_interval(line, stair_room)
+    stair_room = next(
+        (r for r in layout.ground_floor.rooms if r.type == "staircase"), None
+    )
+    stair_iv = room_interval(line, stair_room) if stair_room is not None else None
     if gf.stair is not None and stair_iv is not None:
         n_r = round(ftf / vs.stair_riser_m)
         riser = ftf / n_r
