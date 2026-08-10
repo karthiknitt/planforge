@@ -580,3 +580,21 @@ def test_single_door_room_prefers_circulation_over_no_transit_neighbour():
     assert not _doors_on_room(kitchen, doors), (
         "toilet must not route its only door through the kitchen"
     )
+
+
+def test_parking_never_hosts_interior_door():
+    # _cfg_9x15 plate front: x 1.23 (=1.0+0.23), y 1.73 (=1.5+0.23)
+    # both id orderings: pre-fix the porch placed its own door whenever it
+    # sorted before its neighbour in the per-room door loop (issue #2)
+    for porch_id in ("porch", "a_porch"):
+        rooms = [
+            _room("living", 1.23, 1.73, 3.5, 5.0),
+            _room(porch_id, 1.23, 6.73, 3.5, 3.0, rtype="parking"),
+        ]
+        openings, _walls = _openings_for(rooms, _cfg_9x15())
+        porch_doors = [
+            o
+            for o in openings
+            if o.kind == "door" and o.swing_into_room_id == porch_id
+        ]
+        assert porch_doors == [], f"{porch_id} hosts its own interior door"

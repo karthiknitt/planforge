@@ -66,6 +66,9 @@ _DOOR_NEIGHBOUR_PRIORITY = {"passage": 0, "living": 1, "dining": 2, "staircase":
 _ENTRY_PRIORITY = {"living": 0, "passage": 1, "dining": 2}
 _NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
+# rooms that never host their own interior door: circulation, open-air/outdoor,
+# and transitional spaces — doors serving them are placed by their neighbours.
+_NO_DOOR_TYPES = _PARKING_TYPES | {"passage"}
 # wet rooms + kitchen: interior-accessed, exactly one door, never a transit route
 _SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
@@ -783,7 +786,7 @@ def derive_openings(
 
     main_door = next((o for o in openings if o.is_main), None)
     for idx, room in sorted(enumerate(rooms), key=lambda t: t[1].id):
-        if room.type == "passage":
+        if room.type in _NO_DOOR_TYPES:
             continue
         width = _WET_DOOR if room.type in _WET_TYPES else std.door_width_m
         bed_idx = ens_bed_index.get(idx)  # set only for en-suite toilets
