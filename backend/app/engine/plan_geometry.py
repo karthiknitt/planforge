@@ -62,6 +62,7 @@ _WINDOW_TYPES = {
     "home_office",
     "gym",
     "servant_quarter",
+    "foyer",
 }
 _DOOR_NEIGHBOUR_PRIORITY = {
     "passage": 0,

@@ -759,3 +759,49 @@ def test_courtyard_gets_no_own_door_but_is_reachable():
     assert court_doors == []
     # reachable via the neighbours' doors on the shared walls
     assert validate_floor_connectivity(rooms, openings, 0) == []
+
+
+def test_foyer_gets_window():
+    # "b" defaults to type "bedroom" (already in _WINDOW_TYPES), so only the
+    # foyer's own LEFT exterior edge (cx ~= 1.115, unique to "f" — "b" has no
+    # exterior edge in that x-range) unambiguously proves the fix, not any
+    # front-wall window that could belong to "b" instead.
+    rooms = [
+        _room("f", 1.23, 1.73, 2.77, 12.04, rtype="foyer"),
+        _room("b", 4.115, 1.73, 3.655, 12.04),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    f_windows = [
+        o
+        for o in openings
+        if o.kind == "window" and not o.is_horizontal and abs(o.cx - 1.115) < 1e-6
+    ]
+    assert f_windows, (
+        "foyer got no window on its exterior left wall (_WINDOW_TYPES gap)"
+    )
+
+
+def test_foyer_hosting_main_door_gets_no_overlapping_window():
+    openings, _ = _openings_for(
+        [
+            _room("foyer", 1.23, 1.73, 2.5, 3.0, rtype="foyer"),
+            _room("stair", 3.73, 1.73, 2.0, 3.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 5.0, 4.0),
+        ],
+        _cfg_9x15(),
+    )
+    md = next(o for o in openings if o.is_main)
+    assert md.swing_into_room_id == "foyer"
+    for o in openings:
+        if o is md or o.kind != "window" or o.is_horizontal != md.is_horizontal:
+            continue
+        same_line = (
+            abs(o.cy - md.cy) < 1e-6 if md.is_horizontal else abs(o.cx - md.cx) < 1e-6
+        )
+        if not same_line:
+            continue
+        along_o = o.cx if md.is_horizontal else o.cy
+        along_md = md.cx if md.is_horizontal else md.cy
+        assert abs(along_o - along_md) >= (o.width + md.width) / 2 - 1e-9, (
+            f"foyer window overlaps main door at ({o.cx:.2f},{o.cy:.2f})"
+        )
