@@ -713,5 +713,5 @@ def test_courtyard_gets_no_own_door_but_is_reachable():
         o for o in openings if o.kind == "door" and o.swing_into_room_id == "court"
     ]
     assert court_doors == []
-    doors = [o for o in openings if o.kind == "door"]
-    assert doors  # neighbours still placed doors on the shared walls
+    # reachable via the neighbours' doors on the shared walls
+    assert validate_floor_connectivity(rooms, openings, 0) == []

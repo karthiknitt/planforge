@@ -759,7 +759,7 @@ def _place_main_entrance(
 
     The road is always the y-min edge (archetypes/vastu convention: y=0 is
     the road/front edge). Entry room preference follows Indian practice:
-    living > passage > dining; never parking, stairs or wet rooms. The
+    living > foyer > passage > dining; never parking, stairs or wet rooms. The
     desired position is the facade midpoint so the door lines up with the
     compound-wall gate (cad_advanced centres the gate on the road side).
     """
@@ -783,7 +783,7 @@ def _place_main_entrance(
                 f"({hi - lo:.2f}m < {width + 2 * _JAMB:.2f}m)"
             )
             continue
-        prio = _ENTRY_PRIORITY.get(room.type, 3)
+        prio = _ENTRY_PRIORITY.get(room.type, 4)
         cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
     for _prio, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
         centre = _fit_along(
