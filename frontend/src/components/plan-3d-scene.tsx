@@ -56,6 +56,9 @@ const FLOOR_TINT: Record<string, string> = {
   store_room: "#d3d6da",
   garage: "#a9d2e8",
   passage: "#c2c8d0",
+  foyer: "#c2c8d0",
+  courtyard: "#a9d2e8",
+  wardrobe: "#d3d6da",
 };
 
 function floorTint(type: string): string {

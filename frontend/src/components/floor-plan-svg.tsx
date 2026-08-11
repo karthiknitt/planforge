@@ -59,6 +59,9 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   garage: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
   passage: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
   open_terrace: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  foyer: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
+  courtyard: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  wardrobe: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
 };
 
 // Dark-mode counterpart of PALETTE — same room-type keys, values chosen so
@@ -89,6 +92,9 @@ const PALETTE_DARK: Record<string, { fill: string; stroke: string; text: string 
   garage: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
   passage: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
   open_terrace: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  foyer: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
+  courtyard: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  wardrobe: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
 };
 
 const color = (type: string, dark = false) => {

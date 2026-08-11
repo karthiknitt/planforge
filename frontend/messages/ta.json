@@ -157,7 +157,10 @@
     "servant_quarter": "வேலையாள் அறை",
     "home_office": "வீட்டு அலுவலகம்",
     "gym": "உடற்பயிற்சி அறை",
-    "garage": "கார் நிலையம்"
+    "garage": "கார் நிலையம்",
+    "foyer": "ஃபோயர்",
+    "courtyard": "முற்றம்",
+    "wardrobe": "அலமாரி"
   },
   "compliance": {
     "passed": "இணக்கமானது",

@@ -219,12 +219,15 @@ export const ROOM_TYPES = [
   { value: "gym", label: "Home Gym" },
   { value: "home_office", label: "Home Office" },
   { value: "store_room", label: "Store Room" },
+  { value: "wardrobe", label: "Wardrobe" },
   { value: "garage", label: "Garage" },
   { value: "utility", label: "Utility" },
   { value: "passage", label: "Passage / Corridor" },
+  { value: "foyer", label: "Foyer" },
   { value: "pooja", label: "Pooja Room" },
   { value: "study", label: "Study" },
   { value: "balcony", label: "Balcony" },
+  { value: "courtyard", label: "Courtyard" },
 ] as const;
 
 export type RoomTypeValue = (typeof ROOM_TYPES)[number]["value"];
