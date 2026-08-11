@@ -128,6 +128,7 @@ class FloorDrawing:
     stair: StairGeometry | None
     bounds: tuple[float, float, float, float]  # buildable bbox
     diagnostics: list[str] = field(default_factory=list)  # placement problems
+    entrance_not_on_ground_floor: bool = False
 
     def to_dict(self) -> dict:
         from dataclasses import asdict

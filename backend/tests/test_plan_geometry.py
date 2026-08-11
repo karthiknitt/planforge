@@ -131,15 +131,47 @@ def test_orphan_edge_gets_wall():
         _room("b", 4.115, 1.73, 3.655, 6.0),
     ]
     walls = derive_walls(rooms, buildable_polygon(cfg))
-    # b's top edge at y=7.73 faces void → orphan wall centred iwt/2 above it
+    # b's top edge at y=7.73 faces open sky (interior void, inside the
+    # room-union bbox since "a" extends further back) → external (ewt) wall
+    # centred ewt/2 above it, not internal (#75)
     orphan = [
         w
         for w in walls
-        if not _seg_is_vertical(w) and abs(w.y1 - (7.73 + IWT / 2)) < 1e-6
+        if not _seg_is_vertical(w) and abs(w.y1 - (7.73 + EWT / 2)) < 1e-6
     ]
     assert len(orphan) == 1
+    assert orphan[0].kind == "external"
+    assert orphan[0].thickness == pytest.approx(EWT)
     lo, hi = _interval(orphan[0])
     assert lo >= 4.0 and hi <= 7.885 + 1e-6
+
+
+def test_interior_void_facing_edge_is_external():
+    """#75: a room edge facing an interior void — inside the room-union
+    bbox, not on its boundary — is structurally exterior (open to sky) and
+    must get an `external`/ewt orphan wall, not `internal`/iwt.
+
+    "living" is deeper than "stair", so the bbox rear (7.73, living's own
+    rear edge) is further back than stair's rear edge (5.73). Stair's rear
+    edge is therefore uncovered by both the ring (not on the bbox boundary)
+    and edge-pairing (nothing faces it) — it opens onto the void beside
+    living's extra depth, a genuine interior void.
+    """
+    cfg = _cfg_9x15()
+    rooms = [
+        _room("living", 1.23, 1.73, 4.0, 6.0),  # rear at y=7.73 (defines bbox rear)
+        _room("stair", 5.23, 1.73, 2.0, 4.0, rtype="staircase"),  # rear at y=5.73
+    ]
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    void_facing = [
+        w
+        for w in walls
+        if not _seg_is_vertical(w) and abs(w.y1 - (5.73 + EWT / 2)) < 1e-6
+    ]
+    assert void_facing, "expected an orphan wall on stair's void-facing rear edge"
+    for w in void_facing:
+        assert w.kind == "external"
+        assert w.thickness == pytest.approx(EWT)
 
 
 def _all_floor_walls(rooms, cfg):

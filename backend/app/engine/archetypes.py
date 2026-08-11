@@ -310,6 +310,7 @@ def _stair_band_rooms(
     toilet_name: str = "Toilet 2",
     want_toilet: bool | None = None,
     align_widths: tuple[float, float] | None = None,
+    reverse: bool = False,
 ) -> list[Room]:
     """Fill the FF strip beside the staircase.
 
@@ -326,6 +327,12 @@ def _stair_band_rooms(
     needs a circulation neighbour to open onto; the toilet then opens off
     that room, which is also the conventional arrangement.
 
+    By default the staircase is assumed to sit at ``x`` (band starts right
+    after it), so the filler goes at the band's leading edge. Pass
+    ``reverse=True`` when the staircase instead sits at ``x + band_w`` (the
+    band precedes it) — the toilet then takes the leading edge and the
+    filler the trailing one, so it's still the filler hugging the stair (#61).
+
     ``align_widths``, when given, is the ground floor's own (lead, last) slot
     split for this same x-span (e.g. living/parking) — reusing it here lands
     the filler/toilet joint on the exact same grid line as the GF joint, so
@@ -333,7 +340,8 @@ def _stair_band_rooms(
     leading edge of the LAST (aligned) slot, never the first, preserving the
     staircase's circulation neighbour; an oversized toilet that doesn't fully
     fill the slot is caught by the existing post-fill wet-room split, same as
-    the unaligned path below.
+    the unaligned path below. (``reverse`` is not supported together with
+    ``align_widths`` — no current caller needs both.)
     """
     if want_toilet is None:
         want_toilet = cfg.toilets >= 2
@@ -354,8 +362,11 @@ def _stair_band_rooms(
 
     t_w = min(band_w, 2.0) if want_t else 0.0
     rem_w = band_w - t_w - iwt if want_t else band_w
+    filler_x = x + t_w + iwt if (want_t and reverse) else x
 
-    filler = _band_filler_rooms(prefix, x, y, rem_w, band_d) if rem_w > 0.5 else []
+    filler = (
+        _band_filler_rooms(prefix, filler_x, y, rem_w, band_d) if rem_w > 0.5 else []
+    )
     if not want_t:
         return filler
     if not filler:
@@ -363,9 +374,9 @@ def _stair_band_rooms(
         # and the door placer falls back to its last resort. Rare, and better
         # than dropping a toilet the config asked for.
         return [_r(toilet_id, toilet_name, "toilet", x, y, band_w, band_d)]
-    return filler + [
-        _r(toilet_id, toilet_name, "toilet", x + rem_w + iwt, y, t_w, band_d)
-    ]
+    toilet_x = x if reverse else x + rem_w + iwt
+    toilet_room = _r(toilet_id, toilet_name, "toilet", toilet_x, y, t_w, band_d)
+    return [toilet_room, *filler] if reverse else [*filler, toilet_room]
 
 
 def _band_filler_rooms(
@@ -804,6 +815,12 @@ def layout_c(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
             )
 
     gf_rooms.append(_r("gf_kitchen", "Kitchen", "kitchen", ox, stair_y, k_w, d_stair))
+    # The stair sits at the FAR end of this band (stair_x, right of the
+    # toilet zone), so a plain toilet-fills-the-whole-band placement left it
+    # with only a wet-room partition to take a door from (#61) — same class
+    # of bug #50/#51 fixed for layout_a/b/d's GF bands. reverse=True gives
+    # the toilet the leading edge (next to kitchen) and a real circulation
+    # filler the trailing edge, hard against the staircase.
     if cfg.has_pooja and t_w > POOJA_W + 0.5:
         gf_rooms.append(
             _r(
@@ -817,29 +834,32 @@ def layout_c(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
             )
         )
         rem_w = t_w - POOJA_W - iwt
-        if rem_w > 0.5:
-            gf_rooms.append(
-                _r(
-                    "gf_toilet_1",
-                    "Toilet 1",
-                    "toilet",
-                    ox + k_w + iwt + POOJA_W + iwt,
-                    stair_y,
-                    rem_w,
-                    d_stair,
-                )
-            )
-    elif t_w > 0.5:
-        gf_rooms.append(
-            _r(
-                "gf_toilet_1",
-                "Toilet 1",
-                "toilet",
-                ox + k_w + iwt,
-                stair_y,
-                t_w,
-                d_stair,
-            )
+        gf_rooms += _stair_band_rooms(
+            cfg,
+            ox + k_w + iwt + POOJA_W + iwt,
+            stair_y,
+            rem_w,
+            d_stair,
+            iwt,
+            prefix="gf",
+            toilet_id="gf_toilet_1",
+            toilet_name="Toilet 1",
+            want_toilet=rem_w > 0.5,
+            reverse=True,
+        )
+    else:
+        gf_rooms += _stair_band_rooms(
+            cfg,
+            ox + k_w + iwt,
+            stair_y,
+            t_w,
+            d_stair,
+            iwt,
+            prefix="gf",
+            toilet_id="gf_toilet_1",
+            toilet_name="Toilet 1",
+            want_toilet=t_w > 0.5,
+            reverse=True,
         )
     gf_rooms.append(
         _r("gf_stair", "Staircase", "staircase", stair_x, stair_y, STAIR_W, d_stair)
@@ -1090,25 +1110,27 @@ def layout_e(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
     else:
         gf_rooms.append(_r("gf_living", "Living / Hall", "living", ox, oy, W, d_front))
 
-    # Centre: stair + toilet
+    # Centre: stair + toilet. Toilet-adjacent-to-stair (the original order
+    # here) left the stair with only a wet-room partition to take a door
+    # from (#61) — same class of bug #50/#51 fixed for the other archetypes'
+    # GF bands, just via hand-rolled code that predated _stair_band_rooms.
+    # Reusing it puts a real circulation filler hard against the stair
+    # instead, with the toilet at the band's far end.
     gf_rooms.append(
         _r("gf_stair", "Staircase", "staircase", ox, stair_y, STAIR_W, d_mid)
     )
     t_ctr_w = W - STAIR_W - iwt
-    t1_w = min(t_ctr_w, 2.0)
-    gf_rooms.append(
-        _r(
-            "gf_toilet_1",
-            "Toilet 1",
-            "toilet",
-            ox + STAIR_W + iwt,
-            stair_y,
-            t1_w,
-            d_mid,
-        )
-    )
-    gf_rooms += _band_filler_rooms(
-        "gf", ox + STAIR_W + iwt + t1_w + iwt, stair_y, t_ctr_w - t1_w - iwt, d_mid
+    gf_rooms += _stair_band_rooms(
+        cfg,
+        ox + STAIR_W + iwt,
+        stair_y,
+        t_ctr_w,
+        d_mid,
+        iwt,
+        prefix="gf",
+        toilet_id="gf_toilet_1",
+        toilet_name="Toilet 1",
+        want_toilet=t_ctr_w > 0.5,
     )
 
     # Rear: open plan kitchen + dining

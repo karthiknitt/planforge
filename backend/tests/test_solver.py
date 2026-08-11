@@ -155,12 +155,16 @@ def test_solve_columns_use_wall_junction_pipeline_not_room_corners():
             pipeline_total += len(expected_pts)
 
     # Aggregated across all floors of all layouts, the span-aware pipeline
-    # must not exceed the old naive per-room-corner scheme. A tie is fine:
-    # with the wall-coalignment objective (Phase 1A) room corners dedupe
-    # onto shared grid lines, shrinking the naive count to meet the
-    # pipeline's — the regression guarded here (a column at EVERY corner,
-    # far more than junction-derived) would show as pipeline > naive.
-    assert pipeline_total <= naive_corner_total
+    # must stay in the same ballpark as the old naive per-room-corner scheme,
+    # not blow far past it. It no longer has to stay <=: interior-void-facing
+    # room edges (light wells / jogged footprints) are correctly classified
+    # as external walls (#75) and get their own corner columns via
+    # derive_junctions/derive_columns — real structural columns the naive
+    # per-room-corner count never accounted for. The regression this guards
+    # against (a column at EVERY corner, independent of junction/beam-span
+    # logic) would multiply the pipeline count far past naive, not add a
+    # modest handful — a generous margin still catches that anti-pattern.
+    assert pipeline_total <= naive_corner_total * 1.5 + 10
 
 
 def test_solved_parking_touches_road_side():

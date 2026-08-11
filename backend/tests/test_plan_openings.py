@@ -631,6 +631,41 @@ def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
         )
 
 
+def test_main_door_all_parking_frontage_flags_entrance_not_on_ground_floor():  # #77
+    # Same "Modern-26" scenario as the diagnostic test above: the entire road
+    # frontage is parking/staircase (no room TYPE there can ever host a
+    # door), which is a distinct, typology-level condition — an "upside-down"
+    # duplex whose real entry is an external stair straight to the first
+    # floor — from an incidental placement failure (too narrow, columns
+    # blocked). Only that typology case should set the flag.
+    drawing = _drawing_for(
+        [
+            _room("porch", 1.23, 1.73, 4.0, 3.0, rtype="parking"),
+            _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 4.0, 3.0),
+        ]
+    )
+    assert drawing.entrance_not_on_ground_floor is True
+
+
+def test_main_door_too_narrow_candidate_does_not_flag_entrance_not_on_ground_floor():  # #77
+    # A too-narrow ROAD-FACING room is an incidental placement failure, not a
+    # typology-level "no entry room exists at all" case — must not set the flag.
+    drawing = _drawing_for(
+        [
+            _room("entry", 1.23, 1.73, 0.97, 3.0),  # < 1.05 + 2 jambs
+            _room("living", 1.23, 4.73, 4.0, 4.0),
+        ]
+    )
+    assert drawing.entrance_not_on_ground_floor is False
+
+
+def test_main_door_success_does_not_flag_entrance_not_on_ground_floor():  # #77
+    drawing = _drawing_for(_two_bedrooms())
+    assert any(o.is_main for o in drawing.openings)
+    assert drawing.entrance_not_on_ground_floor is False
+
+
 def test_main_door_too_narrow_candidate_is_diagnosed():  # #6b
     # entry is the ONLY road-facing room; living sits behind it
     drawing = _drawing_for(
@@ -759,3 +794,116 @@ def test_courtyard_gets_no_own_door_but_is_reachable():
     assert court_doors == []
     # reachable via the neighbours' doors on the shared walls
     assert validate_floor_connectivity(rooms, openings, 0) == []
+
+
+def test_foyer_gets_window():
+    # "b" defaults to type "bedroom" (already in _WINDOW_TYPES), so only the
+    # foyer's own LEFT exterior edge (cx ~= 1.115, unique to "f" — "b" has no
+    # exterior edge in that x-range) unambiguously proves the fix, not any
+    # front-wall window that could belong to "b" instead.
+    rooms = [
+        _room("f", 1.23, 1.73, 2.77, 12.04, rtype="foyer"),
+        _room("b", 4.115, 1.73, 3.655, 12.04),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    f_windows = [
+        o
+        for o in openings
+        if o.kind == "window" and not o.is_horizontal and abs(o.cx - 1.115) < 1e-6
+    ]
+    assert f_windows, (
+        "foyer got no window on its exterior left wall (_WINDOW_TYPES gap)"
+    )
+
+
+def test_foyer_hosting_main_door_gets_no_overlapping_window():
+    openings, _ = _openings_for(
+        [
+            _room("foyer", 1.23, 1.73, 2.5, 3.0, rtype="foyer"),
+            _room("stair", 3.73, 1.73, 2.0, 3.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 5.0, 4.0),
+        ],
+        _cfg_9x15(),
+    )
+    md = next(o for o in openings if o.is_main)
+    assert md.swing_into_room_id == "foyer"
+    for o in openings:
+        if o is md or o.kind != "window" or o.is_horizontal != md.is_horizontal:
+            continue
+        same_line = (
+            abs(o.cy - md.cy) < 1e-6 if md.is_horizontal else abs(o.cx - md.cx) < 1e-6
+        )
+        if not same_line:
+            continue
+        along_o = o.cx if md.is_horizontal else o.cy
+        along_md = md.cx if md.is_horizontal else md.cy
+        assert abs(along_o - along_md) >= (o.width + md.width) / 2 - 1e-9, (
+            f"foyer window overlaps main door at ({o.cx:.2f},{o.cy:.2f})"
+        )
+
+
+def test_void_facing_room_receives_window():
+    """A room whose only exterior edge faces an interior void (not the plate
+    boundary) must still receive a window. The void-facing orphan wall is
+    marked kind="external" by derive_walls; derive_openings must recognize it
+    as a valid exterior edge candidate."""
+    cfg = _cfg_9x15()
+    rooms = [
+        _room("living", 1.23, 1.73, 4.0, 6.0),  # rear at y=7.73 (defines bbox rear)
+        _room("bed", 5.23, 1.73, 2.54, 4.0, rtype="bedroom"),  # rear at y=5.73
+    ]
+    openings, walls = _openings_for(rooms, cfg)
+    # bed's rear edge (y=5.73) faces the interior void (living extends further)
+    # and is not on the plate boundary — so it has no plate-based exterior edge,
+    # only a void-facing orphan wall marked kind="external"
+    ext_walls_on_bed_rear = [
+        w
+        for w in walls
+        if w.kind == "external"
+        and abs(w.y1 - w.y2) < 1e-9
+        and abs(w.y1 - (5.73 + 0.115)) < 1e-6
+        and min(w.x1, w.x2) < 5.23 + 2.54
+        and max(w.x1, w.x2) > 5.23
+    ]
+    assert ext_walls_on_bed_rear, "bed's void-facing rear wall should be external"
+    # bed must get a window on that rear void-facing edge
+    bed_windows = [
+        o
+        for o in openings
+        if o.kind == "window"
+        and o.is_horizontal
+        and abs(o.cy - (5.73 + 0.115)) < 0.13
+        and 5.23 - 0.13 <= o.cx <= 5.23 + 2.54 + 0.13
+    ]
+    assert bed_windows, "bed got no window on its void-facing exterior wall"
+
+
+def test_void_facing_wet_room_receives_ventilator():
+    """A wet room whose only exterior edge faces an interior void must still
+    receive a ventilator. Mirrors test_void_facing_room_receives_window."""
+    cfg = _cfg_9x15()
+    rooms = [
+        _room("living", 1.23, 1.73, 4.0, 6.0),
+        _room("toilet", 5.23, 1.73, 2.54, 4.0, rtype="toilet"),  # rear at y=5.73
+    ]
+    openings, walls = _openings_for(rooms, cfg)
+    ext_walls_on_toilet_rear = [
+        w
+        for w in walls
+        if w.kind == "external"
+        and abs(w.y1 - w.y2) < 1e-9
+        and abs(w.y1 - (5.73 + 0.115)) < 1e-6
+        and min(w.x1, w.x2) < 5.23 + 2.54
+        and max(w.x1, w.x2) > 5.23
+    ]
+    assert ext_walls_on_toilet_rear, "toilet's void-facing rear wall should be external"
+    # toilet must get a ventilator on that rear void-facing edge
+    toilet_vents = [
+        o
+        for o in openings
+        if o.kind == "ventilator"
+        and o.is_horizontal
+        and abs(o.cy - (5.73 + 0.115)) < 0.13
+        and 5.23 - 0.13 <= o.cx <= 5.23 + 2.54 + 0.13
+    ]
+    assert toilet_vents, "toilet got no ventilator on its void-facing exterior wall"
