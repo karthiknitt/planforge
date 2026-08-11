@@ -644,6 +644,23 @@ def test_main_door_off_plate_front_is_diagnosed():  # #6
     assert any(d.startswith("main_entrance:") for d in drawing.diagnostics)
 
 
+def test_main_door_columns_blocked_is_diagnosed():  # G
+    # living is the ONLY eligible road-facing room, barely wider than the
+    # minimum (1.32 >= 1.07 + 2*0.115 jamb). Its partition with the stair
+    # meets the front wall at a junction that auto-derives a column at
+    # (2.55, 1.615); that column forbids door centres > 2.55 - 0.695 = 1.855
+    # while the fit window is [1.88, 1.90], so _fit_along returns None.
+    drawing = _drawing_for(
+        [
+            _room("living", 1.23, 1.73, 1.32, 4.0),
+            _room("stair", 2.55, 1.73, 2.0, 4.0, rtype="staircase"),
+        ]
+    )
+    assert not any(o.is_main for o in drawing.openings)
+    diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
+    assert diag and "fully blocked" in diag[0]
+
+
 def test_diagnostics_key_present_in_drawing_dict():
     drawing = _drawing_for([_room("a", 1.23, 1.73, 3.0, 3.0)])
     assert "diagnostics" in drawing.to_dict()

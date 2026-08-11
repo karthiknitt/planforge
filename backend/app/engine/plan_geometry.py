@@ -778,12 +778,12 @@ def _place_main_entrance(
             continue
         prio = _ENTRY_PRIORITY.get(room.type, 3)
         cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
-    for _prio, _dist, _rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
+    for _prio, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
         centre = _fit_along(
             gate_x, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
         )
         if centre is None:
-            rejected.append(f"{_rid} fully blocked by columns/openings")
+            rejected.append(f"{rid} fully blocked by columns/openings")
             continue
         door = _make_door(
             room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
@@ -793,7 +793,10 @@ def _place_main_entrance(
     detail = "; ".join(rejected) if rejected else "no road-facing room at front plate"
     if reasons is not None:
         reasons.append(f"main_entrance: {detail}")
-    logger.warning("no suitable road-facing room for a main entrance door: %s", detail)
+    else:
+        logger.warning(
+            "no suitable road-facing room for a main entrance door: %s", detail
+        )
     return None
 
 
