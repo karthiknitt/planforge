@@ -87,3 +87,7 @@ Screenshot*.png
 skills-lock.json
 dev-migrate.sh
 .envrc
+
+# Reverse-engineering harness scratch: downloaded reference images/PDFs/PNGs
+# and per-design JSON, entirely local working data, never committed.
+docs/superpowers/specs/reverse_engr/
