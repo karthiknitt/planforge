@@ -593,8 +593,57 @@ def test_parking_never_hosts_interior_door():
         ]
         openings, _walls = _openings_for(rooms, _cfg_9x15())
         porch_doors = [
-            o
-            for o in openings
-            if o.kind == "door" and o.swing_into_room_id == porch_id
+            o for o in openings if o.kind == "door" and o.swing_into_room_id == porch_id
         ]
         assert porch_doors == [], f"{porch_id} hosts its own interior door"
+
+
+# ── Entrance-placement diagnostics (Task 6: #6, #6b, G, #6d) ─────────────────
+
+
+def _drawing_for(rooms):
+    from app.engine.models import FloorPlan
+    from app.engine.plan_geometry import build_floor_drawing
+
+    fp = FloorPlan(floor=0, floor_type="ground", rooms=rooms)
+    return build_floor_drawing(fp, _cfg_9x15())
+
+
+def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
+    drawing = _drawing_for(
+        [
+            _room("porch", 1.23, 1.73, 4.0, 3.0, rtype="parking"),
+            _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 4.0, 3.0),
+        ]
+    )
+    assert any(d.startswith("main_entrance:") for d in drawing.diagnostics)
+    assert not any(o.is_main for o in drawing.openings)
+
+
+def test_main_door_too_narrow_candidate_is_diagnosed():  # #6b
+    # entry is the ONLY road-facing room; living sits behind it
+    drawing = _drawing_for(
+        [
+            _room("entry", 1.23, 1.73, 0.97, 3.0),  # < 1.05 + 2 jambs
+            _room("living", 1.23, 4.73, 4.0, 4.0),
+        ]
+    )
+    diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
+    assert diag and "too narrow" in diag[0]
+
+
+def test_main_door_off_plate_front_is_diagnosed():  # #6
+    drawing = _drawing_for(
+        [
+            _room("living", 1.23, 2.5, 5.0, 5.0),  # 0.77m behind plate front 1.73
+            _room("stair", 6.23, 1.73, 1.5, 6.0, rtype="staircase"),
+        ]
+    )
+    assert not any(o.is_main for o in drawing.openings)
+    assert any(d.startswith("main_entrance:") for d in drawing.diagnostics)
+
+
+def test_diagnostics_key_present_in_drawing_dict():
+    drawing = _drawing_for([_room("a", 1.23, 1.73, 3.0, 3.0)])
+    assert "diagnostics" in drawing.to_dict()

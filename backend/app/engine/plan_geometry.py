@@ -746,6 +746,7 @@ def _place_main_entrance(
     buildable: Polygon,
     ewt: float,
     tol: float,
+    reasons: list[str] | None = None,
 ) -> Opening | None:
     """Main entrance door (MD) in the road-facing external wall.
 
@@ -761,13 +762,19 @@ def _place_main_entrance(
     width = std.main_door_width_m
     gate_x = (bx1 + bx2) / 2
     cands = []
+    rejected: list[str] = []
     for room in rooms:
-        if room.type in _NO_ENTRY_TYPES:
-            continue
         if abs(room.y - py1) > 2 * tol:
+            continue  # not road-frontage — not a candidate at all
+        if room.type in _NO_ENTRY_TYPES:
+            rejected.append(f"{room.id}(type={room.type}) cannot host entry")
             continue
         lo, hi = room.x, room.x + room.width
         if hi - lo < width + 2 * _JAMB:
+            rejected.append(
+                f"{room.id} too narrow for main door "
+                f"({hi - lo:.2f}m < {width + 2 * _JAMB:.2f}m)"
+            )
             continue
         prio = _ENTRY_PRIORITY.get(room.type, 3)
         cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
@@ -776,13 +783,17 @@ def _place_main_entrance(
             gate_x, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
         )
         if centre is None:
+            rejected.append(f"{_rid} fully blocked by columns/openings")
             continue
         door = _make_door(
             room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
         )
         door.is_main = True
         return door
-    logger.warning("no suitable road-facing room for a main entrance door")
+    detail = "; ".join(rejected) if rejected else "no road-facing room at front plate"
+    if reasons is not None:
+        reasons.append(f"main_entrance: {detail}")
+    logger.warning("no suitable road-facing room for a main entrance door: %s", detail)
     return None
 
 
@@ -796,6 +807,7 @@ def derive_openings(
     iwt: float = IWT,
     tol: float = 0.01,
     floor: int = 0,
+    reasons: list[str] | None = None,
 ) -> list[Opening]:
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
@@ -811,7 +823,7 @@ def derive_openings(
 
     # ── Main entrance first, so it claims front-wall space before windows ─
     if floor == 0:
-        place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol))
+        place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol, reasons))
 
     # ── Doors: one per non-passage room; a door in a shared wall serves
     # BOTH rooms, so a room whose gap already carries a door is done ──────
@@ -1634,6 +1646,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     walls = derive_walls(rooms, buildable)
     junctions = derive_junctions(walls)
     columns = derive_columns(walls, junctions=junctions, rooms=rooms)
+    diagnostics: list[str] = []
     openings = derive_openings(
         rooms,
         walls,
@@ -1641,7 +1654,10 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         get_opening_standards(),
         buildable,
         floor=floorplan.floor,
+        reasons=diagnostics,
     )
+    for d in diagnostics:
+        logger.warning("floor %s: %s", floorplan.floor, d)
     walls.sort(key=lambda w: (w.kind, w.x1, w.y1, w.x2, w.y2))
     openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
     columns.sort(key=lambda c: (c.cx, c.cy))
@@ -1656,4 +1672,5 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         labels=derive_labels(rooms, bounds=buildable.bounds),
         stair=derive_stair(rooms),
         bounds=buildable.bounds,
+        diagnostics=diagnostics,
     )
