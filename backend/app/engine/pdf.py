@@ -9,6 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_primitives import metres_to_ftin
+from app.engine.compliance import load_rules
 from app.engine.geometry import buildable_polygon
 from app.engine.models import FloorPlan, Layout, PlotConfig
 from app.engine.section_geometry import (
@@ -430,6 +431,13 @@ def _draw_floor(
     page_w, page_h = A4
     scale, ox, oy, plot_px, plot_py = _compute_layout(cfg, page_w, page_h)
 
+    # Load compliance rules for stair tread depth
+    rules = load_rules()
+    # Use average of min/max tread depth range; fallback to 0.27m if missing
+    tread_min_mm = rules.get("stair_tread_min_mm", 250)
+    tread_max_mm = rules.get("stair_tread_max_mm", 300)
+    tread_depth_m = ((tread_min_mm + tread_max_mm) / 2) / 1000.0
+
     # ── Road strip ────────────────────────────────────────────────────────────
     road_y = TITLE_H + MARGIN
     # Road strip: two lines — floor plan label (top) + road direction (bottom)
@@ -686,6 +694,7 @@ def _draw_floor(
             ox,
             oy,
             stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
+            tread_depth_m=tread_depth_m,
         )
 
         # ── Window symbols in exterior wall gaps ──────────────────────────────
@@ -790,12 +799,19 @@ def _draw_floor(
     )
 
 
-def _stair_tread_elements(room) -> dict:
+def _stair_tread_elements(room, tread_depth_m: float = 0.27) -> dict:
     """Orientation-aware stair geometry in metres (same heuristic as
     plan_geometry.derive_stair: depth >= width => flight climbs S->N,
-    else W->E)."""
+    else W->E).
+
+    Parameters
+    ----------
+    room : Room
+        Staircase room
+    tread_depth_m : float
+        Target tread depth in metres (default 0.27m, overridable via config)
+    """
     inset = 0.115 / 2
-    tread_depth_m = 0.27
     vertical_run = room.depth >= room.width
     if vertical_run:
         cross_lo, cross_hi = room.x + inset, room.x + room.width - inset
@@ -857,8 +873,14 @@ def _stair_tread_elements(room) -> dict:
     }
 
 
-def _draw_staircase_treads(c, rooms, scale, ox, oy, stair_label="UP"):
-    """Draw staircase: floor-level indicator, tread lines, break line, arrow + label."""
+def _draw_staircase_treads(c, rooms, scale, ox, oy, stair_label="UP", tread_depth_m: float = 0.27):
+    """Draw staircase: floor-level indicator, tread lines, break line, arrow + label.
+
+    Parameters
+    ----------
+    tread_depth_m : float
+        Target tread depth in metres (from compliance config)
+    """
 
     def _pts(seg):
         x1, y1, x2, y2 = seg
@@ -870,7 +892,7 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy, stair_label="UP"):
         if room.type != "staircase":
             continue
         rw = room.width * scale
-        el = _stair_tread_elements(room)
+        el = _stair_tread_elements(room, tread_depth_m)
 
         # ── Floor-level indicator (thick first tread at stair entry) ────────────
         c.setStrokeColor(HexColor("#000000"))

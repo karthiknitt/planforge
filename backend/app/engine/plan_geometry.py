@@ -72,8 +72,8 @@ _DOOR_NEIGHBOUR_PRIORITY = {
     "staircase": 3,
 }
 _ENTRY_PRIORITY = {"living": 0, "foyer": 1, "passage": 2, "dining": 3}
-_NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
+_NO_ENTRY_TYPES = _WET_TYPES | _PARKING_TYPES | {"staircase"}
 # rooms that never host their own interior door: circulation, open-air/outdoor,
 # and transitional spaces — doors serving them are placed by their neighbours.
 _NO_DOOR_TYPES = _PARKING_TYPES | {"passage", "foyer", "courtyard"}
@@ -663,10 +663,28 @@ def _fit_along(
     return min(valid, key=lambda c: abs(c - desired))
 
 
-def _exterior_edges(room, buildable: Polygon, ewt: float, tol: float):
-    """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the plate boundary."""
-    bx1, by1, bx2, by2 = buildable.bounds
-    px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
+def _exterior_edges(
+    room, buildable: Polygon, ewt: float, tol: float, rooms: list[Room] | None = None
+):
+    """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the exterior boundary.
+
+    When rooms are provided, uses the room-union footprint boundary (actual exterior
+    walls for partial-footprint floors); otherwise falls back to buildable plate
+    (preserves pre-footprint behavior for full-coverage or empty floors).
+    """
+    if rooms:
+        # Use room-union footprint boundary for partial-footprint support
+        footprint = unary_union(
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+        )
+        px1, py1, px2, py2 = footprint.bounds
+        # Exterior centreline coords offset from footprint bounding box
+        bx1, by1, bx2, by2 = px1 - ewt, py1 - ewt, px2 + ewt, py2 + ewt
+    else:
+        # Fall back to buildable plate (legacy behavior when rooms unavailable)
+        bx1, by1, bx2, by2 = buildable.bounds
+        px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
+
     if abs(room.x - px1) <= 2 * tol:
         yield (False, bx1 + ewt / 2, room.y, room.y + room.depth)
     if abs(room.x + room.width - px2) <= 2 * tol:
@@ -949,7 +967,7 @@ def derive_openings(
                 break
         if not placed:
             # entrance door on an exterior edge (e.g. parking, or isolated room)
-            for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+            for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol, rooms):
                 if hi - lo < width + 2 * _JAMB:
                     continue
                 centre = _fit_along(
@@ -972,7 +990,7 @@ def derive_openings(
         if room.type not in _WINDOW_TYPES:
             continue
         edges = sorted(
-            _exterior_edges(room, buildable, ewt, tol),
+            _exterior_edges(room, buildable, ewt, tol, rooms),
             key=lambda e: e[3] - e[2],
             reverse=True,
         )[:2]
@@ -1005,7 +1023,7 @@ def derive_openings(
     for room in sorted(rooms, key=lambda r: r.id):
         if room.type not in _WET_TYPES:
             continue
-        for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+        for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol, rooms):
             if hi - lo < std.ventilator_width_m + 2 * _JAMB:
                 continue
             centre = _fit_along(
@@ -1331,7 +1349,7 @@ def _add_repair_door(
     # only (upper floors have no street access; "outside" is not a corridor)
     if floor != 0:
         return False
-    for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+    for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol, rooms):
         if hi - lo < width + 2 * _JAMB:
             continue
         centre = _fit_along(

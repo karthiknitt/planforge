@@ -2,6 +2,8 @@
 
 import math
 
+import pytest
+
 from app.engine.geometry import buildable_polygon
 from app.engine.plan_geometry import (
     derive_columns,
@@ -265,13 +267,15 @@ def test_main_door_does_not_overlap_other_openings_on_its_wall():
         )
 
 
-def test_no_main_door_when_only_parking_faces_front():
+@pytest.mark.parametrize("parking_type", ["parking", "parking_4w", "parking_2w"])
+def test_no_main_door_when_only_parking_faces_front(parking_type):
+    """Main door excluded when only parking (any variant) faces the road."""
     cfg = _cfg_9x15()
     buildable = buildable_polygon(cfg)
     # only the parking room touches the front (y-min) plate edge; the bedroom
     # is set back behind it and never faces the road
     rooms = [
-        _room("park", 1.23, 1.73, 6.54, 3.0, rtype="parking"),
+        _room("park", 1.23, 1.73, 6.54, 3.0, rtype=parking_type),
         _room("bed", 1.23, 5.0, 6.54, 8.77),
     ]
     walls = derive_walls(rooms, buildable)
@@ -715,3 +719,57 @@ def test_courtyard_gets_no_own_door_but_is_reachable():
     assert court_doors == []
     # reachable via the neighbours' doors on the shared walls
     assert validate_floor_connectivity(rooms, openings, 0) == []
+
+
+def test_partial_footprint_openings_only_on_real_exterior_walls():
+    """Partial-footprint floor: openings only on actual room-union boundaries.
+
+    Regression for the buildable-plate vs. room-footprint discrepancy: when
+    rooms cover only the front half of the buildable plate (e.g., GF with roof
+    void at rear), windows/ventilators/fallback doors must not be placed on
+    plate edges that aren't real exterior walls of the room union.
+    """
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    bx1, by1, bx2, by2 = buildable.bounds
+    # Rooms cover only the FRONT half of the plate (partial footprint)
+    rooms = [
+        _room("living", 1.23, 1.73, 4.0, 4.0),
+        _room("kitchen", 5.23, 1.73, 2.54, 4.0),
+    ]
+    # Actual room-union rear boundary at y=5.73; buildable rear is at y=14.0
+    footprint_rear_y = 5.73
+    buildable_rear_y = by2 - 0.23  # 13.77 (plate boundary before external wall)
+
+    openings, walls = _openings_for(rooms, cfg)
+
+    # All openings must be on walls that correspond to actual room edges
+    # (i.e., on the footprint boundary at y=5.73, NOT on the buildable rear at y≈13.77)
+    for opening in openings:
+        if opening.kind in ("window", "ventilator", "door"):
+            # Check that opening isn't placed on the void-facing buildable rear edge
+            if opening.is_horizontal:
+                # Horizontal openings: cy is the wall centreline
+                assert abs(opening.cy - (buildable_rear_y + 0.115)) > 0.1, (
+                    f"{opening.kind} at ({opening.cx:.2f},{opening.cy:.2f}) is on "
+                    f"the buildable rear edge (y≈{buildable_rear_y + 0.115:.2f}), "
+                    f"not the room-union rear boundary (y={footprint_rear_y + 0.115:.2f})"
+                )
+            # Vertical openings: cx is the wall centreline
+            # (left/right edges should be fine as they match the footprint)
+
+    # Windows should be placed on the actual exterior walls of the rooms
+    windows = [o for o in openings if o.kind == "window"]
+    assert windows, "partial-footprint habitable rooms should still get windows"
+
+    # Specifically check that no window is on the void-facing buildable rear
+    for w in windows:
+        if w.is_horizontal:
+            # Windows on horizontal walls: cy should be near footprint edges, not void edges
+            assert (
+                abs(w.cy - (footprint_rear_y + 0.115)) < 0.1
+                or abs(w.cy - (1.73 - 0.115)) < 0.1  # front edge
+            ), (
+                f"window at ({w.cx:.2f},{w.cy:.2f}) not on real exterior wall "
+                f"(expected front y≈1.615 or rear y≈5.845, got y={w.cy:.2f})"
+            )
