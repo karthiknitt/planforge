@@ -17,6 +17,9 @@ export const TYPE_LABELS: Record<string, string> = {
   store_room: "Store Room",
   garage: "Garage",
   passage: "Passage",
+  foyer: "Foyer",
+  courtyard: "Courtyard",
+  wardrobe: "Wardrobe",
 };
 
 // Light values are the original palette. Dark variants are hue-matched to
@@ -43,4 +46,7 @@ export const SWATCH: Record<string, string> = {
   store_room: "bg-slate-50 border-slate-400 dark:bg-slate-800/40 dark:border-slate-500",
   garage: "bg-blue-50 border-blue-500 dark:bg-sky-950/40 dark:border-sky-500",
   passage: "bg-slate-100 border-slate-400 dark:bg-slate-800/50 dark:border-slate-500",
+  foyer: "bg-slate-100 border-slate-400 dark:bg-slate-800/50 dark:border-slate-500",
+  courtyard: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
+  wardrobe: "bg-slate-50 border-slate-400 dark:bg-slate-800/40 dark:border-slate-500",
 };

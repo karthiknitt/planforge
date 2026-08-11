@@ -94,6 +94,7 @@ _ENSUITE_MIN_OVERLAP_MM = 900
 # landing. No door-placement rule can repair that: ban the toilet wall and the
 # staircase is simply left with no door at all.
 _STAIR_DOOR_MIN_OVERLAP_MM = 900 + 2 * 115
+# NOTE: plan_geometry.py's _CIRCULATION_TYPES also carries foyer/courtyard — intentionally NOT mirrored here; the solver never emits those types.
 _CIRCULATION_TYPES = {"passage", "living", "dining"}
 # Repulsion guard bands: the solver otherwise games hard thresholds (parks a
 # toilet 1 mm past the wall gap) and post-solve snapping (±SNAP_TOL_M) can

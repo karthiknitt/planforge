@@ -22,6 +22,7 @@ from app.engine.section_render import (
     render_section_view,
 )
 from app.engine.title_block import draw_title_block
+from app.engine.vertical_standards import VS
 
 # ---------------------------------------------------------------------------
 # Internal CAD drawing helpers (ReportLab, not ezdxf)
@@ -172,6 +173,9 @@ PALETTE: dict[str, tuple[str, str]] = {
     "study": ("#FFFFFF", "#000000"),
     "balcony": ("#FFFFFF", "#000000"),
     "dining": ("#FFFFFF", "#000000"),
+    "foyer": ("#FFFFFF", "#000000"),
+    "courtyard": ("#FFFFFF", "#000000"),
+    "wardrobe": ("#FFFFFF", "#000000"),
 }
 
 # ── Page constants (points) ───────────────────────────────────────────────────
@@ -240,6 +244,61 @@ def _schedule_column_x(page_w: float, margin: float) -> float:
     return page_w - margin - SCHED_W
 
 
+_FLOOR_LABELS = {-1: "Basement", 0: "Ground Floor", 1: "First Floor", 2: "Second Floor"}
+
+_FLOOR_NUM_BY_KEY = {
+    "basement_floor": -1,
+    "ground_floor": 0,
+    "first_floor": 1,
+    "second_floor": 2,
+}
+
+
+def _floor_label(floor_plan: FloorPlan) -> str:
+    """Display label for a floor number (Basement/Ground/First/Second Floor)."""
+    return _FLOOR_LABELS.get(floor_plan.floor, f"Floor {floor_plan.floor}")
+
+
+def ordered_floors(layout: Layout) -> list[FloorPlan]:
+    """All populated floors in build order (basement first)."""
+    return [
+        fp
+        for fp in (
+            layout.basement_floor,
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+        )
+        if fp is not None
+    ]
+
+
+def arch_page_index(layout: Layout, floor_key: str) -> int:
+    """Architectural-page index (0-based) of ``floor_key`` in render_pdf()'s page order."""
+    want = _FLOOR_NUM_BY_KEY.get(floor_key)
+    if want is None:
+        return 0
+    return next(
+        (i for i, fp in enumerate(ordered_floors(layout)) if fp.floor == want),
+        0,
+    )
+
+
+def _has_floor_above(layout: Layout, floor_plan: FloorPlan) -> bool:
+    """True if any populated floor (with rooms) sits above ``floor_plan``."""
+    floors = {
+        fp.floor: fp
+        for fp in (
+            layout.basement_floor,
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+        )
+        if fp
+    }
+    return any(f > floor_plan.floor and fp.rooms for f, fp in floors.items())
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -255,12 +314,10 @@ def render_pdf(
     """Return raw PDF bytes.
 
     Page order:
-      1. Ground Floor architectural plan
-      2. First Floor architectural plan
-      3. Ground Floor structural (beam & column) layout
-      4. First Floor structural (beam & column) layout
-      5. Section A-A
-      6. Front Elevation
+      1..N. Architectural pages, one per populated floor, basement first
+      N+1..2N. Structural pages (beam & column layout), same order
+      then Section A-A
+      then Front Elevation
 
     ``structural_design`` (optional): the persisted StructuralDesign surface
     -- {status, revision_id, changelog, structapi: {data, disclaimer}} --
@@ -275,8 +332,7 @@ def render_pdf(
     show_watermark = watermark_preliminary and structural_design is None
 
     # ── Architectural pages ────────────────────────────────────────────────────
-    for floor_plan in [layout.ground_floor, layout.first_floor]:
-        floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
+    for floor_plan in ordered_floors(layout):
         _draw_floor_projected(
             c,
             floor_plan,
@@ -284,15 +340,14 @@ def render_pdf(
             cfg,
             project_name,
             num_bedrooms,
-            floor_label,
+            _floor_label(floor_plan),
             annotations=annotations,
             watermark_preliminary=show_watermark,
         )
         c.showPage()
 
     # ── Structural pages ───────────────────────────────────────────────────────
-    for floor_plan in [layout.ground_floor, layout.first_floor]:
-        floor_label = "Ground Floor" if floor_plan.floor == 0 else "First Floor"
+    for floor_plan in ordered_floors(layout):
         _draw_structural_floor(
             c,
             floor_plan,
@@ -300,7 +355,7 @@ def render_pdf(
             cfg,
             project_name,
             num_bedrooms,
-            floor_label,
+            _floor_label(floor_plan),
             structural_design=structural_design,
         )
         c.showPage()
@@ -625,7 +680,14 @@ def _draw_floor(
             c.rect(cx_c - jf, cy_c - jf, jf * 2, jf * 2, fill=1, stroke=0)
 
         # ── Staircase treads ──────────────────────────────────────────────────
-        _draw_staircase_treads(c, rooms, scale, ox, oy)
+        _draw_staircase_treads(
+            c,
+            rooms,
+            scale,
+            ox,
+            oy,
+            stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
+        )
 
         # ── Window symbols in exterior wall gaps ──────────────────────────────
         _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y)
@@ -729,71 +791,138 @@ def _draw_floor(
     )
 
 
-def _draw_staircase_treads(c, rooms, scale, ox, oy):
-    """Draw staircase: floor-level indicator, tread lines, break line, UP arrow + label."""
+def _stair_tread_elements(room, tread_m: float = VS.stair_tread_m) -> dict:
+    """Orientation-aware stair geometry in metres (same heuristic as
+    plan_geometry.derive_stair: depth >= width => flight climbs S->N,
+    else W->E). Tread depth follows the engine's vertical standards."""
+    inset = 0.115 / 2
+    vertical_run = room.depth >= room.width
+    if vertical_run:
+        cross_lo, cross_hi = room.x + inset, room.x + room.width - inset
+        num = max(3, min(16, int((room.depth * 0.5) / tread_m)))
+        step = (room.depth / 2) / (num + 1)
+        treads = [
+            (cross_lo, room.y + i * step, cross_hi, room.y + i * step)
+            for i in range(1, num + 1)
+        ]
+        return {
+            "indicator": (cross_lo, room.y, cross_hi, room.y),
+            "treads": treads,
+            "break_line": (
+                cross_lo,
+                room.y + room.depth / 2,
+                cross_hi,
+                room.y + room.depth / 2,
+            ),
+            "arrow": (
+                room.x + room.width / 2,
+                room.y + room.depth * 0.58,
+                room.x + room.width / 2,
+                room.y + room.depth * 0.80,
+            ),
+            "label_xy": (
+                room.x + room.width / 2,
+                room.y + room.depth * 0.80 + 0.12,
+            ),
+            "label_halign": "centre",
+        }
+    # E-W flight: indicator on the west (x-min) edge, treads stacked along x
+    cross_lo, cross_hi = room.y + inset, room.y + room.depth - inset
+    num = max(3, min(16, int((room.width * 0.5) / tread_m)))
+    step = (room.width / 2) / (num + 1)
+    treads = [
+        (room.x + i * step, cross_lo, room.x + i * step, cross_hi)
+        for i in range(1, num + 1)
+    ]
+    return {
+        "indicator": (room.x, cross_lo, room.x, cross_hi),
+        "treads": treads,
+        "break_line": (
+            room.x + room.width / 2,
+            cross_lo,
+            room.x + room.width / 2,
+            cross_hi,
+        ),
+        "arrow": (
+            room.x + room.width * 0.58,
+            room.y + room.depth / 2,
+            room.x + room.width * 0.80,
+            room.y + room.depth / 2,
+        ),
+        "label_xy": (
+            room.x + room.width * 0.80 + 0.12,
+            room.y + room.depth / 2,
+        ),
+        "label_halign": "left",
+    }
+
+
+def _draw_staircase_treads(c, rooms, scale, ox, oy, stair_label="UP"):
+    """Draw staircase: floor-level indicator, tread lines, break line, arrow + label."""
+
+    def _pts(seg):
+        x1, y1, x2, y2 = seg
+        return ox + x1 * scale, oy + y1 * scale, ox + x2 * scale, oy + y2 * scale
+
     c.setDash()
 
     for room in rooms:
         if room.type != "staircase":
             continue
-        rx = ox + room.x * scale
-        ry = oy + room.y * scale
         rw = room.width * scale
-        rh = room.depth * scale
-        inset = 0.115 * scale / 2  # stop at inner wall face
+        el = _stair_tread_elements(room)
 
-        # ── Floor-level indicator (thick first tread at stair entry / bottom) ──
+        # ── Floor-level indicator (thick first tread at stair entry) ────────────
         c.setStrokeColor(HexColor("#000000"))
         c.setLineWidth(1.8)
-        c.line(rx + inset, ry, rx + rw - inset, ry)
+        c.line(*_pts(el["indicator"]))
 
-        # ── Tread lines — evenly spaced, using target 270mm tread depth ─────────
-        tread_depth_m = 0.27  # standard residential tread depth
-        num_treads = max(3, min(16, int((room.depth * 0.5) / tread_depth_m)))
-        lower_half = rh / 2  # draw treads in lower half only (above break line)
-        step = lower_half / (num_treads + 1) if num_treads > 0 else lower_half / 4
+        # ── Tread lines — evenly spaced, depth per vertical standards (VS) ──────
         c.setStrokeColor(HexColor("#333333"))
         c.setLineWidth(0.5)
-        for i in range(1, num_treads + 1):
-            ly = ry + i * step
-            c.line(rx + inset, ly, rx + rw - inset, ly)
+        for tread in el["treads"]:
+            c.line(*_pts(tread))
 
-        # ── Break line (dashed zigzag, mid-height) ───────────────────────────────
-        mid_y = ry + rh / 2
+        # ── Break line (dashed zigzag, mid-flight) ───────────────────────────────
         c.setDash(4, 2)
         c.setLineWidth(0.75)
         c.setStrokeColor(HexColor("#000000"))
-        c.line(rx + inset, mid_y, rx + rw - inset, mid_y)
+        c.line(*_pts(el["break_line"]))
         c.setDash()
 
-        # ── UP label + arrow (upper tread zone, above break line) ────────────────
+        # ── UP/DN label + arrow (exit zone, past the break line) ────────────────
         if rw >= 18:
             lbl_fs = max(8, min(12, rw * 0.30))
-            cx_s = rx + rw / 2
-            # Arrow stem + head pointing up, positioned in upper zone
-            arrow_base_y = ry + rh * 0.58
-            arrow_tip_y = ry + rh * 0.80
-            stem_x = cx_s
+            ax1, ay1, ax2, ay2 = _pts(el["arrow"])
             c.setStrokeColor(HexColor("#000000"))
             c.setLineWidth(1.0)
-            c.line(stem_x, arrow_base_y, stem_x, arrow_tip_y)  # vertical stem
+            c.line(ax1, ay1, ax2, ay2)  # stem
             arrow_w = min(rw * 0.28, 7)
             p = c.beginPath()
-            p.moveTo(stem_x, arrow_tip_y + arrow_w)  # tip
-            p.lineTo(stem_x - arrow_w / 2, arrow_tip_y)  # left wing
-            p.lineTo(stem_x + arrow_w / 2, arrow_tip_y)  # right wing
+            if ax1 == ax2:  # vertical flight — head points up
+                p.moveTo(ax2, ay2 + arrow_w)  # tip
+                p.lineTo(ax2 - arrow_w / 2, ay2)  # left wing
+                p.lineTo(ax2 + arrow_w / 2, ay2)  # right wing
+            else:  # E-W flight — head points right
+                p.moveTo(ax2 + arrow_w, ay2)  # tip
+                p.lineTo(ax2, ay2 - arrow_w / 2)  # lower wing
+                p.lineTo(ax2, ay2 + arrow_w / 2)  # upper wing
             p.close()
             c.setFillColor(HexColor("#000000"))
             c.drawPath(p, fill=1, stroke=0)
-            # "UP" text above the arrow tip
+            # Label past the arrow tip
+            lx, ly = el["label_xy"]
             c.setFillColor(HexColor("#000000"))
             c.setFont("Helvetica-Bold", lbl_fs)
-            c.drawCentredString(cx_s, arrow_tip_y + arrow_w + 2, "UP")
+            if el["label_halign"] == "centre":
+                c.drawCentredString(ox + lx * scale, oy + ly * scale, stair_label)
+            else:
+                c.drawString(ox + lx * scale, oy + ly * scale, stair_label)
 
 
 def _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y):
     """Draw window symbols on exterior-facing walls of habitable rooms."""
-    habitable = {"living", "bedroom", "kitchen", "study", "dining"}
+    habitable = {"living", "bedroom", "kitchen", "study", "dining", "foyer"}
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(WIN_LW)
     win_w_m = 1.2  # window width in metres
@@ -1949,7 +2078,7 @@ def _draw_labels(
 
 
 def _draw_stair_geometry(
-    c: canvas.Canvas, drawing, s: float, ox: float, oy: float
+    c: canvas.Canvas, drawing, s: float, ox: float, oy: float, stair_label: str = "UP"
 ) -> None:
     stair = drawing.stair
     if stair is None:
@@ -1978,7 +2107,7 @@ def _draw_stair_geometry(
         )
     ux, uy = stair.up_label_xy
     c.setFont("Helvetica-Bold", 6)
-    c.drawString(ox + ux * s + 3, oy + uy * s, "UP")
+    c.drawString(ox + ux * s + 3, oy + uy * s, stair_label)
 
 
 def _draw_floor_projected(
@@ -2066,7 +2195,14 @@ def _draw_floor_projected(
             fill=1,
             stroke=0,
         )
-    _draw_stair_geometry(c, drawing, s, ox, oy)
+    _draw_stair_geometry(
+        c,
+        drawing,
+        s,
+        ox,
+        oy,
+        stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
+    )
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)

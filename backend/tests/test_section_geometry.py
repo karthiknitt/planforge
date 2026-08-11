@@ -177,3 +177,35 @@ def test_elevation_includes_full_height_main_door():
     assert any(r.bounds[0] <= md.cx <= r.bounds[2] for r in door_rects), (
         "no elevation door rect at the main-door x position"
     )
+
+
+def test_section_cut_line_falls_back_without_staircase():
+    from shapely.geometry import box
+
+    from app.engine.section_geometry import section_cut_line
+    from tests.test_multi_floor import _room
+
+    rooms = [_room("living", "living", 1.13, 1.73, 4.0, 5.0)]
+    buildable = box(1.0, 2.0, 10.0, 14.0)
+    line, along_y = section_cut_line(rooms, buildable)
+    # graceful fallback: plain vertical mid-line through the buildable bounds
+    assert along_y is True
+    coords = list(line.coords)
+    assert coords[0][0] == coords[1][0] == 5.5
+    assert coords[0][1] == 1.0 and coords[1][1] == 15.0  # padded by 1.0
+
+
+def test_render_pdf_handles_stairless_ground_floor():
+    """End-to-end: a genuinely stair-less single-story home renders (H)."""
+    from app.engine.pdf import render_pdf
+    from tests.test_multi_floor import _cfg, _make_layout, _room
+
+    rooms = [  # front rooms at 1.73 = setback_front(1.5) + EWT(0.23)
+        _room("living", "living", 1.13, 1.73, 4.0, 5.0),
+        _room("bed", "bedroom", 5.13, 1.73, 4.0, 5.0),
+    ]
+    lay = _make_layout(rooms, ff_rooms=[])
+    pdf = render_pdf("Stairless", lay, _cfg(), 3)
+    from tests.helpers.pdf_png import pdf_pages
+
+    assert pdf_pages(pdf) == 6

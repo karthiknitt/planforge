@@ -8,6 +8,7 @@ from app.engine.plan_geometry import (
     derive_openings,
     derive_walls,
     opening_boxes,
+    validate_floor_connectivity,
     wall_polygons,
 )
 from app.engine.standards import OpeningStandards
@@ -580,3 +581,181 @@ def test_single_door_room_prefers_circulation_over_no_transit_neighbour():
     assert not _doors_on_room(kitchen, doors), (
         "toilet must not route its only door through the kitchen"
     )
+
+
+def test_parking_never_hosts_interior_door():
+    # _cfg_9x15 plate front: x 1.23 (=1.0+0.23), y 1.73 (=1.5+0.23)
+    # both id orderings: pre-fix the porch placed its own door whenever it
+    # sorted before its neighbour in the per-room door loop (issue #2)
+    for porch_id in ("porch", "a_porch"):
+        rooms = [
+            _room("living", 1.23, 1.73, 3.5, 5.0),
+            _room(porch_id, 1.23, 6.73, 3.5, 3.0, rtype="parking"),
+        ]
+        openings, _walls = _openings_for(rooms, _cfg_9x15())
+        porch_doors = [
+            o for o in openings if o.kind == "door" and o.swing_into_room_id == porch_id
+        ]
+        assert porch_doors == [], f"{porch_id} hosts its own interior door"
+        # the porch must still be served as a no-transit endpoint by the
+        # neighbour's door on the shared wall
+        assert validate_floor_connectivity(rooms, openings, 0) == []
+
+
+# ── Entrance-placement diagnostics (Task 6: #6, #6b, G, #6d) ─────────────────
+
+
+def _drawing_for(rooms):
+    from app.engine.models import FloorPlan
+    from app.engine.plan_geometry import build_floor_drawing
+
+    fp = FloorPlan(floor=0, floor_type="ground", rooms=rooms)
+    return build_floor_drawing(fp, _cfg_9x15())
+
+
+def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
+    # every parking type (2W/4W variants included) is ineligible to host the
+    # main entrance — a frontage of only parking + stair must be diagnosed
+    for rtype in ("parking", "parking_4w", "parking_2w"):
+        drawing = _drawing_for(
+            [
+                _room("porch", 1.23, 1.73, 4.0, 3.0, rtype=rtype),
+                _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
+                _room("living", 1.23, 4.73, 4.0, 3.0),
+            ]
+        )
+        diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
+        assert diag and "porch" in diag[0], f"{rtype}: no main_entrance diagnostic"
+        assert not any(o.is_main for o in drawing.openings), (
+            f"{rtype}: porch hosted the main door"
+        )
+
+
+def test_main_door_too_narrow_candidate_is_diagnosed():  # #6b
+    # entry is the ONLY road-facing room; living sits behind it
+    drawing = _drawing_for(
+        [
+            _room("entry", 1.23, 1.73, 0.97, 3.0),  # < 1.05 + 2 jambs
+            _room("living", 1.23, 4.73, 4.0, 4.0),
+        ]
+    )
+    diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
+    assert diag and "too narrow" in diag[0]
+
+
+def test_main_door_off_plate_front_is_diagnosed():  # #6
+    drawing = _drawing_for(
+        [
+            _room("living", 1.23, 2.5, 5.0, 5.0),  # 0.77m behind plate front 1.73
+            _room("stair", 6.23, 1.73, 1.5, 6.0, rtype="staircase"),
+        ]
+    )
+    assert not any(o.is_main for o in drawing.openings)
+    assert any(d.startswith("main_entrance:") for d in drawing.diagnostics)
+
+
+def test_main_door_columns_blocked_is_diagnosed():  # G
+    # living is the ONLY eligible road-facing room, barely wider than the
+    # minimum (1.32 >= 1.07 + 2*0.115 jamb). Its partition with the stair
+    # meets the front wall at a junction that auto-derives a column at
+    # (2.55, 1.615); that column forbids door centres > 2.55 - 0.695 = 1.855
+    # while the fit window is [1.88, 1.90], so _fit_along returns None.
+    drawing = _drawing_for(
+        [
+            _room("living", 1.23, 1.73, 1.32, 4.0),
+            _room("stair", 2.55, 1.73, 2.0, 4.0, rtype="staircase"),
+        ]
+    )
+    assert not any(o.is_main for o in drawing.openings)
+    diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
+    assert diag and "fully blocked" in diag[0]
+
+
+def test_diagnostics_key_present_in_drawing_dict():
+    drawing = _drawing_for([_room("a", 1.23, 1.73, 3.0, 3.0)])
+    assert "diagnostics" in drawing.to_dict()
+
+
+def test_partial_footprint_rear_surface_gets_window():
+    """Rooms fill only the front part of the plate (#6c floor): the living
+    room's REAR edge is a true exterior surface after the wall-ring fix — it
+    must receive a window on the union rear ring (cy = rear + ewt/2), not be
+    silently omitted as before.
+
+    (living is wider than deep so its front/rear edges are its two longest
+    exterior edges — a square room would tie and a vertical edge would win
+    the stable :2 selection, hiding the effect this test pins down.)"""
+    openings, _ = _openings_for(
+        [
+            _room("living", 1.23, 1.73, 5.0, 3.0),
+            _room("stair", 6.345, 1.73, 1.425, 3.0, rtype="staircase"),
+        ],
+        _cfg_9x15(),
+    )
+    rear_windows = [
+        o for o in openings if o.kind == "window" and abs(o.cy - (4.73 + 0.115)) < 1e-6
+    ]
+    assert rear_windows, "no window was placed on the union rear surface"
+
+
+def test_main_door_on_setback_building_uses_union_front():
+    """#6 healed for partial footprints: no room at the buildable front plate,
+    but the front-most room defines the building's real front wall."""
+    openings, _ = _openings_for(
+        [
+            _room("living", 1.23, 2.5, 4.0, 4.0),
+            _room("bed", 4.23, 2.5, 3.0, 4.0, rtype="bedroom"),
+            _room("stair", 4.23, 6.5, 2.0, 3.0, rtype="staircase"),
+        ],
+        _cfg_9x15(),
+    )
+    main = next((o for o in openings if o.is_main), None)
+    assert main is not None
+    assert abs(main.cy - (2.5 - 0.115)) < 1e-6  # union front minus ewt/2
+
+
+# ── Out-of-bounds room validation (Task 7: #F) ───────────────────────────────
+
+
+def test_rooms_outside_buildable_bounds_are_flagged():
+    drawing = _drawing_for(
+        [
+            _room("living", 1.23, 1.73, 4.0, 5.0),
+            _room(
+                "stray", 12.0, 1.73, 3.0, 3.0
+            ),  # buildable max x is 8.0 for _cfg_9x15
+        ]
+    )
+    assert any(d.startswith("geometry:") for d in drawing.diagnostics)
+
+
+# ── New room types: foyer / courtyard / wardrobe (Task 8: #C) ────────────────
+
+
+def test_foyer_hosts_main_entrance():
+    openings, _ = _openings_for(
+        [
+            _room("foyer", 1.23, 1.73, 2.5, 3.0, rtype="foyer"),
+            _room("stair", 3.73, 1.73, 2.0, 3.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 5.0, 4.0),
+        ],
+        _cfg_9x15(),
+    )
+    main = next((o for o in openings if o.is_main), None)
+    assert main is not None
+    assert main.swing_into_room_id == "foyer"
+
+
+def test_courtyard_gets_no_own_door_but_is_reachable():
+    rooms = [  # 3 rooms stacked around a central courtyard strip
+        _room("living", 1.23, 1.73, 4.0, 3.0),
+        _room("court", 1.23, 4.73, 4.0, 2.0, rtype="courtyard"),
+        _room("stair", 1.23, 6.73, 4.0, 3.0, rtype="staircase"),
+    ]
+    openings, _ = _openings_for(rooms, _cfg_9x15())
+    court_doors = [
+        o for o in openings if o.kind == "door" and o.swing_into_room_id == "court"
+    ]
+    assert court_doors == []
+    # reachable via the neighbours' doors on the shared walls
+    assert validate_floor_connectivity(rooms, openings, 0) == []

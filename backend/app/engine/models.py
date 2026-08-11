@@ -26,6 +26,10 @@ RoomType = Literal[
     "store_room",
     "garage",
     "passage",
+    # hand-authored / editor data only — the solver never generates these three
+    "foyer",  # entry vestibule
+    "courtyard",  # interior open-to-sky court (light-well)
+    "wardrobe",  # walk-in closet
 ]
 
 
@@ -81,8 +85,8 @@ class Layout:
 
 @dataclass
 class PlotConfig:
-    plot_length: float
-    plot_width: float
+    plot_length: float  # y-extent (front/road -> rear), metres. NOT the longer axis.
+    plot_width: float  # x-extent (left -> right, road frontage), metres.
     setback_front: float
     setback_rear: float
     setback_left: float

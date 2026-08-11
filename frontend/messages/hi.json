@@ -157,7 +157,10 @@
     "servant_quarter": "नौकर कक्ष",
     "home_office": "होम ऑफिस",
     "gym": "जिम",
-    "garage": "गैराज"
+    "garage": "गैराज",
+    "foyer": "फ़ोयर",
+    "courtyard": "आंगन",
+    "wardrobe": "वॉर्डरोब"
   },
   "compliance": {
     "passed": "अनुपालक",

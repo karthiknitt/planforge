@@ -6,8 +6,9 @@ is inset ewt from the buildable ring. Walls therefore live in the gaps:
 
 - paired internal walls: centreline at the midpoint of the gap between two
   facing room edges
-- external ring: centreline at buildable boundary − ewt/2 (outer face flush
-  with the buildable polygon)
+- external ring: centreline at the room-union bounding box ± ewt/2 (inner
+  face flush with the floor's room union; falls back to the buildable plate
+  when the floor has no rooms)
 - orphan walls: room edges facing unassigned space get an iwt wall hugging
   the edge (centreline iwt/2 outside the room)
 
@@ -21,7 +22,7 @@ import logging
 import math
 from typing import TYPE_CHECKING
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 
 from app.engine.cad_elements import (
@@ -62,16 +63,26 @@ _WINDOW_TYPES = {
     "gym",
     "servant_quarter",
 }
-_DOOR_NEIGHBOUR_PRIORITY = {"passage": 0, "living": 1, "dining": 2, "staircase": 3}
-_ENTRY_PRIORITY = {"living": 0, "passage": 1, "dining": 2}
-_NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
+_DOOR_NEIGHBOUR_PRIORITY = {
+    "passage": 0,
+    "foyer": 0,
+    "courtyard": 1,
+    "living": 1,
+    "dining": 2,
+    "staircase": 3,
+}
+_ENTRY_PRIORITY = {"living": 0, "foyer": 1, "passage": 2, "dining": 3}
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
+_NO_ENTRY_TYPES = _WET_TYPES | _PARKING_TYPES | {"staircase"}
+# rooms that never host their own interior door: circulation, open-air/outdoor,
+# and transitional spaces — doors serving them are placed by their neighbours.
+_NO_DOOR_TYPES = _PARKING_TYPES | {"passage", "foyer", "courtyard"}
 # wet rooms + kitchen: interior-accessed, exactly one door, never a transit route
 _SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
 _NO_TRANSIT_TYPES = _SINGLE_DOOR_TYPES | _PARKING_TYPES
 # rooms the staircase may legitimately take its door from
-_CIRCULATION_TYPES = {"passage", "living", "dining"}
+_CIRCULATION_TYPES = {"passage", "foyer", "courtyard", "living", "dining"}
 # shared-wall run the staircase needs with one of those to fit a door leaf
 # plus both jambs — the same test the candidate loop applies per wall below.
 _STAIR_DOOR_MIN_RUN_M = 0.9 + 2 * _JAMB
@@ -183,6 +194,42 @@ def _pair_edges(
     return out
 
 
+def _plate_bounds(
+    rooms: list[Room], buildable: Polygon, ewt: float
+) -> tuple[float, float, float, float]:
+    """Plate bounds (px1, py1, px2, py2) for the floor's exterior surface.
+
+    Room-union bbox when rooms exist (matches the derive_walls ring);
+    buildable inset by ewt otherwise. THE single source of truth for both
+    wall rings and opening placement."""
+    if rooms:
+        footprint = unary_union(
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+        )
+        px1, py1, px2, py2 = footprint.bounds
+        # Clear-rect rooms always leave iwt slits between neighbours, so an
+        # area-vs-bbox check false-alarms on every full-plate layout. This is
+        # a heuristic: corner-jogged (L-shaped) footprints are detected via a
+        # missing bbox corner; mid-edge notches (C/U shapes) are NOT detected.
+        if any(
+            footprint.distance(Point(cx, cy)) > 1e-6
+            for cx in (px1, px2)
+            for cy in (py1, py2)
+        ):
+            logger.warning(
+                "non-rectangular room footprint: external ring approximated "
+                "by the footprint bounding box (jogged outline not followed)"
+            )
+        return px1, py1, px2, py2
+    bx1, by1, bx2, by2 = buildable.bounds
+    if abs(buildable.area - (bx2 - bx1) * (by2 - by1)) > 1e-6:
+        logger.warning(
+            "non-rectangular buildable polygon: external ring approximated "
+            "by its bounding box (trapezoid/L/quad support pending)"
+        )
+    return bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
+
+
 def derive_walls(
     rooms: list[Room],
     buildable: Polygon,
@@ -190,15 +237,27 @@ def derive_walls(
     iwt: float = IWT,
     tol: float = 0.01,
 ) -> list[WallSegment]:
-    bx1, by1, bx2, by2 = buildable.bounds
-    if abs(buildable.area - (bx2 - bx1) * (by2 - by1)) > 1e-6:
-        logger.warning(
-            "non-rectangular buildable polygon: external ring approximated "
-            "by its bounding box (trapezoid/L/quad support pending)"
-        )
-    cxl, cxr = bx1 + ewt / 2, bx2 - ewt / 2
-    cyb, cyt = by1 + ewt / 2, by2 - ewt / 2
-    px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt  # plate
+    """Derive the floor's wall centrelines from its rooms.
+
+    The external ring hugs this floor's room union (a partial-footprint floor
+    — e.g. a GF leaving a roof void at the rear — gets no false ring around
+    the empty area); with no rooms it falls back to the buildable plate.
+
+    Known residual limitation: uncovered room edges facing an *interior* void
+    (e.g. a roof void over part of the GF footprint, technically inside the
+    footprint bounding box) are still drawn as `internal` (iwt) orphan walls.
+    Fixing that needs Shapely strip classification of every orphan edge
+    against the footprint; out of scope for now. Opening placement shares the
+    same exterior-surface model: `_exterior_edges`/`_place_main_entrance` in
+    `derive_openings` also consume `_plate_bounds`, so void-facing surfaces on
+    partial-footprint floors DO receive openings. Only `_place_main_entrance`'s
+    `gate_x` (compound-wall gate/road alignment) still keys off the buildable
+    plate.
+    """
+    px1, py1, px2, py2 = _plate_bounds(rooms, buildable, ewt)
+
+    cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
+    cyb, cyt = py1 - ewt / 2, py2 + ewt / 2
 
     walls: list[WallSegment] = [
         WallSegment(cxl, cyb, cxr, cyb, ewt, kind="external"),
@@ -615,18 +674,20 @@ def _fit_along(
     return min(valid, key=lambda c: abs(c - desired))
 
 
-def _exterior_edges(room, buildable: Polygon, ewt: float, tol: float):
-    """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the plate boundary."""
-    bx1, by1, bx2, by2 = buildable.bounds
-    px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
+def _exterior_edges(
+    room, plate: tuple[float, float, float, float], ewt: float, tol: float
+):
+    """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the floor's
+    exterior surface (the room-union plate, see `_plate_bounds`)."""
+    px1, py1, px2, py2 = plate
     if abs(room.x - px1) <= 2 * tol:
-        yield (False, bx1 + ewt / 2, room.y, room.y + room.depth)
+        yield (False, px1 - ewt / 2, room.y, room.y + room.depth)
     if abs(room.x + room.width - px2) <= 2 * tol:
-        yield (False, bx2 - ewt / 2, room.y, room.y + room.depth)
+        yield (False, px2 + ewt / 2, room.y, room.y + room.depth)
     if abs(room.y - py1) <= 2 * tol:
-        yield (True, by1 + ewt / 2, room.x, room.x + room.width)
+        yield (True, py1 - ewt / 2, room.x, room.x + room.width)
     if abs(room.y + room.depth - py2) <= 2 * tol:
-        yield (True, by2 - ewt / 2, room.x, room.x + room.width)
+        yield (True, py2 + ewt / 2, room.x, room.x + room.width)
 
 
 class _ObstacleIndex:
@@ -705,43 +766,58 @@ def _place_main_entrance(
     buildable: Polygon,
     ewt: float,
     tol: float,
+    reasons: list[str] | None = None,
 ) -> Opening | None:
     """Main entrance door (MD) in the road-facing external wall.
 
     The road is always the y-min edge (archetypes/vastu convention: y=0 is
     the road/front edge). Entry room preference follows Indian practice:
-    living > passage > dining; never parking, stairs or wet rooms. The
+    living > foyer > passage > dining; never parking, stairs or wet rooms. The
+    door sits on the floor's front exterior surface (room-union plate); its
     desired position is the facade midpoint so the door lines up with the
     compound-wall gate (cad_advanced centres the gate on the road side).
     """
-    bx1, by1, bx2, _by2 = buildable.bounds
-    py1 = by1 + ewt  # front plate boundary
-    coord = by1 + ewt / 2  # front external-wall centreline
+    bx1, _by1, bx2, _by2 = buildable.bounds
+    _px1, py1, _px2, _py2 = _plate_bounds(rooms, buildable, ewt)
+    coord = py1 - ewt / 2  # front external-wall centreline (union plate)
     width = std.main_door_width_m
     gate_x = (bx1 + bx2) / 2
     cands = []
+    rejected: list[str] = []
     for room in rooms:
-        if room.type in _NO_ENTRY_TYPES:
-            continue
         if abs(room.y - py1) > 2 * tol:
+            continue  # not road-frontage — not a candidate at all
+        if room.type in _NO_ENTRY_TYPES:
+            rejected.append(f"{room.id}(type={room.type}) cannot host entry")
             continue
         lo, hi = room.x, room.x + room.width
         if hi - lo < width + 2 * _JAMB:
+            rejected.append(
+                f"{room.id} too narrow for main door "
+                f"({hi - lo:.2f}m < {width + 2 * _JAMB:.2f}m)"
+            )
             continue
-        prio = _ENTRY_PRIORITY.get(room.type, 3)
+        prio = _ENTRY_PRIORITY.get(room.type, 4)
         cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
-    for _prio, _dist, _rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
+    for _prio, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
         centre = _fit_along(
             gate_x, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
         )
         if centre is None:
+            rejected.append(f"{rid} fully blocked by columns/openings")
             continue
         door = _make_door(
             room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
         )
         door.is_main = True
         return door
-    logger.warning("no suitable road-facing room for a main entrance door")
+    detail = "; ".join(rejected) if rejected else "no road-facing room at front plate"
+    if reasons is not None:
+        reasons.append(f"main_entrance: {detail}")
+    else:
+        logger.warning(
+            "no suitable road-facing room for a main entrance door: %s", detail
+        )
     return None
 
 
@@ -755,11 +831,13 @@ def derive_openings(
     iwt: float = IWT,
     tol: float = 0.01,
     floor: int = 0,
+    reasons: list[str] | None = None,
 ) -> list[Opening]:
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
     openings: list[Opening] = []
     doored_gaps: set[tuple[int, int]] = set()  # room-index pairs already connected
+    plate = _plate_bounds(rooms, buildable, ewt)  # exterior-surface model
 
     def place(opening: Opening | None) -> bool:
         if opening is None:
@@ -770,10 +848,10 @@ def derive_openings(
 
     # ── Main entrance first, so it claims front-wall space before windows ─
     if floor == 0:
-        place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol))
+        place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol, reasons))
 
-    # ── Doors: one per non-passage room; a door in a shared wall serves
-    # BOTH rooms, so a room whose gap already carries a door is done ──────
+    # ── Doors: one per room not in _NO_DOOR_TYPES; a door in a shared wall
+    # serves BOTH rooms, so a room whose gap already carries a door is done ──
     id_to_index = {r.id: k for k, r in enumerate(rooms)}
     ens_bed_index = {}  # en-suite room index -> its attached bedroom index
     for k, r in enumerate(rooms):
@@ -783,7 +861,7 @@ def derive_openings(
 
     main_door = next((o for o in openings if o.is_main), None)
     for idx, room in sorted(enumerate(rooms), key=lambda t: t[1].id):
-        if room.type == "passage":
+        if room.type in _NO_DOOR_TYPES:
             continue
         width = _WET_DOOR if room.type in _WET_TYPES else std.door_width_m
         bed_idx = ens_bed_index.get(idx)  # set only for en-suite toilets
@@ -886,7 +964,7 @@ def derive_openings(
                 break
         if not placed:
             # entrance door on an exterior edge (e.g. parking, or isolated room)
-            for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+            for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
                 if hi - lo < width + 2 * _JAMB:
                     continue
                 centre = _fit_along(
@@ -909,7 +987,7 @@ def derive_openings(
         if room.type not in _WINDOW_TYPES:
             continue
         edges = sorted(
-            _exterior_edges(room, buildable, ewt, tol),
+            _exterior_edges(room, plate, ewt, tol),
             key=lambda e: e[3] - e[2],
             reverse=True,
         )[:2]
@@ -942,7 +1020,7 @@ def derive_openings(
     for room in sorted(rooms, key=lambda r: r.id):
         if room.type not in _WET_TYPES:
             continue
-        for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+        for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
             if hi - lo < std.ventilator_width_m + 2 * _JAMB:
                 continue
             centre = _fit_along(
@@ -1268,7 +1346,8 @@ def _add_repair_door(
     # only (upper floors have no street access; "outside" is not a corridor)
     if floor != 0:
         return False
-    for is_h, coord, lo, hi in _exterior_edges(room, buildable, ewt, tol):
+    plate = _plate_bounds(rooms, buildable, ewt)
+    for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
         if hi - lo < width + 2 * _JAMB:
             continue
         centre = _fit_along(
@@ -1593,6 +1672,22 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     walls = derive_walls(rooms, buildable)
     junctions = derive_junctions(walls)
     columns = derive_columns(walls, junctions=junctions, rooms=rooms)
+    diagnostics: list[str] = []
+    bx1, by1, bx2, by2 = buildable.bounds
+    oob = [
+        r.id
+        for r in rooms
+        if r.x < bx1 - 0.05
+        or r.y < by1 - 0.05
+        or r.x + r.width > bx2 + 0.05
+        or r.y + r.depth > by2 + 0.05
+    ]
+    if oob:
+        diagnostics.append(
+            "geometry: rooms outside buildable bounds: "
+            + ", ".join(oob)
+            + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?)"
+        )
     openings = derive_openings(
         rooms,
         walls,
@@ -1600,7 +1695,10 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         get_opening_standards(),
         buildable,
         floor=floorplan.floor,
+        reasons=diagnostics,
     )
+    for d in diagnostics:
+        logger.warning("floor %s: %s", floorplan.floor, d)
     walls.sort(key=lambda w: (w.kind, w.x1, w.y1, w.x2, w.y2))
     openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
     columns.sort(key=lambda c: (c.cx, c.cy))
@@ -1615,4 +1713,5 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         labels=derive_labels(rooms, bounds=buildable.bounds),
         stair=derive_stair(rooms),
         bounds=buildable.bounds,
+        diagnostics=diagnostics,
     )

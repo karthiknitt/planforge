@@ -157,7 +157,10 @@
     "servant_quarter": "Servant Quarter",
     "home_office": "Home Office",
     "gym": "Gym",
-    "garage": "Garage"
+    "garage": "Garage",
+    "foyer": "Foyer",
+    "courtyard": "Courtyard",
+    "wardrobe": "Wardrobe"
   },
   "compliance": {
     "passed": "Compliant",
