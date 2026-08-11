@@ -6,8 +6,9 @@ is inset ewt from the buildable ring. Walls therefore live in the gaps:
 
 - paired internal walls: centreline at the midpoint of the gap between two
   facing room edges
-- external ring: centreline at buildable boundary − ewt/2 (outer face flush
-  with the buildable polygon)
+- external ring: centreline at the room-union bounding box ± ewt/2 (outer
+  face flush with the floor's room union; falls back to the buildable plate
+  when the floor has no rooms)
 - orphan walls: room edges facing unassigned space get an iwt wall hugging
   the edge (centreline iwt/2 outside the room)
 
@@ -21,7 +22,7 @@ import logging
 import math
 from typing import TYPE_CHECKING
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 
 from app.engine.cad_elements import (
@@ -193,15 +194,41 @@ def derive_walls(
     iwt: float = IWT,
     tol: float = 0.01,
 ) -> list[WallSegment]:
-    bx1, by1, bx2, by2 = buildable.bounds
-    if abs(buildable.area - (bx2 - bx1) * (by2 - by1)) > 1e-6:
-        logger.warning(
-            "non-rectangular buildable polygon: external ring approximated "
-            "by its bounding box (trapezoid/L/quad support pending)"
+    """Derive the floor's wall centrelines from its rooms.
+
+    The external ring hugs this floor's room union (a partial-footprint floor
+    — e.g. a GF leaving a roof void at the rear — gets no false ring around
+    the empty area); with no rooms it falls back to the buildable plate.
+
+    Known residual limitation: uncovered room edges facing an *interior* void
+    (e.g. a roof void over part of the GF footprint, technically inside the
+    footprint bounding box) are still drawn as `internal` (iwt) orphan walls.
+    Fixing that needs Shapely strip classification of every orphan edge
+    against the footprint; out of scope for now.
+    """
+    if rooms:
+        footprint = unary_union(
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
         )
-    cxl, cxr = bx1 + ewt / 2, bx2 - ewt / 2
-    cyb, cyt = by1 + ewt / 2, by2 - ewt / 2
-    px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt  # plate
+        px1, py1, px2, py2 = footprint.bounds
+        # Clear-rect rooms always leave iwt slits between neighbours, so an
+        # area-vs-bbox check false-alarms on every full-plate layout. A jogged
+        # (L-shaped) footprint is instead detected by missing bbox corners.
+        if any(
+            footprint.distance(Point(cx, cy)) > 1e-6
+            for cx in (px1, px2)
+            for cy in (py1, py2)
+        ):
+            logger.warning(
+                "non-rectangular room footprint: external ring approximated "
+                "by the footprint bounding box (jogged outline not followed)"
+            )
+    else:
+        bx1, by1, bx2, by2 = buildable.bounds
+        px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
+
+    cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
+    cyb, cyt = py1 - ewt / 2, py2 + ewt / 2
 
     walls: list[WallSegment] = [
         WallSegment(cxl, cyb, cxr, cyb, ewt, kind="external"),

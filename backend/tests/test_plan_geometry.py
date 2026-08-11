@@ -10,6 +10,7 @@ face unassigned space.
 
 import math
 
+import pytest
 from shapely.geometry import box
 
 from app.engine.cad_elements import WallJunction
@@ -410,3 +411,25 @@ def test_derive_columns_rooms_param_optional_backward_compatible():
     assert [(round(c.cx, 3), round(c.cy, 3)) for c in without_rooms] == [
         (round(c.cx, 3), round(c.cy, 3)) for c in with_none
     ]
+
+
+def test_external_ring_follows_room_union_not_buildable():
+    # rooms cover only the FRONT half of the _cfg_9x15 plate — roof void at rear
+    rooms = [
+        _room("living", 1.23, 1.73, 4.0, 4.0),
+        _room("stair", 5.23, 1.73, 2.0, 4.0, rtype="staircase"),
+    ]
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls(rooms, buildable)
+    ext = [w for w in walls if w.kind == "external"]
+    rear_cyt = max(max(w.y1, w.y2) for w in ext)
+    front_cyb = min(min(w.y1, w.y2) for w in ext)
+    # ring hugs the room union (5.73 + EWT/2), NOT the buildable rear edge
+    assert rear_cyt == pytest.approx(5.73 + EWT / 2, abs=1e-6)
+    assert front_cyb == pytest.approx(1.73 - EWT / 2, abs=1e-6)
+
+
+def test_external_ring_falls_back_to_buildable_without_rooms():
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls([], buildable)
+    assert [w for w in walls if w.kind == "external"]
