@@ -22,6 +22,7 @@ from app.engine.section_render import (
     render_section_view,
 )
 from app.engine.title_block import draw_title_block
+from app.engine.vertical_standards import VS
 
 # ---------------------------------------------------------------------------
 # Internal CAD drawing helpers (ReportLab, not ezdxf)
@@ -790,16 +791,15 @@ def _draw_floor(
     )
 
 
-def _stair_tread_elements(room) -> dict:
+def _stair_tread_elements(room, tread_m: float = VS.stair_tread_m) -> dict:
     """Orientation-aware stair geometry in metres (same heuristic as
     plan_geometry.derive_stair: depth >= width => flight climbs S->N,
-    else W->E)."""
+    else W->E). Tread depth follows the engine's vertical standards."""
     inset = 0.115 / 2
-    tread_depth_m = 0.27
     vertical_run = room.depth >= room.width
     if vertical_run:
         cross_lo, cross_hi = room.x + inset, room.x + room.width - inset
-        num = max(3, min(16, int((room.depth * 0.5) / tread_depth_m)))
+        num = max(3, min(16, int((room.depth * 0.5) / tread_m)))
         step = (room.depth / 2) / (num + 1)
         treads = [
             (cross_lo, room.y + i * step, cross_hi, room.y + i * step)
@@ -828,7 +828,7 @@ def _stair_tread_elements(room) -> dict:
         }
     # E-W flight: indicator on the west (x-min) edge, treads stacked along x
     cross_lo, cross_hi = room.y + inset, room.y + room.depth - inset
-    num = max(3, min(16, int((room.width * 0.5) / tread_depth_m)))
+    num = max(3, min(16, int((room.width * 0.5) / tread_m)))
     step = (room.width / 2) / (num + 1)
     treads = [
         (room.x + i * step, cross_lo, room.x + i * step, cross_hi)
@@ -877,7 +877,7 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy, stair_label="UP"):
         c.setLineWidth(1.8)
         c.line(*_pts(el["indicator"]))
 
-        # ── Tread lines — evenly spaced, target 270mm tread depth ────────────────
+        # ── Tread lines — evenly spaced, depth per vertical standards (VS) ──────
         c.setStrokeColor(HexColor("#333333"))
         c.setLineWidth(0.5)
         for tread in el["treads"]:
