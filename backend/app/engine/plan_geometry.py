@@ -812,6 +812,63 @@ def _exterior_edges(
         yield (True, py2 + ewt / 2, room.x, room.x + room.width)
 
 
+def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
+    """Yield (is_horizontal, wall_coord, lo, hi) for external walls bordering
+    this room. Includes void-facing orphan walls (kind="external") that
+    wouldn't be caught by _exterior_edges's plate-bounds check."""
+    rx1, ry1 = room.x, room.y
+    rx2, ry2 = room.x + room.width, room.y + room.depth
+    for w in walls:
+        if w.kind != "external":
+            continue
+        # Check if wall is aligned with a room edge
+        if abs(w.x1 - w.x2) < 1e-9:  # vertical wall
+            wall_x = w.x1
+            wy1, wy2 = min(w.y1, w.y2), max(w.y1, w.y2)
+            # Check if wall is on room's left or right edge
+            if abs(wall_x - rx1) <= tol or abs(wall_x - rx2) <= tol:
+                # Check overlap with room's y-extent
+                overlap_lo = max(wy1, ry1)
+                overlap_hi = min(wy2, ry2)
+                if overlap_hi - overlap_lo > tol:
+                    yield (False, wall_x, overlap_lo, overlap_hi)
+        else:  # horizontal wall
+            wall_y = w.y1
+            wx1, wx2 = min(w.x1, w.x2), max(w.x1, w.x2)
+            # Check if wall is on room's bottom or top edge
+            if abs(wall_y - ry1) <= tol or abs(wall_y - ry2) <= tol:
+                # Check overlap with room's x-extent
+                overlap_lo = max(wx1, rx1)
+                overlap_hi = min(wx2, rx2)
+                if overlap_hi - overlap_lo > tol:
+                    yield (True, wall_y, overlap_lo, overlap_hi)
+
+
+def _all_exterior_edges(
+    room,
+    walls: list[WallSegment],
+    plate: tuple[float, float, float, float],
+    ewt: float,
+    tol: float,
+):
+    """Yield all (is_horizontal, coord, lo, hi) exterior edges for a room,
+    combining both plate-boundary edges and void-facing orphan walls marked
+    kind="external". Deduplicates edges that appear in both sources."""
+    seen = set()
+    # First collect from plate bounds
+    for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
+        if key not in seen:
+            seen.add(key)
+            yield (is_h, coord, lo, hi)
+    # Then add any external walls not on plate boundary (void-facing orphans)
+    for is_h, coord, lo, hi in _exterior_wall_edges(room, walls, tol):
+        key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
+        if key not in seen:
+            seen.add(key)
+            yield (is_h, coord, lo, hi)
+
+
 class _ObstacleIndex:
     """Along-wall obstacles (columns + placed openings) per wall line."""
 
@@ -1109,7 +1166,7 @@ def derive_openings(
                 break
         if not placed:
             # entrance door on an exterior edge (e.g. parking, or isolated room)
-            for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+            for is_h, coord, lo, hi in _all_exterior_edges(room, walls, plate, ewt, tol):
                 if hi - lo < width + 2 * _JAMB:
                     continue
                 centre = _fit_along(
@@ -1132,7 +1189,7 @@ def derive_openings(
         if room.type not in _WINDOW_TYPES:
             continue
         edges = sorted(
-            _exterior_edges(room, plate, ewt, tol),
+            _all_exterior_edges(room, walls, plate, ewt, tol),
             key=lambda e: e[3] - e[2],
             reverse=True,
         )[:2]
@@ -1165,7 +1222,7 @@ def derive_openings(
     for room in sorted(rooms, key=lambda r: r.id):
         if room.type not in _WET_TYPES:
             continue
-        for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        for is_h, coord, lo, hi in _all_exterior_edges(room, walls, plate, ewt, tol):
             if hi - lo < std.ventilator_width_m + 2 * _JAMB:
                 continue
             centre = _fit_along(
@@ -1196,6 +1253,7 @@ def derive_openings(
     _enforce_single_door(rooms, openings, obstacles, adjs, tol)
     _repair_connectivity(
         rooms,
+        walls,
         openings,
         obstacles,
         adjs,
@@ -1384,6 +1442,7 @@ def _enforce_single_door(
 
 def _repair_connectivity(
     rooms: list[Room],
+    walls: list[WallSegment],
     openings: list[Opening],
     obstacles: _ObstacleIndex,
     adjs: list[_Adjacency],
@@ -1412,6 +1471,7 @@ def _repair_connectivity(
             if _add_repair_door(
                 i,
                 rooms,
+                walls,
                 openings,
                 obstacles,
                 adjs,
@@ -1433,6 +1493,7 @@ def _repair_connectivity(
 def _add_repair_door(
     i: int,
     rooms: list[Room],
+    walls: list[WallSegment],
     openings: list[Opening],
     obstacles: _ObstacleIndex,
     adjs: list[_Adjacency],
@@ -1492,7 +1553,7 @@ def _add_repair_door(
     if floor != 0:
         return False
     plate = _plate_bounds(rooms, buildable, ewt)
-    for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+    for is_h, coord, lo, hi in _all_exterior_edges(room, walls, plate, ewt, tol):
         if hi - lo < width + 2 * _JAMB:
             continue
         centre = _fit_along(
