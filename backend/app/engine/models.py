@@ -26,6 +26,10 @@ RoomType = Literal[
     "store_room",
     "garage",
     "passage",
+    # hand-authored / editor data only — the solver never generates these three
+    "foyer",  # entry vestibule
+    "courtyard",  # interior open-to-sky court (light-well)
+    "wardrobe",  # walk-in closet
 ]
 
 

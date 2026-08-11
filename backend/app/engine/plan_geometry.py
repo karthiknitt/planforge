@@ -63,19 +63,26 @@ _WINDOW_TYPES = {
     "gym",
     "servant_quarter",
 }
-_DOOR_NEIGHBOUR_PRIORITY = {"passage": 0, "living": 1, "dining": 2, "staircase": 3}
-_ENTRY_PRIORITY = {"living": 0, "passage": 1, "dining": 2}
+_DOOR_NEIGHBOUR_PRIORITY = {
+    "passage": 0,
+    "foyer": 0,
+    "courtyard": 1,
+    "living": 1,
+    "dining": 2,
+    "staircase": 3,
+}
+_ENTRY_PRIORITY = {"living": 0, "foyer": 1, "passage": 2, "dining": 3}
 _NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 # rooms that never host their own interior door: circulation, open-air/outdoor,
 # and transitional spaces — doors serving them are placed by their neighbours.
-_NO_DOOR_TYPES = _PARKING_TYPES | {"passage"}
+_NO_DOOR_TYPES = _PARKING_TYPES | {"passage", "foyer", "courtyard"}
 # wet rooms + kitchen: interior-accessed, exactly one door, never a transit route
 _SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
 _NO_TRANSIT_TYPES = _SINGLE_DOOR_TYPES | _PARKING_TYPES
 # rooms the staircase may legitimately take its door from
-_CIRCULATION_TYPES = {"passage", "living", "dining"}
+_CIRCULATION_TYPES = {"passage", "foyer", "courtyard", "living", "dining"}
 # shared-wall run the staircase needs with one of those to fit a door leaf
 # plus both jambs — the same test the candidate loop applies per wall below.
 _STAIR_DOOR_MIN_RUN_M = 0.9 + 2 * _JAMB
@@ -828,8 +835,8 @@ def derive_openings(
     if floor == 0:
         place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol, reasons))
 
-    # ── Doors: one per non-passage room; a door in a shared wall serves
-    # BOTH rooms, so a room whose gap already carries a door is done ──────
+    # ── Doors: one per room not in _NO_DOOR_TYPES; a door in a shared wall
+    # serves BOTH rooms, so a room whose gap already carries a door is done ──
     id_to_index = {r.id: k for k, r in enumerate(rooms)}
     ens_bed_index = {}  # en-suite room index -> its attached bedroom index
     for k, r in enumerate(rooms):
@@ -1663,7 +1670,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         diagnostics.append(
             "geometry: rooms outside buildable bounds: "
             + ", ".join(oob)
-            + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?"
+            + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?)"
         )
     openings = derive_openings(
         rooms,

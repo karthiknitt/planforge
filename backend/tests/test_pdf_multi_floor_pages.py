@@ -100,3 +100,17 @@ def test_stair_tread_geometry_square_room_picks_vertical():
     for x1, y1, x2, y2 in [el["indicator"], *el["treads"], el["break_line"]]:
         assert y1 == y2 and x1 != x2  # horizontal segments
     assert el["arrow"][0] == el["arrow"][2]  # arrow stem vertical (constant x)
+
+
+def test_new_room_types_render():
+    # non-overlapping tiling of the _cfg plate (x 1.13..10.33, y 1.73..13.23)
+    gf = [
+        _room("foyer", "foyer", 1.13, 1.73, 2.5, 3.0),
+        _room("court", "courtyard", 3.63, 1.73, 1.5, 3.0),
+        _room("stair", "staircase", 5.13, 1.73, 2.0, 5.0),
+        _room("ww", "wardrobe", 7.13, 1.73, 2.0, 2.0),
+        _room("bed", "bedroom", 7.13, 3.73, 2.5, 3.0),
+        _room("living", "living", 1.13, 4.73, 4.0, 4.0),
+    ]
+    pdf = render_pdf("NewTypes", _make_layout(gf, ff_rooms=[]), _cfg(), 3)
+    assert pdf_pages(pdf) == 6

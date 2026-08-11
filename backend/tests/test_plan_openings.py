@@ -8,6 +8,7 @@ from app.engine.plan_geometry import (
     derive_openings,
     derive_walls,
     opening_boxes,
+    validate_floor_connectivity,
     wall_polygons,
 )
 from app.engine.standards import OpeningStandards
@@ -596,6 +597,9 @@ def test_parking_never_hosts_interior_door():
             o for o in openings if o.kind == "door" and o.swing_into_room_id == porch_id
         ]
         assert porch_doors == [], f"{porch_id} hosts its own interior door"
+        # the porch must still be served as a no-transit endpoint by the
+        # neighbour's door on the shared wall
+        assert validate_floor_connectivity(rooms, openings, 0) == []
 
 
 # ── Entrance-placement diagnostics (Task 6: #6, #6b, G, #6d) ─────────────────
@@ -679,3 +683,35 @@ def test_rooms_outside_buildable_bounds_are_flagged():
         ]
     )
     assert any(d.startswith("geometry:") for d in drawing.diagnostics)
+
+
+# ── New room types: foyer / courtyard / wardrobe (Task 8: #C) ────────────────
+
+
+def test_foyer_hosts_main_entrance():
+    openings, _ = _openings_for(
+        [
+            _room("foyer", 1.23, 1.73, 2.5, 3.0, rtype="foyer"),
+            _room("stair", 3.73, 1.73, 2.0, 3.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 5.0, 4.0),
+        ],
+        _cfg_9x15(),
+    )
+    main = next((o for o in openings if o.is_main), None)
+    assert main is not None
+    assert main.swing_into_room_id == "foyer"
+
+
+def test_courtyard_gets_no_own_door_but_is_reachable():
+    rooms = [  # 3 rooms stacked around a central courtyard strip
+        _room("living", 1.23, 1.73, 4.0, 3.0),
+        _room("court", 1.23, 4.73, 4.0, 2.0, rtype="courtyard"),
+        _room("stair", 1.23, 6.73, 4.0, 3.0, rtype="staircase"),
+    ]
+    openings, _ = _openings_for(rooms, _cfg_9x15())
+    court_doors = [
+        o for o in openings if o.kind == "door" and o.swing_into_room_id == "court"
+    ]
+    assert court_doors == []
+    doors = [o for o in openings if o.kind == "door"]
+    assert doors  # neighbours still placed doors on the shared walls

@@ -172,6 +172,9 @@ PALETTE: dict[str, tuple[str, str]] = {
     "study": ("#FFFFFF", "#000000"),
     "balcony": ("#FFFFFF", "#000000"),
     "dining": ("#FFFFFF", "#000000"),
+    "foyer": ("#FFFFFF", "#000000"),
+    "courtyard": ("#FFFFFF", "#000000"),
+    "wardrobe": ("#FFFFFF", "#000000"),
 }
 
 # ── Page constants (points) ───────────────────────────────────────────────────
@@ -919,7 +922,7 @@ def _draw_staircase_treads(c, rooms, scale, ox, oy, stair_label="UP"):
 
 def _draw_windows(c, rooms, scale, ox, oy, min_x, max_x, min_y, max_y):
     """Draw window symbols on exterior-facing walls of habitable rooms."""
-    habitable = {"living", "bedroom", "kitchen", "study", "dining"}
+    habitable = {"living", "bedroom", "kitchen", "study", "dining", "foyer"}
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(WIN_LW)
     win_w_m = 1.2  # window width in metres
