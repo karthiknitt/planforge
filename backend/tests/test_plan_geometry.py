@@ -427,9 +427,15 @@ def test_external_ring_follows_room_union_not_buildable():
     # ring hugs the room union (5.73 + EWT/2), NOT the buildable rear edge
     assert rear_cyt == pytest.approx(5.73 + EWT / 2, abs=1e-6)
     assert front_cyb == pytest.approx(1.73 - EWT / 2, abs=1e-6)
+    # full set of four external centrelines: right hugged at 7.23 + EWT/2 too
+    coords = sorted(w.x1 if _seg_is_vertical(w) else w.y1 for w in ext)
+    assert coords == pytest.approx([1.115, 1.615, 5.845, 7.345], abs=1e-6)
 
 
 def test_external_ring_falls_back_to_buildable_without_rooms():
     buildable = buildable_polygon(_cfg_9x15())
     walls = derive_walls([], buildable)
-    assert [w for w in walls if w.kind == "external"]
+    ext = [w for w in walls if w.kind == "external"]
+    assert len(ext) == 4
+    coords = sorted(w.x1 if _seg_is_vertical(w) else w.y1 for w in ext)
+    assert coords == pytest.approx([1.115, 1.615, 7.885, 13.885], abs=1e-6)

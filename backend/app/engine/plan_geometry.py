@@ -6,7 +6,7 @@ is inset ewt from the buildable ring. Walls therefore live in the gaps:
 
 - paired internal walls: centreline at the midpoint of the gap between two
   facing room edges
-- external ring: centreline at the room-union bounding box ± ewt/2 (outer
+- external ring: centreline at the room-union bounding box ± ewt/2 (inner
   face flush with the floor's room union; falls back to the buildable plate
   when the floor has no rooms)
 - orphan walls: room edges facing unassigned space get an iwt wall hugging
@@ -204,7 +204,12 @@ def derive_walls(
     (e.g. a roof void over part of the GF footprint, technically inside the
     footprint bounding box) are still drawn as `internal` (iwt) orphan walls.
     Fixing that needs Shapely strip classification of every orphan edge
-    against the footprint; out of scope for now.
+    against the footprint; out of scope for now. Related follow-up candidate:
+    window/ventilator/exterior-fallback door placement in `derive_openings`
+    (`_exterior_edges` and `_place_main_entrance`) still keys off the
+    *buildable-plate* surface model, not the new room-union ring — so
+    void-facing exterior wall surfaces on partial-footprint floors receive
+    no openings.
     """
     if rooms:
         footprint = unary_union(
@@ -212,8 +217,9 @@ def derive_walls(
         )
         px1, py1, px2, py2 = footprint.bounds
         # Clear-rect rooms always leave iwt slits between neighbours, so an
-        # area-vs-bbox check false-alarms on every full-plate layout. A jogged
-        # (L-shaped) footprint is instead detected by missing bbox corners.
+        # area-vs-bbox check false-alarms on every full-plate layout. This is
+        # a heuristic: corner-jogged (L-shaped) footprints are detected via a
+        # missing bbox corner; mid-edge notches (C/U shapes) are NOT detected.
         if any(
             footprint.distance(Point(cx, cy)) > 1e-6
             for cx in (px1, px2)
@@ -225,6 +231,11 @@ def derive_walls(
             )
     else:
         bx1, by1, bx2, by2 = buildable.bounds
+        if abs(buildable.area - (bx2 - bx1) * (by2 - by1)) > 1e-6:
+            logger.warning(
+                "non-rectangular buildable polygon: external ring approximated "
+                "by its bounding box (trapezoid/L/quad support pending)"
+            )
         px1, py1, px2, py2 = bx1 + ewt, by1 + ewt, bx2 - ewt, by2 - ewt
 
     cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
