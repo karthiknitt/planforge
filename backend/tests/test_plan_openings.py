@@ -631,6 +631,41 @@ def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
         )
 
 
+def test_main_door_all_parking_frontage_flags_entrance_not_on_ground_floor():  # #77
+    # Same "Modern-26" scenario as the diagnostic test above: the entire road
+    # frontage is parking/staircase (no room TYPE there can ever host a
+    # door), which is a distinct, typology-level condition — an "upside-down"
+    # duplex whose real entry is an external stair straight to the first
+    # floor — from an incidental placement failure (too narrow, columns
+    # blocked). Only that typology case should set the flag.
+    drawing = _drawing_for(
+        [
+            _room("porch", 1.23, 1.73, 4.0, 3.0, rtype="parking"),
+            _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
+            _room("living", 1.23, 4.73, 4.0, 3.0),
+        ]
+    )
+    assert drawing.entrance_not_on_ground_floor is True
+
+
+def test_main_door_too_narrow_candidate_does_not_flag_entrance_not_on_ground_floor():  # #77
+    # A too-narrow ROAD-FACING room is an incidental placement failure, not a
+    # typology-level "no entry room exists at all" case — must not set the flag.
+    drawing = _drawing_for(
+        [
+            _room("entry", 1.23, 1.73, 0.97, 3.0),  # < 1.05 + 2 jambs
+            _room("living", 1.23, 4.73, 4.0, 4.0),
+        ]
+    )
+    assert drawing.entrance_not_on_ground_floor is False
+
+
+def test_main_door_success_does_not_flag_entrance_not_on_ground_floor():  # #77
+    drawing = _drawing_for(_two_bedrooms())
+    assert any(o.is_main for o in drawing.openings)
+    assert drawing.entrance_not_on_ground_floor is False
+
+
 def test_main_door_too_narrow_candidate_is_diagnosed():  # #6b
     # entry is the ONLY road-facing room; living sits behind it
     drawing = _drawing_for(

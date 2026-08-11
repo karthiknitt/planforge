@@ -843,6 +843,7 @@ def _place_main_entrance(
     ewt: float,
     tol: float,
     reasons: list[str] | None = None,
+    status: dict | None = None,
 ) -> Opening | None:
     """Main entrance door (MD) in the road-facing external wall.
 
@@ -852,17 +853,27 @@ def _place_main_entrance(
     door sits on the floor's front exterior surface (room-union plate); its
     desired position is the facade midpoint so the door lines up with the
     compound-wall gate (cad_advanced centres the gate on the road side).
+
+    ``status``, if given, is set with ``entrance_not_on_ground_floor=True``
+    when the ENTIRE road frontage is occupied by no-entry room types
+    (parking/wet/staircase) — the "upside-down duplex" typology (#6d): all
+    bedrooms on GF, the real entrance is an external stair straight to the
+    first floor. That's a distinct, typed condition from the generic
+    "no suitable room" diagnostic below — it means no door placement here
+    was ever possible, not that one was attempted and failed (too narrow,
+    columns-blocked), so a caller can surface it deliberately (e.g. a
+    landing-door design, or an explicit "entrance not on ground floor"
+    label) rather than reading it out of the free-text diagnostic string.
     """
     bx1, _by1, bx2, _by2 = buildable.bounds
     _px1, py1, _px2, _py2 = _plate_bounds(rooms, buildable, ewt)
     coord = py1 - ewt / 2  # front external-wall centreline (union plate)
     width = std.main_door_width_m
     gate_x = (bx1 + bx2) / 2
+    frontage_rooms = [r for r in rooms if abs(r.y - py1) <= 2 * tol]
     cands = []
     rejected: list[str] = []
-    for room in rooms:
-        if abs(room.y - py1) > 2 * tol:
-            continue  # not road-frontage — not a candidate at all
+    for room in frontage_rooms:
         if room.type in _NO_ENTRY_TYPES:
             rejected.append(f"{room.id}(type={room.type}) cannot host entry")
             continue
@@ -887,6 +898,13 @@ def _place_main_entrance(
         )
         door.is_main = True
         return door
+    if (
+        status is not None
+        and not cands
+        and frontage_rooms
+        and all(r.type in _NO_ENTRY_TYPES for r in frontage_rooms)
+    ):
+        status["entrance_not_on_ground_floor"] = True
     detail = "; ".join(rejected) if rejected else "no road-facing room at front plate"
     if reasons is not None:
         reasons.append(f"main_entrance: {detail}")
@@ -908,6 +926,7 @@ def derive_openings(
     tol: float = 0.01,
     floor: int = 0,
     reasons: list[str] | None = None,
+    status: dict | None = None,
 ) -> list[Opening]:
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
@@ -924,7 +943,11 @@ def derive_openings(
 
     # ── Main entrance first, so it claims front-wall space before windows ─
     if floor == 0:
-        place(_place_main_entrance(rooms, obstacles, std, buildable, ewt, tol, reasons))
+        place(
+            _place_main_entrance(
+                rooms, obstacles, std, buildable, ewt, tol, reasons, status
+            )
+        )
 
     # ── Doors: one per room not in _NO_DOOR_TYPES; a door in a shared wall
     # serves BOTH rooms, so a room whose gap already carries a door is done ──
@@ -1764,6 +1787,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
             + ", ".join(oob)
             + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?)"
         )
+    status: dict = {}
     openings = derive_openings(
         rooms,
         walls,
@@ -1772,6 +1796,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         buildable,
         floor=floorplan.floor,
         reasons=diagnostics,
+        status=status,
     )
     for d in diagnostics:
         logger.warning("floor %s: %s", floorplan.floor, d)
@@ -1790,4 +1815,5 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         stair=derive_stair(rooms),
         bounds=buildable.bounds,
         diagnostics=diagnostics,
+        entrance_not_on_ground_floor=status.get("entrance_not_on_ground_floor", False),
     )
