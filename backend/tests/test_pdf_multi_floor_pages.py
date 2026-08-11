@@ -69,3 +69,23 @@ def test_arch_page_index_matches_render_order():
     assert arch_page_index(both, "first_floor") == 2
     assert arch_page_index(both, "second_floor") == 3
     assert arch_page_index(both, "unknown_key") == 0  # safe fallback
+
+
+def test_stair_label_is_floor_aware():
+    from tests.helpers.pdf_png import pdf_page_text
+
+    pdf = render_pdf("G+1", _stack(), _cfg(), 3)
+    assert "UP" in pdf_page_text(pdf, 0)  # ground floor: floor exists above
+    assert "DN" in pdf_page_text(pdf, 1)  # first (top) floor
+
+
+def test_stair_tread_geometry_east_west():
+    from app.engine.pdf import _stair_tread_elements
+
+    room = _room("stair", "staircase", 5.13, 1.73, 4.0, 2.0)  # wider than deep
+    el = _stair_tread_elements(room)
+    # indicator + treads + break line all run VERTICALLY for an E-W flight:
+    for x1, y1, x2, y2 in [el["indicator"], *el["treads"], el["break_line"]]:
+        assert x1 == x2 and y1 != y2
+    assert el["arrow"][0] != el["arrow"][2]  # arrow advances along x
+    assert el["arrow"][1] == el["arrow"][3]
