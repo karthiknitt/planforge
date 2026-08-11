@@ -17,6 +17,7 @@ from app.engine.cad_elements import WallJunction
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig, Room
 from app.engine.plan_geometry import (
+    _SNAP,
     _merge_adjacent_columns,
     _near_staircase,
     derive_columns,
@@ -471,3 +472,45 @@ def test_external_ring_falls_back_to_buildable_without_rooms():
     assert len(ext) == 4
     coords = sorted(w.x1 if _seg_is_vertical(w) else w.y1 for w in ext)
     assert coords == pytest.approx([1.115, 1.615, 7.885, 13.885], abs=1e-6)
+
+
+def test_external_ring_leaves_notch_open_no_false_wall():
+    """#6c follow-up: an L-shaped footprint (a full-width front row plus a
+    rear row that only covers PART of the width -- e.g. a floor with a
+    sloped-roof void over one rear corner, as seen on the Assamese-07
+    reverse-engineering reconstruction) must not get a false wall ring
+    closing off the empty notch. `_plate_bounds` still reports the room
+    union's bbox (which includes the notch), but each ring side must only
+    be built from the room edges that actually reach it -- the old
+    unconditional full-bbox-side ring drew a wall across the notch even
+    though no room, and therefore no real building fabric, is there."""
+    rooms = [
+        # full-width front row: x[1.23, 7.77] y[1.73, 7.73]
+        _room("living", 1.23, 1.73, 6.54, 6.0),
+        # rear row covers only the WEST half: x[1.23, 4.0] y[7.73, 13.77]
+        # -- notch (no room) at x[4.0, 7.77] y[7.73, 13.77]
+        _room("bedroom", 1.23, 7.73, 2.77, 6.04),
+    ]
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls(rooms, buildable)
+    ext = [w for w in walls if w.kind == "external"]
+
+    # North ring (rear, y ~ 13.885) must stop at bedroom's own east edge
+    # (x=4.0), not reach all the way to the buildable-derived east
+    # centreline (7.885) the way the old bbox-side ring did.
+    north = [w for w in ext if not _seg_is_vertical(w) and w.y1 > 10.0]
+    assert north, "expected a north ring wall over bedroom"
+    assert max(max(w.x1, w.x2) for w in north) < 4.0 + _SNAP + 1e-6
+
+    # East ring (right side, x ~ 7.885) must stop at living's own rear edge
+    # (y=7.73), not reach up to the buildable-derived north centreline
+    # (13.885) the way the old bbox-side ring did.
+    east = [w for w in ext if _seg_is_vertical(w) and w.x1 > 6.0]
+    assert east, "expected an east ring wall alongside living"
+    assert max(max(w.y1, w.y2) for w in east) < 7.73 + _SNAP + 1e-6
+
+    # No external wall segment should have an endpoint inside the notch's
+    # far corner region at all.
+    for w in ext:
+        for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
+            assert not (x > 5.0 and y > 10.0), f"false wall in notch corner: {w}"

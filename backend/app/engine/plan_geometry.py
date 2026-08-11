@@ -286,7 +286,13 @@ def derive_walls(
 
     The external ring hugs this floor's room union (a partial-footprint floor
     — e.g. a GF leaving a roof void at the rear — gets no false ring around
-    the empty area); with no rooms it falls back to the buildable plate.
+    the empty area); with no rooms it falls back to the buildable plate. Each
+    of the ring's four sides is itself built only from the room edges that
+    actually reach that side of `_plate_bounds`'s bbox, not drawn full-length
+    unconditionally — a jogged/notched footprint (an L-shaped floor, e.g. a
+    sloped-roof void over one corner) therefore gets a wall-less gap over the
+    notch instead of a false wall closing off empty space, even though the
+    notch's edges lie inside the bbox rather than outside it.
 
     Uncovered room edges facing an *interior* void (e.g. a roof void over
     part of the GF footprint, technically inside the footprint bounding box)
@@ -306,14 +312,73 @@ def derive_walls(
     cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
     cyb, cyt = py1 - ewt / 2, py2 + ewt / 2
 
-    walls: list[WallSegment] = [
-        WallSegment(cxl, cyb, cxr, cyb, ewt, kind="external"),
-        WallSegment(cxl, cyt, cxr, cyt, ewt, kind="external"),
-        WallSegment(cxl, cyb, cxl, cyt, ewt, kind="external"),
-        WallSegment(cxr, cyb, cxr, cyt, ewt, kind="external"),
-    ]
-
     vert_edges, hor_edges = _room_edges(rooms)
+
+    if rooms:
+        # Ring walls only span the stretches where a room actually reaches
+        # that plate boundary. `_plate_bounds` gives the room-union's BBOX,
+        # which for a jogged/notched footprint (an L-shaped floor, e.g. a
+        # sloped-roof void over part of the footprint) is strictly larger
+        # than the footprint itself -- unconditionally drawing all four
+        # bbox sides in full used to close a false wall ring around that
+        # empty notch (#6c's remaining case: the bbox fix bounded the ring
+        # to the union's bbox, but a bbox can't express a notch). Building
+        # each side from the room edges that actually lie on it leaves a
+        # notch's boundary wall-less, matching source drawings that show
+        # bare roof texture there with no wall line at all.
+        # `iwt + tol` (not `tol`) is the merge gap so same-row neighbours
+        # separated by a normal partition slit still read as one
+        # continuous ring wall -- only a stretch wider than a partition
+        # (a genuine notch) stays split.
+        ring_gap = iwt + tol
+        south_x = _merge_intervals(
+            [
+                (e.lo, e.hi)
+                for e in hor_edges
+                if e.normal == -1 and abs(e.coord - py1) <= 2 * tol
+            ],
+            ring_gap,
+        )
+        north_x = _merge_intervals(
+            [
+                (e.lo, e.hi)
+                for e in hor_edges
+                if e.normal == +1 and abs(e.coord - py2) <= 2 * tol
+            ],
+            ring_gap,
+        )
+        west_y = _merge_intervals(
+            [
+                (e.lo, e.hi)
+                for e in vert_edges
+                if e.normal == -1 and abs(e.coord - px1) <= 2 * tol
+            ],
+            ring_gap,
+        )
+        east_y = _merge_intervals(
+            [
+                (e.lo, e.hi)
+                for e in vert_edges
+                if e.normal == +1 and abs(e.coord - px2) <= 2 * tol
+            ],
+            ring_gap,
+        )
+        walls: list[WallSegment] = (
+            [WallSegment(lo, cyb, hi, cyb, ewt, kind="external") for lo, hi in south_x]
+            + [
+                WallSegment(lo, cyt, hi, cyt, ewt, kind="external")
+                for lo, hi in north_x
+            ]
+            + [WallSegment(cxl, lo, cxl, hi, ewt, kind="external") for lo, hi in west_y]
+            + [WallSegment(cxr, lo, cxr, hi, ewt, kind="external") for lo, hi in east_y]
+        )
+    else:
+        walls = [
+            WallSegment(cxl, cyb, cxr, cyb, ewt, kind="external"),
+            WallSegment(cxl, cyt, cxr, cyt, ewt, kind="external"),
+            WallSegment(cxl, cyb, cxl, cyt, ewt, kind="external"),
+            WallSegment(cxr, cyb, cxr, cyt, ewt, kind="external"),
+        ]
 
     # Mark plate-boundary edges as covered by the external ring.
     for e in vert_edges:
