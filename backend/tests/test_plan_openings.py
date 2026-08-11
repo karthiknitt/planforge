@@ -614,15 +614,21 @@ def _drawing_for(rooms):
 
 
 def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
-    drawing = _drawing_for(
-        [
-            _room("porch", 1.23, 1.73, 4.0, 3.0, rtype="parking"),
-            _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
-            _room("living", 1.23, 4.73, 4.0, 3.0),
-        ]
-    )
-    assert any(d.startswith("main_entrance:") for d in drawing.diagnostics)
-    assert not any(o.is_main for o in drawing.openings)
+    # every parking type (2W/4W variants included) is ineligible to host the
+    # main entrance — a frontage of only parking + stair must be diagnosed
+    for rtype in ("parking", "parking_4w", "parking_2w"):
+        drawing = _drawing_for(
+            [
+                _room("porch", 1.23, 1.73, 4.0, 3.0, rtype=rtype),
+                _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
+                _room("living", 1.23, 4.73, 4.0, 3.0),
+            ]
+        )
+        diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
+        assert diag and "porch" in diag[0], f"{rtype}: no main_entrance diagnostic"
+        assert not any(o.is_main for o in drawing.openings), (
+            f"{rtype}: porch hosted the main door"
+        )
 
 
 def test_main_door_too_narrow_candidate_is_diagnosed():  # #6b

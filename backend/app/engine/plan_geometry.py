@@ -72,8 +72,8 @@ _DOOR_NEIGHBOUR_PRIORITY = {
     "staircase": 3,
 }
 _ENTRY_PRIORITY = {"living": 0, "foyer": 1, "passage": 2, "dining": 3}
-_NO_ENTRY_TYPES = _WET_TYPES | {"parking", "staircase"}
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
+_NO_ENTRY_TYPES = _WET_TYPES | _PARKING_TYPES | {"staircase"}
 # rooms that never host their own interior door: circulation, open-air/outdoor,
 # and transitional spaces — doors serving them are placed by their neighbours.
 _NO_DOOR_TYPES = _PARKING_TYPES | {"passage", "foyer", "courtyard"}
