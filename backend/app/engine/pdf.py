@@ -280,6 +280,21 @@ def arch_page_index(layout: Layout, floor_key: str) -> int:
     )
 
 
+def _has_floor_above(layout: Layout, floor_plan: FloorPlan) -> bool:
+    """True if any populated floor (with rooms) sits above ``floor_plan``."""
+    floors = {
+        fp.floor: fp
+        for fp in (
+            layout.basement_floor,
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+        )
+        if fp
+    }
+    return any(f > floor_plan.floor and fp.rooms for f, fp in floors.items())
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -661,21 +676,13 @@ def _draw_floor(
             c.rect(cx_c - jf, cy_c - jf, jf * 2, jf * 2, fill=1, stroke=0)
 
         # ── Staircase treads ──────────────────────────────────────────────────
-        _floors = {
-            fp.floor: fp
-            for fp in (
-                layout.basement_floor,
-                layout.ground_floor,
-                layout.first_floor,
-                layout.second_floor,
-            )
-            if fp
-        }
-        has_floor_above = any(
-            f > floor_plan.floor and fp.rooms for f, fp in _floors.items()
-        )
         _draw_staircase_treads(
-            c, rooms, scale, ox, oy, stair_label="UP" if has_floor_above else "DN"
+            c,
+            rooms,
+            scale,
+            ox,
+            oy,
+            stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
         )
 
         # ── Window symbols in exterior wall gaps ──────────────────────────────
@@ -2185,21 +2192,13 @@ def _draw_floor_projected(
             fill=1,
             stroke=0,
         )
-    _floors = {
-        fp.floor: fp
-        for fp in (
-            layout.basement_floor,
-            layout.ground_floor,
-            layout.first_floor,
-            layout.second_floor,
-        )
-        if fp
-    }
-    has_floor_above = any(
-        f > floor_plan.floor and fp.rooms for f, fp in _floors.items()
-    )
     _draw_stair_geometry(
-        c, drawing, s, ox, oy, stair_label="UP" if has_floor_above else "DN"
+        c,
+        drawing,
+        s,
+        ox,
+        oy,
+        stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
     )
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)

@@ -89,3 +89,14 @@ def test_stair_tread_geometry_east_west():
         assert x1 == x2 and y1 != y2
     assert el["arrow"][0] != el["arrow"][2]  # arrow advances along x
     assert el["arrow"][1] == el["arrow"][3]
+
+
+def test_stair_tread_geometry_square_room_picks_vertical():
+    from app.engine.pdf import _stair_tread_elements
+
+    room = _room("sq", "staircase", 5.13, 1.73, 3.0, 3.0)  # depth == width
+    el = _stair_tread_elements(room)
+    # tie-break parity with plan_geometry.derive_stair: vertical (S->N) branch wins
+    for x1, y1, x2, y2 in [el["indicator"], *el["treads"], el["break_line"]]:
+        assert y1 == y2 and x1 != x2  # horizontal segments
+    assert el["arrow"][0] == el["arrow"][2]  # arrow stem vertical (constant x)
