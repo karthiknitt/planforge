@@ -1650,6 +1650,21 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     junctions = derive_junctions(walls)
     columns = derive_columns(walls, junctions=junctions, rooms=rooms)
     diagnostics: list[str] = []
+    bx1, by1, bx2, by2 = buildable.bounds
+    oob = [
+        r.id
+        for r in rooms
+        if r.x < bx1 - 0.05
+        or r.y < by1 - 0.05
+        or r.x + r.width > bx2 + 0.05
+        or r.y + r.depth > by2 + 0.05
+    ]
+    if oob:
+        diagnostics.append(
+            "geometry: rooms outside buildable bounds: "
+            + ", ".join(oob)
+            + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?"
+        )
     openings = derive_openings(
         rooms,
         walls,

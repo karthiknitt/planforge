@@ -664,3 +664,18 @@ def test_main_door_columns_blocked_is_diagnosed():  # G
 def test_diagnostics_key_present_in_drawing_dict():
     drawing = _drawing_for([_room("a", 1.23, 1.73, 3.0, 3.0)])
     assert "diagnostics" in drawing.to_dict()
+
+
+# ── Out-of-bounds room validation (Task 7: #F) ───────────────────────────────
+
+
+def test_rooms_outside_buildable_bounds_are_flagged():
+    drawing = _drawing_for(
+        [
+            _room("living", 1.23, 1.73, 4.0, 5.0),
+            _room(
+                "stray", 12.0, 1.73, 3.0, 3.0
+            ),  # buildable max x is 8.0 for _cfg_9x15
+        ]
+    )
+    assert any(d.startswith("geometry:") for d in drawing.diagnostics)

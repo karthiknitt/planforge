@@ -81,8 +81,8 @@ class Layout:
 
 @dataclass
 class PlotConfig:
-    plot_length: float
-    plot_width: float
+    plot_length: float  # y-extent (front/road -> rear), metres. NOT the longer axis.
+    plot_width: float  # x-extent (left -> right, road frontage), metres.
     setback_front: float
     setback_rear: float
     setback_left: float
