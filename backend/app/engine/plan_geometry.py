@@ -815,19 +815,24 @@ def _exterior_edges(
 def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
     """Yield (is_horizontal, wall_coord, lo, hi) for external walls bordering
     this room. Includes void-facing orphan walls (kind="external") that
-    wouldn't be caught by _exterior_edges's plate-bounds check."""
+    wouldn't be caught by _exterior_edges's plate-bounds check.
+
+    A wall's centreline sits offset from the room edge by half its own
+    thickness (the room-layout convention: rooms are clear interior rects,
+    walls live outside them) — matching against the raw room edge with only
+    `tol` slack misses every real wall, since that offset (ewt/2 = 0.115 m)
+    dwarfs `tol` (typically 0.01 m).
+    """
     rx1, ry1 = room.x, room.y
     rx2, ry2 = room.x + room.width, room.y + room.depth
     for w in walls:
         if w.kind != "external":
             continue
-        # Check if wall is aligned with a room edge
+        t = w.thickness / 2
         if abs(w.x1 - w.x2) < 1e-9:  # vertical wall
             wall_x = w.x1
             wy1, wy2 = min(w.y1, w.y2), max(w.y1, w.y2)
-            # Check if wall is on room's left or right edge
-            if abs(wall_x - rx1) <= tol or abs(wall_x - rx2) <= tol:
-                # Check overlap with room's y-extent
+            if abs(wall_x - (rx1 - t)) <= tol or abs(wall_x - (rx2 + t)) <= tol:
                 overlap_lo = max(wy1, ry1)
                 overlap_hi = min(wy2, ry2)
                 if overlap_hi - overlap_lo > tol:
@@ -835,9 +840,7 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
         else:  # horizontal wall
             wall_y = w.y1
             wx1, wx2 = min(w.x1, w.x2), max(w.x1, w.x2)
-            # Check if wall is on room's bottom or top edge
-            if abs(wall_y - ry1) <= tol or abs(wall_y - ry2) <= tol:
-                # Check overlap with room's x-extent
+            if abs(wall_y - (ry1 - t)) <= tol or abs(wall_y - (ry2 + t)) <= tol:
                 overlap_lo = max(wx1, rx1)
                 overlap_hi = min(wx2, rx2)
                 if overlap_hi - overlap_lo > tol:
@@ -1166,7 +1169,9 @@ def derive_openings(
                 break
         if not placed:
             # entrance door on an exterior edge (e.g. parking, or isolated room)
-            for is_h, coord, lo, hi in _all_exterior_edges(room, walls, plate, ewt, tol):
+            for is_h, coord, lo, hi in _all_exterior_edges(
+                room, walls, plate, ewt, tol
+            ):
                 if hi - lo < width + 2 * _JAMB:
                     continue
                 centre = _fit_along(

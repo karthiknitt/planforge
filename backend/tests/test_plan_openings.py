@@ -842,28 +842,42 @@ def test_foyer_hosting_main_door_gets_no_overlapping_window():
         )
 
 
+def _void_isolated_room_rooms(target_id: str, target_type: str):
+    """`target_id` sandwiched front/left/right by other rooms, with only its
+    rear open to a genuine interior void (nothing covers that area up to the
+    plate's own rear at y=7.73) — its ONLY exterior surface is void-facing,
+    unlike a fixture where the target also happens to touch the plate
+    boundary on another side (those edges would out-rank or pre-empt the
+    void edge in window/ventilator selection, defeating the point of the
+    test)."""
+    return [
+        _room("living", 1.23, 1.73, 6.54, 2.0),  # full-width front row
+        _room("left", 1.23, 3.73, 2.0, 2.0),  # closes target's left (internal)
+        _room(target_id, 3.23, 3.73, 2.54, 2.0, rtype=target_type),
+        _room("right", 5.77, 3.73, 2.0, 2.0),  # closes target's right (internal)
+    ]
+
+
 def test_void_facing_room_receives_window():
     """A room whose only exterior edge faces an interior void (not the plate
     boundary) must still receive a window. The void-facing orphan wall is
     marked kind="external" by derive_walls; derive_openings must recognize it
     as a valid exterior edge candidate."""
     cfg = _cfg_9x15()
-    rooms = [
-        _room("living", 1.23, 1.73, 4.0, 6.0),  # rear at y=7.73 (defines bbox rear)
-        _room("bed", 5.23, 1.73, 2.54, 4.0, rtype="bedroom"),  # rear at y=5.73
-    ]
+    rooms = _void_isolated_room_rooms("bed", "bedroom")
     openings, walls = _openings_for(rooms, cfg)
-    # bed's rear edge (y=5.73) faces the interior void (living extends further)
-    # and is not on the plate boundary — so it has no plate-based exterior edge,
-    # only a void-facing orphan wall marked kind="external"
+    # bed's rear edge (y=5.73) faces the interior void (nothing covers that
+    # area up to the plate's rear at y=7.73) and is not on the plate boundary
+    # — so it has no plate-based exterior edge, only a void-facing orphan
+    # wall marked kind="external"
     ext_walls_on_bed_rear = [
         w
         for w in walls
         if w.kind == "external"
         and abs(w.y1 - w.y2) < 1e-9
         and abs(w.y1 - (5.73 + 0.115)) < 1e-6
-        and min(w.x1, w.x2) < 5.23 + 2.54
-        and max(w.x1, w.x2) > 5.23
+        and min(w.x1, w.x2) < 5.77
+        and max(w.x1, w.x2) > 3.23
     ]
     assert ext_walls_on_bed_rear, "bed's void-facing rear wall should be external"
     # bed must get a window on that rear void-facing edge
@@ -873,7 +887,7 @@ def test_void_facing_room_receives_window():
         if o.kind == "window"
         and o.is_horizontal
         and abs(o.cy - (5.73 + 0.115)) < 0.13
-        and 5.23 - 0.13 <= o.cx <= 5.23 + 2.54 + 0.13
+        and 3.23 - 0.13 <= o.cx <= 5.77 + 0.13
     ]
     assert bed_windows, "bed got no window on its void-facing exterior wall"
 
@@ -882,10 +896,7 @@ def test_void_facing_wet_room_receives_ventilator():
     """A wet room whose only exterior edge faces an interior void must still
     receive a ventilator. Mirrors test_void_facing_room_receives_window."""
     cfg = _cfg_9x15()
-    rooms = [
-        _room("living", 1.23, 1.73, 4.0, 6.0),
-        _room("toilet", 5.23, 1.73, 2.54, 4.0, rtype="toilet"),  # rear at y=5.73
-    ]
+    rooms = _void_isolated_room_rooms("toilet", "toilet")
     openings, walls = _openings_for(rooms, cfg)
     ext_walls_on_toilet_rear = [
         w
@@ -893,8 +904,8 @@ def test_void_facing_wet_room_receives_ventilator():
         if w.kind == "external"
         and abs(w.y1 - w.y2) < 1e-9
         and abs(w.y1 - (5.73 + 0.115)) < 1e-6
-        and min(w.x1, w.x2) < 5.23 + 2.54
-        and max(w.x1, w.x2) > 5.23
+        and min(w.x1, w.x2) < 5.77
+        and max(w.x1, w.x2) > 3.23
     ]
     assert ext_walls_on_toilet_rear, "toilet's void-facing rear wall should be external"
     # toilet must get a ventilator on that rear void-facing edge
@@ -904,6 +915,6 @@ def test_void_facing_wet_room_receives_ventilator():
         if o.kind == "ventilator"
         and o.is_horizontal
         and abs(o.cy - (5.73 + 0.115)) < 0.13
-        and 5.23 - 0.13 <= o.cx <= 5.23 + 2.54 + 0.13
+        and 3.23 - 0.13 <= o.cx <= 5.77 + 0.13
     ]
     assert toilet_vents, "toilet got no ventilator on its void-facing exterior wall"
