@@ -94,16 +94,17 @@ FULL_STRUCTAPI_DATA = {
 # Realistic plinth-beam design keyed by the ACTUAL group keys
 # `plinth_group_key(kind, round(length, 1))` produces for GEO_V1's ground-floor
 # walls (verified by direct inspection of build_floor_drawing(GEO_V1) output --
-# 2 external groups + 6 internal groups). Using fabricated keys that don't match
-# any real wall would leave every beam mark undrawn on the Plinth Beam Plan
-# sheet (render_plinth_beam_plan only labels a wall when its recomputed group
-# key has a matching entry -- see its docstring).
+# 1 internal group + 4 external groups: the kitchen's void-facing edges,
+# structurally exterior since #75, no longer fall under "internal"). Using
+# fabricated keys that don't match any real wall would leave every beam mark
+# undrawn on the Plinth Beam Plan sheet (render_plinth_beam_plan only labels a
+# wall when its recomputed group key has a matching entry -- see its docstring).
 FULL_PLINTH_BEAMS_DATA = {
-    "plinth-internal-span1.60": {
+    "plinth-external-span1.60": {
         "b_mm": 230,
         "D_mm": 300,
         "span_m": 1.60,
-        "kind": "internal",
+        "kind": "external",
         "design": {
             "n_bars": 2,
             "bar_dia": 12,
@@ -111,10 +112,10 @@ FULL_PLINTH_BEAMS_DATA = {
             "stirrups": {"sv_provided": 150},
         },
     },
-    "plinth-internal-span2.10": {
+    "plinth-internal-span2.20": {
         "b_mm": 230,
         "D_mm": 300,
-        "span_m": 2.10,
+        "span_m": 2.20,
         "kind": "internal",
         "design": {
             "n_bars": 2,
@@ -123,11 +124,11 @@ FULL_PLINTH_BEAMS_DATA = {
             "stirrups": {"sv_provided": 150},
         },
     },
-    "plinth-internal-span2.60": {
+    "plinth-external-span2.60": {
         "b_mm": 230,
         "D_mm": 300,
         "span_m": 2.60,
-        "kind": "internal",
+        "kind": "external",
         "design": {
             "n_bars": 3,
             "bar_dia": 12,
@@ -135,11 +136,11 @@ FULL_PLINTH_BEAMS_DATA = {
             "stirrups": {"sv_provided": 150},
         },
     },
-    "plinth-internal-span3.60": {
+    "plinth-external-span3.70": {
         "b_mm": 230,
         "D_mm": 300,
-        "span_m": 3.60,
-        "kind": "internal",
+        "span_m": 3.70,
+        "kind": "external",
         "design": {
             "n_bars": 3,
             "bar_dia": 12,
@@ -147,49 +148,13 @@ FULL_PLINTH_BEAMS_DATA = {
             "stirrups": {"sv_provided": 150},
         },
     },
-    "plinth-internal-span4.10": {
+    "plinth-external-span6.70": {
         "b_mm": 230,
         "D_mm": 300,
-        "span_m": 4.10,
-        "kind": "internal",
-        "design": {
-            "n_bars": 3,
-            "bar_dia": 12,
-            "doubly_reinforced": False,
-            "stirrups": {"sv_provided": 150},
-        },
-    },
-    "plinth-internal-span6.60": {
-        "b_mm": 230,
-        "D_mm": 300,
-        "span_m": 6.60,
-        "kind": "internal",
-        "design": {
-            "n_bars": 4,
-            "bar_dia": 12,
-            "doubly_reinforced": True,
-            "stirrups": {"sv_provided": 150},
-        },
-    },
-    "plinth-external-span7.80": {
-        "b_mm": 230,
-        "D_mm": 300,
-        "span_m": 7.80,
+        "span_m": 6.70,
         "kind": "external",
         "design": {
             "n_bars": 4,
-            "bar_dia": 12,
-            "doubly_reinforced": True,
-            "stirrups": {"sv_provided": 150},
-        },
-    },
-    "plinth-external-span12.30": {
-        "b_mm": 230,
-        "D_mm": 300,
-        "span_m": 12.30,
-        "kind": "external",
-        "design": {
-            "n_bars": 5,
             "bar_dia": 12,
             "doubly_reinforced": True,
             "stirrups": {"sv_provided": 150},
@@ -484,7 +449,7 @@ async def test_export_structural_drawing_set_happy_path_all_sheets_populated(
 
     # Marks rendered from real data.
     assert "T1" in all_text  # corner footing mark (GEO_V1 has a corner column)
-    assert "PB1" in all_text  # smallest-span plinth beam mark (1.60 m internal)
+    assert "PB1" in all_text  # smallest-span plinth beam mark (1.60 m external)
 
     # Assertions derived from the ACTUAL reinforcement fields seeded above --
     # renderers read these via silent `.get(key, default)`, so a renamed or

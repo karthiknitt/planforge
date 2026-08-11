@@ -383,7 +383,53 @@ def derive_walls(
                 walls.append(WallSegment(lo, coord, hi, coord, thickness, kind=kind))
 
     _snap_ends(walls)
+    _trim_room_overreach(walls, rooms, ewt, iwt)
     return walls
+
+
+def _trim_room_overreach(
+    walls: list[WallSegment], rooms: list[Room], ewt: float, iwt: float
+) -> None:
+    """`wall_polygons()` extends each wall's ends by half its own thickness
+    for corner closure, assuming a perpendicular wall is there to close
+    against — true even after `_snap_ends` legitimately extends a wall to
+    meet one. An external wall (ewt) reaches further past that snapped end
+    than an iwt wall would, which can land past a neighbouring room's edge
+    with no wall there to close against and bite into its clear interior.
+    Trims such ends back so the effective reach past a bare room corner
+    matches what iwt gave before (#75 promoted some orphans to ewt).
+    """
+    if not rooms:
+        return
+    rooms_union = unary_union(
+        [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+    )
+    if rooms_union.is_empty:
+        return
+    margin = (ewt - iwt) / 2
+    t = ewt / 2
+    for w in walls:
+        if w.kind != "external":
+            continue
+        if _is_vertical(w):
+            lo, hi = min(w.y1, w.y2), max(w.y1, w.y2)
+            lo_zone = box(w.x1 - t, lo - t, w.x1 + t, lo)
+            hi_zone = box(w.x1 - t, hi, w.x1 + t, hi + t)
+        else:
+            lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+            lo_zone = box(lo - t, w.y1 - t, lo, w.y1 + t)
+            hi_zone = box(hi, w.y1 - t, hi + t, w.y1 + t)
+        new_lo, new_hi = lo, hi
+        if rooms_union.intersection(lo_zone).area > 1e-6:
+            new_lo += margin
+        if rooms_union.intersection(hi_zone).area > 1e-6:
+            new_hi -= margin
+        if new_hi - new_lo < _MIN_WALL_LEN or (new_lo, new_hi) == (lo, hi):
+            continue
+        if _is_vertical(w):
+            w.y1, w.y2 = new_lo, new_hi
+        else:
+            w.x1, w.x2 = new_lo, new_hi
 
 
 def _is_vertical(w: WallSegment) -> bool:
