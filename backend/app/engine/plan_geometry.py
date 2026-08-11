@@ -9,8 +9,10 @@ is inset ewt from the buildable ring. Walls therefore live in the gaps:
 - external ring: centreline at the room-union bounding box ± ewt/2 (inner
   face flush with the floor's room union; falls back to the buildable plate
   when the floor has no rooms)
-- orphan walls: room edges facing unassigned space get an iwt wall hugging
-  the edge (centreline iwt/2 outside the room)
+- orphan walls: room edges facing unassigned space get a wall hugging the
+  edge. iwt (centreline iwt/2 outside the room) when a neighbouring room
+  mass sits just outside; ewt when it doesn't (interior void, light well/
+  duct — structurally exterior even though it's inside the footprint bbox)
 
 All outputs are axis-aligned centreline segments, normalized so
 (x1, y1) <= (x2, y2).
@@ -195,6 +197,48 @@ def _pair_edges(
     return out
 
 
+def _raw_wall_box(w: WallSegment) -> Polygon:
+    """Wall footprint at its true thickness, WITHOUT the end-extension
+    `wall_polygons()` applies for rendering corner-closure — that extension
+    would bleed a wall's footprint past its real end and contaminate
+    `_edge_faces_open_space` classification for a nearby, unrelated edge."""
+    t = w.thickness / 2
+    if abs(w.x1 - w.x2) < 1e-9:
+        lo, hi = min(w.y1, w.y2), max(w.y1, w.y2)
+        return box(w.x1 - t, lo, w.x1 + t, hi)
+    lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+    return box(lo, w.y1 - t, hi, w.y1 + t)
+
+
+def _edge_faces_open_space(
+    e: "_Edge", is_vertical: bool, footprint: Polygon | None, ewt: float
+) -> bool:
+    """True if the outward side of an uncovered room edge has no neighbouring
+    room mass — i.e. it faces open/unassigned space (including an interior
+    void, not just the exterior ring) rather than another room that simply
+    wasn't caught by edge-pairing.
+
+    Tests a strip offset outward from the edge by [eps, ewt] (not [0, ewt]) so
+    a room merely touching the edge's own centreline — true along its full
+    length — doesn't register as a false "covered" neighbour. Uses AREA
+    overlap, not `intersects()`: a perpendicular room can share a full-length
+    boundary LINE with the strip (zero area) without actually occupying any
+    of the space the strip is probing — `intersects()` alone would treat
+    that boundary contact as a real neighbour and misclassify true voids.
+    """
+    if footprint is None:
+        return True
+    eps = 0.02
+    lo, hi = e.lo, e.hi
+    if hi - lo < 1e-9:
+        return True
+    a = e.coord + e.normal * eps
+    b = e.coord + e.normal * ewt
+    x0, x1 = (a, b) if a <= b else (b, a)
+    strip = box(x0, lo, x1, hi) if is_vertical else box(lo, x0, hi, x1)
+    return footprint.intersection(strip).area < 1e-9
+
+
 def _plate_bounds(
     rooms: list[Room], buildable: Polygon, ewt: float
 ) -> tuple[float, float, float, float]:
@@ -244,16 +288,18 @@ def derive_walls(
     — e.g. a GF leaving a roof void at the rear — gets no false ring around
     the empty area); with no rooms it falls back to the buildable plate.
 
-    Known residual limitation: uncovered room edges facing an *interior* void
-    (e.g. a roof void over part of the GF footprint, technically inside the
-    footprint bounding box) are still drawn as `internal` (iwt) orphan walls.
-    Fixing that needs Shapely strip classification of every orphan edge
-    against the footprint; out of scope for now. Opening placement shares the
-    same exterior-surface model: `_exterior_edges`/`_place_main_entrance` in
-    `derive_openings` also consume `_plate_bounds`, so void-facing surfaces on
-    partial-footprint floors DO receive openings. Only `_place_main_entrance`'s
-    `gate_x` (compound-wall gate/road alignment) still keys off the buildable
-    plate.
+    Uncovered room edges facing an *interior* void (e.g. a roof void over
+    part of the GF footprint, technically inside the footprint bounding box)
+    are classified via `_edge_faces_open_space`: a Shapely strip offset
+    outward from the edge is tested against the room-union footprint, and an
+    edge with no neighbouring room mass there gets an `external` (ewt) orphan
+    wall instead of `internal` (iwt) — that surface faces open sky, not
+    another room, even though it isn't on the bbox boundary. Opening
+    placement shares the same exterior-surface model: `_exterior_edges`/
+    `_place_main_entrance` in `derive_openings` also consume `_plate_bounds`,
+    so void-facing surfaces on partial-footprint floors DO receive openings.
+    Only `_place_main_entrance`'s `gate_x` (compound-wall gate/road
+    alignment) still keys off the buildable plate.
     """
     px1, py1, px2, py2 = _plate_bounds(rooms, buildable, ewt)
 
@@ -286,26 +332,55 @@ def derive_walls(
     for mid, lo, hi in _pair_edges(hor_edges, iwt, tol):
         grouped.setdefault(("h", round(mid, 6)), []).append((lo, hi))
 
-    # Orphan walls: uncovered edge stretches get an iwt wall hugging the edge.
-    for e in vert_edges:
-        for lo, hi in _subtract_intervals((e.lo, e.hi), e.covered):
-            if hi - lo < _MIN_WALL_LEN:
-                continue
-            mid = e.coord + e.normal * iwt / 2
-            grouped.setdefault(("v", round(mid, 6)), []).append((lo, hi))
-    for e in hor_edges:
-        for lo, hi in _subtract_intervals((e.lo, e.hi), e.covered):
-            if hi - lo < _MIN_WALL_LEN:
-                continue
-            mid = e.coord + e.normal * iwt / 2
-            grouped.setdefault(("h", round(mid, 6)), []).append((lo, hi))
-
     for (orient, coord), intervals in sorted(grouped.items()):
         for lo, hi in _merge_intervals(intervals, tol):
             if orient == "v":
                 walls.append(WallSegment(coord, lo, coord, hi, iwt, kind="internal"))
             else:
                 walls.append(WallSegment(lo, coord, hi, coord, iwt, kind="internal"))
+
+    # Orphan walls: uncovered edge stretches get a wall hugging the edge.
+    # An edge whose outward side has no neighbouring room mass — an interior
+    # void (roof void, light well/duct) or space the pairing pass missed —
+    # is structurally exterior (open to sky) and gets ewt, not iwt.
+    # Room boxes ALONE aren't enough: at a T-junction, the perpendicular
+    # partition's own foot leaves an iwt-wide sliver on the far room's edge
+    # that no room covers (rooms are clear interior spaces — the partition
+    # wall itself lives in the gap, unmodeled by room rects). Folding in the
+    # ring + paired-internal walls already placed above (real built
+    # structure) closes that sliver correctly, while a genuine void (roof
+    # void, light well) — far wider than any wall — still reads as open.
+    footprint = (
+        unary_union(
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+            + [_raw_wall_box(w) for w in walls]
+        )
+        if rooms
+        else None
+    )
+    orphan_groups: dict[tuple[str, float, str], list[tuple[float, float]]] = {}
+    for is_vertical, edges, axis in ((True, vert_edges, "v"), (False, hor_edges, "h")):
+        for e in edges:
+            for lo, hi in _subtract_intervals((e.lo, e.hi), e.covered):
+                if hi - lo < _MIN_WALL_LEN:
+                    continue
+                seg = _Edge(e.coord, lo, hi, e.normal)
+                if _edge_faces_open_space(seg, is_vertical, footprint, ewt):
+                    kind, thickness = "external", ewt
+                else:
+                    kind, thickness = "internal", iwt
+                mid = e.coord + e.normal * thickness / 2
+                orphan_groups.setdefault((axis, round(mid, 6), kind), []).append(
+                    (lo, hi)
+                )
+
+    for (orient, coord, kind), intervals in sorted(orphan_groups.items()):
+        thickness = ewt if kind == "external" else iwt
+        for lo, hi in _merge_intervals(intervals, tol):
+            if orient == "v":
+                walls.append(WallSegment(coord, lo, coord, hi, thickness, kind=kind))
+            else:
+                walls.append(WallSegment(lo, coord, hi, coord, thickness, kind=kind))
 
     _snap_ends(walls)
     return walls
