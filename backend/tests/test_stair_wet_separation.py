@@ -113,28 +113,18 @@ _FLOORS = [0, 1]
 #: stair band, so that fix is per-archetype; only the UPPER-floor band is shared
 #: (`archetypes._stair_band_rooms`), which is why every first-floor case passes.
 #:
-#: `layout_a`, `layout_b` and `layout_d` GF bands are reordered — enough to
-#: cover every layout the MyLatest config admits. One archetype still admitted
-#: by `_standard_cfg` seats its GF stair against a wet/parking room, so that
-#: one pair is a strict xfail: it will fail loudly the moment it starts
-#: passing, rather than quietly rotting.
+#: All six archetypes' GF bands now give the stair a real circulation-room
+#: neighbour before parking/wet rooms (#50, #51, #61 — layout_c/layout_e were
+#: the last two, both hand-rolled and not covered by the earlier shared-helper
+#: fix). No more xfail needed here.
 #:
 #: Gotcha when extending this: `generate()` REASSIGNS layout ids to A/B/C, so
 #: the layout reported as "A" is NOT necessarily `layout_a()` — identify the
 #: archetype from its room ids and geometry, never from the layout id.
-_STANDARD_GF_XFAIL = pytest.param(
-    "standard_layouts",
-    0,
-    marks=pytest.mark.xfail(
-        strict=True,
-        reason="one archetype's ground-floor stair band is not yet reordered "
-        "(see comment above _STANDARD_GF_XFAIL)",
-    ),
-)
 _CASES = [
     ("mylatest_layouts", 0),
     ("mylatest_layouts", 1),
-    _STANDARD_GF_XFAIL,
+    ("standard_layouts", 0),
     ("standard_layouts", 1),
 ]
 
