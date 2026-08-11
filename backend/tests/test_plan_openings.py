@@ -676,6 +676,44 @@ def test_diagnostics_key_present_in_drawing_dict():
     assert "diagnostics" in drawing.to_dict()
 
 
+def test_partial_footprint_rear_surface_gets_window():
+    """Rooms fill only the front part of the plate (#6c floor): the living
+    room's REAR edge is a true exterior surface after the wall-ring fix — it
+    must receive a window on the union rear ring (cy = rear + ewt/2), not be
+    silently omitted as before.
+
+    (living is wider than deep so its front/rear edges are its two longest
+    exterior edges — a square room would tie and a vertical edge would win
+    the stable :2 selection, hiding the effect this test pins down.)"""
+    openings, _ = _openings_for(
+        [
+            _room("living", 1.23, 1.73, 5.0, 3.0),
+            _room("stair", 6.345, 1.73, 1.425, 3.0, rtype="staircase"),
+        ],
+        _cfg_9x15(),
+    )
+    rear_windows = [
+        o for o in openings if o.kind == "window" and abs(o.cy - (4.73 + 0.115)) < 1e-6
+    ]
+    assert rear_windows, "no window was placed on the union rear surface"
+
+
+def test_main_door_on_setback_building_uses_union_front():
+    """#6 healed for partial footprints: no room at the buildable front plate,
+    but the front-most room defines the building's real front wall."""
+    openings, _ = _openings_for(
+        [
+            _room("living", 1.23, 2.5, 4.0, 4.0),
+            _room("bed", 4.23, 2.5, 3.0, 4.0, rtype="bedroom"),
+            _room("stair", 4.23, 6.5, 2.0, 3.0, rtype="staircase"),
+        ],
+        _cfg_9x15(),
+    )
+    main = next((o for o in openings if o.is_main), None)
+    assert main is not None
+    assert abs(main.cy - (2.5 - 0.115)) < 1e-6  # union front minus ewt/2
+
+
 # ── Out-of-bounds room validation (Task 7: #F) ───────────────────────────────
 
 
