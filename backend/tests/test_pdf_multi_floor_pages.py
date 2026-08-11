@@ -48,3 +48,24 @@ def test_g1_basement_pdf_has_basement_pages():
 def test_g1_still_six_pages():  # regression guard — existing behaviour unchanged
     pdf = render_pdf("G+1", _stack(), _cfg(), 3)
     assert pdf_pages(pdf) == 6
+
+
+def test_g2_plus_basement_has_ten_pages():
+    pdf = render_pdf("G+2+B", _stack(sf=True, basement=True), _cfg(), 3)
+    assert pdf_pages(pdf) == 10
+    assert pdf_page_text(pdf, 8).upper().find("SECTION") != -1
+    assert "FRONT ELEVATION" in pdf_page_text(pdf, 9).upper()
+
+
+def test_arch_page_index_matches_render_order():
+    from app.engine.pdf import arch_page_index
+
+    g2 = _stack(sf=True)
+    assert arch_page_index(g2, "ground_floor") == 0
+    assert arch_page_index(g2, "second_floor") == 2
+    both = _stack(sf=True, basement=True)
+    assert arch_page_index(both, "basement_floor") == 0
+    assert arch_page_index(both, "ground_floor") == 1
+    assert arch_page_index(both, "first_floor") == 2
+    assert arch_page_index(both, "second_floor") == 3
+    assert arch_page_index(both, "unknown_key") == 0  # safe fallback

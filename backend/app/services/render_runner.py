@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from app.config.settings import settings
-from app.engine.pdf import render_pdf
+from app.engine.pdf import arch_page_index, render_pdf
 from app.engine.render_prompt import build_render_prompt
 from app.models.job import GenerationJob
 from app.models.project import Project
@@ -186,10 +186,9 @@ async def perform_render(
     layout = layout_store.engine_layout_from_geometry(stored.geometry)
     if reference_png is None:
         pdf_bytes = render_pdf(project.name, layout, cfg, project.num_bedrooms)
-        # Standard PDF page order: GF architectural = 0, FF architectural = 1.
-        # Conditioning the FF render on the GF page made the model draw the
-        # wrong rooms — pick the page that matches the requested floor.
-        page_idx = {"ground_floor": 0, "first_floor": 1}.get(floor, 0)
+        # Arch-page index must match render_pdf()'s floor-ordered pages
+        # (basement first), or the model conditions on the wrong floor's plan.
+        page_idx = arch_page_index(layout, floor)
         reference_png = pdf_page_png(pdf_bytes, page_idx=page_idx)
         reference_kind = "cad"
     prompt = build_render_prompt(
