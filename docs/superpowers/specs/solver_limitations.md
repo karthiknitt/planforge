@@ -443,6 +443,7 @@ Fixed on branch `fix/solver-limitations-render-pipeline` (plan: `docs/plans/2026
 | #3, H | Fixed | `section_cut_line()` mid-line fallback + `derive_section` Rule-7 stair guard |
 | #6a | Fixed | `render_pdf()` iterates `ordered_floors()` (basement→SF); `arch_page_index()` keeps render-conditioning correct |
 | #6c | Fixed | `derive_walls()` ring from room-union bbox (inner face flush; buildable fallback when no rooms) |
+| #6c (jogged/notched footprints) | Fixed (2026-08-12) | `derive_walls()` builds each of the ring's 4 sides only from the room edges that actually reach that side of the bbox (merge gap `iwt + tol`, bridging same-row partition slits but not a genuine notch), instead of drawing each side full-length unconditionally — an L-shaped footprint (e.g. Assamese-07's FF/SF sloped-roof void over the SE car-porch corner) no longer gets a false wall closing off the empty notch. Verified against a fresh Assamese-07 harness re-render (`docs/superpowers/specs/reverse_engr/Assamese/Assamese-07/RENDER_FIDELITY_CHECK.md`, before/after crops) and a new regression test, `test_external_ring_leaves_notch_open_no_false_wall` in `backend/tests/test_plan_geometry.py`. |
 | #6, #6b, G, #6d | Surfaced | `FloorDrawing.diagnostics` carries per-room rejection reasons; placement redesign (#6d) deferred |
 | F | Mitigated | `geometry:` out-of-bounds diagnostic in `build_floor_drawing` + corrected axis comments; field rename deferred |
 | C | Fixed | `foyer` / `courtyard` / `wardrobe` RoomTypes (engine) + frontend labels/colors |
@@ -450,5 +451,5 @@ Fixed on branch `fix/solver-limitations-render-pipeline` (plan: `docs/plans/2026
 | #4 | Out of scope | connectivity check deferred to `2026-08-09-layout-quality-critique-loop-design.md` |
 | A, B, D, E | Out of scope | accepted schema limits / methodology notes — see plan |
 
-Known follow-ups (not blockers): `foyer` ∈ `_WINDOW_TYPES` gap (openings-derived windows skip foyer; PDF symbol path covers it); interior-void orphan edges on partial footprints still draw as internal walls; openings surface model (`_exterior_edges`/`_place_main_entrance`) still keys off buildable plate, not the room-union ring.
+Known follow-ups (not blockers): `foyer` ∈ `_WINDOW_TYPES` gap (openings-derived windows skip foyer; PDF symbol path covers it); openings surface model (`_exterior_edges`/`_place_main_entrance` in `derive_openings`) still consumes `_plate_bounds`'s room-union **bbox** directly, not the per-side, edge-covered ring `derive_walls()` now builds — a notch could in principle still receive a spurious opening even though it no longer receives a spurious wall, but this was NOT observed on Assamese-07 (see the 2026-08-12 re-render notes) and would need its own dedicated reference case to confirm either way.
 
