@@ -602,6 +602,33 @@ def test_parking_never_hosts_interior_door():
         assert validate_floor_connectivity(rooms, openings, 0) == []
 
 
+def test_gapped_parking_gets_no_repair_door():
+    """A car porch held a real physical gap from every neighbour (the
+    reverse-engineering harness's checklist item 3 — RoomType alone isn't
+    enough, parking needs actual clearance so it never LOOKS like a normal
+    walled room with a pedestrian door) has no shared wall with anything,
+    so `_repair_connectivity`'s reachability pass always finds it
+    "unreachable" and used to force a door onto its own exterior wall
+    anyway — the repair pass didn't share `_NO_DOOR_TYPES`'s exclusion the
+    main per-room door loop already enforces. A real carport is reachable
+    only from the driveway/outside, never via an interior door; forcing one
+    drew a pedestrian door into what should read as open parking space."""
+    for rtype in ("parking", "parking_4w", "parking_2w"):
+        rooms = [
+            _room("living", 1.23, 1.73, 3.5, 5.0),
+            # gap of 0.2m from living's rear edge (6.73) — well past
+            # iwt + tol (0.125), so no shared-wall adjacency exists at all
+            _room("porch", 1.23, 6.93, 3.5, 3.0, rtype=rtype),
+        ]
+        openings, _walls = _openings_for(rooms, _cfg_9x15())
+        porch_doors = [
+            o for o in openings if o.kind == "door" and o.swing_into_room_id == "porch"
+        ]
+        assert porch_doors == [], (
+            f"{rtype} got a repair-pass door despite being gapped from every neighbour"
+        )
+
+
 # ── Entrance-placement diagnostics (Task 6: #6, #6b, G, #6d) ─────────────────
 
 

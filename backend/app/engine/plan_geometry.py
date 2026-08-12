@@ -1527,12 +1527,25 @@ def _repair_connectivity(
     """Add doors until every room is reachable, or no progress can be made.
 
     Prefers a shared wall with a reachable, non-wet neighbour (real
-    circulation), then any undoored shared wall, then an exterior edge."""
+    circulation), then any undoored shared wall, then an exterior edge.
+
+    Parking rooms are exempt, same as passage: `_NO_DOOR_TYPES` already
+    keeps them out of the main per-room door loop by design (checklist
+    item 3 in the reverse-engineering harness — a car porch/parking bay is
+    a real, physically separate outdoor structure, reachable only from the
+    driveway, not a room a resident walks into from inside the house). This
+    repair pass ran unconditionally over ALL non-passage rooms regardless
+    of type, so a deliberately door-less, gapped parking room always came
+    back "unreachable" and got a forced door anyway — undoing the very
+    exclusion `_NO_DOOR_TYPES` was there to enforce, and drawing a
+    pedestrian door into a car porch no real design has one in."""
     for _ in range(len(rooms) + 1):
         graph = _door_graph(rooms, openings, adjs, tol)
         reachable = _reachable_rooms(rooms, graph, floor, openings)
         unreachable = [
-            i for i, r in enumerate(rooms) if r.type != "passage" and i not in reachable
+            i
+            for i, r in enumerate(rooms)
+            if r.type not in ({"passage"} | _PARKING_TYPES) and i not in reachable
         ]
         if not unreachable:
             return
