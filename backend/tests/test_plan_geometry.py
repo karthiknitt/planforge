@@ -20,6 +20,8 @@ from app.engine.plan_geometry import (
     _SNAP,
     _merge_adjacent_columns,
     _near_staircase,
+    _plate_bounds,
+    _structural_rooms,
     derive_columns,
     derive_junctions,
     derive_walls,
@@ -702,3 +704,138 @@ def test_perpendicular_edge_does_not_rescue_an_open_wall():
         "S wall survived: a perpendicular (vertical) edge wrongly rescued it"
     )
     assert _walls_on_edge(walls, vertical=True, coord=0.0), "W wall must remain"
+
+
+# --- carved / nested rooms (Room.parent_id) ---------------------------------
+
+
+def _carve_pair() -> tuple[Room, Room]:
+    """A 4x4 bedroom with a 1.5x2.0 toilet carved into its SW corner."""
+    bedroom = Room(
+        id="bed",
+        name="Bedroom",
+        type="bedroom",
+        x=1.0,
+        y=1.0,
+        width=4.0,
+        depth=4.0,
+    )
+    toilet = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="bed",
+    )
+    return bedroom, toilet
+
+
+def test_carved_room_does_not_duplicate_parent_walls():
+    """A toilet carved into a bedroom's rectangle gets its own two internal
+    separating walls, and the bedroom keeps all four of its own outer walls —
+    the carve must not punch a hole in the parent's envelope."""
+    bedroom, toilet = _carve_pair()
+    walls = derive_walls([bedroom, toilet], _buildable())
+    # Parent envelope intact on all four sides.
+    for vertical, coord in ((False, 1.0), (False, 5.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord), (
+            f"parent lost its wall at {'x' if vertical else 'y'}={coord}"
+        )
+    # Carve produces the two interior separating walls (x=2.5 and y=3.0).
+    assert _walls_on_edge(walls, vertical=True, coord=2.5), "missing carve E wall"
+    assert _walls_on_edge(walls, vertical=False, coord=3.0), "missing carve N wall"
+
+
+def test_carve_separating_walls_are_internal_not_exterior():
+    """The carve's own edges face the parent's mass, so they must read as
+    interior partitions (iwt) — never as void-facing external surfaces."""
+    bedroom, toilet = _carve_pair()
+    walls = derive_walls([bedroom, toilet], _buildable())
+    for vertical, coord in ((True, 2.5), (False, 3.0)):
+        segs = _walls_on_edge(walls, vertical=vertical, coord=coord)
+        assert segs, f"no wall at {'x' if vertical else 'y'}={coord}"
+        assert all(w.kind == "internal" for w in segs), (
+            f"carve wall at {'x' if vertical else 'y'}={coord} is not internal: "
+            f"{[(w.kind, w.thickness) for w in segs]}"
+        )
+        assert all(abs(w.thickness - IWT) < 1e-9 for w in segs)
+
+
+def test_carved_child_excluded_from_parent_net_area():
+    bedroom, toilet = _carve_pair()
+    assert bedroom.area == 16.0
+    assert bedroom.net_area([toilet]) == 13.0
+    # An unrelated room never reduces the parent's net area.
+    other = Room(
+        id="oth", name="Store", type="store_room", x=20.0, y=20.0, width=2.0, depth=2.0
+    )
+    assert bedroom.net_area([other]) == 16.0
+    # No children at all -> net area equals gross area (default behaviour).
+    assert bedroom.net_area([]) == bedroom.area
+
+
+def test_carve_must_lie_inside_its_parent():
+    bedroom, _ = _carve_pair()
+    stray = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=9.0,
+        y=9.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="bed",
+    )
+    with pytest.raises(ValueError, match="not contained"):
+        derive_walls([bedroom, stray], _buildable())
+
+
+def test_carve_with_unknown_parent_is_rejected():
+    bedroom, _ = _carve_pair()
+    orphan = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="nope",
+    )
+    with pytest.raises(ValueError, match="unknown parent_id"):
+        derive_walls([bedroom, orphan], _buildable())
+
+
+def test_parent_id_defaults_to_none_and_changes_nothing():
+    """The load-bearing invariant: an unset parent_id must leave every
+    existing layout byte-identical."""
+    rooms, cfg = golden_layout().ground_floor.rooms, golden_config()
+    assert all(r.parent_id is None for r in rooms)
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    assert walls
+
+
+def test_carve_within_containment_tolerance_does_not_inflate_the_plate():
+    """`_validate_carves` allows 1 cm of slop, so a carve CAN stick marginally
+    past its parent. It must still be filtered out of the footprint union, or
+    that slop silently grows the plate the exterior ring is built on."""
+    bedroom, _ = _carve_pair()
+    sloppy = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=4.01,  # 1 cm past the parent's E edge — inside the 0.01 tol
+        depth=2.0,
+        parent_id="bed",
+    )
+    assert _structural_rooms([bedroom, sloppy]) == [bedroom]
+    derive_walls([bedroom, sloppy], _buildable())  # tolerated, not an error
+    _px1, _py1, px2, _py2 = _plate_bounds([bedroom, sloppy], _buildable(), EWT)
+    assert px2 == pytest.approx(5.0), (
+        f"carve mass leaked into the plate: east bound {px2} != parent's 5.0"
+    )

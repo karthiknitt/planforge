@@ -308,6 +308,43 @@ def _is_declared_open(
     return False
 
 
+def _validate_carves(rooms: list[Room], tol: float = 0.01) -> None:
+    """Every room with a `parent_id` must lie inside that parent's rectangle.
+
+    A carve that escapes its parent would add mass to the floor footprint
+    that `_structural_rooms` has already filtered out, silently shrinking the
+    plate and the void-classification footprint. Fail loudly instead.
+    """
+    by_id = {r.id: r for r in rooms}
+    for r in rooms:
+        if r.parent_id is None:
+            continue
+        p = by_id.get(r.parent_id)
+        if p is None:
+            raise ValueError(f"room {r.id!r} has unknown parent_id {r.parent_id!r}")
+        if not (
+            r.x >= p.x - tol
+            and r.y >= p.y - tol
+            and r.x + r.width <= p.x + p.width + tol
+            and r.y + r.depth <= p.y + p.depth + tol
+        ):
+            raise ValueError(
+                f"carved room {r.id!r} is not contained in parent {p.id!r}"
+            )
+
+
+def _structural_rooms(rooms: list[Room]) -> list[Room]:
+    """Rooms that contribute mass to the floor footprint.
+
+    Carved children (`parent_id` set) do NOT: they sit inside a parent that
+    already contributes the same area, so unioning them in again would
+    double-count that mass. Only the FOOTPRINT UNION is filtered — edge
+    pairing still runs over the full room list, so a carve's own edges
+    become real interior partitions.
+    """
+    return [r for r in rooms if r.parent_id is None]
+
+
 def _plate_bounds(
     rooms: list[Room], buildable: Polygon, ewt: float
 ) -> tuple[float, float, float, float]:
@@ -315,7 +352,10 @@ def _plate_bounds(
 
     Room-union bbox when rooms exist (matches the derive_walls ring);
     buildable inset by ewt otherwise. THE single source of truth for both
-    wall rings and opening placement."""
+    wall rings and opening placement — hence the carve filter lives here,
+    not at the call sites, so `derive_walls` and `derive_openings` can never
+    disagree about what the plate is."""
+    rooms = _structural_rooms(rooms)
     if rooms:
         footprint = unary_union(
             [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
@@ -376,6 +416,7 @@ def derive_walls(
     Only `_place_main_entrance`'s `gate_x` (compound-wall gate/road
     alignment) still keys off the buildable plate.
     """
+    _validate_carves(rooms, tol)
     px1, py1, px2, py2 = _plate_bounds(rooms, buildable, ewt)
 
     cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
@@ -484,12 +525,18 @@ def derive_walls(
     # ring + paired-internal walls already placed above (real built
     # structure) closes that sliver correctly, while a genuine void (roof
     # void, light well) — far wider than any wall — still reads as open.
+    # Carved children are excluded from the union (`_structural_rooms`): their
+    # mass is already contributed by the parent they sit inside, and counting
+    # it twice would let a stray carve inflate the footprint. Their EDGES are
+    # still present in `vert_edges`/`hor_edges` below, so a carve's own sides
+    # are classified against the parent's mass and become internal partitions.
+    structural = _structural_rooms(rooms)
     footprint = (
         unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in structural]
             + [_raw_wall_box(w) for w in walls]
         )
-        if rooms
+        if structural
         else None
     )
     orphan_groups: dict[tuple[str, float, str], list[tuple[float, float]]] = {}

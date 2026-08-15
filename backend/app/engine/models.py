@@ -57,6 +57,12 @@ class Room:
     # normal fully-enclosed room — the default, so existing layouts are
     # unaffected.
     open_sides: frozenset[str] = field(default_factory=frozenset)
+    # When set, this room is carved out of the interior of the room with this
+    # id: its area is subtracted from the parent's usable area and its edges
+    # become interior partitions. 22% of the reverse_engr corpus needs this
+    # (an ensuite toilet sitting in a corner of a bedroom's rectangle).
+    # Defaults to None, so every existing layout is unaffected.
+    parent_id: str | None = None
 
     def __post_init__(self) -> None:
         bad = set(self.open_sides) - _VALID_SIDES
@@ -78,6 +84,15 @@ class Room:
     @property
     def area(self) -> float:
         return round(self.width * self.depth, 2)
+
+    def net_area(self, children: list["Room"]) -> float:
+        """Area minus any rooms carved out of this one.
+
+        Derived from `self.area` (not `width * depth`) so it stays correct
+        once `area` becomes the union of a room's shape-template parts.
+        """
+        carved = sum(c.width * c.depth for c in children if c.parent_id == self.id)
+        return round(self.area - carved, 2)
 
 
 @dataclass
