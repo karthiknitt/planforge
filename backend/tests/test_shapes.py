@@ -127,6 +127,24 @@ def test_unknown_template_is_rejected():
         parts_for(0.0, 0.0, 10.0, 10.0, "Z")  # type: ignore[arg-type]
 
 
+def test_a_validated_but_unhandled_template_raises_instead_of_rendering_as_u(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """SHAPE_TEMPLATES auto-populates from the ShapeTemplate Literal, so a name
+    added there would pass validate_shape and then fall through to whichever
+    branch happens to be last. It must raise, not silently become a U.
+
+    Widening the frozenset (rather than editing the Literal) keeps this test
+    working unchanged when real templates are added later.
+    """
+    from app.engine import shapes
+
+    monkeypatch.setattr(shapes, "SHAPE_TEMPLATES", shapes.SHAPE_TEMPLATES | {"ZIGZAG"})
+    shapes.validate_shape("ZIGZAG", 0.6)  # type: ignore[arg-type]  # validation now passes
+    with pytest.raises(ValueError, match="ZIGZAG"):
+        shapes.parts_for(0.0, 0.0, 12.0, 9.0, "ZIGZAG")  # type: ignore[arg-type]
+
+
 def test_room_rejects_a_bad_template_at_construction():
     with pytest.raises(ValueError, match="template"):
         Room(

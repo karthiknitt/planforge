@@ -105,10 +105,16 @@ def parts_for(
             Rect(x, y, width, d1),
             Rect(stem_x, y + d1, w1, depth - d1),
         )
-    # "U": full-width base band + two legs, leaving a central notch.
-    leg = (width - w1) / 2.0
-    return (
-        Rect(x, y, width, d1),
-        Rect(x, y + d1, leg, depth - d1),
-        Rect(x + width - leg, y + d1, leg, depth - d1),
-    )
+    if template == "U":
+        # Full-width base band + two legs, leaving a central notch.
+        leg = (width - w1) / 2.0
+        return (
+            Rect(x, y, width, d1),
+            Rect(x, y + d1, leg, depth - d1),
+            Rect(x + width - leg, y + d1, leg, depth - d1),
+        )
+    # Not an `else` on the U branch: SHAPE_TEMPLATES auto-populates from the
+    # ShapeTemplate Literal, so adding a name there would pass validate_shape
+    # and then silently render as a U. Fail loudly instead — a new template
+    # must add its own branch here.
+    raise ValueError(f"unhandled shape template {template!r}")
