@@ -1038,6 +1038,39 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
                     yield (True, wall_y, overlap_lo, overlap_hi)
 
 
+def _is_declared_open_edge(
+    room: Room, is_horizontal: bool, coord: float, ewt: float, tol: float
+) -> bool:
+    """True if `coord` sits on a room edge the room declared open via
+    `Room.open_sides` — no wall was ever drawn there (see `derive_walls`'s
+    own open-edge drop), so no opening may be cut into it either.
+
+    A wall centreline serving a room edge sits `ewt / 2` outside the raw
+    room edge (external ring convention), so the match slack must absorb
+    that offset — `ewt / 2 + tol`, matching `derive_walls`'s `open_slack`.
+    """
+    if not room.open_sides:
+        return False
+    slack = ewt / 2 + tol
+    if is_horizontal:
+        if "S" in room.open_sides and abs(coord - (room.y - ewt / 2)) <= slack:
+            return True
+        if (
+            "N" in room.open_sides
+            and abs(coord - (room.y + room.depth + ewt / 2)) <= slack
+        ):
+            return True
+    else:
+        if "W" in room.open_sides and abs(coord - (room.x - ewt / 2)) <= slack:
+            return True
+        if (
+            "E" in room.open_sides
+            and abs(coord - (room.x + room.width + ewt / 2)) <= slack
+        ):
+            return True
+    return False
+
+
 def _all_exterior_edges(
     room,
     walls: list[WallSegment],
@@ -1047,16 +1080,24 @@ def _all_exterior_edges(
 ):
     """Yield all (is_horizontal, coord, lo, hi) exterior edges for a room,
     combining both plate-boundary edges and void-facing orphan walls marked
-    kind="external". Deduplicates edges that appear in both sources."""
+    kind="external". Deduplicates edges that appear in both sources.
+
+    Edges lying on a side the room declared open (`Room.open_sides`) are
+    skipped entirely — there is no wall there for an opening to cut into.
+    """
     seen = set()
     # First collect from plate bounds
     for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol):
+            continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
             seen.add(key)
             yield (is_h, coord, lo, hi)
     # Then add any external walls not on plate boundary (void-facing orphans)
     for is_h, coord, lo, hi in _exterior_wall_edges(room, walls, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol):
+            continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
             seen.add(key)
