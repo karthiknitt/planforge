@@ -198,6 +198,11 @@ class PlotConfig:
     # En-suite toilets: one attached bath per bedroom, additive to `toilets`
     # (which then counts COMMON toilets only)
     attached_toilets: bool = False
+    # Opt-in: let the solver give eligible rooms a non-RECT shape template, so
+    # two rooms can interlock (an L's notch filled by its neighbour). Off by
+    # default — every room then comes out `template="RECT"` and the CP-SAT
+    # model is exactly the one that existed before shape templates.
+    allow_shape_templates: bool = False
 
     @property
     def bhk(self) -> int:
