@@ -25,6 +25,7 @@ import math
 from typing import TYPE_CHECKING
 
 from shapely.geometry import Point, Polygon, box
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
 from app.engine.cad_elements import (
@@ -163,15 +164,152 @@ class _Edge:
         self.covered: list[tuple[float, float]] = []
 
 
+def _part_boxes(rooms: list[Room]) -> list[Polygon]:
+    """One Shapely box per occupied rectangle across `rooms`.
+
+    Shape templates (Task 6) make a room the UNION of 1-3 rectangles, so any
+    footprint/mass computation must union parts, not room bounding boxes —
+    an L room's notch is empty space, not room mass.
+    """
+    return [box(p.x, p.y, p.x + p.width, p.y + p.depth) for r in rooms for p in r.rects]
+
+
+def _room_polygon(room: Room) -> BaseGeometry:
+    """The room's occupied area — the union of its shape-template parts.
+
+    For a "RECT" room this is exactly `box(x, y, x + width, y + depth)`:
+    `Room.rects` is then a 1-tuple and `unary_union` of a single box returns
+    it with its coordinates untouched. That identity is what keeps the
+    union-boundary walk below behaviour-preserving for every existing layout.
+    """
+    return unary_union(_part_boxes([room]))
+
+
+def _rooms_polygon(rooms: list[Room]) -> BaseGeometry:
+    boxes = _part_boxes(rooms)
+    return unary_union(boxes) if boxes else Polygon()
+
+
+def _merge_collinear(edges: list[_Edge]) -> list[_Edge]:
+    """Merge touching runs that share a coordinate and an outward normal.
+
+    Shapely's union emits a vertex wherever two input rectangles met, so an
+    L's west side arrives as two collinear segments; without this the wall
+    passes would treat them as two separate runs and merge them back with a
+    different (and lossy) gap tolerance.
+
+    Output order is (normal, coord, lo) — for a RECT room that is exactly the
+    order the pre-template `_room_edges` emitted (W then E, S then N), which
+    matters because `_snap_ends` mutates walls in list order.
+    """
+    out: list[_Edge] = []
+    for e in sorted(edges, key=lambda z: (z.normal, z.coord, z.lo)):
+        prev = out[-1] if out else None
+        if (
+            prev is not None
+            and prev.normal == e.normal
+            and abs(prev.coord - e.coord) < 1e-9
+            and prev.hi >= e.lo - 1e-9
+        ):
+            prev.hi = max(prev.hi, e.hi)
+        else:
+            out.append(e)
+    return out
+
+
+def _boundary_edges(geom: BaseGeometry) -> tuple[list[_Edge], list[_Edge]]:
+    """Axis-aligned boundary runs of a rectilinear polygon, split into
+    (vertical, horizontal).
+
+    The outward normal is read off the ring's WINDING, not from a
+    representative interior point: a representative point of an L-shaped
+    polygon sits on the wrong side of at least one of its own edges, which
+    would flip that edge's normal and turn a re-entrant corner into a
+    phantom exterior surface. For a counter-clockwise ring the interior lies
+    to the LEFT of travel, so the outward normal is the right-hand normal
+    (dy, -dx); a clockwise ring (what `unary_union` returns for a merged
+    footprint) is the mirror image. Interior rings of a valid polygon are
+    wound opposite to the exterior, so the same rule points their normals
+    into the hole, which is correct — a hole's surface faces open space.
+    """
+    verts: list[_Edge] = []
+    horiz: list[_Edge] = []
+    polys = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+    for poly in polys:
+        if poly.is_empty or poly.geom_type != "Polygon":
+            continue
+        for ring in [poly.exterior, *poly.interiors]:
+            ccw = ring.is_ccw
+            coords = list(ring.coords)
+            for (x0, y0), (x1, y1) in zip(coords, coords[1:], strict=False):
+                dx, dy = x1 - x0, y1 - y0
+                if abs(dx) < 1e-9 and abs(dy) > 1e-9:
+                    verts.append(
+                        _Edge(
+                            x0,
+                            min(y0, y1),
+                            max(y0, y1),
+                            1 if (dy > 0) == ccw else -1,
+                        )
+                    )
+                elif abs(dy) < 1e-9 and abs(dx) > 1e-9:
+                    horiz.append(
+                        _Edge(
+                            y0,
+                            min(x0, x1),
+                            max(x0, x1),
+                            -1 if (dx > 0) == ccw else 1,
+                        )
+                    )
+    return _merge_collinear(verts), _merge_collinear(horiz)
+
+
 def _room_edges(rooms: list[Room]) -> tuple[list[_Edge], list[_Edge]]:
+    """Union-boundary runs of every room, as (vertical, horizontal).
+
+    A RECT room yields its four bbox edges — identical to the pre-template
+    behaviour. An L/T/U room yields the runs of its part union, so its notch
+    is a real re-entrant corner and no wall is drawn across it.
+    """
     vert: list[_Edge] = []
     hor: list[_Edge] = []
     for r in rooms:
-        vert.append(_Edge(r.x, r.y, r.y + r.depth, -1))
-        vert.append(_Edge(r.x + r.width, r.y, r.y + r.depth, +1))
-        hor.append(_Edge(r.y, r.x, r.x + r.width, -1))
-        hor.append(_Edge(r.y + r.depth, r.x, r.x + r.width, +1))
+        v, h = _boundary_edges(_room_polygon(r))
+        vert.extend(v)
+        hor.extend(h)
     return vert, hor
+
+
+_SIDE_OF_EDGE: dict[tuple[bool, int], str] = {
+    (True, -1): "W",
+    (True, +1): "E",
+    (False, -1): "S",
+    (False, +1): "N",
+}
+_SIDE_IS_HORIZONTAL: dict[str, bool] = {"N": True, "S": True, "E": False, "W": False}
+_SIDE_SIGN: dict[str, int] = {"N": +1, "E": +1, "S": -1, "W": -1}
+
+
+def _edges_by_side(room: Room) -> dict[str, list[tuple[float, float, float]]]:
+    """Union-boundary runs of `room` as (coord, lo, hi), keyed by the
+    plot-relative side letter `Room.open_sides` uses.
+
+    A RECT room has exactly one run per side; an L room can have two runs on
+    the same side (e.g. its base band's east face and its leg's east face),
+    which is precisely why `Room.open_sides` cannot be resolved from the
+    bounding box.
+    """
+    vert, hor = _boundary_edges(_room_polygon(room))
+    out: dict[str, list[tuple[float, float, float]]] = {
+        "N": [],
+        "S": [],
+        "E": [],
+        "W": [],
+    }
+    for is_vertical, edges in ((True, vert), (False, hor)):
+        for e in edges:
+            out[_SIDE_OF_EDGE[(is_vertical, e.normal)]].append((e.coord, e.lo, e.hi))
+    return out
 
 
 def _pair_edges(
@@ -249,44 +387,90 @@ def _open_edge_intervals(
     spanning [x_lo, x_hi]. `tol` is unused for the interval itself but kept
     in the signature so callers pass the same slack used to match walls to
     these intervals.
+
+    Runs come from the room's part UNION boundary, not its bounding box: an
+    L-shaped car porch declared open on "E" has two east-facing runs at two
+    different x-coords, and its bbox's east line covers stretches where the
+    room isn't even present.
     """
     _ = tol
     vertical: list[tuple[float, float, float]] = []
     horizontal: list[tuple[float, float, float]] = []
     for r in rooms:
-        x0, y0 = r.x, r.y
-        x1, y1 = r.x + r.width, r.y + r.depth
+        if not r.open_sides:
+            continue
+        sides = _edges_by_side(r)
         for side in r.open_sides:
-            if side == "W":
-                vertical.append((x0, y0, y1))
-            elif side == "E":
-                vertical.append((x1, y0, y1))
-            elif side == "S":
-                horizontal.append((y0, x0, x1))
-            elif side == "N":
-                horizontal.append((y1, x0, x1))
+            sink = horizontal if _SIDE_IS_HORIZONTAL[side] else vertical
+            sink.extend(sides[side])
     return vertical, horizontal
 
 
-def _is_declared_open(
+def _closed_edge_intervals(
+    rooms: list[Room], iwt: float, tol: float
+) -> tuple[set[tuple[float, float, float]], set[tuple[float, float, float]]]:
+    """Union-boundary runs that some room did NOT declare open, merged per
+    centreline. Returns (vertical, horizontal).
+
+    A shared wall where only one side declared itself open stays built, so
+    these are the intervals that rescue a wall from the open-side filter.
+    They are kept split by orientation so a vertical covered edge cannot
+    rescue a horizontal wall that merely shares its coordinate value.
+
+    Merging per centreline (rather than matching raw per-room runs) is
+    load-bearing: by the time the filter runs, a party wall passing several
+    neighbours is ONE merged segment. The `iwt + tol` gap joins neighbours
+    separated by a normal partition slit — that slit is filled by the
+    partition itself, so the covered run is continuous.
+    """
+    raw_v: dict[float, list[tuple[float, float]]] = {}
+    raw_h: dict[float, list[tuple[float, float]]] = {}
+    for r in rooms:
+        sides = _edges_by_side(r)
+        for side, runs in sides.items():
+            if side in r.open_sides:
+                continue
+            sink = raw_h if _SIDE_IS_HORIZONTAL[side] else raw_v
+            for coord, lo, hi in runs:
+                sink.setdefault(round(coord, 6), []).append((lo, hi))
+    return (
+        {
+            (coord, lo, hi)
+            for coord, spans in raw_v.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        },
+        {
+            (coord, lo, hi)
+            for coord, spans in raw_h.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        },
+    )
+
+
+def _apply_open_sides(
     w: WallSegment,
     open_v: list[tuple[float, float, float]],
     open_h: list[tuple[float, float, float]],
     covered_v: set[tuple[float, float, float]],
     covered_h: set[tuple[float, float, float]],
     tol: float,
-) -> bool:
-    """True if `w` lies on a declared-open interval and is not a party wall.
+) -> list[WallSegment]:
+    """`w` with its declared-open stretches SUBTRACTED — 0, 1 or 2 segments.
 
-    `covered_v`/`covered_h` hold intervals that a *non-open* room edge also
-    occupies — a shared wall where only one side declared itself open stays
-    built. They are kept split by orientation so a vertical covered edge
-    cannot rescue a horizontal wall that merely shares its coordinate value.
+    Subtraction, not all-or-nothing containment: `_merge_intervals` happily
+    joins an open porch's ring run with a normal neighbour's into a single
+    segment, and a containment test then keeps the whole thing (the merged
+    wall is not *wholly* inside the porch's open interval), leaving a wall
+    across the porch opening. Splitting removes only the open share.
 
     `tol` must absorb the offset between a room edge and the centreline of
     the wall serving it: an external ring wall sits ewt/2 *outside* the edge
     and is snapped out to the ring corners, a paired internal wall sits at
     the half-gap midpoint. Callers pass `ewt / 2 + tol`, the worst case.
+    Both the open runs AND the rescuing covered runs are widened by that
+    slack — widening the covered runs is what keeps the filter conservative,
+    so a wall shared with a non-open neighbour survives intact rather than
+    being nibbled at its ends.
     """
     is_v = abs(w.x1 - w.x2) < 1e-6
     coord = w.x1 if is_v else w.y1
@@ -295,17 +479,35 @@ def _is_declared_open(
         if is_v
         else (min(w.x1, w.x2), max(w.x1, w.x2))
     )
-    for c, ilo, ihi in open_v if is_v else open_h:
-        if abs(c - coord) > tol:
+    opens = [
+        (ilo - tol, ihi + tol)
+        for c, ilo, ihi in (open_v if is_v else open_h)
+        if abs(c - coord) <= tol
+    ]
+    if not opens:
+        return [w]
+    covered = [
+        (clo - tol, chi + tol)
+        for cc, clo, chi in (covered_v if is_v else covered_h)
+        if abs(cc - coord) <= tol
+    ]
+    truly_open: list[tuple[float, float]] = []
+    for span in _merge_intervals(opens, 0.0):
+        truly_open.extend(_subtract_intervals(span, covered))
+    if not truly_open:
+        return [w]
+
+    out: list[WallSegment] = []
+    for rlo, rhi in _subtract_intervals((lo, hi), truly_open):
+        if rhi - rlo < _MIN_WALL_LEN:
             continue
-        if lo >= ilo - tol and hi <= ihi + tol:
-            if any(
-                abs(cc - coord) <= tol and lo >= clo - tol and hi <= chi + tol
-                for cc, clo, chi in (covered_v if is_v else covered_h)
-            ):
-                return False
-            return True
-    return False
+        if abs(rlo - lo) < 1e-9 and abs(rhi - hi) < 1e-9:
+            out.append(w)
+        elif is_v:
+            out.append(WallSegment(coord, rlo, coord, rhi, w.thickness, kind=w.kind))
+        else:
+            out.append(WallSegment(rlo, coord, rhi, coord, w.thickness, kind=w.kind))
+    return out
 
 
 def _validate_carves(rooms: list[Room], tol: float = 0.01) -> None:
@@ -389,9 +591,7 @@ def _plate_bounds(
     # hand in the full room list.
     structural = _structural_rooms(rooms)
     if structural:
-        footprint = unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in structural]
-        )
+        footprint = _rooms_polygon(structural)
         px1, py1, px2, py2 = footprint.bounds
         # Clear-rect rooms always leave iwt slits between neighbours, so an
         # area-vs-bbox check false-alarms on every full-plate layout. This is
@@ -574,10 +774,7 @@ def derive_walls(
     # exploiting the 0.01 m slack would otherwise inflate the plate bbox).
     structural = _structural_rooms(rooms)
     footprint = (
-        unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in structural]
-            + [_raw_wall_box(w) for w in walls]
-        )
+        unary_union(_part_boxes(structural) + [_raw_wall_box(w) for w in walls])
         if structural
         else None
     )
@@ -614,53 +811,19 @@ def derive_walls(
     # Slack is ewt/2 + tol: the wall serving a room edge does NOT sit on that
     # edge — an external ring wall is ewt/2 outside it and snapped out to the
     # ring corners; a paired internal wall sits at the inter-room gap's
-    # midpoint. Only a wall lying *wholly within* one declared-open interval
-    # is dropped, so a ring wall merged across an open room and a normal
-    # neighbour is conservatively kept.
+    # midpoint. A ring wall that `_merge_intervals` joined across an open
+    # room AND a normal neighbour is SPLIT (interval subtraction), so only
+    # the open room's share disappears.
     open_slack = ewt / 2 + tol
     open_v, open_h = _open_edge_intervals(rooms, open_slack)
     if open_v or open_h:
         # A room edge that is NOT declared open, sitting on the same
-        # centreline, keeps the wall alive (party wall).
-        #
-        # The covered edges MUST be merged per centreline before the
-        # containment test. By this point the wall list has been through
-        # `_merge_intervals` and `_snap_ends`, so a party wall running past
-        # several neighbours is ONE segment; matching it against raw
-        # per-room edges would require a single neighbour to span the whole
-        # merged wall, which fails as soon as two rooms share the open
-        # room's edge -- and the wall would be deleted out from under
-        # neighbours that never declared themselves open at all. Merging
-        # with an `iwt + tol` gap (the ring's `ring_gap` rationale) joins
-        # neighbours separated by a normal partition slit: that slit is
-        # filled by the partition itself, so the covered run is continuous.
-        raw_v: dict[float, list[tuple[float, float]]] = {}
-        raw_h: dict[float, list[tuple[float, float]]] = {}
-        for r in rooms:
-            x0, y0 = r.x, r.y
-            x1, y1 = r.x + r.width, r.y + r.depth
-            for side, coord, lo, hi, sink in (
-                ("W", x0, y0, y1, raw_v),
-                ("E", x1, y0, y1, raw_v),
-                ("S", y0, x0, x1, raw_h),
-                ("N", y1, x0, x1, raw_h),
-            ):
-                if side not in r.open_sides:
-                    sink.setdefault(round(coord, 6), []).append((lo, hi))
-        covered_v: set[tuple[float, float, float]] = {
-            (coord, lo, hi)
-            for coord, spans in raw_v.items()
-            for lo, hi in _merge_intervals(spans, iwt + tol)
-        }
-        covered_h: set[tuple[float, float, float]] = {
-            (coord, lo, hi)
-            for coord, spans in raw_h.items()
-            for lo, hi in _merge_intervals(spans, iwt + tol)
-        }
+        # centreline, keeps that stretch of wall alive (party wall).
+        covered_v, covered_h = _closed_edge_intervals(rooms, iwt, tol)
         walls = [
-            w
+            piece
             for w in walls
-            if not _is_declared_open(
+            for piece in _apply_open_sides(
                 w, open_v, open_h, covered_v, covered_h, open_slack
             )
         ]
@@ -678,12 +841,15 @@ def _trim_room_overreach(
     with no wall there to close against and bite into its clear interior.
     Trims such ends back so the effective reach past a bare room corner
     matches what iwt gave before (#75 promoted some orphans to ewt).
+
+    Operates on the FULL room list on purpose — a carved child is clear
+    interior that a wall must not bite into just as much as its parent is —
+    but on each room's part UNION, not its bounding box: an L room's notch is
+    open space, and a wall is allowed to reach into it.
     """
     if not rooms:
         return
-    rooms_union = unary_union(
-        [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
-    )
+    rooms_union = _rooms_polygon(rooms)
     if rooms_union.is_empty:
         return
     margin = (ewt - iwt) / 2
@@ -1014,29 +1180,49 @@ class _Adjacency:
 
 
 def _adjacencies(rooms: list[Room], iwt: float, tol: float) -> list[_Adjacency]:
+    """Facing wall runs between every ordered room pair.
+
+    Runs over PART pairs, not room bounding boxes: an L-shaped room touches
+    its neighbour only along the parts that actually reach it, and its bbox
+    would claim a shared wall across its own notch — a door hung there would
+    open onto nothing. Runs on the same centreline are merged back so a
+    multi-part contact still reads as one door-able wall.
+
+    For a "RECT" room `Room.rects` is a 1-tuple, so this reduces exactly to
+    the pre-template bbox pairing, in the same order.
+    """
     out: list[_Adjacency] = []
-    for i, ra in enumerate(rooms):
-        for j, rb in enumerate(rooms):
+    parts = [r.rects for r in rooms]
+    for i, parts_a in enumerate(parts):
+        for j, parts_b in enumerate(parts):
             if i == j:
                 continue
-            # ra's right edge facing rb's left edge
-            gap = rb.x - (ra.x + ra.width)
-            if -tol <= gap <= iwt + tol:
-                lo = max(ra.y, rb.y)
-                hi = min(ra.y + ra.depth, rb.y + rb.depth)
-                if hi - lo >= 0.05:
-                    out.append(
-                        _Adjacency(i, j, True, (ra.x + ra.width + rb.x) / 2, lo, hi)
-                    )
-            # ra's top edge facing rb's bottom edge
-            gap = rb.y - (ra.y + ra.depth)
-            if -tol <= gap <= iwt + tol:
-                lo = max(ra.x, rb.x)
-                hi = min(ra.x + ra.width, rb.x + rb.width)
-                if hi - lo >= 0.05:
-                    out.append(
-                        _Adjacency(i, j, False, (ra.y + ra.depth + rb.y) / 2, lo, hi)
-                    )
+            for vertical in (True, False):
+                grouped: dict[float, list[tuple[float, float]]] = {}
+                for pa in parts_a:
+                    for pb in parts_b:
+                        if vertical:
+                            # pa's right edge facing pb's left edge
+                            gap = pb.x - (pa.x + pa.width)
+                            lo, hi = (
+                                max(pa.y, pb.y),
+                                min(pa.y + pa.depth, pb.y + pb.depth),
+                            )
+                            mid = (pa.x + pa.width + pb.x) / 2
+                        else:
+                            # pa's top edge facing pb's bottom edge
+                            gap = pb.y - (pa.y + pa.depth)
+                            lo, hi = (
+                                max(pa.x, pb.x),
+                                min(pa.x + pa.width, pb.x + pb.width),
+                            )
+                            mid = (pa.y + pa.depth + pb.y) / 2
+                        if not (-tol <= gap <= iwt + tol) or hi - lo < 0.05:
+                            continue
+                        grouped.setdefault(round(mid, 6), []).append((lo, hi))
+                for mid in sorted(grouped):
+                    for lo, hi in _merge_intervals(grouped[mid], tol):
+                        out.append(_Adjacency(i, j, vertical, mid, lo, hi))
     return out
 
 
@@ -1080,16 +1266,25 @@ def _exterior_edges(
     room, plate: tuple[float, float, float, float], ewt: float, tol: float
 ):
     """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the floor's
-    exterior surface (the room-union plate, see `_plate_bounds`)."""
+    exterior surface (the room-union plate, see `_plate_bounds`).
+
+    Spans come from the room's union-boundary runs, so an L room whose bbox
+    reaches the plate boundary contributes only the stretch its parts
+    actually occupy — the rest of that bbox line is open air over the notch,
+    with no wall for an opening to cut into.
+    """
     px1, py1, px2, py2 = plate
-    if abs(room.x - px1) <= 2 * tol:
-        yield (False, px1 - ewt / 2, room.y, room.y + room.depth)
-    if abs(room.x + room.width - px2) <= 2 * tol:
-        yield (False, px2 + ewt / 2, room.y, room.y + room.depth)
-    if abs(room.y - py1) <= 2 * tol:
-        yield (True, py1 - ewt / 2, room.x, room.x + room.width)
-    if abs(room.y + room.depth - py2) <= 2 * tol:
-        yield (True, py2 + ewt / 2, room.x, room.x + room.width)
+    vert, hor = _boundary_edges(_room_polygon(room))
+    for e in vert:
+        if e.normal == -1 and abs(e.coord - px1) <= 2 * tol:
+            yield (False, px1 - ewt / 2, e.lo, e.hi)
+        elif e.normal == +1 and abs(e.coord - px2) <= 2 * tol:
+            yield (False, px2 + ewt / 2, e.lo, e.hi)
+    for e in hor:
+        if e.normal == -1 and abs(e.coord - py1) <= 2 * tol:
+            yield (True, py1 - ewt / 2, e.lo, e.hi)
+        elif e.normal == +1 and abs(e.coord - py2) <= 2 * tol:
+            yield (True, py2 + ewt / 2, e.lo, e.hi)
 
 
 def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
@@ -1102,9 +1297,13 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
     walls live outside them) — matching against the raw room edge with only
     `tol` slack misses every real wall, since that offset (ewt/2 = 0.115 m)
     dwarfs `tol` (typically 0.01 m).
+
+    Matching is against the room's union-boundary runs rather than its four
+    bbox edges: a non-RECT room's notch faces are real exterior surfaces
+    that no bbox edge describes, and its bbox lines run past where the room
+    stops.
     """
-    rx1, ry1 = room.x, room.y
-    rx2, ry2 = room.x + room.width, room.y + room.depth
+    vert, hor = _boundary_edges(_room_polygon(room))
     for w in walls:
         if w.kind != "external":
             continue
@@ -1112,51 +1311,60 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
         if abs(w.x1 - w.x2) < 1e-9:  # vertical wall
             wall_x = w.x1
             wy1, wy2 = min(w.y1, w.y2), max(w.y1, w.y2)
-            if abs(wall_x - (rx1 - t)) <= tol or abs(wall_x - (rx2 + t)) <= tol:
-                overlap_lo = max(wy1, ry1)
-                overlap_hi = min(wy2, ry2)
+            for e in vert:
+                if abs(wall_x - (e.coord + e.normal * t)) > tol:
+                    continue
+                overlap_lo = max(wy1, e.lo)
+                overlap_hi = min(wy2, e.hi)
                 if overlap_hi - overlap_lo > tol:
                     yield (False, wall_x, overlap_lo, overlap_hi)
         else:  # horizontal wall
             wall_y = w.y1
             wx1, wx2 = min(w.x1, w.x2), max(w.x1, w.x2)
-            if abs(wall_y - (ry1 - t)) <= tol or abs(wall_y - (ry2 + t)) <= tol:
-                overlap_lo = max(wx1, rx1)
-                overlap_hi = min(wx2, rx2)
+            for e in hor:
+                if abs(wall_y - (e.coord + e.normal * t)) > tol:
+                    continue
+                overlap_lo = max(wx1, e.lo)
+                overlap_hi = min(wx2, e.hi)
                 if overlap_hi - overlap_lo > tol:
                     yield (True, wall_y, overlap_lo, overlap_hi)
 
 
 def _is_declared_open_edge(
-    room: Room, is_horizontal: bool, coord: float, ewt: float, tol: float
+    room: Room,
+    is_horizontal: bool,
+    coord: float,
+    ewt: float,
+    tol: float,
+    lo: float | None = None,
+    hi: float | None = None,
 ) -> bool:
-    """True if `coord` sits on a room edge the room declared open via
-    `Room.open_sides` — no wall was ever drawn there (see `derive_walls`'s
-    own open-edge drop), so no opening may be cut into it either.
+    """True if (`coord`, [`lo`, `hi`]) sits on a room edge the room declared
+    open via `Room.open_sides` — no wall was ever drawn there (see
+    `derive_walls`'s own open-edge subtraction), so no opening may be cut
+    into it either.
 
     A wall centreline serving a room edge sits `ewt / 2` outside the raw
     room edge (external ring convention), so the match slack must absorb
     that offset — `ewt / 2 + tol`, matching `derive_walls`'s `open_slack`.
+
+    Matched against the room's union-boundary runs, and against the
+    candidate's own span when given: a non-RECT room can have two runs on
+    the same declared-open side at different coordinates, and one run of a
+    side can be open while the bbox line it lies on is not the room at all.
     """
     if not room.open_sides:
         return False
     slack = ewt / 2 + tol
-    if is_horizontal:
-        if "S" in room.open_sides and abs(coord - (room.y - ewt / 2)) <= slack:
-            return True
-        if (
-            "N" in room.open_sides
-            and abs(coord - (room.y + room.depth + ewt / 2)) <= slack
-        ):
-            return True
-    else:
-        if "W" in room.open_sides and abs(coord - (room.x - ewt / 2)) <= slack:
-            return True
-        if (
-            "E" in room.open_sides
-            and abs(coord - (room.x + room.width + ewt / 2)) <= slack
-        ):
-            return True
+    sides = _edges_by_side(room)
+    for side in room.open_sides:
+        if _SIDE_IS_HORIZONTAL[side] != is_horizontal:
+            continue
+        for c, elo, ehi in sides[side]:
+            if abs(coord - (c + _SIDE_SIGN[side] * ewt / 2)) > slack:
+                continue
+            if lo is None or hi is None or (lo < ehi - tol and hi > elo + tol):
+                return True
     return False
 
 
@@ -1177,7 +1385,7 @@ def _all_exterior_edges(
     seen = set()
     # First collect from plate bounds
     for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
-        if _is_declared_open_edge(room, is_h, coord, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol, lo, hi):
             continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
@@ -1185,7 +1393,7 @@ def _all_exterior_edges(
             yield (is_h, coord, lo, hi)
     # Then add any external walls not on plate boundary (void-facing orphans)
     for is_h, coord, lo, hi in _exterior_wall_edges(room, walls, tol):
-        if _is_declared_open_edge(room, is_h, coord, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol, lo, hi):
             continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
@@ -2072,7 +2280,10 @@ def _lines_fit(
 def _room_label_lines(room) -> list[str]:
     """Dual-unit label (ft-in + metric), matching Indian working-drawing
     convention: NAME / 11'-10" × 25'-4" / (3.6 m × 7.7 m) / 299 SQFT."""
-    area_sqft = round(room.width * room.depth * 10.7639)
+    # Occupied area (the part union), not the bounding box: an L/T/U room
+    # would otherwise print the SQFT of a rectangle it does not fill.
+    # Identical to width * depth for a RECT room.
+    area_sqft = round(sum(p.area for p in room.rects) * 10.7639)
     return [
         room.name.upper(),
         f"{metres_to_ftin(room.width)} × {metres_to_ftin(room.depth)}",

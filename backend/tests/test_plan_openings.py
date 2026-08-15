@@ -4,6 +4,8 @@ import math
 
 from app.engine.geometry import buildable_polygon
 from app.engine.plan_geometry import (
+    _all_exterior_edges,
+    _plate_bounds,
     derive_columns,
     derive_openings,
     derive_walls,
@@ -1016,3 +1018,64 @@ def test_void_facing_wet_room_receives_ventilator():
         and 3.23 - 0.13 <= o.cx <= 5.77 + 0.13
     ]
     assert toilet_vents, "toilet got no ventilator on its void-facing exterior wall"
+
+
+def _l_room():
+    """An L living room whose bbox top edge exists only over a narrow leg.
+
+    ratio 0.3 → base band y in [1.73, 2.93] spanning the full 6 m width, leg
+    x in [1.23, 3.03] rising to y = 5.73. The bbox's N edge (y = 5.73) is
+    therefore only 1.8 m of real wall; the other 4.2 m is open air over the
+    notch. width > depth so N/S are the two LONGEST edges and the window pass
+    actually targets that line.
+    """
+    from app.engine.models import Room
+
+    return Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=1.23,
+        y=1.73,
+        width=6.0,
+        depth=4.0,
+        template="L",
+        shape_ratio=0.3,
+    )
+
+
+def test_exterior_edges_of_an_l_room_stop_at_the_notch():
+    """`_all_exterior_edges` is what opening placement consumes. Its N run
+    must be the union-boundary run (the leg only), not the bbox's full
+    6 m span."""
+    room = _l_room()
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    walls = derive_walls([room], buildable)
+    plate = _plate_bounds([room], buildable, EWT)
+    north = [
+        e
+        for e in _all_exterior_edges(room, walls, plate, EWT, 0.01)
+        if e[0] and abs(e[1] - (5.73 + EWT / 2)) < 0.06
+    ]
+    assert north, "the L's north exterior edge vanished entirely"
+    for _is_h, _coord, lo, hi in north:
+        assert hi <= 3.03 + 0.01, (
+            f"north exterior edge spans x=[{lo}, {hi}] — past the leg's east "
+            "face at 3.03, i.e. straight across the notch"
+        )
+
+
+def test_no_opening_is_placed_across_an_l_notch():
+    """End-to-end guard: nothing may be cut into the bbox's N line beyond the
+    leg, because there is no wall there."""
+    room = _l_room()
+    openings, _walls = _openings_for([room], _cfg_9x15())
+    notch_centreline = 5.73 + EWT / 2
+    leg_x_max = 3.03
+    for o in openings:
+        if o.is_horizontal and abs(o.cy - notch_centreline) < 0.06:
+            assert o.cx + o.width / 2 <= leg_x_max + EWT / 2 + 0.01, (
+                f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on a bbox edge "
+                "that is not part of the room"
+            )
