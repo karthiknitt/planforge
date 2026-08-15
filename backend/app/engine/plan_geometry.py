@@ -309,19 +309,48 @@ def _is_declared_open(
 
 
 def _validate_carves(rooms: list[Room], tol: float = 0.01) -> None:
-    """Every room with a `parent_id` must lie inside that parent's rectangle.
+    """Every room with a `parent_id` must resolve, be acyclic, and lie inside
+    that parent's rectangle.
 
     A carve that escapes its parent would add mass to the floor footprint
     that `_structural_rooms` has already filtered out, silently shrinking the
     plate and the void-classification footprint. Fail loudly instead.
+
+    Cycles are rejected for a nastier reason: every room in a cycle has a
+    `parent_id`, so `_structural_rooms` returns an EMPTY list and the plate
+    silently degrades from the room union to the whole buildable plate inset
+    by ewt — a 4-sided ring drawn around metres of empty plot, with no error
+    anywhere. Containment alone cannot catch this (`r.parent_id == r.id` is
+    trivially "contained"), so it is a separate pass.
     """
     by_id = {r.id: r for r in rooms}
+
+    # Pass 1: every parent_id resolves.
+    for r in rooms:
+        if r.parent_id is not None and r.parent_id not in by_id:
+            raise ValueError(f"room {r.id!r} has unknown parent_id {r.parent_id!r}")
+
+    # Pass 2: no cycles (self-parent is the length-1 case).
     for r in rooms:
         if r.parent_id is None:
             continue
-        p = by_id.get(r.parent_id)
-        if p is None:
-            raise ValueError(f"room {r.id!r} has unknown parent_id {r.parent_id!r}")
+        chain = [r.id]
+        seen = {r.id}
+        node = r
+        while node.parent_id is not None:
+            node = by_id[node.parent_id]
+            chain.append(node.id)
+            if node.id in seen:
+                raise ValueError(
+                    "parent_id cycle among carved rooms: " + " -> ".join(chain)
+                )
+            seen.add(node.id)
+
+    # Pass 3: containment.
+    for r in rooms:
+        if r.parent_id is None:
+            continue
+        p = by_id[r.parent_id]
         if not (
             r.x >= p.x - tol
             and r.y >= p.y - tol
@@ -355,10 +384,13 @@ def _plate_bounds(
     wall rings and opening placement — hence the carve filter lives here,
     not at the call sites, so `derive_walls` and `derive_openings` can never
     disagree about what the plate is."""
-    rooms = _structural_rooms(rooms)
-    if rooms:
+    # Bound to a distinct name (not a rebind of `rooms`) so it stays obvious
+    # that the plate is built from STRUCTURAL mass only, while callers still
+    # hand in the full room list.
+    structural = _structural_rooms(rooms)
+    if structural:
         footprint = unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in structural]
         )
         px1, py1, px2, py2 = footprint.bounds
         # Clear-rect rooms always leave iwt slits between neighbours, so an
@@ -530,6 +562,16 @@ def derive_walls(
     # it twice would let a stray carve inflate the footprint. Their EDGES are
     # still present in `vert_edges`/`hor_edges` below, so a carve's own sides
     # are classified against the parent's mass and become internal partitions.
+    #
+    # NOT DEAD CODE, but currently unobservable HERE: a validated carve is a
+    # subset of its parent, so the union polygon is identical either way, and
+    # `_validate_carves`'s 0.01 m slack cannot reach `_edge_faces_open_space`
+    # either — that probe starts its strip at eps = 0.02 outward. The filter
+    # is what keeps that true: raise the carve tolerance above 0.02, or let a
+    # carve be anything other than a strict sub-rectangle (Task 6's shape
+    # templates), and removing it starts corrupting void classification.
+    # `_plate_bounds` applies the same filter and IS observable today (a carve
+    # exploiting the 0.01 m slack would otherwise inflate the plate bbox).
     structural = _structural_rooms(rooms)
     footprint = (
         unary_union(

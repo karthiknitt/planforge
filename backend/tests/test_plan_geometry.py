@@ -809,13 +809,96 @@ def test_carve_with_unknown_parent_is_rejected():
         derive_walls([bedroom, orphan], _buildable())
 
 
+# Golden wall set for the 6-room ground floor of the shared fixture, captured
+# BEFORE `Room.parent_id` existed. Every entry is
+# (x1, y1, x2, y2, thickness, kind), rounded to 4 dp and sorted.
+_GOLDEN_GF_WALLS = [
+    (1.115, 1.615, 1.115, 4.845, 0.23, "external"),
+    (1.115, 1.615, 7.885, 1.615, 0.23, "external"),
+    (1.115, 4.845, 2.1875, 4.845, 0.23, "external"),
+    (1.115, 5.944, 1.115, 13.885, 0.23, "external"),
+    (1.115, 5.944, 4.995, 5.944, 0.23, "external"),
+    (1.115, 13.885, 7.885, 13.885, 0.23, "external"),
+    (2.1875, 1.615, 2.1875, 4.845, 0.115, "internal"),
+    (2.1875, 4.845, 4.995, 4.845, 0.23, "external"),
+    (4.8845, 5.944, 4.8845, 13.885, 0.115, "internal"),
+    (4.8845, 5.944, 5.0525, 5.944, 0.23, "external"),
+    (4.8845, 6.0015, 6.9615, 6.0015, 0.115, "internal"),
+    (4.995, 4.7875, 4.995, 5.944, 0.23, "external"),
+    (5.0525, 1.615, 5.0525, 4.845, 0.115, "internal"),
+    (6.904, 6.0015, 7.019, 6.0015, 0.115, "internal"),
+    (6.9615, 6.0015, 6.9615, 13.885, 0.115, "internal"),
+    (6.9615, 6.0015, 7.885, 6.0015, 0.115, "internal"),
+    (7.885, 1.615, 7.885, 13.885, 0.23, "external"),
+]
+
+
+def _wall_tuples(walls) -> list[tuple[float, float, float, float, float, str]]:
+    return sorted(
+        (
+            round(w.x1, 4),
+            round(w.y1, 4),
+            round(w.x2, 4),
+            round(w.y2, 4),
+            round(w.thickness, 4),
+            w.kind,
+        )
+        for w in walls
+    )
+
+
 def test_parent_id_defaults_to_none_and_changes_nothing():
-    """The load-bearing invariant: an unset parent_id must leave every
-    existing layout byte-identical."""
+    """The load-bearing invariant of the whole phase: with no `parent_id`
+    anywhere, `derive_walls` must reproduce the pre-feature wall set exactly
+    — same count, same centrelines, same thicknesses, same kinds."""
     rooms, cfg = golden_layout().ground_floor.rooms, golden_config()
     assert all(r.parent_id is None for r in rooms)
     walls = derive_walls(rooms, buildable_polygon(cfg))
-    assert walls
+    assert len(walls) == len(_GOLDEN_GF_WALLS)
+    assert _wall_tuples(walls) == _GOLDEN_GF_WALLS
+
+
+def test_room_is_its_own_parent_is_rejected():
+    """Self-parent is trivially "contained", so only the cycle pass catches
+    it — and unchecked it empties `_structural_rooms` and degrades the plate
+    to the whole buildable inset."""
+    bedroom, _ = _carve_pair()
+    bedroom.parent_id = "bed"
+    with pytest.raises(ValueError, match="parent_id cycle"):
+        derive_walls([bedroom], _buildable())
+
+
+def test_two_node_parent_id_cycle_is_rejected():
+    a, b = _carve_pair()
+    a.parent_id = "wc"  # bed -> wc -> bed
+    with pytest.raises(ValueError, match="parent_id cycle") as exc:
+        derive_walls([a, b], _buildable())
+    assert "bed" in str(exc.value) and "wc" in str(exc.value)
+
+
+def test_three_node_parent_id_cycle_is_rejected():
+    a = Room(id="a", name="A", type="bedroom", x=1.0, y=1.0, width=4.0, depth=4.0)
+    b = Room(id="b", name="B", type="toilet", x=1.0, y=1.0, width=2.0, depth=2.0)
+    c = Room(id="c", name="C", type="store_room", x=1.0, y=1.0, width=1.0, depth=1.0)
+    a.parent_id, b.parent_id, c.parent_id = "b", "c", "a"
+    with pytest.raises(ValueError, match="parent_id cycle") as exc:
+        derive_walls([a, b, c], _buildable())
+    assert all(rid in str(exc.value) for rid in ("a", "b", "c"))
+
+
+def test_cycle_would_otherwise_degrade_the_plate_to_the_buildable():
+    """Pins WHY the cycle guard exists: without it, every room is filtered
+    out as a carve and the plate silently falls back to the buildable ring.
+    `_structural_rooms` alone still shows the degradation, so the guard in
+    `derive_walls` is the only thing standing between that and a wall ring
+    drawn around empty plot."""
+    bedroom, toilet = _carve_pair()
+    bedroom.parent_id = "wc"
+    assert _structural_rooms([bedroom, toilet]) == []
+    degraded = _plate_bounds([bedroom, toilet], _buildable(), EWT)
+    assert degraded == pytest.approx((EWT, EWT, 12.0 - EWT, 12.0 - EWT))
+    with pytest.raises(ValueError, match="parent_id cycle"):
+        derive_walls([bedroom, toilet], _buildable())
 
 
 def test_carve_within_containment_tolerance_does_not_inflate_the_plate():
