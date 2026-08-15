@@ -30,6 +30,14 @@ RoomType = Literal[
     "foyer",  # entry vestibule
     "courtyard",  # interior open-to-sky court (light-well)
     "wardrobe",  # walk-in closet
+    # open / semi-open programme, evidenced by the reverse_engr corpus
+    "terrace",  # open or semi-covered roof terrace
+    "garden",  # landscaped ground area inside the plot
+    "verandah",  # covered open-sided edge space (osari / otla / attole)
+    "seating",  # outdoor seating pocket / conversation pit
+    "open_to_sky",  # skylight void / open-to-sky cut-out
+    "duct",  # service shaft
+    "washbasin_nook",  # wash-basin alcove outside a toilet
 ]
 
 _VALID_SIDES = frozenset({"N", "S", "E", "W"})
