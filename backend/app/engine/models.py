@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.engine.shapes import Rect, ShapeTemplate, parts_for, validate_shape
+
 RoomType = Literal[
     "living",
     "bedroom",
@@ -63,8 +65,15 @@ class Room:
     # (an ensuite toilet sitting in a corner of a bedroom's rectangle).
     # Defaults to None, so every existing layout is unaffected.
     parent_id: str | None = None
+    # Shape template: the room's footprint is the union of 1-3 axis-aligned
+    # rectangles derived from its bounding box (x, y, width, depth) and this
+    # template. "RECT" — the default — yields exactly one rectangle equal to
+    # that bounding box, so every existing caller is unaffected.
+    template: ShapeTemplate = "RECT"
+    shape_ratio: float = 0.6
 
     def __post_init__(self) -> None:
+        validate_shape(self.template, self.shape_ratio)
         bad = set(self.open_sides) - _VALID_SIDES
         if bad:
             raise ValueError(
@@ -82,16 +91,32 @@ class Room:
         return bool(self.open_sides)
 
     @property
+    def rects(self) -> tuple[Rect, ...]:
+        """The room's occupied rectangles.
+
+        A 1-tuple equal to the room's own rectangle for "RECT", so every
+        caller that assumed one rectangle per room keeps working unchanged.
+        """
+        return parts_for(
+            self.x, self.y, self.width, self.depth, self.template, self.shape_ratio
+        )
+
+    @property
     def area(self) -> float:
-        return round(self.width * self.depth, 2)
+        """Occupied area — the union of the shape-template parts.
+
+        Identical to `width * depth` for "RECT" rooms.
+        """
+        return round(sum(p.area for p in self.rects), 2)
 
     def net_area(self, children: list["Room"]) -> float:
         """Area minus any rooms carved out of this one.
 
-        Derived from `self.area` (not `width * depth`) so it stays correct
-        once `area` becomes the union of a room's shape-template parts.
+        Both terms use `.area` (not `width * depth`) so a non-RECT parent or
+        carve is measured by its part union rather than its bounding box — an
+        L/T/U carve would otherwise over-subtract by up to half its bbox.
         """
-        carved = sum(c.width * c.depth for c in children if c.parent_id == self.id)
+        carved = sum(c.area for c in children if c.parent_id == self.id)
         return round(self.area - carved, 2)
 
 
