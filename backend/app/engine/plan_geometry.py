@@ -533,19 +533,41 @@ def derive_walls(
     if open_v or open_h:
         # A room edge that is NOT declared open, sitting on the same
         # centreline, keeps the wall alive (party wall).
-        covered_v: set[tuple[float, float, float]] = set()
-        covered_h: set[tuple[float, float, float]] = set()
+        #
+        # The covered edges MUST be merged per centreline before the
+        # containment test. By this point the wall list has been through
+        # `_merge_intervals` and `_snap_ends`, so a party wall running past
+        # several neighbours is ONE segment; matching it against raw
+        # per-room edges would require a single neighbour to span the whole
+        # merged wall, which fails as soon as two rooms share the open
+        # room's edge -- and the wall would be deleted out from under
+        # neighbours that never declared themselves open at all. Merging
+        # with an `iwt + tol` gap (the ring's `ring_gap` rationale) joins
+        # neighbours separated by a normal partition slit: that slit is
+        # filled by the partition itself, so the covered run is continuous.
+        raw_v: dict[float, list[tuple[float, float]]] = {}
+        raw_h: dict[float, list[tuple[float, float]]] = {}
         for r in rooms:
             x0, y0 = r.x, r.y
             x1, y1 = r.x + r.width, r.y + r.depth
-            for side, entry, sink in (
-                ("W", (x0, y0, y1), covered_v),
-                ("E", (x1, y0, y1), covered_v),
-                ("S", (y0, x0, x1), covered_h),
-                ("N", (y1, x0, x1), covered_h),
+            for side, coord, lo, hi, sink in (
+                ("W", x0, y0, y1, raw_v),
+                ("E", x1, y0, y1, raw_v),
+                ("S", y0, x0, x1, raw_h),
+                ("N", y1, x0, x1, raw_h),
             ):
                 if side not in r.open_sides:
-                    sink.add(entry)
+                    sink.setdefault(round(coord, 6), []).append((lo, hi))
+        covered_v: set[tuple[float, float, float]] = {
+            (coord, lo, hi)
+            for coord, spans in raw_v.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        }
+        covered_h: set[tuple[float, float, float]] = {
+            (coord, lo, hi)
+            for coord, spans in raw_h.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        }
         walls = [
             w
             for w in walls

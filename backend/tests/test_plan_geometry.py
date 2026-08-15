@@ -599,3 +599,106 @@ def test_party_wall_survives_neighbour_declaring_open():
     assert _walls_on_edge(walls, vertical=False, coord=5.0), (
         "shared porch/living wall was wrongly deleted"
     )
+
+
+def test_party_wall_survives_two_neighbours_declaring_open():
+    """Horizontal party wall shared by TWO non-open rooms.
+
+    The wall the pairing pass builds is a single merged segment spanning both
+    neighbours, so the rescue must see the neighbours' south edges as one
+    merged run too — matching each raw per-room edge on its own never
+    contains the merged wall, and the wall gets dropped. Note both
+    neighbours here have EMPTY open_sides: they must not lose a wall
+    because some *other* room declared itself open.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=4.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living", name="Living", type="living", x=1.0, y=5.0, width=2.0, depth=4.0
+    )
+    kitchen = Room(
+        id="kitchen", name="Kitchen", type="kitchen", x=3.0, y=5.0, width=2.0, depth=4.0
+    )
+    rooms = [porch, living, kitchen]
+    walls = derive_walls(rooms, _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), (
+        "party wall shared by two non-open neighbours was wrongly deleted"
+    )
+    # ...and the feature is still a no-op for the closed rooms: the same
+    # layout with nothing declared open derives the same wall count.
+    closed = derive_walls(
+        [
+            Room(
+                id="porch",
+                name="Car Porch",
+                type="parking_4w",
+                x=1.0,
+                y=0.0,
+                width=4.0,
+                depth=5.0,
+            ),
+            living,
+            kitchen,
+        ],
+        _buildable(),
+    )
+    assert len(walls) == len(closed)
+
+
+def test_vertical_party_wall_survives_two_neighbours_declaring_open():
+    """Same multi-neighbour rescue on the VERTICAL axis.
+
+    Guards the covered_v/covered_h split: a porch open on its E edge abutting
+    two stacked rooms must not delete their shared W wall.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=0.0,
+        y=0.0,
+        width=3.0,
+        depth=6.0,
+        open_sides=frozenset({"E"}),
+    )
+    r1 = Room(id="r1", name="Bed 1", type="bedroom", x=3.0, y=0.0, width=4.0, depth=3.0)
+    r2 = Room(id="r2", name="Bed 2", type="bedroom", x=3.0, y=3.0, width=4.0, depth=3.0)
+    walls = derive_walls([porch, r1, r2], _buildable())
+    assert _walls_on_edge(walls, vertical=True, coord=3.0), (
+        "vertical party wall shared by two non-open neighbours was deleted"
+    )
+
+
+def test_perpendicular_edge_does_not_rescue_an_open_wall():
+    """The party-wall rescue must not match across axes.
+
+    A corner porch open to the road on S: its south wall's centreline is
+    y=-0.115 and the wall spans x=[-0.115, 3.115]. The porch's OWN west edge
+    is the vertical line x=0.0 spanning y=[0, 5] — numerically close enough
+    to -0.115, and wide enough to contain the span, that an orientation-blind
+    `covered` set rescues the very wall the porch declared open. Keeping the
+    covered edges split by axis is what prevents that.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=0.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    walls = derive_walls([porch], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=0.0) == [], (
+        "S wall survived: a perpendicular (vertical) edge wrongly rescued it"
+    )
+    assert _walls_on_edge(walls, vertical=True, coord=0.0), "W wall must remain"
