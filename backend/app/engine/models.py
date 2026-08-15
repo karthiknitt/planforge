@@ -32,6 +32,8 @@ RoomType = Literal[
     "wardrobe",  # walk-in closet
 ]
 
+_VALID_SIDES = frozenset({"N", "S", "E", "W"})
+
 
 @dataclass
 class Room:
@@ -42,6 +44,28 @@ class Room:
     y: float  # front edge in plot coordinates (metres from road/front)
     width: float  # metres (x direction)
     depth: float  # metres (y direction, away from road)
+    # Plot-relative edges carrying no wall. "S" = y edge nearest the road,
+    # "N" = far y edge, "W" = low x edge, "E" = high x edge. Empty means a
+    # normal fully-enclosed room — the default, so existing layouts are
+    # unaffected.
+    open_sides: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        bad = set(self.open_sides) - _VALID_SIDES
+        if bad:
+            raise ValueError(
+                f"open_sides contains unknown side(s) {sorted(bad)}; "
+                f"expected a subset of {sorted(_VALID_SIDES)}"
+            )
+        if len(self.open_sides) == 4:
+            raise ValueError(
+                "open_sides cannot contain all four sides — a room with no "
+                "walls has no derivable footprint; use a plot-level feature"
+            )
+
+    @property
+    def is_open(self) -> bool:
+        return bool(self.open_sides)
 
     @property
     def area(self) -> float:
