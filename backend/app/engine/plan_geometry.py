@@ -239,6 +239,75 @@ def _edge_faces_open_space(
     return footprint.intersection(strip).area < 1e-9
 
 
+def _open_edge_intervals(
+    rooms: list[Room], tol: float
+) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+    """Centreline intervals declared wall-less by `Room.open_sides`.
+
+    Returns (vertical, horizontal); each entry is (coord, lo, hi). Vertical
+    entries are x-coords spanning [y_lo, y_hi]; horizontal are y-coords
+    spanning [x_lo, x_hi]. `tol` is unused for the interval itself but kept
+    in the signature so callers pass the same slack used to match walls to
+    these intervals.
+    """
+    _ = tol
+    vertical: list[tuple[float, float, float]] = []
+    horizontal: list[tuple[float, float, float]] = []
+    for r in rooms:
+        x0, y0 = r.x, r.y
+        x1, y1 = r.x + r.width, r.y + r.depth
+        for side in r.open_sides:
+            if side == "W":
+                vertical.append((x0, y0, y1))
+            elif side == "E":
+                vertical.append((x1, y0, y1))
+            elif side == "S":
+                horizontal.append((y0, x0, x1))
+            elif side == "N":
+                horizontal.append((y1, x0, x1))
+    return vertical, horizontal
+
+
+def _is_declared_open(
+    w: WallSegment,
+    open_v: list[tuple[float, float, float]],
+    open_h: list[tuple[float, float, float]],
+    covered_v: set[tuple[float, float, float]],
+    covered_h: set[tuple[float, float, float]],
+    tol: float,
+) -> bool:
+    """True if `w` lies on a declared-open interval and is not a party wall.
+
+    `covered_v`/`covered_h` hold intervals that a *non-open* room edge also
+    occupies — a shared wall where only one side declared itself open stays
+    built. They are kept split by orientation so a vertical covered edge
+    cannot rescue a horizontal wall that merely shares its coordinate value.
+
+    `tol` must absorb the offset between a room edge and the centreline of
+    the wall serving it: an external ring wall sits ewt/2 *outside* the edge
+    and is snapped out to the ring corners, a paired internal wall sits at
+    the half-gap midpoint. Callers pass `ewt / 2 + tol`, the worst case.
+    """
+    is_v = abs(w.x1 - w.x2) < 1e-6
+    coord = w.x1 if is_v else w.y1
+    lo, hi = (
+        (min(w.y1, w.y2), max(w.y1, w.y2))
+        if is_v
+        else (min(w.x1, w.x2), max(w.x1, w.x2))
+    )
+    for c, ilo, ihi in open_v if is_v else open_h:
+        if abs(c - coord) > tol:
+            continue
+        if lo >= ilo - tol and hi <= ihi + tol:
+            if any(
+                abs(cc - coord) <= tol and lo >= clo - tol and hi <= chi + tol
+                for cc, clo, chi in (covered_v if is_v else covered_h)
+            ):
+                return False
+            return True
+    return False
+
+
 def _plate_bounds(
     rooms: list[Room], buildable: Polygon, ewt: float
 ) -> tuple[float, float, float, float]:
@@ -449,6 +518,41 @@ def derive_walls(
 
     _snap_ends(walls)
     _trim_room_overreach(walls, rooms, ewt, iwt)
+
+    # Drop walls on edges the room declared open (`Room.open_sides`) — a car
+    # porch open to the driveway, a balcony open to the front. Applied last,
+    # after snapping/trimming, so the comparison sees final centrelines.
+    # Slack is ewt/2 + tol: the wall serving a room edge does NOT sit on that
+    # edge — an external ring wall is ewt/2 outside it and snapped out to the
+    # ring corners; a paired internal wall sits at the inter-room gap's
+    # midpoint. Only a wall lying *wholly within* one declared-open interval
+    # is dropped, so a ring wall merged across an open room and a normal
+    # neighbour is conservatively kept.
+    open_slack = ewt / 2 + tol
+    open_v, open_h = _open_edge_intervals(rooms, open_slack)
+    if open_v or open_h:
+        # A room edge that is NOT declared open, sitting on the same
+        # centreline, keeps the wall alive (party wall).
+        covered_v: set[tuple[float, float, float]] = set()
+        covered_h: set[tuple[float, float, float]] = set()
+        for r in rooms:
+            x0, y0 = r.x, r.y
+            x1, y1 = r.x + r.width, r.y + r.depth
+            for side, entry, sink in (
+                ("W", (x0, y0, y1), covered_v),
+                ("E", (x1, y0, y1), covered_v),
+                ("S", (y0, x0, x1), covered_h),
+                ("N", (y1, x0, x1), covered_h),
+            ):
+                if side not in r.open_sides:
+                    sink.add(entry)
+        walls = [
+            w
+            for w in walls
+            if not _is_declared_open(
+                w, open_v, open_h, covered_v, covered_h, open_slack
+            )
+        ]
     return walls
 
 

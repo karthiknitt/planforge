@@ -514,3 +514,88 @@ def test_external_ring_leaves_notch_open_no_false_wall():
     for w in ext:
         for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
             assert not (x > 5.0 and y > 10.0), f"false wall in notch corner: {w}"
+
+
+# --- Room.open_sides: walls omitted on declared-open edges -----------------
+
+
+def _buildable():
+    return box(0, 0, 12, 12)
+
+
+def _walls_on_edge(walls, *, vertical: bool, coord: float, tol: float = 0.12):
+    """WallSegments whose centreline sits on x=coord (vertical) or y=coord.
+
+    `tol` must exceed EWT/2 (0.115): a room edge on the plate boundary is
+    walled by the external ring, whose centreline sits ewt/2 *outside* the
+    edge (a room at y=0 gets its south wall at y=-0.115). Room edges in
+    these fixtures are metres apart, so 0.12 is still unambiguous.
+    """
+    out = []
+    for w in walls:
+        is_v = abs(w.x1 - w.x2) < 1e-6
+        if is_v != vertical:
+            continue
+        c = w.x1 if is_v else w.y1
+        if abs(c - coord) <= tol:
+            out.append(w)
+    return out
+
+
+def test_open_side_gets_no_wall():
+    """A car porch open on its road-facing (S) edge gets no wall there,
+    but keeps its other three walls."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    walls = derive_walls([porch], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=0.0) == []
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), "N wall must remain"
+    assert _walls_on_edge(walls, vertical=True, coord=1.0), "W wall must remain"
+    assert _walls_on_edge(walls, vertical=True, coord=4.0), "E wall must remain"
+
+
+def test_closed_room_unchanged_by_the_feature():
+    """Regression: a room with no open_sides derives exactly the walls it
+    derived before this feature existed — all four edges present."""
+    r = Room(id="r", name="Living", type="living", x=1.0, y=1.0, width=4.0, depth=3.0)
+    walls = derive_walls([r], _buildable())
+    for vertical, coord in ((False, 1.0), (False, 4.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord), (
+            f"missing wall at {'x' if vertical else 'y'}={coord}"
+        )
+
+
+def test_party_wall_survives_neighbour_declaring_open():
+    """A porch open on its N edge that abuts a living room must NOT delete the
+    living room's S wall — the shared wall is still real."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=1.0,
+        y=5.0,
+        width=3.0,
+        depth=4.0,
+    )
+    walls = derive_walls([porch, living], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), (
+        "shared porch/living wall was wrongly deleted"
+    )
