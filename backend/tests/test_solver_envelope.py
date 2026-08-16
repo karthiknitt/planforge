@@ -17,7 +17,7 @@ import pytest
 from ortools.sat.python import cp_model
 from shapely.geometry import box
 
-from app.engine.geometry import buildable_polygon, notch_keepout
+from app.engine.geometry import buildable_polygon, notch_keepout, notch_rect
 from app.engine.models import PlotConfig
 from app.engine.solver import (
     _forbid_notch,
@@ -212,10 +212,57 @@ def test_legacy_l_shaped_config_solves_without_an_unhandled_raise():
     assert layout is None or layout.ground_floor is not None
 
 
-def test_legacy_l_shaped_config_still_gets_the_notch_constraint():
-    """Not gating it must not mean not constraining it — the whole point of
-    deleting generator.py's post-hoc deletion pass."""
-    assert notch_rect_m(_legacy_l_cfg()) == (9.0, 11.0, 12.0, 15.0)
+def test_legacy_l_shaped_is_notch_safe_via_its_inset_not_via_the_constraint():
+    """TRAP NOTICE for whoever fixes `geometry.buildable_polygon`.
+
+    An earlier version of this test asserted only
+    `notch_rect_m(cfg) == (9.0, 11.0, 12.0, 15.0)` and claimed the legacy
+    surface "still gets the notch constraint". Both were wrong: that assertion
+    stays green even if the `_forbid_notch` call is deleted from `_solve_one`
+    outright, and on the real solve geometry the constraint emits NOTHING.
+
+    What actually keeps legacy L plots out of their cutout is the *bug* in
+    `buildable_polygon`: its half-plane inset over-clips the plate to
+    6140x6040 mm at (1430, 3230), whose right edge is x=7.57 m — already short
+    of the notch at x=9.0 m. So `_forbid_notch` takes its "the notch misses the
+    buildable plate entirely" early return and adds zero literals.
+
+    Task 9 deleted generator.py's post-hoc "delete rooms in the cutout" pass,
+    so this inset is now the ONLY thing standing between a legacy config and a
+    room in the cutout. Correcting the inset without re-checking this will
+    silently re-open room-in-cutout placement. The third assertion below is the
+    safety net: it shows the constraint is correctly wired and DOES engage once
+    the plate is the honest one, so a fixed inset is caught by the machinery
+    rather than by a user.
+    """
+    cfg = _legacy_l_cfg()
+
+    def _emitted(bw: int, bd: int, ox: int, oy: int) -> tuple[int, int]:
+        model = cp_model.CpModel()
+        parts = [
+            _PartVars(
+                model.new_int_var(0, bw, "x"),
+                model.new_int_var(0, bd, "y"),
+                model.new_int_var(1, bw, "w"),
+                model.new_int_var(1, bd, "d"),
+                "bedroom_0",
+                "bedroom",
+            )
+        ]
+        _forbid_notch(model, cfg, parts, ox_mm=ox, oy_mm=oy, bw=bw, bd=bd, ewt=EWT)
+        literals = [v for v in model.proto.variables if v.name.startswith("notch_")]
+        return len(literals), len(model.proto.constraints)
+
+    bw, bd, ox, oy = _plate_geom_mm(cfg, EWT)[:4]
+
+    # 1. the over-clipped plate the legacy surface actually solves on...
+    assert (bw, bd, ox, oy) == (6140, 6040, 1430, 3230)
+    # 2. ...already stops short of the notch, so the constraint is a no-op
+    assert ox + bw <= 9000, "plate reaches the notch; assertion 3 is now load-bearing"
+    assert _emitted(bw, bd, ox, oy) == (0, 0)
+    # 3. but the constraint IS wired: give it the honest full-rectangle plate
+    #    (what a corrected `buildable_polygon` would return) and it engages
+    assert _emitted(9140, 10040, 1430, 3230) == (2, 3)
 
 
 @pytest.mark.parametrize("template", ["T", "U"])
@@ -324,3 +371,24 @@ def test_the_solver_respects_the_notch_setbacks_not_just_the_raw_notch():
                     box(p.x, p.y, p.x + p.width, p.y + p.depth)
                 ).area
                 assert overlap < 1e-6, f"{r.id} sits inside the notch setback"
+
+
+@pytest.mark.parametrize("shape", ["trapezoid", "quadrilateral", "l_shaped"])
+def test_a_notch_on_a_non_rectangular_plot_shape_raises(shape: str):
+    """BREAKAGE 3. Every consumer models the notch as a corner cut out of a
+    RECTANGLE — `plot_polygon` builds its hexagon from plot_width/plot_length
+    and `buildable_polygon` insets a plain box — so combining the two surfaces
+    would silently discard the trapezoid/quad/l_shaped outline and draw the
+    plan on a plot the user does not have. Unreachable until Task 22 plumbs the
+    fields through; a refusal beats a wrong answer."""
+    cfg = _l_cfg()
+    cfg.plot_shape = shape
+
+    for call in (
+        lambda: notch_rect(cfg),
+        lambda: notch_keepout(cfg, wall_clearance=EWT),
+        lambda: buildable_polygon(cfg, wall_clearance=EWT),
+        lambda: validate_plot_envelope(cfg, EWT),
+    ):
+        with pytest.raises(ValueError, match="cannot be combined with"):
+            call()

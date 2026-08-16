@@ -84,9 +84,26 @@ def notch_rect(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
     untouched. Lives here rather than in solver.py because the boundary, the
     compliance check and the fill passes all need it and none of them may
     import the solver.
+
+    Raises ValueError if a `plot_template` notch is combined with a
+    non-rectangular `plot_shape`. Every consumer of this function models the
+    notch as a corner cut out of a RECTANGLE — `plot_polygon` builds the
+    hexagon from `plot_width`/`plot_length`, and `buildable_polygon` insets a
+    plain box — so a trapezoid/quad/legacy-`l_shaped` outline would be
+    silently discarded and the plan drawn on a plot the user does not have.
+    Unreachable while the fields are engine-only, but Task 22 plumbs them
+    through, and a wrong answer is worse than a refusal.
     """
     if cfg.plot_template == "RECT" or cfg.notch_width <= 0 or cfg.notch_depth <= 0:
         return None
+    if cfg.plot_shape != "rectangular":
+        raise ValueError(
+            f"plot_template={cfg.plot_template!r} (a notch) cannot be combined with "
+            f"plot_shape={cfg.plot_shape!r}: the notch is only defined as a corner "
+            "cut out of a rectangular plot. Use one or the other — for an L-shaped "
+            'trapezoid/quadrilateral neither surface applies, and plot_shape="l_shaped" '
+            "already has its own cutout fields."
+        )
     return (
         cfg.plot_width - cfg.notch_width,
         cfg.plot_length - cfg.notch_depth,
@@ -211,11 +228,19 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
     which is only correct for a convex outline: on a notched plot the two
     cutout edges' half-planes extend across the whole plot and shear off
     buildable land nowhere near the notch (91.8 m² -> 37.1 m² on the 12x15 m L
-    fixture). The legacy `plot_shape == "l_shaped"` surface still goes through
-    the loop — that conservatism is long-standing behaviour there and
-    `archetypes._l_shaped_floor_plate` is calibrated against it — but the new
-    surface gets the exact region: rectangle inset by the four outer setbacks,
-    minus the setback-grown notch keep-out.
+    fixture). The new surface instead gets the exact region: rectangle inset by
+    the four outer setbacks, minus the setback-grown notch keep-out.
+
+    The legacy `plot_shape == "l_shaped"` surface is left on the loop only
+    because changing it is out of this change's scope — NOT because anything
+    depends on its conservatism. Nothing is calibrated against it: for the
+    12x15 m NE-cutout config this loop returns 37.09 m² while
+    `archetypes._l_shaped_floor_plate` hands back a 61.65 m² plate reaching
+    y=13.27, so `compliance.check(archetypes.layout_a(cfg), ...)` fails with
+    six "extends outside the setback boundary" violations. The two disagree,
+    and the legacy surface is broken end to end today — a 3BHK needing ~96 m²
+    cannot fit in 37 m², and the archetype fallback fails compliance. Fixing
+    this loop is a P1 correctness fix; see the Task 9 report.
     """
     keepout = notch_keepout(cfg, wall_clearance)
     if keepout is not None:
