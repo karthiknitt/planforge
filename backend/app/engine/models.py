@@ -71,6 +71,11 @@ class Room:
     # that bounding box, so every existing caller is unaffected.
     template: ShapeTemplate = "RECT"
     shape_ratio: float = 0.6
+    # id of a room on the floor below that this room opens onto. A void has no
+    # slab, no ceiling, and no carpet area — it is a hole, not a room (a
+    # double-height living area or courtyard). Defaults to None, so every
+    # existing layout is unaffected.
+    void_over: str | None = None
 
     def __post_init__(self) -> None:
         validate_shape(self.template, self.shape_ratio)
@@ -89,6 +94,10 @@ class Room:
     @property
     def is_open(self) -> bool:
         return bool(self.open_sides)
+
+    @property
+    def is_void(self) -> bool:
+        return self.void_over is not None
 
     @property
     def rects(self) -> tuple[Rect, ...]:
