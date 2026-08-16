@@ -111,6 +111,98 @@ def test_fit_template_degrades_to_rect_when_the_template_cannot_fit():
     assert (fit.grid_x, fit.grid_y) == (1, 1)
 
 
+def test_fit_template_falls_back_when_the_inflated_area_exceeds_the_max_bbox():
+    """A template must never make a room infeasible that RECT could satisfy.
+
+    Regression: the fallback guard checked the inflated minimum against
+    max_w/max_d and against the inflated MAXIMUM area, but never against the
+    largest bbox area actually reachable (max_w * max_d). With a 3.5 m cap on
+    both dimensions the L's inflated 14.29 m² minimum cannot fit in the
+    12.25 m² the room can reach, so the room could never be placed at all.
+    """
+    fit = _fit_template(
+        "L",
+        0.6,
+        min_w=2000,
+        max_w=3500,
+        min_d=2000,
+        max_d=3500,
+        min_area=12_000_000,
+        max_area=40_000_000,
+    )
+    assert fit.template == "RECT", (
+        f"template kept with min_area={fit.min_area} against a largest "
+        f"reachable bbox of {3500 * 3500}"
+    )
+    assert (fit.min_w, fit.min_d) == (2000, 2000)
+    assert (fit.min_area, fit.max_area) == (12_000_000, 40_000_000)
+    assert (fit.grid_x, fit.grid_y) == (1, 1)
+
+
+def test_fit_template_measures_the_reachable_bbox_on_the_grid_not_the_raw_cap():
+    """The guard must compare against the GRID-QUANTISED maximum.
+
+    A templated room's w/d are pinned to multiples of the grid step, so a
+    max_w of 3499 mm really means 3495 mm. Between those two numbers sits a
+    band of minimum areas that look reachable against the raw cap and are not
+    reachable in fact — the room would be accepted as an L and then never be
+    placeable.
+    """
+    fit = _fit_template(
+        "L",
+        0.6,
+        min_w=2000,
+        max_w=3499,
+        min_d=2000,
+        max_d=3499,
+        min_area=10_280_000,
+        max_area=40_000_000,
+    )
+    # 12_238_096 needed; raw cap 3499**2 = 12_243_001 says yes, but the room
+    # can only ever reach 3495**2 = 12_215_025.
+    assert fit.template == "RECT", (
+        f"kept the template needing {fit.min_area} mm² against a reachable "
+        f"{3495 * 3495} (raw cap {3499 * 3499} is not what w*d can hit)"
+    )
+
+
+def test_fit_template_is_never_less_satisfiable_than_plain_rect():
+    """Property sweep: a template may never turn a solvable room unsolvable.
+
+    Not "the result is always satisfiable" — a spec can be impossible on its
+    own (a 2x2 m cap with an 8 m² minimum is, template or no template), and
+    rejecting that is the caller's job. The invariant that belongs here is
+    that `_fit_template` never *removes* satisfiability RECT already had.
+    """
+    templated = 0
+    for max_dim in range(2000, 9001, 250):
+        for min_area in (8_000_000, 12_000_000, 18_000_000):
+            kw = dict(
+                min_w=2000,
+                max_w=max_dim,
+                min_d=2000,
+                max_d=max_dim,
+                min_area=min_area,
+                max_area=40_000_000,
+            )
+            fit = _fit_template("L", 0.6, **kw)
+            rect_satisfiable = min_area <= max_dim * max_dim
+            if fit.template != "RECT":
+                templated += 1
+            if not rect_satisfiable and fit.template == "RECT":
+                continue  # impossible input, faithfully passed through
+            reach_w = (max_dim // fit.grid_x) * fit.grid_x
+            reach_d = (max_dim // fit.grid_y) * fit.grid_y
+            assert fit.min_w <= reach_w and fit.min_d <= reach_d
+            assert fit.min_area <= reach_w * reach_d, (
+                f"max_dim={max_dim} min_area={min_area}: {fit.template} needs "
+                f"{fit.min_area} mm² of bbox but can only reach "
+                f"{reach_w * reach_d}"
+            )
+            assert fit.min_area <= fit.max_area
+    assert templated, "sweep never produced a templated fit — it proves nothing"
+
+
 def test_fit_template_grid_step_makes_every_part_offset_a_whole_millimetre():
     """Part coords are `dim * u / 1000`; CP-SAT is integer-only.
 
@@ -162,6 +254,7 @@ def test_a_neighbour_can_occupy_an_l_rooms_notch():
     _add_room_parts(
         model,
         "l_room",
+        "living",
         _fixed(model, 0, "lx"),
         _fixed(model, 0, "ly"),
         _fixed(model, 1000, "lw"),
@@ -185,6 +278,7 @@ def test_a_neighbour_can_occupy_an_l_rooms_notch():
     _add_room_parts(
         model,
         "neighbour",
+        "parking",
         nx,
         ny,
         _fixed(model, 400, "nw"),
@@ -212,6 +306,24 @@ def test_a_neighbour_can_occupy_an_l_rooms_notch():
     assert (solver.value(nx), solver.value(ny)) == (600, 600)
     # 3 parts: the L's two, plus the neighbour's single one.
     assert len(part_vars) == 3
+
+    # Every part carries its owning room's identity — a pass that constrains
+    # parts (e.g. an L-shaped plot's forbidden notch) must be able to exempt
+    # rooms by type without building a parallel index. Both parts of the
+    # templated room report it, not just the first.
+    assert [(pv.room_id, pv.room_type) for pv in part_vars] == [
+        ("l_room", "living"),
+        ("l_room", "living"),
+        ("neighbour", "parking"),
+    ]
+    # Positional access to the geometry vars is unchanged by those two fields.
+    assert part_vars[2][:4] == (
+        part_vars[2].px,
+        part_vars[2].py,
+        part_vars[2].pw,
+        part_vars[2].pd,
+    )
+    assert part_vars[2].px is nx and part_vars[2].py is ny
 
 
 def test_snap_overlap_guard_measures_footprints_not_bounding_boxes():

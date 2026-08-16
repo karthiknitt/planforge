@@ -198,13 +198,19 @@ class _PartVars(NamedTuple):
     notch region of an L-shaped PLOT, where a bbox test would either leak a
     part into the notch or reject a room that only overhangs it with a hole.
 
-    It is a NamedTuple, so `px, py, pw, pd = pv` works as well as `pv.px`.
+    `room_id`/`room_type` identify the owning room, so such a pass can EXEMPT
+    rooms rather than apply itself blindly — parking above all: PR #81 already
+    had to exempt parking from the connectivity repair pass, because a car
+    porch is legitimately reachable only from the driveway. They are last in
+    the field order so `pv[:4]` and `pv.px` both keep working.
     """
 
     px: cp_model.IntVar
     py: cp_model.IntVar
     pw: cp_model.IntVar
     pd: cp_model.IntVar
+    room_id: str
+    room_type: str
 
 
 def _mm(metres: float) -> int:
@@ -313,11 +319,22 @@ def _fit_template(
     t_min_d = _round_up(ceil(min_d / ratio), grid_y)
     t_min_area = ceil(min_area / frac)
     t_max_area = int(max_area / frac)
+    # Largest bbox the room can actually reach: max_w/max_d quantised DOWN to
+    # the template's grid, because w/d are pinned to multiples of it.
+    reach_w = (max_w // grid_x) * grid_x
+    reach_d = (max_d // grid_y) * grid_y
     if (
-        t_min_w > (max_w // grid_x) * grid_x
-        or t_min_d > (max_d // grid_y) * grid_y
+        t_min_w > reach_w
+        or t_min_d > reach_d
         or t_min_area > t_max_area
         or t_min_w * t_min_d > t_max_area
+        # The inflated area minimum must be reachable at all. Without this the
+        # template can demand more bbox area than max_w*max_d can supply and
+        # make a room infeasible that was perfectly feasible as a RECT —
+        # breaking the "a template is never the reason a solve fails" rule,
+        # and (worse) surfacing as an unexplained infeasibility in the passes
+        # layered on top of this one.
+        or t_min_area > reach_w * reach_d
     ):
         return rect
     return _ShapeFit(
@@ -328,6 +345,7 @@ def _fit_template(
 def _add_room_parts(
     model: cp_model.CpModel,
     rid: str,
+    rtype: str,
     xv: cp_model.IntVar,
     yv: cp_model.IntVar,
     wv: cp_model.IntVar,
@@ -353,12 +371,13 @@ def _add_room_parts(
 
     `part_vars` is the caller's list and is appended to for EVERY part,
     including a RECT room's single one (where the "part" vars are the room's
-    own x/y/w/d), so a later pass can constrain occupied rectangles directly.
+    own x/y/w/d), each tagged with `rid`/`rtype` so a later pass can constrain
+    occupied rectangles directly and still exempt rooms by type.
     """
     if template == "RECT":
         x_ivs.append(model.new_interval_var(xv, wv, xe, f"ix_{rid}"))
         y_ivs.append(model.new_interval_var(yv, dv, ye, f"iy_{rid}"))
-        part_vars.append(_PartVars(xv, yv, wv, dv))
+        part_vars.append(_PartVars(xv, yv, wv, dv, rid, rtype))
         return
 
     scale = _FRACTION_SCALE
@@ -383,7 +402,7 @@ def _add_room_parts(
         model.add(pye == py + pd)
         x_ivs.append(model.new_interval_var(px, pw, pxe, f"pxi_{rid}_{k}"))
         y_ivs.append(model.new_interval_var(py, pd, pye, f"pyi_{rid}_{k}"))
-        part_vars.append(_PartVars(px, py, pw, pd))
+        part_vars.append(_PartVars(px, py, pw, pd, rid, rtype))
 
 
 def _plate_and_planes_from_polygon(
@@ -1023,6 +1042,7 @@ def _solve_one(
         _add_room_parts(
             model,
             rd["id"],
+            rtype,
             x,
             y,
             w,
