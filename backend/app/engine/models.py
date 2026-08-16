@@ -203,6 +203,17 @@ class PlotConfig:
     # default — every room then comes out `template="RECT"` and the CP-SAT
     # model is exactly the one that existed before shape templates.
     allow_shape_templates: bool = False
+    # Rectilinear PLOT envelope — INDEPENDENT of `allow_shape_templates` above,
+    # which is about ROOM shape. "RECT" (the default) is today's plain
+    # rectangular site and changes nothing at all: the solver's notch pass
+    # returns immediately and the CP-SAT model is byte-identical. "L"/"T"/"U"
+    # cut a `notch_width` x `notch_depth` rectangle out of the plot's
+    # REAR-RIGHT corner; that land is off-plot, so the solver forbids room
+    # parts from entering it (it used to place rooms there and delete them
+    # afterwards, silently losing programme).
+    plot_template: ShapeTemplate = "RECT"
+    notch_width: float = 0.0  # metres, x-extent of the cutout
+    notch_depth: float = 0.0  # metres, y-extent of the cutout
 
     @property
     def bhk(self) -> int:
