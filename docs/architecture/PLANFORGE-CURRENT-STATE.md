@@ -110,11 +110,14 @@ chat, all AI SDK v6 `tool()` calls: `get_room_list` (77), `get_room_details` (85
 None of these operate on individual walls or openings — consistent with "no entity identity"
 above; the tool surface is room-level.
 
-The stream-error-chunk gotcha lives in `frontend/src/lib/agent-model-chain.ts`, which
-implements the model fallback chain. Its own header comment (lines 6–11) states the gotcha
-directly: AI SDK v6's `toUIMessageStream` never throws on a provider failure — it reports
-failures as an `error`-typed chunk *inside* the stream, captured via `onError`
-(`route.ts:363`, `:384`). The consequence, per `consumeAttempt`'s own comment (lines 62–66):
+The stream-error-chunk gotcha is stated directly at its true origin, `route.ts:343-345`: "In
+ai@6 a provider failure surfaces as an `error` CHUNK (never a thrown rejection), so the raw
+error is captured via toUIMessageStream's onError — runModelChain reads it to decide whether
+to fall back to the next provider." `agent-model-chain.ts`'s `StreamAttempt.getRawError` JSDoc
+(lines 17-22) restates the same mechanism from the consumer side: "The raw provider error
+captured while streaming (via toUIMessageStream's onError) ... Populated by the time an
+`error` chunk is yielded, since onError runs to build that chunk." The consequence, per
+`consumeAttempt`'s own comment (lines 62–66):
 "In ai@6 provider failures arrive as `error` CHUNKS (never thrown), but the try/catch is kept
 as a belt-and-braces guard for a genuinely rejecting iterable." In other words, catch-based
 fallback logic is dead code *for the failure mode that actually occurs in production*
@@ -163,7 +166,7 @@ remains live for that one read endpoint.
 stair — the elements listed above. The compound wall, the landscaped setback fill, and
 furniture are **not** part of it; they are drawn per-renderer, straight from `rooms`, in each
 export format independently. This asymmetry is why the compound wall and setback fill appear
-in the DXF output but not the PDF, and why furniture is implemented twice: 13 `_furniture_*`
+in the DXF output but not the PDF, and why furniture is implemented twice: 12 `_furniture_*`
 renderer functions in `backend/app/engine/cad_advanced.py` for DXF, and an independent
 implementation in `frontend/src/components/floor-plan-svg.tsx` plus `furniture-overlay.tsx`
 for the frontend SVG. A later phase of the current plan is scoped to close this gap; it has
