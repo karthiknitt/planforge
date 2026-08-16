@@ -21,7 +21,7 @@ from typing import NamedTuple
 from ortools.sat.python import cp_model
 
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
-from .shapes import ShapeTemplate, parts_for
+from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
 from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
@@ -443,6 +443,212 @@ def _plate_and_planes_from_polygon(
         planes.append((dx, dy, rhs))
 
     return bw, bd, ox, oy, planes
+
+
+def _plate_geom_mm(
+    cfg: PlotConfig, ewt: float
+) -> tuple[int, int, int, int, list[tuple[int, int, int]]] | None:
+    """(bw, bd, ox, oy, half_planes) of the buildable plate, in millimetres.
+
+    Extracted from `_solve_one` so the pre-solve envelope validation measures
+    exactly the plate the solve will use. The arithmetic is unchanged.
+    """
+    if cfg.plot_shape != "rectangular":
+        from app.engine.geometry import buildable_polygon
+
+        inset = buildable_polygon(cfg, wall_clearance=ewt)
+        if inset.is_empty:
+            return None
+        return _plate_and_planes_from_polygon(inset)
+    bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
+    bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
+    ox = _mm(cfg.setback_left + ewt)
+    oy = _mm(cfg.setback_front + ewt)
+    return bw, bd, ox, oy, []
+
+
+# ── Rectilinear PLOT envelope: the notch ──────────────────────────────────────
+
+
+def notch_rect_m(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
+    """The off-plot cutout rectangle (x0, y0, x1, y1) in PLOT metres, or None.
+
+    Two config surfaces describe the same thing and both resolve here:
+
+    * `plot_template` in {"L", "T", "U"} with `notch_width`/`notch_depth` —
+      the cutout is the plot's REAR-RIGHT corner.
+    * the legacy `plot_shape == "l_shaped"` with
+      `cutout_corner`/`cutout_width`/`cutout_height`, whose cutout may sit at
+      any of the four corners. `generator.py` used to service that surface by
+      DELETING rooms that landed in the cutout after the solve; covering it
+      here is what makes removing that pass an upgrade rather than a
+      regression.
+
+    `plot_template` wins when both are set.
+    """
+    if cfg.plot_template != "RECT":
+        return (
+            cfg.plot_width - cfg.notch_width,
+            cfg.plot_length - cfg.notch_depth,
+            cfg.plot_width,
+            cfg.plot_length,
+        )
+    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        cw, ch = cfg.cutout_width, cfg.cutout_height
+        pw, pl = cfg.plot_width, cfg.plot_length
+        return {
+            "NE": (pw - cw, pl - ch, pw, pl),
+            "NW": (0.0, pl - ch, cw, pl),
+            "SE": (pw - cw, 0.0, pw, ch),
+            "SW": (0.0, 0.0, cw, ch),
+        }.get((cfg.cutout_corner or "NE").upper(), (pw - cw, pl - ch, pw, pl))
+    return None
+
+
+def _forbid_notch(
+    model: cp_model.CpModel,
+    cfg: PlotConfig,
+    parts: list[_PartVars],
+    *,
+    ox_mm: int,
+    oy_mm: int,
+    bw: int,
+    bd: int,
+) -> None:
+    """Forbid every room PART from intersecting the plot's notch.
+
+    Replaces generator.py's post-hoc "delete rooms in the cutout zone" pass,
+    which silently dropped programme instead of never placing it there.
+
+    A part avoids an axis-aligned notch iff it lies wholly to one side of it —
+    a disjunction of (at most) four linear constraints, one reified BoolVar
+    each. Disjuncts that no part could ever satisfy inside the plate are not
+    emitted at all, so the ordinary rear-right cutout costs exactly two
+    BoolVars per part: "left of the notch" or "in front of it".
+
+    This runs over parts, not bounding boxes, so it is exact for an L/T/U ROOM
+    too — a bbox test would either leak a part into the notch or reject a room
+    that merely overhangs the notch with its hole. Plot shape and room shape
+    stay independent; nothing here needs `cfg.allow_shape_templates`.
+
+    NO ROOM TYPE IS EXEMPT. The notch is land that is not part of the site, so
+    unlike PR #81's parking exemption (about reachability from a driveway — a
+    car porch still stands on your own plot) there is no type, open or roofed,
+    that may occupy it: not parking, not a balcony overhanging it, not a
+    garden or terrace. `room_type` is still used, to name the BoolVars so an
+    infeasible model can be read.
+    """
+    rect = notch_rect_m(cfg)
+    if rect is None:  # plot_template == "RECT" and no legacy cutout
+        return
+    nlo_x = _mm(rect[0]) - ox_mm
+    nlo_y = _mm(rect[1]) - oy_mm
+    nhi_x = _mm(rect[2]) - ox_mm
+    nhi_y = _mm(rect[3]) - oy_mm
+    if nlo_x >= bw or nlo_y >= bd or nhi_x <= 0 or nhi_y <= 0:
+        return  # the notch misses the buildable plate entirely
+
+    for k, pv in enumerate(parts):
+        escapes: list[cp_model.IntVar] = []
+        candidates = (
+            ("left", nlo_x > 0, pv.px + pv.pw <= nlo_x),
+            ("front", nlo_y > 0, pv.py + pv.pd <= nlo_y),
+            ("right", nhi_x < bw, pv.px >= nhi_x),
+            ("rear", nhi_y < bd, pv.py >= nhi_y),
+        )
+        for tag, reachable, expr in candidates:
+            if not reachable:
+                continue  # unsatisfiable inside the plate — do not emit
+            lit = model.new_bool_var(f"notch_{tag}_{pv.room_type}_{pv.room_id}_{k}")
+            model.add(expr).only_enforce_if(lit)
+            escapes.append(lit)
+        if not escapes:
+            raise ValueError(
+                "the plot notch covers the entire buildable plate — no room "
+                "can be placed; reduce the notch or the setbacks"
+            )
+        model.add_bool_or(escapes)
+
+
+def validate_plot_envelope(
+    cfg: PlotConfig,
+    ewt: float,
+    room_defs: list[dict] | None = None,
+    specs: dict | None = None,
+) -> None:
+    """Raise ValueError when the notch makes the requested programme impossible.
+
+    Raised UP FRONT rather than letting CP-SAT return INFEASIBLE: an
+    INFEASIBLE status is indistinguishable from "the solver ran out of budget",
+    and both `solve_layout` and `solve_layouts` swallow exceptions from the
+    solve itself, so the user would only ever see an empty result. Relaxing the
+    constraint instead is not an option — the notch is land the user does not
+    own.
+
+    The area test is a NECESSARY condition only (rooms cannot overlap, so the
+    sum of their minimum areas must fit on the floor), never a sufficient one,
+    so it can never reject a plot that would in fact have solved.
+    """
+    if cfg.plot_template not in SHAPE_TEMPLATES:
+        raise ValueError(
+            f"unknown plot_template {cfg.plot_template!r}; expected one of "
+            f"{sorted(SHAPE_TEMPLATES)}"
+        )
+    if cfg.plot_template != "RECT":
+        if cfg.notch_width <= 0 or cfg.notch_depth <= 0:
+            raise ValueError(
+                f"plot_template={cfg.plot_template!r} needs a positive notch; got "
+                f"notch_width={cfg.notch_width} m, notch_depth={cfg.notch_depth} m "
+                '(use plot_template="RECT" for a plain rectangular plot)'
+            )
+        if cfg.notch_width >= cfg.plot_width or cfg.notch_depth >= cfg.plot_length:
+            raise ValueError(
+                f"the {cfg.notch_width:g}x{cfg.notch_depth:g} m notch is as large as "
+                f"the {cfg.plot_width:g}x{cfg.plot_length:g} m plot — nothing is left "
+                "to build on"
+            )
+
+    rect = notch_rect_m(cfg)
+    if rect is None:
+        return
+    geom = _plate_geom_mm(cfg, ewt)
+    if geom is None:
+        return  # setbacks already consume the plot; the solve returns None
+    bw, bd, ox, oy, _ = geom
+    if bw <= 0 or bd <= 0:
+        return
+
+    # notch ∩ plate is itself a rectangle (both are axis-aligned), so the
+    # buildable area lost to it is exact, not an estimate.
+    lost_w = max(0, min(ox + bw, _mm(rect[2])) - max(ox, _mm(rect[0])))
+    lost_d = max(0, min(oy + bd, _mm(rect[3])) - max(oy, _mm(rect[1])))
+    usable_mm2 = bw * bd - lost_w * lost_d
+
+    if specs is None:
+        specs = _load_specs()
+    if room_defs is None:
+        room_defs = _build_room_list(cfg, specs)
+
+    needed: dict[int, int] = {}
+    counts: dict[int, int] = {}
+    for rd in room_defs:
+        spec = specs.get(rd["type"], specs.get("utility"))
+        raw = rd.get("custom_min_area") or spec["min_area_sqm"]
+        floor = rd["floor"]
+        needed[floor] = needed.get(floor, 0) + int(raw * SCALE * SCALE)
+        counts[floor] = counts.get(floor, 0) + 1
+
+    for floor, required in sorted(needed.items()):
+        if required > usable_mm2:
+            raise ValueError(
+                f"the {rect[2] - rect[0]:g}x{rect[3] - rect[1]:g} m plot notch "
+                f"leaves only {usable_mm2 / (SCALE * SCALE):.1f} m² buildable per "
+                f"floor, but floor {floor}'s programme ({counts[floor]} rooms for "
+                f"{cfg.num_bedrooms} bedrooms / {cfg.toilets} toilets) needs at "
+                f"least {required / (SCALE * SCALE):.1f} m² — shortfall "
+                f"{(required - usable_mm2) / (SCALE * SCALE):.1f} m². Reduce the "
+                "notch, the setbacks, or the programme."
+            )
 
 
 def ensuite_attachment(room_id: str) -> str | None:
@@ -955,19 +1161,10 @@ def _solve_one(
     """
 
     # Buildable plate dimensions in mm
-    quad_planes: list[tuple[int, int, int]] = []
-    if cfg.plot_shape != "rectangular":
-        from app.engine.geometry import buildable_polygon
-
-        inset = buildable_polygon(cfg, wall_clearance=ewt)
-        if inset.is_empty:
-            return None
-        bw, bd, ox, oy, quad_planes = _plate_and_planes_from_polygon(inset)
-    else:
-        bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
-        bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
-        ox = _mm(cfg.setback_left + ewt)
-        oy = _mm(cfg.setback_front + ewt)
+    geom = _plate_geom_mm(cfg, ewt)
+    if geom is None:
+        return None
+    bw, bd, ox, oy, quad_planes = geom
 
     if bw <= 0 or bd <= 0:
         return None
@@ -1117,6 +1314,10 @@ def _solve_one(
     for x_ivs, y_ivs in part_ivs.values():
         if x_ivs:
             model.add_no_overlap_2d(x_ivs, y_ivs)
+
+    # Rectilinear plot: keep every part out of the off-plot notch. A no-op
+    # (returns before touching the model) on the default RECT plot.
+    _forbid_notch(model, cfg, part_vars, ox_mm=ox, oy_mm=oy, bw=bw, bd=bd)
 
     # Staircase alignment across floors
     gf_stairs = [v for v in gf_vars if v.room_type == "staircase"]
@@ -1648,6 +1849,9 @@ def solve_layout(cfg: PlotConfig, ewt: float | None = None) -> Layout | None:
         ewt = load_rules()["external_wall_thickness_mm"] / SCALE
     specs = _load_specs()
     room_defs = _build_room_list(cfg, specs)
+    # Outside the try: a notch that cannot house the programme is a user-input
+    # error and must reach the caller, not be flattened into `None`.
+    validate_plot_envelope(cfg, ewt, room_defs, specs)
     try:
         return _solve_one(
             cfg, ewt, room_defs, specs, "mid", "S2", "Layout S2 — Centre Staircase"
@@ -1657,9 +1861,14 @@ def solve_layout(cfg: PlotConfig, ewt: float | None = None) -> Layout | None:
 
 
 def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:
-    """Generate up to 3 diverse solver layouts. Returns empty list on failure."""
+    """Generate up to 3 diverse solver layouts. Returns empty list on failure.
+
+    Raises ValueError (rather than returning []) when the plot's notch cannot
+    house the requested programme — see `validate_plot_envelope`.
+    """
     specs = _load_specs()
     room_defs = _build_room_list(cfg, specs)
+    validate_plot_envelope(cfg, ewt, room_defs, specs)
 
     zones = [
         ("front", "S1", "Layout S1 — Front Staircase"),
