@@ -2023,6 +2023,7 @@ def _draw_floor_projected(
     # land, so drawing it later paints over them.
     _draw_compound_wall(c, cfg, ox, oy, s, gate_cx=gf_main_door_x)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
+    _draw_compound_wall(c, cfg, ox, oy, s)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)
     _draw_opening_tags(c, drawing, marks, s, ox, oy)
