@@ -154,11 +154,14 @@ def test_dxf_compound_wall_still_produces_five_walls_plus_two_posts(msp):
     assert len(polys) == 7
 
 
-def test_dxf_gate_posts_sit_at_the_shared_gate_positions(msp):
-    cfg = _cfg("S")
-    draw_compound_wall(msp, cfg, "A-COMPOUND-WALL", 0.0)
-    expected_posts = compound_wall_gate_posts(cfg)
-    assert expected_posts is not None
+def _drawn_post_centres(
+    msp, layer: str = "A-COMPOUND-WALL"
+) -> set[tuple[float, float]]:
+    """Centres of the gate-post squares actually emitted into ``msp``.
+
+    Posts are the only near-square polylines on the layer — wall segments are
+    long buffered rectangles — so a small bounding box identifies them.
+    """
 
     def _is_post(e) -> bool:
         pts = list(e.get_points("xy"))
@@ -167,26 +170,51 @@ def test_dxf_gate_posts_sit_at_the_shared_gate_positions(msp):
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         return (max(xs) - min(xs)) < 0.35 and (max(ys) - min(ys)) < 0.35
 
-    post_centres = set()
-    for e in _polys_on_layer(msp, "A-COMPOUND-WALL"):
+    centres = set()
+    for e in _polys_on_layer(msp, layer):
         if _is_post(e):
             pts = list(e.get_points("xy"))
-            cx = round(sum(p[0] for p in pts) / 4, 2)
-            cy = round(sum(p[1] for p in pts) / 4, 2)
-            post_centres.add((cx, cy))
+            centres.add(
+                (
+                    round(sum(p[0] for p in pts) / 4, 2),
+                    round(sum(p[1] for p in pts) / 4, 2),
+                )
+            )
+    return centres
+
+
+def test_dxf_gate_posts_sit_at_the_shared_gate_positions(msp):
+    cfg = _cfg("S")
+    draw_compound_wall(msp, cfg, "A-COMPOUND-WALL", 0.0)
+    expected_posts = compound_wall_gate_posts(cfg)
+    assert expected_posts is not None
+
+    post_centres = _drawn_post_centres(msp)
     assert len(post_centres) == 2, "expected exactly 2 gate-post squares"
-    expected = {(round(p[0], 2), round(p[1], 2)) for p in expected_posts}
-    assert post_centres == expected
+    assert post_centres == {(round(p[0], 2), round(p[1], 2)) for p in expected_posts}
+    # Independent of the shared helper: the pre-refactor inline code placed the
+    # posts at the gate-gap edges of a centred 3.6 m gate on a 9.0 m frontage,
+    # i.e. (9.0 ± 3.6) / 2 = 2.7 and 6.3, both on the y=0 road edge.
+    assert post_centres == {(2.7, 0.0), (6.3, 0.0)}
 
 
 def test_dxf_gate_still_tracks_gate_cx(msp):
-    """Behaviour preserved: passing gate_cx still shifts the gate on a
-    horizontal road-side run (main-entrance-aligned gate)."""
+    """Behaviour preserved: passing gate_cx still shifts the DRAWN gate.
+
+    Asserts against the entities `draw_compound_wall` emitted, not against the
+    shared helper — otherwise this passes even if the DXF renderer ignored
+    `gate_cx`, which is live shipping behaviour (`export.py` passes it on every
+    export).
+    """
     draw_compound_wall(msp, _cfg("S"), "A-COMPOUND-WALL", 0.0, gate_cx=6.0)
-    posts = compound_wall_gate_posts(_cfg("S"), gate_cx=6.0)
-    assert posts is not None
-    mid_x = (posts[0][0] + posts[1][0]) / 2
-    assert abs(mid_x - 6.0) < 1e-6
+
+    drawn = _drawn_post_centres(msp)
+    assert len(drawn) == 2, f"expected 2 drawn gate posts, got {drawn}"
+    mid_x = sum(cx for cx, _ in drawn) / 2
+    assert abs(mid_x - 6.0) < 1e-6, f"drawn gate centred at {mid_x}, expected 6.0"
+    # Guards the fixture: a gate at 4.5 is where the default already sits, so
+    # 6.0 must actually differ from the centred case for this to prove anything.
+    assert drawn != {(2.7, 0.0), (6.3, 0.0)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -319,7 +347,12 @@ def test_pdf_gate_actually_moves_with_the_derived_door():
 
 
 def test_missing_main_entrance_falls_back_to_a_centred_gate():
-    """l_shaped_3bhk derives no main entrance at all — an observed case, not hypothetical."""
+    """A ground floor with no derivable main entrance must still get a gate.
+
+    The fixture is a degenerate empty floor, not the `l_shaped_3bhk` GCS case —
+    that case is the reason this path is known to be reachable rather than
+    defensive, but it is not what is exercised here.
+    """
     cfg = _cfg("S")
     doorless = Layout(
         id="doorless",
@@ -329,7 +362,10 @@ def test_missing_main_entrance_falls_back_to_a_centred_gate():
         compliance=ComplianceResult(passed=True),
     )
     assert _ground_floor_main_door_x(doorless, cfg) is None
-    assert compound_wall_segments(cfg, gate_cx=None) == compound_wall_segments(cfg)
+    # And that None yields a gate centred on the 9.0 m frontage — asserting the
+    # position, not that an explicit None equals the parameter's own default.
+    mid = _front_gate_midpoint(compound_wall_segments(cfg, gate_cx=None), cfg)
+    assert abs(mid - 4.5) < 1e-6
 
 
 def test_render_pdf_threads_the_derived_gate_x_to_every_floor_page(monkeypatch):
@@ -368,7 +404,9 @@ def test_render_pdf_threads_the_derived_gate_x_to_every_floor_page(monkeypatch):
 
     pdf_mod.render_pdf("T", layout, cfg, 3)
 
-    assert seen, "render_pdf drew no architectural floor pages"
+    # Both floors of the fixture must render — set equality alone collapses
+    # duplicates, so it would pass if a page group were dropped entirely.
+    assert len(seen) == 2, f"expected 2 architectural pages, got {len(seen)}"
     assert set(seen) == {expected}, (
         f"every page must use the ground floor's gate x {expected}, got {seen}"
     )

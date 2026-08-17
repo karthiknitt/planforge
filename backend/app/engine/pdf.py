@@ -1735,8 +1735,11 @@ def _draw_floor_projected(
     )
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_voids(c, floor_plan.rooms, s, ox, oy)
-    _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
+    # Before the dim chains, not after: the wall strokes at 0.23 m * scale
+    # along the plot edges, exactly where dimension extension lines and ticks
+    # land, so drawing it later paints over them.
     _draw_compound_wall(c, cfg, ox, oy, s, gate_cx=gf_main_door_x)
+    _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)
     _draw_opening_tags(c, drawing, marks, s, ox, oy)
