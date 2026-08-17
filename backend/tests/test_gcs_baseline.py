@@ -240,7 +240,11 @@ def _opening_records(openings: list[Opening]) -> list[dict[str, Any]]:
         }
         for op in openings
     ]
-    return sorted(records, key=lambda r: (r["kind"], r["cx"], r["cy"], r["width"]))
+    return sorted(records, key=_opening_sort_key)
+
+
+def _opening_sort_key(record: dict[str, Any]) -> tuple[str, float, float, float]:
+    return (record["kind"], record["cx"], record["cy"], record["width"])
 
 
 def _opening_mismatches(
@@ -294,6 +298,11 @@ def _derived_expectations(fp: FloorPlan, cfg: PlotConfig) -> dict[str, Any]:
     gcs = compute_gcs(fp, cfg)
     return {
         "openings": _opening_records(drawing.openings),
+        # The reason strings, not just the count: swapping a pier defect for
+        # a jamb defect leaves the count at 2 and would otherwise pass. They
+        # also make the pinned defects legible in the fixture itself, rather
+        # than something a reader has to re-derive from raw coordinates.
+        "opening_clearance_reasons": list(gcs.debug["opening_clearance"]),
         "baseline": {
             **gcs.as_dict(),
             "column_count": len(drawing.columns),
@@ -396,6 +405,13 @@ def test_gcs_matches_baseline(case_name: str) -> None:
         f"{baseline['opening_clearance_violations']}; reasons: "
         f"{result.debug.get('opening_clearance')}"
     )
+    # The KIND of each violation, not only how many — a jamb defect
+    # substituted for a pier defect keeps the count identical.
+    assert result.debug["opening_clearance"] == case["opening_clearance_reasons"], (
+        f"{case_name}: opening-clearance violations changed kind or place:\n"
+        f"  now:      {result.debug['opening_clearance']}\n"
+        f"  baseline: {case['opening_clearance_reasons']}"
+    )
     # Column count from the SAME derivation compute_gcs's collision check
     # runs (build_floor_drawing -> derive_columns), not the solver's own
     # raw column list — this is what would move if column derivation
@@ -495,6 +511,10 @@ def test_five_cm_main_entrance_shift_fails_the_baseline(case_name: str) -> None:
         if record["is_main"]:
             axis = "cx" if record["is_horizontal"] else "cy"
             record[axis] = round(record[axis] + 0.05, 4)
+    # Re-sort: a real derivation shift goes through _opening_records, which
+    # sorts. Without this the simulation would compare a differently-ordered
+    # list than the code path it stands in for.
+    shifted.sort(key=_opening_sort_key)
 
     assert _opening_mismatches(shifted, expected), (
         f"{case_name}: shifting the main entrance 5 cm along its own wall was "

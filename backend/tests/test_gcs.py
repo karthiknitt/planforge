@@ -147,6 +147,19 @@ def test_clearance_flags_an_opening_spanning_a_junction():
     assert "spans a wall junction" in reasons[0], reasons
 
 
+def test_clearance_reports_an_overhang_as_an_overhang_not_a_junction():
+    """An opening whose centre is on the run but whose edge runs off the end
+    is a different defect from one straddling a mid-run junction, and must
+    not borrow the junction wording — this string is what the baseline test
+    prints on failure."""
+    count, reasons = _opening_clearance_violations(
+        [_window(9.7)], _WALL, _JUNCTIONS
+    )  # spans 9.1..10.3 on a run ending at 10.0
+    assert count == 1
+    assert "extends past its wall run" in reasons[0], reasons
+    assert "junction" not in reasons[0], reasons
+
+
 def test_clearance_flags_an_opening_on_no_wall_at_all():
     count, reasons = _opening_clearance_violations([_window(20.0)], _WALL, _JUNCTIONS)
     assert count == 1

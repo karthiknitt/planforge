@@ -332,6 +332,10 @@
         "is_main": false
       }
     ],
+    "opening_clearance_reasons": [
+      "door @(22.647,3.115) pier 0.000m to window @(21.512,3.115) < 0.115m",
+      "window @(21.512,3.115) pier 0.000m to door @(22.647,3.115) < 0.115m"
+    ],
     "baseline": {
       "total": 65.0,
       "max": 100,
@@ -567,6 +571,7 @@
         "is_main": false
       }
     ],
+    "opening_clearance_reasons": [],
     "baseline": {
       "total": 80.0,
       "max": 100,
@@ -823,6 +828,10 @@
         "is_main": false
       }
     ],
+    "opening_clearance_reasons": [
+      "door @(7.000,1.615) pier 0.000m to window @(8.135,1.615) < 0.115m",
+      "window @(8.135,1.615) pier 0.000m to door @(7.000,1.615) < 0.115m"
+    ],
     "baseline": {
       "total": 70.0,
       "max": 100,
@@ -1032,6 +1041,10 @@
         "is_horizontal": false,
         "is_main": false
       }
+    ],
+    "opening_clearance_reasons": [
+      "door @(4.500,3.115) pier 0.000m to window @(5.635,3.115) < 0.115m",
+      "window @(5.635,3.115) pier 0.000m to door @(4.500,3.115) < 0.115m"
     ],
     "baseline": {
       "total": 70.0,
@@ -1395,6 +1408,10 @@
         "is_horizontal": false,
         "is_main": false
       }
+    ],
+    "opening_clearance_reasons": [
+      "door @(1.115,15.693) pier 0.000m to window @(1.115,14.643) < 0.115m",
+      "window @(1.115,14.643) pier 0.000m to door @(1.115,15.693) < 0.115m"
     ],
     "baseline": {
       "total": 70.0,

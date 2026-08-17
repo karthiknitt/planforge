@@ -29,7 +29,7 @@ else. Verified consumers, all going through `build_floor_drawing`:
 - `backend/app/engine/cad_primitives.py` (line 11) — beam/column layout projected from it
 - `backend/app/engine/section_geometry.py:204` and `:307` — both section-cut entry points call
   `build_floor_drawing(fp, cfg)` per floor
-- `backend/app/quality/ccqs.py:476`, inside `compute_gcs()` (defined line 469)
+- `backend/app/quality/ccqs.py:499`, inside `compute_gcs()` (defined line 492)
 - `backend/app/api/routes/export.py` — three call sites (lines 217, 516, 646)
 - `frontend/src/components/floor-plan-svg.tsx:754` — the frontend's SVG renderer draws from
   the *same* backend-computed geometry (fetched, not recomputed), per its own comment at
@@ -147,7 +147,7 @@ structural detailing model, not yet run) replaces these with typed `BarGroup`, `
 
 ## GCS supersedes CCQS as the export gate
 
-`compute_gcs()` (`backend/app/quality/ccqs.py:469`, `GCS_MAX = 100` at line 151) is the live
+`compute_gcs()` (`backend/app/quality/ccqs.py:492`, `GCS_MAX = 100` at line 151) is the live
 export quality gate, computed directly from the canonical `FloorDrawing` rather than from
 rendered pixels or text. The module's own comment block immediately above `GCS_MAX` (lines
 141–149) states the reason plainly: `compute_ccqs_deterministic()` (line 127)'s 80
