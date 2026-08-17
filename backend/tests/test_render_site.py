@@ -20,6 +20,7 @@ relying on a re-export.
 
 from __future__ import annotations
 
+import types
 from io import BytesIO
 
 import ezdxf
@@ -32,8 +33,15 @@ from app.engine.geometry import (
     compound_wall_gate_posts,
     compound_wall_segments,
 )
-from app.engine.models import PlotConfig
-from app.engine.pdf import _draw_compound_wall
+from app.engine.models import (
+    ComplianceResult,
+    FloorPlan,
+    Layout,
+    PlotConfig,
+    Room,
+)
+from app.engine.pdf import _draw_compound_wall, _ground_floor_main_door_x
+from app.engine.plan_geometry import build_floor_drawing
 
 
 def _cfg(road_side: str = "S") -> PlotConfig:
@@ -202,3 +210,165 @@ def test_pdf_compound_wall_draws_a_stroke_per_segment():
         assert abs(y1 - (20.0 + ey1 * 2.0)) < 1e-6
         assert abs(x2 - (10.0 + ex2 * 2.0)) < 1e-6
         assert abs(y2 - (20.0 + ey2 * 2.0)) < 1e-6
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF/DXF gate agreement
+#
+# The property worth pinning is not that either renderer accepts a gate_cx —
+# it is that both derive the SAME gate position from the SAME layout. Before
+# this was wired, PDF always centred the gate while DXF aligned it to the main
+# entrance, so the two exports of one building disagreed about where the gate
+# physically is.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _layout_with_main_door_at(cx: float) -> Layout:
+    """A ground floor whose derived main entrance sits near plot-x ``cx``.
+
+    The main-entrance pass picks the road-facing wall of the entry room, so the
+    room is placed to straddle ``cx`` on the south (road) edge.
+
+    Rooms stay inside the buildable envelope for ``_cfg()`` — x [1.2, 7.8],
+    y [3.0, 13.5] — so the geometry pass does not warn about out-of-bounds
+    rooms and the derivation runs on a realistic plan.
+    """
+    return Layout(
+        id="gate-test",
+        name="Gate Test",
+        ground_floor=FloorPlan(
+            floor=0,
+            floor_type="ground",
+            rooms=[
+                Room(
+                    id="living-1",
+                    name="Living",
+                    type="living",
+                    x=cx - 1.2,
+                    y=3.0,
+                    width=2.4,
+                    depth=3.5,
+                ),
+                Room(
+                    id="bed-1",
+                    name="Bedroom 1",
+                    type="bedroom",
+                    x=1.2,
+                    y=6.5,
+                    width=3.0,
+                    depth=3.0,
+                ),
+            ],
+        ),
+        first_floor=FloorPlan(floor=1, floor_type="first", rooms=[]),
+        compliance=ComplianceResult(passed=True),
+    )
+
+
+def _front_gate_midpoint(segs, cfg: PlotConfig) -> float:
+    """Centre of the gate gap on the south (y=0) run.
+
+    The run is split into two pieces; the gap lies between their inner ends,
+    which are the only front x-coordinates that are neither plot edge.
+    """
+    front = [s for s in segs if abs(s[1]) < 1e-6 and abs(s[3]) < 1e-6]
+    assert len(front) == 2, f"expected a split front run, got {len(front)} piece(s)"
+    inner = sorted(
+        x
+        for s in front
+        for x in (s[0], s[2])
+        if abs(x) > 1e-6 and abs(x - cfg.plot_width) > 1e-6
+    )
+    assert len(inner) == 2, f"expected two inner gate edges, got {inner}"
+    return (inner[0] + inner[1]) / 2.0
+
+
+def test_pdf_and_dxf_derive_the_same_gate_x_from_the_same_layout():
+    """The two renderers must agree on where the gate is, not merely accept a value."""
+    cfg, layout = _cfg("S"), _layout_with_main_door_at(6.5)
+
+    pdf_gate_x = _ground_floor_main_door_x(layout, cfg)
+
+    # The DXF derivation, reproduced exactly as api/routes/export.py performs it.
+    drawing = build_floor_drawing(layout.ground_floor, cfg)
+    dxf_gate_x = next((o.cx for o in drawing.openings if o.is_main), None)
+
+    assert pdf_gate_x is not None, (
+        "fixture must derive a main entrance, else this test proves nothing"
+    )
+    assert pdf_gate_x == dxf_gate_x
+
+
+def test_pdf_gate_actually_moves_with_the_derived_door():
+    """Guards against the helper being computed and then not passed through."""
+    cfg = _cfg("S")
+    # Deliberately off-centre: a door at plot-x 4.5 would sit exactly where the
+    # centred gate already is (plot_width 9.0 / 2), and the test would pass
+    # against an implementation that ignored the door entirely.
+    gate_x = _ground_floor_main_door_x(_layout_with_main_door_at(6.5), cfg)
+    assert gate_x is not None
+
+    aligned = compound_wall_segments(cfg, gate_cx=gate_x)
+    centred = compound_wall_segments(cfg, gate_cx=None)
+    assert aligned != centred, (
+        f"derived gate x {gate_x} coincides with the centred gate, so this "
+        "fixture cannot detect a gate that ignores the door"
+    )
+
+    assert abs(_front_gate_midpoint(aligned, cfg) - gate_x) < 1e-6
+
+
+def test_missing_main_entrance_falls_back_to_a_centred_gate():
+    """l_shaped_3bhk derives no main entrance at all — an observed case, not hypothetical."""
+    cfg = _cfg("S")
+    doorless = Layout(
+        id="doorless",
+        name="Doorless",
+        ground_floor=FloorPlan(floor=0, floor_type="ground", rooms=[]),
+        first_floor=FloorPlan(floor=1, floor_type="first", rooms=[]),
+        compliance=ComplianceResult(passed=True),
+    )
+    assert _ground_floor_main_door_x(doorless, cfg) is None
+    assert compound_wall_segments(cfg, gate_cx=None) == compound_wall_segments(cfg)
+
+
+def test_render_pdf_threads_the_derived_gate_x_to_every_floor_page(monkeypatch):
+    """The exact regression this fix closes: derived, then not passed through.
+
+    Pins the whole chain — render_pdf derives once, _draw_floor_projected
+    forwards, _draw_compound_wall receives it — and that every page gets the
+    SAME value, since the compound wall is one site-level structure.
+    """
+    from app.engine import pdf as pdf_mod
+
+    seen: list[float | None] = []
+
+    def _spy(*args, gf_main_door_x=None, **kwargs):
+        seen.append(gf_main_door_x)
+
+    # Only the architectural-page loop is under test; stubbing the page
+    # renderer keeps this off the section/elevation path, which needs a far
+    # richer plan than the gate derivation does.
+    monkeypatch.setattr(pdf_mod, "_draw_floor_projected", _spy)
+    # The later page groups need a far richer plan than the gate derivation
+    # does, so they are stubbed out rather than exercised — this lets
+    # render_pdf run to completion instead of the test swallowing its error.
+    _stub = types.SimpleNamespace(title="stub")
+    monkeypatch.setattr(pdf_mod, "_draw_structural_floor", lambda *a, **k: None)
+    monkeypatch.setattr(pdf_mod, "derive_section", lambda *a, **k: _stub)
+    monkeypatch.setattr(pdf_mod, "derive_elevation", lambda *a, **k: _stub)
+    monkeypatch.setattr(pdf_mod, "render_section_view", lambda *a, **k: 50)
+    monkeypatch.setattr(pdf_mod, "render_elevation_view", lambda *a, **k: 50)
+    monkeypatch.setattr(pdf_mod, "_draw_title_block", lambda *a, **k: None)
+
+    cfg = _cfg("S")
+    layout = _layout_with_main_door_at(6.5)
+    expected = _ground_floor_main_door_x(layout, cfg)
+    assert expected is not None
+
+    pdf_mod.render_pdf("T", layout, cfg, 3)
+
+    assert seen, "render_pdf drew no architectural floor pages"
+    assert set(seen) == {expected}, (
+        f"every page must use the ground floor's gate x {expected}, got {seen}"
+    )

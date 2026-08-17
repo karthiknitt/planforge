@@ -330,6 +330,14 @@ def render_pdf(
     c = canvas.Canvas(buf, pagesize=A4)
     show_watermark = watermark_preliminary and structural_design is None
 
+    # The compound wall is a single site-level structure, so its gate aligns to
+    # the ground floor's main entrance on every page. Derived once, before the
+    # loop rather than inside it: `ordered_floors` may yield a basement or stilt
+    # ahead of the ground floor, and those pages must not draw a centred gate
+    # while later pages draw an aligned one. Matches the DXF path
+    # (`api/routes/export.py`), which aligns the gate to the same door.
+    gf_main_door_x = _ground_floor_main_door_x(layout, cfg)
+
     # ── Architectural pages ────────────────────────────────────────────────────
     for floor_plan in ordered_floors(layout):
         _draw_floor_projected(
@@ -342,6 +350,7 @@ def render_pdf(
             _floor_label(floor_plan),
             annotations=annotations,
             watermark_preliminary=show_watermark,
+            gf_main_door_x=gf_main_door_x,
         )
         c.showPage()
 
@@ -840,22 +849,46 @@ def _draw_openings_schedule_table(
     return height
 
 
+def _ground_floor_main_door_x(layout: Layout, cfg: PlotConfig) -> float | None:
+    """The ground floor's main-entrance x, or None if it has no main entrance.
+
+    Mirrors the derivation in `api/routes/export.py` so PDF and DXF align the
+    compound-wall gate to the same door. Returns None when no `is_main` opening
+    was derived — a real and observed case, not a defensive branch — in which
+    case `compound_wall_segments` centres the gate on the road-side edge.
+    """
+    from app.engine.plan_geometry import build_floor_drawing
+
+    ground = next((fp for fp in ordered_floors(layout) if fp.floor == 0), None)
+    if ground is None:
+        return None
+    drawing = build_floor_drawing(ground, cfg)
+    return next((o.cx for o in drawing.openings if o.is_main), None)
+
+
 def _draw_compound_wall(
-    c: canvas.Canvas, cfg: PlotConfig, ox: float, oy: float, s: float
+    c: canvas.Canvas,
+    cfg: PlotConfig,
+    ox: float,
+    oy: float,
+    s: float,
+    gate_cx: float | None = None,
 ) -> None:
     """Boundary wall ring with a road-side gate gap.
 
     Strokes the same centrelines the DXF path buffers into a poché polygon
     (`app.engine.geometry.compound_wall_segments`) — this is a thin ReportLab
-    wrapper, not a second derivation of the wall/gate geometry. Unlike the DXF
-    path this doesn't align the gate to the main-entrance x position (no door
-    position is passed in); it's always centred on the road-side edge.
+    wrapper, not a second derivation of the wall/gate geometry. `gate_cx`
+    (the ground floor's main-entrance x, or None) is threaded through so the
+    gate lines up with the same door DXF aligns it to (see `render_pdf`,
+    which derives it once from the ground floor and passes it to every floor
+    page — upper floors have no compound-wall gate of their own).
     """
     from app.engine.geometry import COMPOUND_WALL_THICKNESS_M, compound_wall_segments
 
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(COMPOUND_WALL_THICKNESS_M * s)
-    for x1, y1, x2, y2 in compound_wall_segments(cfg):
+    for x1, y1, x2, y2 in compound_wall_segments(cfg, gate_cx=gate_cx):
         c.line(ox + x1 * s, oy + y1 * s, ox + x2 * s, oy + y2 * s)
 
 
@@ -1610,8 +1643,15 @@ def _draw_floor_projected(
     floor_label: str,
     annotations: dict | None = None,
     watermark_preliminary: bool = False,
+    gf_main_door_x: float | None = None,
 ) -> None:
-    """Architectural floor page rendered purely from the canonical FloorDrawing."""
+    """Architectural floor page rendered purely from the canonical FloorDrawing.
+
+    `gf_main_door_x` is the GROUND FLOOR's main-entrance x (or None), passed
+    in by `render_pdf` so every floor page's compound-wall gate aligns to the
+    same physical gate — the wall is a single site-level structure, not one
+    per floor, so an upper floor's own door (if any) must never drive it.
+    """
     from app.engine.plan_geometry import (
         build_floor_drawing,
         opening_boxes,
@@ -1696,7 +1736,7 @@ def _draw_floor_projected(
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_voids(c, floor_plan.rooms, s, ox, oy)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
-    _draw_compound_wall(c, cfg, ox, oy, s)
+    _draw_compound_wall(c, cfg, ox, oy, s, gate_cx=gf_main_door_x)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)
     _draw_opening_tags(c, drawing, marks, s, ox, oy)
