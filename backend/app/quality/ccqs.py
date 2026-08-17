@@ -172,7 +172,7 @@ class GcsResult:
     standard_scale: bool
     doors_per_room_ok: bool
     windows_per_habitable_ok: bool
-    opening_clearance_violations: int = 0
+    opening_clearance_violations: int
     debug: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
@@ -343,6 +343,18 @@ def _wall_runs(walls: list[WallSegment]) -> list[tuple[bool, float, float, float
     Sloped walls (the trapezoid plot's sides) are skipped — an `Opening` is
     always axis-aligned, so it never hosts one.
 
+    Divergence risk, stated so the next reader is not surprised: this is a
+    RECONSTRUCTION of a notion that `plan_geometry` owns (it derives per-room
+    wall spans directly, via `_ObstacleIndex` and the adjacency spans the
+    placement loop clamps against). The two can drift apart silently — if
+    `plan_geometry` changes how a run is bounded, this stays on the old
+    model and the metric quietly measures the wrong thing. Hoisting a shared
+    helper into `plan_geometry` (and promoting `_JAMB` to public) would fix
+    that properly; it was left alone deliberately because it is a
+    cross-module refactor of the derivation, out of scope for a scorer.
+    The direction of failure is benign — a merged run is never SHORTER than
+    the real span, so a mismatch under-reports rather than false-positives.
+
     Returns (is_horizontal, cross-axis coord, along-axis lo, along-axis hi).
     """
     buckets: dict[tuple[bool, float], list[list[float]]] = {}
@@ -420,27 +432,35 @@ def _opening_clearance_violations(
             continue
         r_idx, r_lo, r_hi = host
 
-        # Hard boundaries along this run: its two ends, plus any junction
-        # where a perpendicular wall lands on it.
-        bounds = [r_lo, r_hi]
-        for j in junctions:
-            j_along, j_cross = (j.x, j.y) if op.is_horizontal else (j.y, j.x)
-            if (
-                abs(j_cross - cross) <= _WALL_COORD_EPS
-                and r_lo - _OPENING_POS_EPS <= j_along <= r_hi + _OPENING_POS_EPS
-            ):
-                bounds.append(j_along)
+        # Junctions where a perpendicular wall lands on this run. Kept apart
+        # from the run's own ends so the two failure modes below can be told
+        # apart: an opening running off the END of the wall and an opening
+        # straddling a junction MID-run are different defects, and the
+        # message is what the baseline test prints on failure.
+        junction_positions = [
+            j_along
+            for j in junctions
+            for j_along, j_cross in [(j.x, j.y) if op.is_horizontal else (j.y, j.x)]
+            if abs(j_cross - cross) <= _WALL_COORD_EPS
+            and r_lo - _OPENING_POS_EPS <= j_along <= r_hi + _OPENING_POS_EPS
+        ]
 
-        inside = [
+        straddled = [
             b
-            for b in bounds
+            for b in junction_positions
             if lo_edge + _OPENING_POS_EPS < b < hi_edge - _OPENING_POS_EPS
         ]
-        if inside:
+        if lo_edge < r_lo - _OPENING_POS_EPS or hi_edge > r_hi + _OPENING_POS_EPS:
             faults.setdefault(idx, []).append(
-                f"{where} spans a wall junction at {inside[0]:.3f}"
+                f"{where} extends past its wall run "
+                f"({lo_edge:.3f}..{hi_edge:.3f} outruns {r_lo:.3f}..{r_hi:.3f})"
+            )
+        elif straddled:
+            faults.setdefault(idx, []).append(
+                f"{where} spans a wall junction at {straddled[0]:.3f}"
             )
         else:
+            bounds = [r_lo, r_hi, *junction_positions]
             left = max(
                 (b for b in bounds if b <= lo_edge + _OPENING_POS_EPS), default=r_lo
             )
