@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon, Polygon, box
 from shapely.geometry.polygon import orient
 
 from app.engine.models import PlotConfig
@@ -290,7 +290,7 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
     return orient(result, 1.0)
 
 
-def landscape_region(cfg: PlotConfig) -> Polygon:
+def landscape_region(cfg: PlotConfig) -> Polygon | MultiPolygon:
     """The setback margin: `plot_polygon(cfg)` minus `buildable_polygon(cfg)`.
 
     Deliberately built from the two canonical polygons rather than
@@ -303,15 +303,29 @@ def landscape_region(cfg: PlotConfig) -> Polygon:
     narrowing rear corner (which is not plot land at all) as landscaped, and
     would use the same uniform inset on every edge of a quad or notched plot.
 
+    Returns a `MultiPolygon`, not just `Polygon`, whenever the buildable
+    envelope divides the margin into disjoint pieces (deep notch/L-shaped
+    cutouts) — unlike `buildable_polygon`, this does NOT collapse to the
+    largest piece. Every disjoint scrap of margin is real landscaped ground
+    and `_draw_landscape` (pdf.py) is written to hatch all of them, so
+    dropping pieces here would silently under-draw the fill.
+
+    `buildable_polygon` also keeps only its largest piece when an inset
+    splits it (see its own docstring); a smaller discarded fragment is then
+    NOT part of `buildable_polygon`'s result and so gets folded into this
+    function's `plot - buildable` difference and hatched as landscaped
+    ground. Defensible — nothing may be legally built there either — but
+    worth knowing if the two ever need to agree pixel-for-pixel.
+
     `buildable_polygon` returns an empty Polygon when the setbacks consume
     the whole plot. There is then no legal buildable envelope, so every
     square metre of the plot IS the landscaped margin — this returns the
     whole plot rather than an empty region in that case.
     """
-    plot = plot_polygon(cfg)
+    plot = orient(plot_polygon(cfg), 1.0)
     buildable = buildable_polygon(cfg)
     if buildable.is_empty:
-        return orient(plot, 1.0)
+        return plot
     return plot.difference(buildable)
 
 

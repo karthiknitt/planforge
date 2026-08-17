@@ -887,6 +887,12 @@ def _draw_landscape(
     correct for the MultiPolygon case (disjoint margin pieces on a notched or
     L-shaped plot) for free, and inspectable in tests without replaying
     ReportLab's clip operators.
+
+    Hatch spacing (`step`) is defined in PAGE points and converted to plot
+    metres via `/ s`, not a flat metre figure — a flat metre spacing would
+    make on-paper density vary with plot size (lines crowd together as the
+    plot, and therefore `s`, shrinks). This keeps the ink density constant
+    across plot sizes.
     """
     from shapely.geometry import LineString
 
@@ -896,7 +902,7 @@ def _draw_landscape(
     minx, miny, maxx, maxy = region.bounds
     c.setStrokeColor(HexColor("#999999"))
     c.setLineWidth(0.3)
-    step = 0.4  # plot metres between 45-degree hatch lines
+    step = 4.0 / s  # 4 pt on paper, in plot metres, between hatch lines
     diag = (maxx - minx) + (maxy - miny)
     n = int(diag / step) + 2
     for i in range(-n, n):
@@ -905,9 +911,13 @@ def _draw_landscape(
         clipped = sweep.intersection(region)
         if clipped.is_empty:
             continue
-        segments = (
-            clipped.geoms if clipped.geom_type == "MultiLineString" else [clipped]
-        )
+        # `.geoms` covers both MultiLineString (the common split-by-a-hole
+        # case) and GeometryCollection (the rarer case where the sweep line
+        # is also tangent to a vertex, mixing in a Point) — checking for the
+        # attribute rather than one specific geom_type keeps every LineString
+        # member instead of silently dropping the whole result when the type
+        # isn't the one we expected.
+        segments = clipped.geoms if hasattr(clipped, "geoms") else [clipped]
         for seg in segments:
             if seg.geom_type != "LineString" or seg.is_empty:
                 continue
