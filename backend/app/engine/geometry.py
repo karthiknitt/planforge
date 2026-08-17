@@ -340,8 +340,12 @@ def landscape_region(cfg: PlotConfig) -> Polygon | MultiPolygon:
     would use the same uniform inset on every edge of a quad or notched plot.
 
     Returns a `MultiPolygon`, not just `Polygon`, whenever the buildable
-    envelope divides the margin into disjoint pieces (deep notch/L-shaped
-    cutouts) — unlike `buildable_polygon`, this does NOT collapse to the
+    envelope divides the margin into disjoint pieces. The verified trigger is
+    a zero setback on both the left and right edges, which bridges the
+    envelope across the full plot width and leaves disjoint front and rear
+    strips. Notched and L-shaped plots were tested across a range of sizes and
+    corners and all produced a single `Polygon`, so do not cite them as the
+    splitting case. Unlike `buildable_polygon`, this does NOT collapse to the
     largest piece. Every disjoint scrap of margin is real landscaped ground
     and `_draw_landscape` (pdf.py) is written to hatch all of them, so
     dropping pieces here would silently under-draw the fill.
