@@ -530,10 +530,16 @@ def test_landscape_region_is_whole_plot_when_setbacks_consume_it():
 
 def test_draw_landscape_hatches_only_inside_the_setback_margin():
     """Renders the fill/hatch and inspects the actual drawn geometry, not
-    just that some call happened — every stroked/clipped line segment must
-    lie within landscape_region()'s bounding box (a cheap, robust proxy for
-    "clipped to the right polygon" without depending on the exact hatch
-    pattern chosen).
+    just that some call happened.
+
+    Checks real polygon containment against `landscape_region()`, not its
+    bounding box: `landscape_region()` is a RING around all four plot edges,
+    so its bbox is the whole plot (0,0,9,15) here — every point of the plot
+    satisfies a bbox check, including points inside the building. A bbox
+    check alone cannot fail even if `_draw_landscape` hatched the buildable
+    interior too, i.e. it cannot detect the one bug this test exists to
+    catch. The second assertion below closes that hole directly: no drawn
+    endpoint may land inside the buildable envelope.
     """
     buf = BytesIO()
     c = canvas.Canvas(buf)
@@ -546,18 +552,79 @@ def test_draw_landscape_hatches_only_inside_the_setback_margin():
 
     assert len(calls) > 0, "must draw at least one hatch line into the margin"
     region = landscape_region(cfg)
-    minx, miny, maxx, maxy = region.bounds
-    pad = 1e-3
+    buildable = buildable_polygon(cfg)
+    region_guard = region.buffer(1e-6)
+    buildable_interior = buildable.buffer(-1e-6)
+    from shapely.geometry import Point
+
     for x1, y1, x2, y2 in calls:
         for x, y in ((x1, y1), (x2, y2)):
-            plot_x = (x - ox) / s
-            plot_y = (y - oy) / s
-            assert minx - pad <= plot_x <= maxx + pad, (
-                f"hatch endpoint x={plot_x} outside landscape bounds [{minx}, {maxx}]"
+            point = Point((x - ox) / s, (y - oy) / s)
+            assert region_guard.contains(point), (
+                f"hatch endpoint {point} outside landscape_region()"
             )
-            assert miny - pad <= plot_y <= maxy + pad, (
-                f"hatch endpoint y={plot_y} outside landscape bounds [{miny}, {maxy}]"
+            assert not buildable_interior.contains(point), (
+                f"hatch endpoint {point} inside the buildable envelope — "
+                "the fill must not hatch the building"
             )
+
+
+def _zero_side_setback_cfg() -> PlotConfig:
+    """`setback_left = setback_right = 0` makes `buildable_polygon` span the
+    FULL plot width, bridging the margin ring all the way across and
+    splitting `landscape_region` into two disjoint rectangles (a front strip
+    and a rear strip) — a genuine `MultiPolygon`, not a synthetic one. This
+    is the concrete fixture for the disjoint-margin claim in
+    `landscape_region`'s docstring; a notched/L-shaped `plot_template`
+    config was tried first and did NOT reproduce a `MultiPolygon` result
+    (the notch keepout stays well inside the setback ring for every
+    `notch_width`/`notch_depth` combination probed), so this is the fixture
+    that actually exercises the branch.
+    """
+    return PlotConfig(
+        plot_length=15.0,
+        plot_width=9.0,
+        setback_front=3.0,
+        setback_rear=1.5,
+        setback_left=0.0,
+        setback_right=0.0,
+        num_bedrooms=3,
+        toilets=2,
+        parking=True,
+    )
+
+
+def test_landscape_region_is_a_multipolygon_when_the_margin_splits():
+    cfg = _zero_side_setback_cfg()
+    region = landscape_region(cfg)
+    assert region.geom_type == "MultiPolygon", (
+        f"expected a disjoint front/rear margin, got {region.geom_type}"
+    )
+    assert len(region.geoms) == 2, (
+        f"expected 2 disjoint pieces, got {len(region.geoms)}"
+    )
+    expected_area = 9.0 * 3.0 + 9.0 * 1.5  # front strip + rear strip
+    assert abs(region.area - expected_area) < 1e-6
+
+
+def test_draw_landscape_hatches_both_pieces_of_a_multipolygon_margin():
+    """The MultiPolygon case must not silently drop a piece — hatch lines
+    must land in BOTH the front and the rear strip, not just whichever one
+    the sweep happens to hit first."""
+    buf = BytesIO()
+    c = canvas.Canvas(buf)
+    cfg = _zero_side_setback_cfg()
+    calls: list[tuple[float, float, float, float]] = []
+    c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
+
+    ox, oy, s = 0.0, 0.0, 2.0
+    _draw_landscape(c, cfg, ox, oy, s)
+
+    assert len(calls) > 0
+    front_hit = any((y1 / s) < 3.0 or (y2 / s) < 3.0 for _, y1, _, y2 in calls)
+    rear_hit = any((y1 / s) > 13.5 or (y2 / s) > 13.5 for _, y1, _, y2 in calls)
+    assert front_hit, "no hatch line landed in the front strip"
+    assert rear_hit, "no hatch line landed in the rear strip"
 
 
 def test_draw_landscape_is_a_noop_on_empty_region(monkeypatch):
