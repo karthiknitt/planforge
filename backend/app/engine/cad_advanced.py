@@ -13,7 +13,6 @@ Produces:
 from __future__ import annotations
 
 import logging
-import math
 import string
 
 logger = logging.getLogger(__name__)
@@ -258,68 +257,36 @@ def draw_compound_wall(
     """
     Draw compound (boundary) wall around the plot perimeter.
 
-    Uses ``LineString.buffer(0.115)`` with mitered corners for each side.
-    A 3.6 m gate gap is placed at the centre of the road-facing side by
-    default, or centred on ``gate_cx`` (the main entrance door's x position,
-    clamped to keep the gap within the wall) when given.
+    Buffers each centreline from ``app.engine.geometry.compound_wall_segments``
+    (``LineString.buffer(0.115)`` with mitered corners) into a poché polygon.
+    A 3.6 m gate gap sits at the centre of the road-facing side by default, or
+    centred on ``gate_cx`` (the main entrance door's x position, clamped to
+    keep the gap within the wall) when given — see
+    ``app.engine.geometry.GATE_WIDTH_M`` / ``compound_wall_gate_posts``.
     """
     from shapely.geometry import LineString
 
-    pw, pl = cfg.plot_width, cfg.plot_length
-    road = (cfg.road_side or "S").upper()
-    wall_t = 0.115
-    gate_w = 3.6
+    from app.engine.geometry import (
+        COMPOUND_WALL_HALF_THICKNESS_M,
+        compound_wall_gate_posts,
+        compound_wall_segments,
+    )
+
+    wall_t = COMPOUND_WALL_HALF_THICKNESS_M
     post_size = 0.3
 
-    # Four sides: (start, end, side_id)
-    sides: list[tuple] = [
-        ((0.0, 0.0), (pw, 0.0), "S"),
-        ((pw, 0.0), (pw, pl), "E"),
-        ((pw, pl), (0.0, pl), "N"),
-        ((0.0, pl), (0.0, 0.0), "W"),
-    ]
-
-    def _buf_and_draw(ls: "LineString") -> None:
-        buf = ls.buffer(wall_t, cap_style="flat", join_style="mitre")
+    for x1, y1, x2, y2 in compound_wall_segments(cfg, gate_cx=gate_cx):
+        buf = LineString([(x1, y1), (x2, y2)]).buffer(
+            wall_t, cap_style="flat", join_style="mitre"
+        )
         if not buf.is_empty and buf.geom_type == "Polygon":
             pts = [(x, y) for x, y in buf.exterior.coords[:-1]]
             _draw_wall_segment_poly(msp, pts, layer, z)
 
-    for p1, p2, side_id in sides:
-        length = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
-        if length < 0.01:
-            continue
-        dx = (p2[0] - p1[0]) / length
-        dy = (p2[1] - p1[1]) / length
-
-        if side_id == road:
-            if gate_cx is not None and abs(dx) > 0.5:
-                gate_start_d = max(
-                    0.0, min((gate_cx - p1[0]) / dx - gate_w / 2, length - gate_w)
-                )
-            else:
-                gate_start_d = max(0.0, (length - gate_w) / 2)
-            gate_end_d = min(length, gate_start_d + gate_w)
-
-            # Wall segment before gate
-            if gate_start_d > 0.1:
-                sp = p1
-                ep = (p1[0] + gate_start_d * dx, p1[1] + gate_start_d * dy)
-                _buf_and_draw(LineString([sp, ep]))
-
-            # Wall segment after gate
-            if gate_end_d < length - 0.1:
-                sp = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
-                ep = p2
-                _buf_and_draw(LineString([sp, ep]))
-
-            # Gate posts
-            gp1 = (p1[0] + gate_start_d * dx, p1[1] + gate_start_d * dy)
-            gp2 = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
-            _draw_gate_post(msp, gp1[0], gp1[1], post_size, layer, z)
-            _draw_gate_post(msp, gp2[0], gp2[1], post_size, layer, z)
-        else:
-            _buf_and_draw(LineString([p1, p2]))
+    posts = compound_wall_gate_posts(cfg, gate_cx=gate_cx)
+    if posts is not None:
+        for gx, gy in posts:
+            _draw_gate_post(msp, gx, gy, post_size, layer, z)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
