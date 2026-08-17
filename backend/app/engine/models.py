@@ -76,6 +76,10 @@ class Room:
     # double-height living area or courtyard). Defaults to None, so every
     # existing layout is unaffected.
     void_over: str | None = None
+    # Side letter -> bulge (sagitta as a fraction of the edge length). Purely a
+    # drawing annotation: walls, adjacency, area and every solver constraint use
+    # the straight chord. Kerala-style curved verandah fronts are the use case.
+    edge_arcs: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_shape(self.template, self.shape_ratio)
@@ -90,6 +94,18 @@ class Room:
                 "open_sides cannot contain all four sides — a room with no "
                 "walls has no derivable footprint; use a plot-level feature"
             )
+        bad_arc_sides = set(self.edge_arcs) - _VALID_SIDES
+        if bad_arc_sides:
+            raise ValueError(
+                f"edge_arcs contains unknown side(s) {sorted(bad_arc_sides)}; "
+                f"expected a subset of {sorted(_VALID_SIDES)}"
+            )
+        for side, bulge in self.edge_arcs.items():
+            if not -1.0 <= bulge <= 1.0:
+                raise ValueError(
+                    f"edge_arcs[{side!r}] = {bulge} is out of range; bulge is a "
+                    "sagitta fraction of the edge length and must be in [-1, 1]"
+                )
 
     @property
     def is_open(self) -> bool:

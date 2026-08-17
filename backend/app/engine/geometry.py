@@ -463,3 +463,37 @@ def compound_wall_gate_posts(
         gp2 = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
         return gp1, gp2
     return None
+
+
+def arc_points(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    bulge: float,
+    segments: int = 16,
+) -> list[tuple[float, float]]:
+    """Render-only polyline approximating a bowed edge from p0 to p1, with
+    sagitta = bulge * |p1 - p0| (positive bulge bows to the left of p0->p1).
+
+    Pure geometry — no dependency on Room/FloorPlan — so both the PDF
+    renderer (a stroked polyline) and any future DXF consumer can share it.
+    A quadratic (parabola) approximation is deliberate, not a shortcut: a
+    true circular arc needs a degenerate-radius special case as bulge -> 0,
+    which this sidesteps, at the cost of the curve not being a true circular
+    arc (an exact-radius consumer, e.g. a DXF ARC entity, cannot reuse this
+    curve unchanged — see Task 13's DXF-scope note).
+    """
+    x0, y0 = p0
+    x1, y1 = p1
+    dx, dy = x1 - x0, y1 - y0
+    length = (dx * dx + dy * dy) ** 0.5
+    if length < 1e-9 or abs(bulge) < 1e-9:
+        return [p0, p1]
+    nx, ny = -dy / length, dx / length  # unit normal
+    sag = bulge * length
+    out: list[tuple[float, float]] = []
+    for i in range(segments + 1):
+        t = i / segments
+        # parabola peaking at t = 0.5 with height `sag`
+        off = 4.0 * sag * t * (1.0 - t)
+        out.append((x0 + dx * t + nx * off, y0 + dy * t + ny * off))
+    return out
