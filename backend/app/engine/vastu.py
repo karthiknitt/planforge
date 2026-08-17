@@ -38,7 +38,7 @@ from __future__ import annotations
 import math
 
 from .compliance import load_rules
-from .models import Layout, PlotConfig, Room
+from .models import FloorPlan, Layout, PlotConfig, Room
 
 # ── Zone labels (compass + centre) ──────────────────────────────────────────
 #   Grid layout (3×3):
@@ -215,6 +215,131 @@ def zone_distribution(
 # project's other configurable compliance thresholds.
 VASTU_RULES: dict[str, dict] = load_rules()["vastu_zones"]
 
+# ── Graded room rules ───────────────────────────────────────────────────────
+# `vastu_room_rules` is the TRANSPOSE of `vastu_zones` above — same information,
+# indexed by room type instead of by zone — plus one genuinely new tier.
+#
+#   vastu_zones[z].preferred            → vastu_room_rules[r].preferred
+#   vastu_zones[z].avoid | .prohibit    → vastu_room_rules[r].avoid
+#   (nothing)                           → vastu_room_rules[r].acceptable
+#
+# The prohibit/avoid collapse is deliberate: the binary checker needed to tell a
+# violation from a warning, but a *score* only needs "this is wrong here", and
+# both tiers already mean that. The split survives untouched in `vastu_zones`,
+# which `check_vastu` still reads.
+#
+# `acceptable` has no source in `vastu_zones` and was therefore populated only
+# where the engine already encoded a tolerance elsewhere: `check_vastu`'s
+# kitchen check warns unless the zone is SE/NW/E, and its pooja check unless
+# NE/N/E — so NW+E and N+E respectively are tolerated-but-not-preferred. The one
+# judgement call is toilet in S/W (see the report for Task 15).
+#
+# `tests/test_vastu_score.py` pins the transpose cell-by-cell in both directions,
+# so the two encodings cannot drift apart.
+VASTU_ROOM_RULES: dict[str, dict[str, list[str]]] = load_rules().get(
+    "vastu_room_rules", {}
+)
+
+# Room types that inherit another type's rules. Each key is a post-split
+# specialisation of a generic token that `vastu_zones` predates: `models.py` now
+# tells new layouts to prefer `parking_4w` over `parking`, and splits the old
+# `toilet` into `toilet`/`wc_only`/`bathroom_master`. Without these, the
+# *deprecated* token would be the only one carrying a Vastu opinion and every
+# modern layout would score neutral.
+VASTU_RULE_ALIASES: dict[str, str] = {
+    "master_bedroom": "bedroom",
+    "wc_only": "toilet",
+    "bathroom_master": "toilet",
+    "parking_4w": "parking",
+    "parking_2w": "parking",
+    "garage": "parking",
+}
+
+# Verdict factors applied to the fraction of a room's area sitting in a zone.
+VERDICT_PREFERRED = 1.0
+VERDICT_ACCEPTABLE = 0.7
+VERDICT_NEUTRAL = 0.45
+VERDICT_AVOID = 0.0
+
+
+def resolve_north_angle(cfg: PlotConfig, road_side: str | None = None) -> float:
+    """Orientation to score with: an explicit `north_angle_deg` (including 0.0)
+    wins; `None` means "not surveyed", so fall back to the road side.
+
+    `cfg.north_angle_deg` is `float | None`, so it must never reach the
+    trigonometry unresolved.
+    """
+    if cfg.north_angle_deg is not None:
+        return cfg.north_angle_deg
+    return north_angle_for_road_side(
+        road_side if road_side is not None else cfg.road_side
+    )
+
+
+def _rule_for(room_type: str) -> dict[str, list[str]] | None:
+    """Graded rule for a room type, following one alias hop, or None if unknown."""
+    rule = VASTU_ROOM_RULES.get(room_type)
+    if rule is None:
+        alias = VASTU_RULE_ALIASES.get(room_type)
+        if alias is not None:
+            rule = VASTU_ROOM_RULES.get(alias)
+    return rule
+
+
+def _verdict(room_type: str, zone: str) -> float:
+    """Verdict factor for one room type in one zone.
+
+    A room type with no rule, or a zone the rule is silent about, is NEUTRAL —
+    Vastu has no opinion, which is not the same as approval or prohibition.
+    """
+    rule = _rule_for(room_type)
+    if rule is None:
+        return VERDICT_NEUTRAL
+    if zone in rule.get("preferred", []):
+        return VERDICT_PREFERRED
+    if zone in rule.get("acceptable", []):
+        return VERDICT_ACCEPTABLE
+    if zone in rule.get("avoid", []):
+        return VERDICT_AVOID
+    return VERDICT_NEUTRAL
+
+
+def vastu_room_score(
+    room: Room, plot_w: float, plot_l: float, north_angle_deg: float = 0.0
+) -> float:
+    """Graded 0..1 Vastu compliance for one room, area-weighted across zones.
+
+    Replaces the binary prohibit/avoid verdict with a continuous signal — the
+    prerequisite for using Vastu as a CP-SAT objective term rather than only as
+    an accept/reject gate.
+
+    Area-weighted via `zone_distribution`, so a room straddling two zones scores
+    between their verdicts instead of taking whichever one its centroid lands in.
+    Note that `zone_distribution` samples a finite lattice, so the fractions are
+    quantised to that lattice rather than exactly geometric.
+    """
+    dist = zone_distribution(room, plot_w, plot_l, north_angle_deg)
+    return round(
+        sum(frac * _verdict(room.type, zone) for zone, frac in dist.items()), 6
+    )
+
+
+def vastu_layout_score(floors: list[FloorPlan], cfg: PlotConfig) -> float:
+    """0..100 mean room score across every floor.
+
+    Ground-floor-only scoring was the old behaviour; a first-floor master bedroom
+    is now counted. Returns 0.0 for an empty layout — there is nothing to score,
+    and a neutral 45 would falsely credit a plan with no rooms.
+    """
+    rooms = [room for floor in floors for room in floor.rooms]
+    if not rooms:
+        return 0.0
+    north = resolve_north_angle(cfg)
+    total = sum(
+        vastu_room_score(room, cfg.plot_width, cfg.plot_length, north) for room in rooms
+    )
+    return round(100.0 * total / len(rooms), 2)
+
 
 def _get_zone(
     cx: float, cy: float, plot_w: float, plot_l: float, road_side: str
@@ -243,14 +368,10 @@ def check_vastu(
 
     plot_w = cfg.plot_width
     plot_l = cfg.plot_length
-    # One orientation resolved once for the whole check: an explicit
-    # `north_angle_deg` (including 0.0) wins; `None` means "not surveyed", so
-    # fall back to the road side, preserving every pre-existing caller.
-    north = (
-        cfg.north_angle_deg
-        if cfg.north_angle_deg is not None
-        else north_angle_for_road_side(road_side)
-    )
+    # One orientation resolved once for the whole check. The explicit
+    # `road_side` argument, not `cfg.road_side`, is the fallback — that is what
+    # every pre-existing caller passes.
+    north = resolve_north_angle(cfg, road_side)
 
     # Check ground floor rooms (Vastu is primarily for ground floor)
     for room in layout.ground_floor.rooms:

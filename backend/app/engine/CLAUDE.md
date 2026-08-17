@@ -7,8 +7,11 @@ functions over Shapely objects; keep I/O and persistence in `../services/`.
 
 - **Never do raw float math for polygon operations** — use Shapely. Floating-point edge
   cases in setback and inset logic have caused several solver bugs.
-- **Compliance thresholds live in `backend/config/compliance_rules.json`**, never
-  hardcoded. That includes Vastu zone rules (`vastu_zones`) and opening standards.
+- **Compliance thresholds live in `backend/app/config/compliance_rules.json`**, never
+  hardcoded (path confirmed by `compliance.py:8`; it is *not* `backend/config/`).
+  That includes the Vastu rules — both `vastu_zones` (zone-keyed, binary, read by
+  `check_vastu`) and `vastu_room_rules` (room-type-keyed, three-tier, read by
+  `vastu_room_score`) — and opening standards.
 - **Never run `ruff format` on `*.json`** — it corrupts the rules file.
 - **PDF generation is ReportLab only** — not matplotlib, not cairosvg.
 - **DXF is ezdxf, and `doc.write()` needs `StringIO`** (text mode), not `BytesIO`.

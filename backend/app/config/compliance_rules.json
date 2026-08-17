@@ -81,7 +81,7 @@
       "notes": "Sacred zone — ideal for Pooja, open space, water"
     },
     "E": {
-      "preferred": ["bedroom", "dining", "bathroom", "toilet"],
+      "preferred": ["bedroom", "dining", "toilet"],
       "avoid": [],
       "prohibit": [],
       "name": "Purva (E)",
@@ -136,5 +136,19 @@
       "name": "Brahmasthan (Centre)",
       "notes": "Sacred centre — should remain open or light use only"
     }
+  },
+
+  "vastu_room_rules": {
+    "kitchen":   {"preferred": ["SE"], "acceptable": ["E", "NW"], "avoid": ["NE", "SW", "N", "C"]},
+    "toilet":    {"preferred": ["E", "NW"], "acceptable": ["S", "W"], "avoid": ["NE", "SE", "SW", "N", "C"]},
+    "bedroom":   {"preferred": ["E", "S", "SW", "W", "NW"], "acceptable": [], "avoid": ["NE", "SE", "C"]},
+    "pooja":     {"preferred": ["NE"], "acceptable": ["E", "N"], "avoid": ["SE", "S", "SW"]},
+    "living":    {"preferred": ["N"], "acceptable": [], "avoid": ["S"]},
+    "dining":    {"preferred": ["E", "W", "N"], "acceptable": [], "avoid": []},
+    "study":     {"preferred": ["W", "N"], "acceptable": [], "avoid": []},
+    "utility":   {"preferred": ["NE", "NW", "C"], "acceptable": [], "avoid": []},
+    "staircase": {"preferred": ["NE"], "acceptable": [], "avoid": []},
+    "balcony":   {"preferred": ["NE"], "acceptable": [], "avoid": ["SW"]},
+    "parking":   {"preferred": ["S", "NW"], "acceptable": [], "avoid": ["NE"]}
   }
 }
