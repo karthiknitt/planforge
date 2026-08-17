@@ -164,12 +164,13 @@ def test_ninety_degree_rotation_sends_the_ne_corner_to_nw():
 
 
 def test_ninety_degrees_on_a_non_square_plot_keeps_four_distinct_corners():
-    """A 90 deg rotation on a 9x15 plot must not collapse corners onto edges.
+    """A 90 deg rotation on a 9x15 plot keeps four distinct corner zones.
 
-    Rotating in metric space moves a corner of a tall plot far outside the
-    plot's own width, where a clamp folds it into an edge band and two corners
-    can report the same zone. Rotating in normalized plot space keeps the map
-    total and corner-preserving at any aspect ratio.
+    Measured, not assumed: at a 1.67 aspect ratio a metric-space rotation still
+    yields four distinct corners, so what it gets wrong here is the *direction*
+    (it produces the road_side="E" grid where road_side="W" is required), which
+    the second half of this test pins. Outright corner collapse needs a taller
+    plot — see `test_high_aspect_corners_do_not_collapse_onto_edges`.
     """
     corners = {
         "rear-right": (0.95 * NS_W, 0.95 * NS_L),
@@ -186,6 +187,27 @@ def test_ninety_degrees_on_a_non_square_plot_keeps_four_distinct_corners():
     assert zones["rear-left"] == ZONE_GRIDS["W"][0][0]
     assert zones["front-right"] == ZONE_GRIDS["W"][2][2]
     assert zones["front-left"] == ZONE_GRIDS["W"][2][0]
+
+
+def test_high_aspect_corners_do_not_collapse_onto_edges():
+    """On a 6x20 plot at 45 deg, all four corners must still be distinguishable.
+
+    This is the case where a metric-space rotation degenerates outright, not
+    just points the wrong way: the rotated y-extent (~+-9.9 m) dwarfs the 2 m
+    column bands, so the clamp pins every corner to an outer column and the four
+    corners report only two zones (NE, NE, SW, SW — measured). At 45 deg the
+    corners of any rectangle face the four cardinals, which is what a
+    normalized-space rotation reports.
+    """
+    pw, pl = 6.0, 20.0
+    zones = [
+        zone_for_point(0.95 * pw, 0.95 * pl, pw, pl, 45.0),
+        zone_for_point(0.05 * pw, 0.95 * pl, pw, pl, 45.0),
+        zone_for_point(0.95 * pw, 0.05 * pl, pw, pl, 45.0),
+        zone_for_point(0.05 * pw, 0.05 * pl, pw, pl, 45.0),
+    ]
+    assert zones == ["N", "W", "E", "S"], zones
+    assert len(set(zones)) == 4
 
 
 def test_diagonal_rotation_is_aspect_ratio_independent():
@@ -319,6 +341,36 @@ def test_zone_distribution_spans_four_zones_at_the_plot_centre():
     dist = zone_distribution(r, NS_W, NS_L, 0.0)
     assert set(dist) == {"SW", "S", "W", "C"}, dist
     assert abs(sum(dist.values()) - 1.0) < 1e-6
+
+
+def test_zone_distribution_uses_depth_not_width_for_the_y_axis():
+    """A wide, shallow room must be sampled over its own depth.
+
+    Every other room in this file is square or is clipped by a band far enough
+    away that swapping `depth` for `width` in the y sweep changes nothing. This
+    one straddles a row boundary at its midline, so the row split is exactly
+    50/50 only if the sweep spans y=4..6; sweeping y=4..10 instead (width used
+    for both axes) drops the south row to a sixth.
+    """
+    r = _room(1.0, 4.0, 6.0, 2.0)  # 9x15 plot: row boundary at y=5
+    dist = zone_distribution(r, NS_W, NS_L, 0.0)
+    assert set(dist) == {"SW", "S", "SE", "W", "C", "E"}, dist
+    south_row = dist["SW"] + dist["S"] + dist["SE"]
+    assert south_row == pytest.approx(0.5, abs=0.02), dist
+
+
+def test_zone_distribution_samples_cell_midpoints():
+    """A single sample must land on the room's centroid, not on its low corner.
+
+    The lattice uses the midpoint rule (`(i + 0.5) / samples`). Dropping the
+    half-cell offset biases every distribution toward the room's low-x/low-y
+    side; at `samples=1` it degenerates to reading the corner. This room's
+    corner sits in C while its centroid sits in NE.
+    """
+    r = _room(6.0, 6.0, 2.0, 2.0)
+    assert zone_for_point(6.0, 6.0, SQ_W, SQ_L, 0.0) == "C"
+    assert zone_for_point(7.0, 7.0, SQ_W, SQ_L, 0.0) == "NE"
+    assert zone_distribution(r, SQ_W, SQ_L, 0.0, samples=1) == {"NE": 1.0}
 
 
 def test_zone_distribution_sample_count_does_not_change_normalisation():
