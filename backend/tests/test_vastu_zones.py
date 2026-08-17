@@ -71,19 +71,77 @@ def test_corners_at_zero_rotation():
 def test_band_boundaries_match_the_historical_thirds():
     """A point exactly on a third boundary keeps the pre-rotation bucket.
 
-    The superseded ``_get_zone`` used ``cx < plot_w / 3`` for the column and
-    ``cy > 2 * plot_l / 3`` for the row, so a point sitting exactly on the
-    boundary fell into the *middle* band on both axes. Rewriting the buckets in
-    normalized space must not silently move that tie.
+    The superseded ``_get_zone`` bucketed with ``<`` on both column comparisons
+    (``cx < plot_w / 3``, ``cx < 2 * plot_w / 3``) and ``>`` on both row
+    comparisons (``cy > 2 * plot_l / 3``, ``cy > plot_l / 3``). That makes the
+    tie behaviour **asymmetric**, not "middle band on both axes":
+
+    ======================  ==========  ==============
+    boundary                lands in    on 9.0 x 15.0
+    ======================  ==========  ==============
+    ``x = W/3``   (low-x)   middle      ``C``
+    ``x = 2W/3``  (high-x)  outer       ``E``
+    ``y = L/3``   (low-y)   outer       ``S``
+    ``y = 2L/3``  (high-y)  middle      ``C``
+    ======================  ==========  ==============
+
+    All four are pinned below (measured against the ``405cdb9`` code, not
+    assumed) — an earlier revision of this test covered only the two
+    middle-band ties, and mutating either of the two outer-band comparisons
+    alone survived the whole file.
+
+    Rewriting the buckets in normalized space must not silently move any of
+    those ties.
     """
     x_third = NS_W / 3.0
     y_third = NS_L / 3.0
     # Exactly on the low-x boundary -> middle column, not the west column.
     assert zone_for_point(x_third, NS_L / 2, NS_W, NS_L, 0.0) == "C"
     assert zone_for_point(x_third - 0.01, NS_L / 2, NS_W, NS_L, 0.0) == "W"
+    # Exactly on the high-x boundary -> east column, NOT the middle column.
+    assert zone_for_point(2 * x_third, NS_L / 2, NS_W, NS_L, 0.0) == "E"
+    assert zone_for_point(2 * x_third - 0.01, NS_L / 2, NS_W, NS_L, 0.0) == "C"
     # Exactly on the high-y boundary -> middle row, not the north row.
     assert zone_for_point(NS_W / 2, 2 * y_third, NS_W, NS_L, 0.0) == "C"
     assert zone_for_point(NS_W / 2, 2 * y_third + 0.01, NS_W, NS_L, 0.0) == "N"
+    # Exactly on the low-y boundary -> south row, NOT the middle row.
+    assert zone_for_point(NS_W / 2, y_third, NS_W, NS_L, 0.0) == "S"
+    assert zone_for_point(NS_W / 2, y_third + 0.01, NS_W, NS_L, 0.0) == "C"
+
+
+def test_band_boundary_ties_diverge_when_the_third_is_not_representable():
+    """The historical-tie equivalence is exact only in exact arithmetic.
+
+    ``zone_for_point`` recomputes the comparison in normalized space
+    (``(y - L/2) / L`` against ``1/6``) instead of comparing ``y`` against
+    ``2 * L / 3`` directly. Where the plot's third is binary-representable the
+    two agree bit for bit — 9.0/3 == 3.0 and 15.0/3 == 5.0 are exact, which is
+    why ``NS`` preserves all four ties above. Where it is not, a point sitting
+    on the *exact float* boundary can round to the other side.
+
+    Measured against the ``405cdb9`` bucketing, ``SQ`` (10x10) is such a plot:
+    at ``y == 2 * (L / 3) == 6.666666666666667`` the old code said ``C`` and the
+    new one says ``N``. This is pinned rather than hidden because ``NS`` is the
+    one fixture on which this property cannot fail, so the test above could
+    never see it.
+
+    The divergence is deliberately not "fixed": it is measure-zero (a centroid
+    would have to land on that exact float, unreachable from the 0.05 m solver
+    grid) and chasing bit-exact parity with the superseded comparison would cost
+    more than it buys. The x-axis ties on ``SQ`` do survive, and are pinned too
+    so a change of behaviour on either axis shows up.
+    """
+    x_third = SQ_W / 3.0
+    y_third = SQ_L / 3.0
+    # Both column ties still match the historical buckets on 10x10.
+    assert zone_for_point(x_third, SQ_L / 2, SQ_W, SQ_L, 0.0) == "C"
+    assert zone_for_point(2 * x_third, SQ_L / 2, SQ_W, SQ_L, 0.0) == "E"
+    # Low-y tie still matches; high-y tie is the one that rounds across.
+    assert zone_for_point(SQ_W / 2, y_third, SQ_W, SQ_L, 0.0) == "S"
+    assert zone_for_point(SQ_W / 2, 2 * y_third, SQ_W, SQ_L, 0.0) == "N"  # was "C"
+    # A hair either side of it is unambiguous and unaffected.
+    assert zone_for_point(SQ_W / 2, 2 * y_third - 0.01, SQ_W, SQ_L, 0.0) == "C"
+    assert zone_for_point(SQ_W / 2, 2 * y_third + 0.01, SQ_W, SQ_L, 0.0) == "N"
 
 
 # ── road_side -> north_angle_deg mapping, proven against all four grids ─────

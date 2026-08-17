@@ -136,8 +136,18 @@ def zone_for_point(
     a point's y-extent into a band sized by the plot's much smaller width, where
     it clamps — corners fold onto edges and the map stops being a partition of
     the plot. Normalizing first makes the mapping total, corner-preserving and
-    aspect-ratio independent, and reduces exactly to the historical thirds at
-    every multiple of 90°.
+    aspect-ratio independent, and in exact arithmetic reduces to the historical
+    thirds at every multiple of 90°, tie-breaks included.
+
+    In floating point the reduction is exact everywhere except *on* a band
+    boundary: comparing `(y - plot_l/2)/plot_l` against `1/6` is not bit-identical
+    to the superseded `y > 2*plot_l/3`, so on a plot whose third is not
+    binary-representable a point sitting on the exact float boundary may fall in
+    the adjacent band (e.g. y == 6.666666666666667 on a 10 m plot: was C, now N).
+    Interior points are unaffected — a dense old-vs-new sweep found zero
+    off-boundary mismatches — and a room centroid cannot land on such a float
+    from the 0.05 m solver grid, so this is not chased for bit-exact parity.
+    See `tests/test_vastu_zones.py::test_band_boundary_ties_diverge_when_the_third_is_not_representable`.
     """
     u = (x - plot_w / 2.0) / plot_w
     v = (y - plot_l / 2.0) / plot_l
@@ -149,8 +159,11 @@ def zone_for_point(
     east = u * cos_t - v * sin_t
     north = u * sin_t + v * cos_t
 
-    # Tie handling matches the superseded `_get_zone` exactly: a point sitting on
-    # a band boundary belongs to the middle band on both axes.
+    # Tie handling matches the superseded `_get_zone`, which was asymmetric: it
+    # used `<` on both column comparisons and `>` on both row comparisons, so the
+    # low-x and high-y boundaries fall to the MIDDLE band while the high-x and
+    # low-y boundaries fall to the OUTER band. The `<`/`>` split below preserves
+    # that; all four ties are pinned in test_band_boundaries_match_the_historical_thirds.
     if east < -_BAND:
         col = 0
     elif east < _BAND:
