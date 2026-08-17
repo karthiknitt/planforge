@@ -206,6 +206,13 @@ class PlotConfig:
     vastu_enabled: bool = False
     road_width_m: float = 9.0
     road_side: str = "S"
+    # Clockwise degrees from the plot's +y axis to true north. `None` means the
+    # orientation was never surveyed, so Vastu falls back to deriving it from
+    # `road_side` — which is what every plot did before this field existed. An
+    # explicit 0.0 is NOT the same thing: it asserts that +y *is* true north and
+    # overrides `road_side`. Set it for the 24% of plots whose north arrow is not
+    # axis-aligned; those must not be snapped to the nearest cardinal direction.
+    north_angle_deg: float | None = None
     has_pooja: bool = False
     has_study: bool = False
     has_balcony: bool = False
