@@ -195,20 +195,28 @@ def test_avoid_placement_scores_zero() -> None:
     assert vastu_room_score(_room("toilet", 7.5, 7.5), 10.0, 10.0, 0.0) == 0.0
 
 
+def test_the_four_verdict_factors_are_the_specified_values() -> None:
+    """Pinned as literals, not compared to themselves. Every other test that
+    named a constant would happily follow it to a wrong value; this is the one
+    place the numbers are actually asserted."""
+    assert (VERDICT_PREFERRED, VERDICT_ACCEPTABLE, VERDICT_NEUTRAL, VERDICT_AVOID) == (
+        1.0,
+        0.7,
+        0.45,
+        0.0,
+    )
+
+
 def test_acceptable_placement_scores_the_acceptable_factor() -> None:
     """Kitchen in NW is tolerated, not preferred: exactly 0.7, not merely
     somewhere strictly between 0 and 1."""
-    assert vastu_room_score(_room("kitchen", 0.5, 7.5), 10.0, 10.0, 0.0) == (
-        VERDICT_ACCEPTABLE
-    )
+    assert vastu_room_score(_room("kitchen", 0.5, 7.5), 10.0, 10.0, 0.0) == 0.7
 
 
 def test_silent_cell_scores_neutral_not_avoid() -> None:
     """Kitchen in W: `vastu_zones` says nothing about it, and silence is
     neither approval nor prohibition."""
-    assert vastu_room_score(_room("kitchen", 0.5, 4.0), 10.0, 10.0, 0.0) == (
-        VERDICT_NEUTRAL
-    )
+    assert vastu_room_score(_room("kitchen", 0.5, 4.0), 10.0, 10.0, 0.0) == 0.45
 
 
 def test_score_is_area_weighted_not_centroid_only() -> None:
@@ -234,8 +242,8 @@ def test_unknown_type_is_neutral_even_where_a_known_type_is_prohibited() -> None
     a toilet 0.0. Asserting both halves is what makes this test positional
     rather than vacuous: a bug that made every room neutral would pass the
     duct assertion alone."""
-    assert vastu_room_score(_room("duct", 7.5, 7.5), 10.0, 10.0, 0.0) == VERDICT_NEUTRAL
-    assert vastu_room_score(_room("toilet", 7.5, 7.5), 10.0, 10.0, 0.0) == VERDICT_AVOID
+    assert vastu_room_score(_room("duct", 7.5, 7.5), 10.0, 10.0, 0.0) == 0.45
+    assert vastu_room_score(_room("toilet", 7.5, 7.5), 10.0, 10.0, 0.0) == 0.0
 
 
 def test_rotation_moves_the_verdict() -> None:
@@ -244,8 +252,8 @@ def test_rotation_moves_the_verdict() -> None:
     NE (prohibited) once north is 90 degrees clockwise from +y. Pinning a
     rotated case stops the scorer from quietly ignoring `north_angle_deg`."""
     kitchen = _room("kitchen", 7.5, 0.5)
-    assert vastu_room_score(kitchen, 10.0, 10.0, 0.0) == VERDICT_PREFERRED
-    assert vastu_room_score(kitchen, 10.0, 10.0, 90.0) == VERDICT_AVOID
+    assert vastu_room_score(kitchen, 10.0, 10.0, 0.0) == 1.0
+    assert vastu_room_score(kitchen, 10.0, 10.0, 90.0) == 0.0
 
 
 # ── Aliases ─────────────────────────────────────────────────────────────────
