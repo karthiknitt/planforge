@@ -326,6 +326,31 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
     return orient(result, 1.0)
 
 
+def landscape_region(cfg: PlotConfig) -> Polygon:
+    """The setback margin: `plot_polygon(cfg)` minus `buildable_polygon(cfg)`.
+
+    Deliberately built from the two canonical polygons rather than
+    `box(plot_width, plot_length).difference(box(...))`: the naive rectangle
+    difference is only correct when the plot itself is an axis-aligned
+    rectangle. `plot_polygon` honours `plot_template` notches and the
+    trapezoid/quadrilateral/L-shaped `plot_shape`s, and `buildable_polygon`
+    honours PER-EDGE setbacks on all of those — see this module's docstring.
+    A rectangle-diff implementation would report a chunk of the trapezoid's
+    narrowing rear corner (which is not plot land at all) as landscaped, and
+    would use the same uniform inset on every edge of a quad or notched plot.
+
+    `buildable_polygon` returns an empty Polygon when the setbacks consume
+    the whole plot. There is then no legal buildable envelope, so every
+    square metre of the plot IS the landscaped margin — this returns the
+    whole plot rather than an empty region in that case.
+    """
+    plot = plot_polygon(cfg)
+    buildable = buildable_polygon(cfg)
+    if buildable.is_empty:
+        return orient(plot, 1.0)
+    return plot.difference(buildable)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Compound (boundary) wall — pure geometry shared by both renderers
 # ─────────────────────────────────────────────────────────────────────────────

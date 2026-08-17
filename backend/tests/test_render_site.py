@@ -30,8 +30,11 @@ from reportlab.pdfgen import canvas
 from app.engine.cad_advanced import draw_compound_wall
 from app.engine.geometry import (
     GATE_WIDTH_M,
+    buildable_polygon,
     compound_wall_gate_posts,
     compound_wall_segments,
+    landscape_region,
+    plot_polygon,
 )
 from app.engine.models import (
     ComplianceResult,
@@ -40,7 +43,11 @@ from app.engine.models import (
     PlotConfig,
     Room,
 )
-from app.engine.pdf import _draw_compound_wall, _ground_floor_main_door_x
+from app.engine.pdf import (
+    _draw_compound_wall,
+    _draw_landscape,
+    _ground_floor_main_door_x,
+)
 from app.engine.plan_geometry import build_floor_drawing
 
 
@@ -410,3 +417,166 @@ def test_render_pdf_threads_the_derived_gate_x_to_every_floor_page(monkeypatch):
     assert set(seen) == {expected}, (
         f"every page must use the ground floor's gate x {expected}, got {seen}"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# landscape_region — Task 12: the setback margin (plot minus buildable),
+# derived from plot_polygon()/buildable_polygon() rather than a naive
+# rectangle difference. See geometry.py's module docstring for why a plain
+# `box(...).difference(box(...))` is wrong for anything but a rectangular
+# plot: per-edge setbacks, trapezoid/quad corners, and notches all change
+# the buildable boundary's shape, not just its bounding box.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _trapezoid_cfg() -> PlotConfig:
+    """A genuinely non-rectangular plot: front 12 m, rear 8 m, length 18 m,
+    same per-edge setbacks as test_geometry_module.py's TestTrapezoid fixture.
+    `plot_width` is set to 12.0 (matching the front edge) purely because
+    PlotConfig requires it — plot_polygon() ignores it for shape="trapezoid"
+    and uses plot_front_width/plot_rear_width instead. A naive
+    `box(0, 0, cfg.plot_width, cfg.plot_length)` implementation would use
+    that same 12.0 for BOTH the front and rear edges, silently drawing a
+    rectangle instead of a trapezoid.
+    """
+    return PlotConfig(
+        plot_length=18.0,
+        plot_width=12.0,
+        plot_shape="trapezoid",
+        plot_front_width=12.0,
+        plot_rear_width=8.0,
+        setback_front=4.5,
+        setback_rear=2.0,
+        setback_left=1.2,
+        setback_right=1.2,
+        num_bedrooms=2,
+        toilets=2,
+        parking=False,
+    )
+
+
+def test_landscape_region_is_the_setback_margin():
+    cfg = _cfg("S")
+    region = landscape_region(cfg)
+    plot_area = 9.0 * 15.0
+    buildable = (9.0 - 1.2 - 1.2) * (15.0 - 3.0 - 1.5)
+    assert abs(region.area - (plot_area - buildable)) < 1e-6
+
+
+def test_landscape_region_excludes_the_buildable_centre():
+    cfg = _cfg("S")
+    region = landscape_region(cfg)
+    from shapely.geometry import Point
+
+    assert not region.contains(Point(4.5, 7.5)), "centre must not be landscaped"
+    assert region.contains(Point(0.5, 0.5)), "corner margin must be landscaped"
+
+
+def test_landscape_region_on_trapezoid_matches_polygon_difference_not_naive_rect():
+    """The decisive non-rectangular case: on a trapezoid plot, the correct
+    answer (plot_polygon - buildable_polygon) and the naive rectangle-diff
+    answer from the brief's sample code disagree. If this test passes against
+    a naive `box(w, l).difference(box(...))` implementation, the test itself
+    is broken — see the mutation-test note in the task report.
+    """
+    cfg = _trapezoid_cfg()
+    region = landscape_region(cfg)
+
+    correct_area = plot_polygon(cfg).area - buildable_polygon(cfg).area
+    assert abs(region.area - correct_area) < 1e-6
+
+    naive_area = (cfg.plot_width * cfg.plot_length) - (
+        (cfg.plot_width - cfg.setback_left - cfg.setback_right)
+        * (cfg.plot_length - cfg.setback_front - cfg.setback_rear)
+    )
+    assert abs(region.area - naive_area) > 1.0, (
+        "the trapezoid's landscape area must differ materially from the "
+        "naive rectangle-difference area, or this fixture cannot detect the "
+        "naive-implementation bug"
+    )
+
+    # Every buildable-interior point must NOT be landscaped, and a point in
+    # the trapezoid's narrowing rear corner (inside the naive rectangle but
+    # outside the real trapezoid) must not be landscaped either — it isn't
+    # plot at all.
+    from shapely.geometry import Point
+
+    assert not region.contains(Point(6.0, 9.0)), "buildable centre must be excluded"
+    assert not region.contains(Point(0.5, 17.5)), (
+        "a point outside the trapezoid's actual rear edge is not plot land "
+        "and must not be reported as landscaped"
+    )
+
+
+def test_landscape_region_is_whole_plot_when_setbacks_consume_it():
+    """buildable_polygon() returns an empty Polygon when setbacks eat the
+    whole plot. With no legal buildable envelope, every square metre of the
+    plot is open ground, so landscape_region() must be the whole plot, not
+    empty.
+    """
+    cfg = _cfg("S")
+    cfg.setback_left = 6.0
+    cfg.setback_right = 6.5
+    assert buildable_polygon(cfg).is_empty, "fixture must actually consume the plot"
+
+    region = landscape_region(cfg)
+    assert abs(region.area - plot_polygon(cfg).area) < 1e-6
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _draw_landscape — the PDF consumer
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_draw_landscape_hatches_only_inside_the_setback_margin():
+    """Renders the fill/hatch and inspects the actual drawn geometry, not
+    just that some call happened — every stroked/clipped line segment must
+    lie within landscape_region()'s bounding box (a cheap, robust proxy for
+    "clipped to the right polygon" without depending on the exact hatch
+    pattern chosen).
+    """
+    buf = BytesIO()
+    c = canvas.Canvas(buf)
+    cfg = _cfg("S")
+    calls: list[tuple[float, float, float, float]] = []
+    c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
+
+    ox, oy, s = 10.0, 20.0, 2.0
+    _draw_landscape(c, cfg, ox, oy, s)
+
+    assert len(calls) > 0, "must draw at least one hatch line into the margin"
+    region = landscape_region(cfg)
+    minx, miny, maxx, maxy = region.bounds
+    pad = 1e-3
+    for x1, y1, x2, y2 in calls:
+        for x, y in ((x1, y1), (x2, y2)):
+            plot_x = (x - ox) / s
+            plot_y = (y - oy) / s
+            assert minx - pad <= plot_x <= maxx + pad, (
+                f"hatch endpoint x={plot_x} outside landscape bounds [{minx}, {maxx}]"
+            )
+            assert miny - pad <= plot_y <= maxy + pad, (
+                f"hatch endpoint y={plot_y} outside landscape bounds [{miny}, {maxy}]"
+            )
+
+
+def test_draw_landscape_is_a_noop_on_empty_region(monkeypatch):
+    """Degenerate case: an empty landscape_region() (defensive — no fixture
+    in this codebase produces one; see the whole-plot fallback tested above)
+    must not raise and must draw nothing. Forced via monkeypatch on the
+    `landscape_region` name `_draw_landscape` calls, rather than hunting for
+    a real config that triggers it, so the test's premise is exactly what it
+    claims to be.
+    """
+    from shapely.geometry import Polygon
+
+    from app.engine import pdf as pdf_mod
+
+    monkeypatch.setattr(pdf_mod, "landscape_region", lambda cfg: Polygon())
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf)
+    calls: list[tuple[float, float, float, float]] = []
+    c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
+    _draw_landscape(c, _cfg("S"), ox=0.0, oy=0.0, s=1.0)
+    assert calls == []

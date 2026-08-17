@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_primitives import metres_to_ftin
-from app.engine.geometry import buildable_polygon
+from app.engine.geometry import buildable_polygon, landscape_region
 from app.engine.models import FloorPlan, Layout, PlotConfig, Room
 from app.engine.section_geometry import (
     derive_elevation,
@@ -870,6 +870,55 @@ def _ground_floor_main_door_x(layout: Layout, cfg: PlotConfig) -> float | None:
     return next((o.cx for o in drawing.openings if o.is_main), None)
 
 
+def _draw_landscape(
+    c: canvas.Canvas, cfg: PlotConfig, ox: float, oy: float, s: float
+) -> None:
+    """Hatch the setback margin (`landscape_region`) as open/planted ground.
+
+    Diagonal line hatch, NOT a solid fill: CCQS's monochrome component scores
+    mean pixel saturation (`app/quality/ccqs.py:compute_monochromaticity`) —
+    low is good — and the setback margin can be a third of the plot area on a
+    tight site, so a solid green wash would visibly hurt that score. Thin
+    grey (zero-saturation) diagonal lines are the standard site-plan
+    convention for landscaped/planted ground, read correctly on a monochrome
+    print, and match every other `_draw_*` helper in this file, which strokes
+    in black/grey rather than filling with colour.
+
+    Each 45-degree sweep line is intersected with `region` in Shapely first
+    and only the resulting (possibly several, possibly zero) clipped
+    segments are stroked — rather than drawing full-bbox lines and relying on
+    a PDF clip path — so every stroked segment is provably inside the margin,
+    correct for the MultiPolygon case (disjoint margin pieces on a notched or
+    L-shaped plot) for free, and inspectable in tests without replaying
+    ReportLab's clip operators.
+    """
+    from shapely.geometry import LineString
+
+    region = landscape_region(cfg)
+    if region.is_empty:
+        return
+    minx, miny, maxx, maxy = region.bounds
+    c.setStrokeColor(HexColor("#999999"))
+    c.setLineWidth(0.3)
+    step = 0.4  # plot metres between 45-degree hatch lines
+    diag = (maxx - minx) + (maxy - miny)
+    n = int(diag / step) + 2
+    for i in range(-n, n):
+        x_at_ymin = minx + i * step
+        sweep = LineString([(x_at_ymin, miny), (x_at_ymin + (maxy - miny), maxy)])
+        clipped = sweep.intersection(region)
+        if clipped.is_empty:
+            continue
+        segments = (
+            clipped.geoms if clipped.geom_type == "MultiLineString" else [clipped]
+        )
+        for seg in segments:
+            if seg.geom_type != "LineString" or seg.is_empty:
+                continue
+            (px1, py1), (px2, py2) = seg.coords[0], seg.coords[-1]
+            c.line(ox + px1 * s, oy + py1 * s, ox + px2 * s, oy + py2 * s)
+
+
 def _draw_compound_wall(
     c: canvas.Canvas,
     cfg: PlotConfig,
@@ -1703,6 +1752,12 @@ def _draw_floor_projected(
     c.setLineWidth(0.5)
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
+
+    # Landscaped setback margin: ground texture, so it must be under
+    # everything drawn on top of it — the building poché, the compound wall
+    # (drawn later, at line ~1788, deliberately above the dim chains — see
+    # the comment there), and the dim chains themselves.
+    _draw_landscape(c, cfg, ox, oy, s)
 
     # Walls: poché (solid fill) from the unioned polygons with openings cut
     polys = wall_polygons(drawing.walls, openings=opening_boxes(drawing.openings))
