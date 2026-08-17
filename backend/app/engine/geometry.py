@@ -446,6 +446,8 @@ def arc_points(
     arc (an exact-radius consumer, e.g. a DXF ARC entity, cannot reuse this
     curve unchanged — see Task 13's DXF-scope note).
     """
+    if segments < 1:
+        raise ValueError(f"segments must be >= 1, got {segments}")
     x0, y0 = p0
     x1, y1 = p1
     dx, dy = x1 - x0, y1 - y0
