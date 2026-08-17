@@ -24,6 +24,17 @@ from app.engine.models import PlotConfig
 
 _BIG = 1e5
 
+# Compound (boundary) wall — shared between the DXF poché renderer
+# (cad_advanced.draw_compound_wall) and the PDF site plan
+# (pdf._draw_compound_wall). GATE_WIDTH_M is the shipping DXF value (this was
+# already 3.6 m before this module existed); it does NOT match the 3.0 m
+# figure in the Task 11 spec sample, which was illustrative only.
+GATE_WIDTH_M = 3.6
+COMPOUND_WALL_HALF_THICKNESS_M = 0.115  # Shapely buffer distance (DXF poché)
+COMPOUND_WALL_THICKNESS_M = (
+    COMPOUND_WALL_HALF_THICKNESS_M * 2
+)  # 0.23 m, PDF stroke width
+
 
 def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
     """Return a Shapely Polygon for the L-shaped plot boundary.
@@ -277,3 +288,99 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
     if result.geom_type != "Polygon" or result.is_empty:
         return Polygon()
     return orient(result, 1.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compound (boundary) wall — pure geometry shared by both renderers
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _compound_wall_sides(
+    pw: float, pl: float
+) -> list[tuple[tuple[float, float], tuple[float, float], str]]:
+    """The 4 plot-edge runs as (start, end, side_id), same order/winding as
+    the pre-existing DXF implementation this was extracted from."""
+    return [
+        ((0.0, 0.0), (pw, 0.0), "S"),
+        ((pw, 0.0), (pw, pl), "E"),
+        ((pw, pl), (0.0, pl), "N"),
+        ((0.0, pl), (0.0, 0.0), "W"),
+    ]
+
+
+def _gate_span(
+    p1: tuple[float, float], p2: tuple[float, float], gate_cx: float | None
+) -> tuple[float, float, float, float, float]:
+    """Gate-gap placement along p1->p2. Returns (length, dx, dy, gate_start_d,
+    gate_end_d), all as distances along the p1->p2 direction.
+
+    Centred by default; centred on `gate_cx` (clamped to stay on the wall)
+    when given and the run is horizontal — matches the main-entrance-aligned
+    gate the DXF renderer has always drawn.
+    """
+    length = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+    if length < 0.01:
+        return length, 0.0, 0.0, 0.0, 0.0
+    dx = (p2[0] - p1[0]) / length
+    dy = (p2[1] - p1[1]) / length
+    gate_w = min(GATE_WIDTH_M, length)
+    if gate_cx is not None and abs(dx) > 0.5:
+        gate_start_d = max(
+            0.0, min((gate_cx - p1[0]) / dx - gate_w / 2, length - gate_w)
+        )
+    else:
+        gate_start_d = max(0.0, (length - gate_w) / 2)
+    gate_end_d = min(length, gate_start_d + gate_w)
+    return length, dx, dy, gate_start_d, gate_end_d
+
+
+def compound_wall_segments(
+    cfg: PlotConfig, gate_cx: float | None = None
+) -> list[tuple[float, float, float, float]]:
+    """Boundary-wall centrelines as (x1, y1, x2, y2) in plot metres.
+
+    One run per plot edge, except the road-facing edge (`cfg.road_side`),
+    which is split into two runs around a `GATE_WIDTH_M`-wide gate gap —
+    centred on the edge, or on `gate_cx` when given (see `_gate_span`).
+
+    Plot coords: y=0 is the front/road edge, x=0 the left edge — the same
+    convention `plan_geometry` and `cad_advanced` use.
+    """
+    pw, pl = cfg.plot_width, cfg.plot_length
+    road = (cfg.road_side or "S").upper()
+    out: list[tuple[float, float, float, float]] = []
+    for p1, p2, side_id in _compound_wall_sides(pw, pl):
+        if side_id != road:
+            if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) >= 0.01:
+                out.append((p1[0], p1[1], p2[0], p2[1]))
+            continue
+        length, dx, dy, gate_start_d, gate_end_d = _gate_span(p1, p2, gate_cx)
+        if length < 0.01:
+            continue
+        if gate_start_d > 0.1:
+            ep = (p1[0] + gate_start_d * dx, p1[1] + gate_start_d * dy)
+            out.append((p1[0], p1[1], ep[0], ep[1]))
+        if gate_end_d < length - 0.1:
+            sp = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
+            out.append((sp[0], sp[1], p2[0], p2[1]))
+    return out
+
+
+def compound_wall_gate_posts(
+    cfg: PlotConfig, gate_cx: float | None = None
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Centre points of the two gate posts bracketing the road-side gate gap,
+    or None if the road-side run has ~zero length. Shares `_gate_span` with
+    `compound_wall_segments` so post positions always agree with the gap."""
+    pw, pl = cfg.plot_width, cfg.plot_length
+    road = (cfg.road_side or "S").upper()
+    for p1, p2, side_id in _compound_wall_sides(pw, pl):
+        if side_id != road:
+            continue
+        length, dx, dy, gate_start_d, gate_end_d = _gate_span(p1, p2, gate_cx)
+        if length < 0.01:
+            return None
+        gp1 = (p1[0] + gate_start_d * dx, p1[1] + gate_start_d * dy)
+        gp2 = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
+        return gp1, gp2
+    return None

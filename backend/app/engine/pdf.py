@@ -840,6 +840,25 @@ def _draw_openings_schedule_table(
     return height
 
 
+def _draw_compound_wall(
+    c: canvas.Canvas, cfg: PlotConfig, ox: float, oy: float, s: float
+) -> None:
+    """Boundary wall ring with a road-side gate gap.
+
+    Strokes the same centrelines the DXF path buffers into a poché polygon
+    (`app.engine.geometry.compound_wall_segments`) — this is a thin ReportLab
+    wrapper, not a second derivation of the wall/gate geometry. Unlike the DXF
+    path this doesn't align the gate to the main-entrance x position (no door
+    position is passed in); it's always centred on the road-side edge.
+    """
+    from app.engine.geometry import COMPOUND_WALL_THICKNESS_M, compound_wall_segments
+
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(COMPOUND_WALL_THICKNESS_M * s)
+    for x1, y1, x2, y2 in compound_wall_segments(cfg):
+        c.line(ox + x1 * s, oy + y1 * s, ox + x2 * s, oy + y2 * s)
+
+
 def _draw_setback_callouts(
     c: canvas.Canvas,
     cfg: PlotConfig,
@@ -1677,6 +1696,7 @@ def _draw_floor_projected(
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_voids(c, floor_plan.rooms, s, ox, oy)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
+    _draw_compound_wall(c, cfg, ox, oy, s)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)
     _draw_opening_tags(c, drawing, marks, s, ox, oy)
