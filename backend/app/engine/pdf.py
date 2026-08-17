@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_primitives import metres_to_ftin
-from app.engine.geometry import buildable_polygon, landscape_region
+from app.engine.geometry import arc_points, buildable_polygon, landscape_region
 from app.engine.models import FloorPlan, Layout, PlotConfig, Room
 from app.engine.section_geometry import (
     derive_elevation,
@@ -1517,6 +1517,59 @@ def _draw_voids(
         c.drawCentredString(cx, cy - 8, "OPEN TO BELOW")
 
 
+# Stroke width for the arc overlay: matches the exterior wall poché
+# (plan_geometry.EWT) so a curved verandah/skylight edge reads as the same
+# weight as the straight walls around it.
+_ARC_WALL_THICKNESS_M = 0.23
+
+
+def _draw_edge_arcs(
+    c: canvas.Canvas, rooms: list[Room], s: float, ox: float, oy: float
+) -> None:
+    """Overlay bowed edges for rooms with `Room.edge_arcs` set (Task 13).
+
+    Render-only: `edge_arcs` never reaches wall derivation (`derive_walls`
+    consumes `Room` but discards per-room identity when it emits bare
+    `WallSegment`s — see plan_geometry.py — so there is no wall run to route
+    this through). Instead this reads straight from each room's own
+    rectangle, as a decoration pass drawn AFTER the wall poché.
+
+    A straight wall poché edge is already drawn under this room's boundary
+    by the time this runs. Leaving both the straight edge and the curve
+    visible would read as a drafting error, so the straight chord is first
+    painted over with a white stroke (same thickness as the wall it hides),
+    then the curve is stroked on top of it in black. This is a visual
+    overlay only — it does not touch `polys["external"]`/`polys["internal"]`
+    or any wall geometry, so it cannot desync from the poché fill.
+    """
+    for room in rooms:
+        if not room.edge_arcs:
+            continue
+        x0, y0 = room.x, room.y
+        x1, y1 = room.x + room.width, room.y + room.depth
+        chords = {
+            "S": ((x0, y0), (x1, y0)),
+            "N": ((x0, y1), (x1, y1)),
+            "W": ((x0, y0), (x0, y1)),
+            "E": ((x1, y0), (x1, y1)),
+        }
+        for side, bulge in room.edge_arcs.items():
+            p0, p1 = chords[side]
+            pts = arc_points(p0, p1, bulge)
+            # 1. hide the straight chord already drawn by the wall poché.
+            c.setStrokeColor(white)
+            c.setLineWidth(_ARC_WALL_THICKNESS_M * s + 1.0)
+            c.line(ox + p0[0] * s, oy + p0[1] * s, ox + p1[0] * s, oy + p1[1] * s)
+            # 2. stroke the curve on top.
+            c.setStrokeColor(HexColor("#000000"))
+            c.setLineWidth(_ARC_WALL_THICKNESS_M * s)
+            path = c.beginPath()
+            path.moveTo(ox + pts[0][0] * s, oy + pts[0][1] * s)
+            for px, py in pts[1:]:
+                path.lineTo(ox + px * s, oy + py * s)
+            c.drawPath(path, stroke=1, fill=0)
+
+
 def _shape_path(c: canvas.Canvas, geom, s: float, ox: float, oy: float):
     """Fill+outline a shapely (Multi)Polygon with even-odd holes."""
     polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
@@ -1770,6 +1823,7 @@ def _draw_floor_projected(
     _shape_path(c, polys["external"], s, ox, oy)
     c.setLineWidth(0.35)
     _shape_path(c, polys["internal"], s, ox, oy)
+    _draw_edge_arcs(c, floor_plan.rooms, s, ox, oy)
 
     # Section A-A cut marker
     line, _along_y = section_cut_line(floor_plan.rooms, buildable_polygon(cfg))
