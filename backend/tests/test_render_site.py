@@ -538,8 +538,15 @@ def test_draw_landscape_hatches_only_inside_the_setback_margin():
     satisfies a bbox check, including points inside the building. A bbox
     check alone cannot fail even if `_draw_landscape` hatched the buildable
     interior too, i.e. it cannot detect the one bug this test exists to
-    catch. The second assertion below closes that hole directly: no drawn
-    endpoint may land inside the buildable envelope.
+    catch.
+
+    Sampled ALONG each drawn segment (not just at its two endpoints): a
+    mutation that hatches the whole plot rectangle (instead of clipping to
+    `landscape_region()`) still produces lines whose ENDPOINTS sit on the
+    outer plot boundary — outside the buildable interior — even though the
+    segment's middle passes straight through the building. An endpoints-only
+    check missed exactly this mutation in practice (see the mutation-test
+    note in the task report); sampling 11 points per segment closes that gap.
     """
     buf = BytesIO()
     c = canvas.Canvas(buf)
@@ -557,14 +564,18 @@ def test_draw_landscape_hatches_only_inside_the_setback_margin():
     buildable_interior = buildable.buffer(-1e-6)
     from shapely.geometry import Point
 
+    n_samples = 11
     for x1, y1, x2, y2 in calls:
-        for x, y in ((x1, y1), (x2, y2)):
+        for i in range(n_samples + 1):
+            t = i / n_samples
+            x = x1 + (x2 - x1) * t
+            y = y1 + (y2 - y1) * t
             point = Point((x - ox) / s, (y - oy) / s)
             assert region_guard.contains(point), (
-                f"hatch endpoint {point} outside landscape_region()"
+                f"hatch point {point} (t={t}) outside landscape_region()"
             )
             assert not buildable_interior.contains(point), (
-                f"hatch endpoint {point} inside the buildable envelope — "
+                f"hatch point {point} (t={t}) inside the buildable envelope — "
                 "the fill must not hatch the building"
             )
 
