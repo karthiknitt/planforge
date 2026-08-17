@@ -76,9 +76,13 @@ class Room:
     # double-height living area or courtyard). Defaults to None, so every
     # existing layout is unaffected.
     void_over: str | None = None
-    # Side letter -> bulge (sagitta as a fraction of the edge length). Purely a
-    # drawing annotation: walls, adjacency, area and every solver constraint use
-    # the straight chord. Kerala-style curved verandah fronts are the use case.
+    # Side letter -> bulge (sagitta as a fraction of the edge length; POSITIVE
+    # bulge always bows AWAY from the room, outward across that side — never
+    # into the room, regardless of which side letter). Purely a drawing
+    # annotation: walls, adjacency, area and every solver constraint use the
+    # straight chord. Kerala-style curved verandah fronts are the use case.
+    # RECT-only (see __post_init__): a bounding-box side is only guaranteed
+    # to sit on a real wall for the "RECT" template.
     edge_arcs: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -93,6 +97,13 @@ class Room:
             raise ValueError(
                 "open_sides cannot contain all four sides — a room with no "
                 "walls has no derivable footprint; use a plot-level feature"
+            )
+        if self.edge_arcs and self.template != "RECT":
+            raise ValueError(
+                f"edge_arcs is only supported on template='RECT' rooms "
+                f"(got template={self.template!r}); a non-RECT bounding-box "
+                "side is not guaranteed to sit on a real wall, so drawing an "
+                "arc there could slash across open space"
             )
         bad_arc_sides = set(self.edge_arcs) - _VALID_SIDES
         if bad_arc_sides:
