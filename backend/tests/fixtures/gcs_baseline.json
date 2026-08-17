@@ -218,8 +218,122 @@
         }
       ]
     },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 19.864,
+        "cy": 3.795,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 20.474,
+        "cy": 12.891,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 22.647,
+        "cy": 3.115,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "door",
+        "cx": 23.342,
+        "cy": 3.795,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 23.342,
+        "cy": 9.52,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 23.342,
+        "cy": 11.825,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 25.842,
+        "cy": 9.52,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 31.877,
+        "cy": 11.335,
+        "width": 0.75,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 33.677,
+        "cy": 11.335,
+        "width": 0.75,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 37.452,
+        "cy": 8.91,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 48.385,
+        "cy": 12.113,
+        "width": 0.6,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 21.512,
+        "cy": 3.115,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 30.092,
+        "cy": 3.115,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 48.385,
+        "cy": 10.1225,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
     "baseline": {
-      "total": 70.0,
+      "total": 65.0,
       "max": 100,
       "phantom_walls": 10,
       "collisions": 0,
@@ -228,6 +342,7 @@
       "standard_scale": false,
       "doors_per_room_ok": true,
       "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
       "column_count": 21,
       "frozen_input_column_count": 21
     }
@@ -362,6 +477,96 @@
         }
       ]
     },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 3.897,
+        "cy": 2.135,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 3.897,
+        "cy": 4.753,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 3.897,
+        "cy": 6.852,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 5.908,
+        "cy": 6.242,
+        "width": 0.75,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 6.867,
+        "cy": 5.1925,
+        "width": 0.6,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 1.115,
+        "cy": 5.57,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 2.5635,
+        "cy": 9.685,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.3245,
+        "cy": 9.685,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.682,
+        "cy": 1.315,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.867,
+        "cy": 2.7865,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.867,
+        "cy": 7.906,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
     "baseline": {
       "total": 80.0,
       "max": 100,
@@ -372,6 +577,7 @@
       "standard_scale": true,
       "doors_per_room_ok": true,
       "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 0,
       "column_count": 10,
       "frozen_input_column_count": 10
     }
@@ -519,8 +725,106 @@
         }
       ]
     },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 4.471,
+        "cy": 2.295,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 4.471,
+        "cy": 5.295,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 5.036,
+        "cy": 6.994,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 7.0,
+        "cy": 1.615,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "door",
+        "cx": 7.707,
+        "cy": 6.994,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 9.6295,
+        "cy": 7.599,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 10.544,
+        "cy": 11.9395,
+        "width": 0.6,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 3.456,
+        "cy": 11.882,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.3565,
+        "cy": 16.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 8.135,
+        "cy": 1.615,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 8.3855,
+        "cy": 16.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 10.544,
+        "cy": 4.362,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
     "baseline": {
-      "total": 80.0,
+      "total": 70.0,
       "max": 100,
       "phantom_walls": 6,
       "collisions": 0,
@@ -529,6 +833,7 @@
       "standard_scale": true,
       "doors_per_room_ok": true,
       "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
       "column_count": 11,
       "frozen_input_column_count": 11
     }
@@ -646,8 +951,90 @@
         }
       ]
     },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 3.13,
+        "cy": 3.795,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 3.695,
+        "cy": 6.326,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 4.5,
+        "cy": 3.115,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "door",
+        "cx": 5.292,
+        "cy": 6.3355,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 2.115,
+        "cy": 7.548,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 3.4785,
+        "cy": 8.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.635,
+        "cy": 3.115,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.7485,
+        "cy": 8.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.885,
+        "cy": 4.778,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.885,
+        "cy": 7.5575,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
     "baseline": {
-      "total": 80.0,
+      "total": 70.0,
       "max": 100,
       "phantom_walls": 4,
       "collisions": 0,
@@ -656,6 +1043,7 @@
       "standard_scale": true,
       "doors_per_room_ok": true,
       "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
       "column_count": 8,
       "frozen_input_column_count": 8
     }
@@ -862,8 +1250,154 @@
         }
       ]
     },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 1.115,
+        "cy": 15.693,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 1.795,
+        "cy": 10.516,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 7.555,
+        "cy": 11.081,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.6345,
+        "cy": 4.907,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.635,
+        "cy": 2.22,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.635,
+        "cy": 7.333,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.635,
+        "cy": 8.787,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 9.2,
+        "cy": 10.516,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 9.33,
+        "cy": 1.615,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "ventilator",
+        "cx": 7.5847,
+        "cy": 5.965,
+        "width": 0.6,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 7.585,
+        "cy": 1.615,
+        "width": 0.6,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 7.585,
+        "cy": 6.728,
+        "width": 0.6,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 1.115,
+        "cy": 14.643,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 7.67,
+        "cy": 15.5723,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 8.52,
+        "cy": 15.5723,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 11.2025,
+        "cy": 1.615,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 13.885,
+        "cy": 6.123,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 13.885,
+        "cy": 14.643,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
     "baseline": {
-      "total": 80.0,
+      "total": 70.0,
       "max": 100,
       "phantom_walls": 9,
       "collisions": 0,
@@ -872,6 +1406,7 @@
       "standard_scale": true,
       "doors_per_room_ok": true,
       "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
       "column_count": 19,
       "frozen_input_column_count": 19
     }
