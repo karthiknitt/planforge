@@ -9,9 +9,13 @@ functions over Shapely objects; keep I/O and persistence in `../services/`.
   cases in setback and inset logic have caused several solver bugs.
 - **Compliance thresholds live in `backend/app/config/compliance_rules.json`**, never
   hardcoded (path confirmed by `compliance.py:8`; it is *not* `backend/config/`).
-  That includes the Vastu rules — both `vastu_zones` (zone-keyed, binary, read by
-  `check_vastu`) and `vastu_room_rules` (room-type-keyed, three-tier, read by
-  `vastu_room_score`) — and opening standards.
+  That includes the Vastu rules — both `vastu_zones` (zone-keyed, three tiers:
+  `preferred`/`avoid`/`prohibit`, though `check_vastu` reads only the latter two) and
+  `vastu_room_rules` (room-type-keyed, three tiers: `preferred`/`acceptable`/`avoid`,
+  read by `vastu_room_score`) — and opening standards. `vastu_room_rules` is a
+  **derived transpose** of `vastu_zones`, pinned in both directions by the round-trip
+  tests in `tests/test_vastu_score.py`: edit `vastu_zones` and re-derive, never author
+  a `vastu_room_rules` cell by hand.
 - **Never run `ruff format` on `*.json`** — it corrupts the rules file.
 - **PDF generation is ReportLab only** — not matplotlib, not cairosvg.
 - **DXF is ezdxf, and `doc.write()` needs `StringIO`** (text mode), not `BytesIO`.
