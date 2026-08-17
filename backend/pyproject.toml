@@ -37,9 +37,18 @@ dev = [
     "pymupdf>=1.27.2.3",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.15.9",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: full-pipeline tests that run a real CP-SAT solve (or DXF/PDF/BOQ/structural rendering downstream of one); >=24s each in isolation on this hardware. Excluded by the dev fast path: `pytest -m 'not slow'`.",
+]
+# Per-test hang guard, not a perf budget: CP-SAT can hang, and this must fail
+# loudly instead of silently eating a 76-minute run. 300s is well above any
+# single test observed (slowest *file*, summing multiple tests, was 362s) but
+# short enough that a real hang doesn't stall CI for long.
+timeout = 300
