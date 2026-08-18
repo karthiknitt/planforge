@@ -7,8 +7,8 @@ set. It is now a warning plus a graded 0–100 score that reaches ranking throug
 
 These tests build `Layout` fixtures by hand and exercise the scoring/ranking
 functions directly — `backend/tests/CLAUDE.md`: CP-SAT is not deterministic, so
-nothing here re-solves. The single end-to-end test is marked `slow` and asserts
-only invariants that hold for every seed.
+nothing here re-solves except the two tests marked `slow`, which assert only
+invariants that hold for every seed (never a count compared against another run).
 
 Plot is 9 m x 12 m with road_side "S", so the Vastu 3x3 grid is
     x in [0,3) left, [3,6) middle, [6,9) right
@@ -192,7 +192,17 @@ def test_attach_vastu_leaves_the_layout_untouched_when_disabled():
 
 def test_attach_vastu_matches_the_score_component_it_feeds():
     """`vastu_score` is stored for the API; it must be the same number ranking
-    used, or the UI would explain a ranking with an unrelated figure."""
+    used, or the UI would explain a ranking with an unrelated figure.
+
+    Scope, honestly: this is a **drift guard on the two expressions**, not on the
+    call site. `_attach_vastu` and `_score_vastu` each evaluate
+    `vastu_layout_score(layout_floors(...))`, so this catches one of them being
+    changed without the other. It cannot show that `_attach_vastu` is called at
+    the *right point* in `generate` — the fixture is a hand-built Layout that
+    never runs the fill/split/trim/re-snap passes, which is exactly what moving
+    the call site was about. Only the `slow` end-to-end test's
+    `lay.score.vastu == round(lay.vastu_score, 1)` pins the position.
+    """
     layout, _bad = _swapped_pair()
     cfg = _cfg()
     _attach_vastu(layout, cfg)
@@ -233,3 +243,68 @@ def test_generate_with_vastu_returns_scored_layouts_with_no_vastu_violations():
         assert lay.vastu_score is not None
         assert 0.0 <= lay.vastu_score <= 100.0
         assert lay.score.vastu == round(lay.vastu_score, 1)
+
+
+# ── The solver path ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.slow
+def test_solver_does_not_drop_a_layout_over_a_prohibited_zone_room():
+    """`solver._build_layout` had a third `check_vastu` call site — it pushed
+    Vastu findings into `compliance.violations`, flipped `compliance.passed`, and
+    `solve_layouts` then returned `None` for that layout. That is the same gate
+    Task 16 removed from the archetype path, still live on the *primary* path:
+    with `check_vastu` reporting a single violation, `solve_layouts` went from 3
+    layouts to 0. It also meant every Vastu warning on a solver layout was
+    emitted twice, once here and once in `generator._attach_vastu`.
+
+    `check_vastu` is stubbed to report a prohibited-zone room on every layout, so
+    the old code would discard the entire candidate set. Two assertions, because
+    they fail for different reasons: the call count is deterministic and pins the
+    call site itself; the layout count is the user-facing consequence and is what
+    a *partial* restoration (violations without the `passed` flip) would still
+    let through.
+    """
+    import app.engine.vastu as vastu_mod
+    from app.engine.compliance import load_rules
+    from app.engine.solver import solve_layouts
+
+    cfg = PlotConfig(
+        plot_length=15.0,
+        plot_width=9.0,
+        setback_front=3.0,
+        setback_rear=1.5,
+        setback_left=1.2,
+        setback_right=1.2,
+        num_bedrooms=3,
+        toilets=2,
+        parking=True,
+        vastu_enabled=True,
+        road_side="S",
+    )
+    ewt = load_rules()["external_wall_thickness_mm"] / 1000
+
+    calls = []
+    real_check_vastu = vastu_mod.check_vastu
+
+    def _always_prohibited(*args, **kwargs):
+        calls.append(1)
+        return (
+            ["[Vastu] Kitchen in Nairutya (SW) zone — strictly prohibited"],
+            ["[Vastu] Kitchen in Nairutya (SW) zone — strictly prohibited"],
+        )
+
+    vastu_mod.check_vastu = _always_prohibited
+    try:
+        layouts = solve_layouts(cfg, ewt=ewt)
+    finally:
+        vastu_mod.check_vastu = real_check_vastu
+
+    # The solver path must not consult Vastu at all — `_attach_vastu` owns it.
+    assert len(calls) == 0
+    # ...and so a Vastu-poor layout survives the solve.
+    assert len(layouts) > 0
+    for lay in layouts:
+        assert lay.compliance.passed is True
+        assert not any("[Vastu]" in v for v in lay.compliance.violations)
+        assert not any("[Vastu]" in w for w in lay.compliance.warnings)

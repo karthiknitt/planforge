@@ -1781,7 +1781,6 @@ def _solve_one(
 
     from .compliance import check, load_rules
     from .models import ComplianceResult
-    from .vastu import check_vastu
 
     rules = load_rules()
 
@@ -1803,12 +1802,14 @@ def _solve_one(
             ),
             compliance=ComplianceResult(passed=True),
         )
+        # Bye-law compliance only. Vastu is deliberately NOT checked here: it is
+        # a cultural preference, and running it on this path put its findings in
+        # `compliance.violations`, flipped `passed`, and made the `return None`
+        # below delete the solve result — the same gate Task 16 removed from the
+        # archetype path. `generator._attach_vastu` records Vastu as a warning
+        # plus a graded score for every layout, solver and archetype alike, on
+        # the final post-fill geometry.
         layout.compliance = check(layout, cfg, rules)
-        if cfg.vastu_enabled:
-            v_viol, v_warn = check_vastu(layout, cfg, road_side=cfg.road_side)
-            layout.compliance.violations.extend(v_viol)
-            layout.compliance.warnings.extend(v_warn)
-            layout.compliance.passed = len(layout.compliance.violations) == 0
         return layout
 
     # Post-solve snap: coalesce residual near-aligned wall lines (the
