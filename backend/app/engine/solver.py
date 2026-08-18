@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
-from math import ceil, gcd, lcm
+from math import ceil, cos, gcd, lcm, radians, sin
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 from ortools.sat.python import cp_model
 
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
+from .vastu import ZONE_GRID_ROAD_S, _rule_for, _verdict, resolve_north_angle
 from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
@@ -136,6 +137,64 @@ WET_SHRINK_WEIGHT = 30
 PARKING_ROAD_PENALTY = 250_000
 
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
+
+# ── Vastu placement steering ─────────────────────────────────────────────────
+# Cost (objective units) of putting a room in a zone its rule marks `avoid`;
+# lesser tiers pay `VASTU_WEIGHT * (1 - verdict)`, i.e. 0 for `preferred`,
+# 0.30x for `acceptable`, 0.55x for a zone the rule is silent about.
+#
+# Scale: the objective is a MINIMISATION whose live terms are the
+# points-weighted adjacency pull (up to 12 pts on a DOUBLED centre distance,
+# so ~24 units per mm — moving a room 1 m trades ~24k, and a whole plan's
+# pairs sum into the millions), the size terms (~1 per mm, ~85k total),
+# ALIGN_BONUS (2500 per aligned edge pair) and the toilet/parking placement
+# penalties (150k-250k per offending toilet).
+#
+# Measured, not guessed. 12 configs (4 road sides, 2 off-axis north angles,
+# tight/big/square/wide plots, 2-5 bedrooms), each solved with Vastu off as
+# the baseline and on at each weight, scored by the mean centroid verdict
+# (what this term actually optimises) and by `vastu_layout_score`:
+#
+#     weight      centroid mean   area-weighted mean   wins/losses vs off
+#     off             46.61              49.54               —
+#      40k            ~ same             worse              3 / 5
+#     120k            ~ same             ~ same             4 / 4
+#     200k            54.87              49.83              7 / 4
+#     300k            60.34              54.46             11 / 1
+#     800k            no further gain, area-weighted mean regressed
+#
+# Below ~200k the term is inert: it is a per-room cost competing with an
+# objective whose adjacency mass is in the millions, so the solver spends its
+# budget elsewhere and Vastu placement is indistinguishable from chance.
+# Above ~300k it stops buying anything and starts costing the other terms.
+#
+# It reads as larger than TOILET_FRONT_PENALTY (150k), but it is not the same
+# unit: that is a penalty on ONE boolean for ONE offending toilet, this is a
+# per-room cost spread over every ruled room. The two also mostly point the
+# same way — a toilet's remaining soft `avoid` zones after the hard exclusions
+# are SE/SW/N, which on the common road_side="S" plot IS the front band the
+# toilet penalty is already pushing it out of.
+VASTU_WEIGHT = 300_000
+# Zones that may carry a HARD exclusion at all (spec: Safety / Global
+# Constraints). Everything outside this pair stays soft on every room type.
+VASTU_HARD_EXCLUDE_ZONES = frozenset({"NE", "C"})
+# Room types eligible for a hard exclusion. The zones themselves are NOT
+# listed here — they are read from each type's `avoid` tier in
+# `vastu_room_rules` (see `_vastu_hard_excluded_zones`), so a hard constraint
+# can never contradict the data the scorer reads.
+#
+# `staircase` is deliberately absent even though the plan's draft listed it:
+# its rule is {"preferred": ["NE"], "acceptable": [], "avoid": []}, so NE is
+# its ONLY opinionated zone and it is a preference, not an avoidance. Hard-
+# excluding it would have the constraint fight the objective term on every
+# solve and cap every staircase at the neutral verdict. If a staircase in the
+# NE is wrong Vastu, that is an edit to `vastu_zones` re-derived through the
+# transpose, not a solver constraint that silently disagrees with the rules.
+VASTU_HARD_EXCLUDE_TYPES = frozenset({"toilet", "wc_only", "bathroom_master"})
+# Fixed-point scale for cos/sin in the zone half-planes. Exact (no rounding
+# at all) at every multiple of 90 degrees, which is where band ties actually
+# land on real plots.
+_VASTU_TRIG_SCALE = 1_000_000
 
 # ── Shape templates (opt-in via cfg.allow_shape_templates) ────────────────────
 # Which room types may be given a non-RECT footprint, and which template.
@@ -1214,6 +1273,253 @@ def snap_rooms_to_shared_grid(
     return result
 
 
+# ── Vastu zone reification ───────────────────────────────────────────────────
+
+
+class _VastuBands(NamedTuple):
+    """Integer half-planes that reproduce `vastu.zone_for_point` on a plot.
+
+    `zone_for_point` normalises the point by the plot extents *before* rotating
+    it, so both of its band coordinates stay LINEAR in the raw (x, y):
+
+        east  = (x - W/2)/W * cos t - (y - L/2)/L * sin t
+        north = (x - W/2)/W * sin t + (y - L/2)/L * cos t
+
+    That is what makes the 3x3 grid reifiable for ANY north angle and not only
+    the axis-aligned ones — the *cells* are rotated squares once the angle is
+    off-axis, but the four boundaries between them are still straight lines, so
+    each is one CP-SAT linear constraint on the room centroid.
+
+    Fields hold `east`/`north` rescaled so that the +-1/6 band boundary lands on
+    +-`band` == +-`_VASTU_BAND_SCALE`, as a function of the DOUBLED centroid
+    `cx2 = 2*x + w` (doubling keeps the centroid integral without an extra var):
+
+        east_scaled  = ex * cx2 + ey * cy2 + ec
+        north_scaled = nx * cx2 + ny * cy2 + nc
+
+    A fixed band scale matters: the obvious formulation (multiply through by
+    `12 * W * L * trig_scale`) produces coefficients around 1e15 on a 9x15 m
+    plot, and CP-SAT could no longer solve an off-axis plot inside its budget
+    at all (measured: `north_angle_deg=37.5` went from a 15 s solve to no
+    solution). Here the coefficients stay around 3e4.
+
+    `margin` is the exact worst-case error the six roundings can introduce into
+    `east_scaled`/`north_scaled`, so a caller that needs a CONSERVATIVE test
+    (the hard exclusions) can widen the region by it and stay a strict superset
+    of the float original.
+    """
+
+    ex: int
+    ey: int
+    ec: int
+    nx: int
+    ny: int
+    nc: int
+    band: int
+    margin: int
+
+
+# Integer value the +-1/6 Vastu band boundary is mapped onto. Tuned, not
+# arbitrary: this constant sets the magnitude of every coefficient the zone
+# half-planes put into the model, and CP-SAT is sensitive to it. At 1e8 the
+# expressions reach ~2e9 and the search could no longer find ANY feasible
+# solution inside its deterministic budget on two of three orientations
+# (road_side="N" and north_angle_deg=37.5 both returned UNKNOWN, having solved
+# fine without Vastu). 1e6 keeps them near 1e7 and all three solve. The cost is
+# a coarser rounding margin — ~2.4% of a band, i.e. the hard-excluded region is
+# inflated by ~12 cm on a 15 m plot — which is immaterial for a placement
+# preference. `_vastu_feasibility_fallback` covers the residual risk.
+_VASTU_BAND_SCALE = 1_000_000
+
+
+def _vastu_bands(plot_w_mm: int, plot_l_mm: int, north_angle_deg: float) -> _VastuBands:
+    """Half-plane coefficients for a plot's Vastu grid, in millimetre units."""
+    theta = radians(north_angle_deg)
+    cos_t, sin_t = cos(theta), sin(theta)
+    k = 3 * _VASTU_BAND_SCALE
+    w, ln = plot_w_mm, plot_l_mm
+    # Derivation: east * 6 * _VASTU_BAND_SCALE / (2*_VASTU_BAND_SCALE) ... i.e.
+    # substitute u = (cx2 - w) / (2w), v = (cy2 - ln) / (2ln) into the two
+    # projections above and scale so that 1/6 maps to _VASTU_BAND_SCALE.
+    ex = round(k * cos_t / w)
+    ey = round(-k * sin_t / ln)
+    ec = round(k * (sin_t - cos_t))
+    nx = round(k * sin_t / w)
+    ny = round(k * cos_t / ln)
+    nc = round(-k * (sin_t + cos_t))
+    # Each of the six coefficients carries at most 0.5 of rounding error, and
+    # cx2 <= 2w, cy2 <= 2ln.
+    margin = int(0.5 * (2 * w + 2 * ln + 1)) + 1
+    return _VastuBands(ex, ey, ec, nx, ny, nc, _VASTU_BAND_SCALE, margin)
+
+
+def _vastu_zone_of_centroid_mm(cx2: int, cy2: int, bands: _VastuBands) -> str:
+    """Zone of a doubled-centroid point under `bands`.
+
+    The reference implementation of what the CP-SAT constraints below encode;
+    `tests/test_solver_vastu.py` pins it against `vastu.zone_for_point`. The
+    asymmetric `<` / `>` mirrors `zone_for_point`'s tie handling.
+    """
+    east = bands.ex * cx2 + bands.ey * cy2 + bands.ec
+    north = bands.nx * cx2 + bands.ny * cy2 + bands.nc
+    col = 0 if east < -bands.band else (1 if east < bands.band else 2)
+    row = 0 if north > bands.band else (1 if north > -bands.band else 2)
+    return ZONE_GRID_ROAD_S[row][col]
+
+
+def _vastu_hard_excluded_zones(room_type: str) -> frozenset[str]:
+    """Zones a room type is structurally forbidden from, derived from the rules.
+
+    Only `VASTU_HARD_EXCLUDE_TYPES` are eligible, and even for those only the
+    zones their own `avoid` tier already names — so every hard constraint the
+    solver adds corresponds to an `avoid` cell in `vastu_room_rules` and cannot
+    drift from it when the rules file is edited.
+    """
+    if room_type not in VASTU_HARD_EXCLUDE_TYPES:
+        return frozenset()
+    rule = _rule_for(room_type)
+    if rule is None:
+        return frozenset()
+    return VASTU_HARD_EXCLUDE_ZONES & frozenset(rule.get("avoid", []))
+
+
+def _vastu_zone_cost(room_type: str, zone: str) -> int:
+    """Objective cost of placing `room_type` in `zone`.
+
+    Deliberately takes NO area: `vastu_layout_score` is area-weighted, and
+    mirroring that here would hand the solver a way to improve the objective by
+    SHRINKING a badly-placed room instead of moving it — room width and depth
+    are decision variables, unlike the room type. A per-room constant cost
+    makes relocation the only way to pay less.
+    """
+    return int(round(VASTU_WEIGHT * (1.0 - _verdict(room_type, zone))))
+
+
+def _vastu_escape_bounds(
+    index: int, bands: _VastuBands, is_row: bool
+) -> list[tuple[int, int]]:
+    """Ways for a coordinate to leave the CLOSED band `index`, as (sign, bound).
+
+    `sign == -1` means `expr <= bound`, `sign == +1` means `expr >= bound`. Any
+    one of the returned options being satisfied puts the coordinate outside the
+    band, so a caller ORs them (across both axes) to forbid a grid cell.
+
+    The band is CLOSED, i.e. inflated by one integer unit past each boundary,
+    on purpose. `zone_for_point` computes its bands in floating point, where
+    `cos(radians(90))` is 6.1e-17 rather than 0; that epsilon is far below one
+    integer unit here but it decides the verdict for a centroid sitting exactly
+    ON a band boundary (measured: 266-409 boundary points of 54481 on a 9x15
+    plot at 90/180/270 degrees). Inflating by a unit makes the forbidden region
+    a strict superset of the float one, so a hard exclusion can never be
+    satisfied by a room the scorer still reads as being in the excluded zone.
+    """
+    hi = bands.band + bands.margin
+    lo = -bands.band - bands.margin
+    if is_row:
+        # row 0: n > band | row 1: -band < n <= band | row 2: n <= -band
+        return {
+            0: [(-1, bands.band - bands.margin - 1)],
+            1: [(-1, lo - 1), (1, hi + 1)],
+            2: [(1, -bands.band + bands.margin + 1)],
+        }[index]
+    # col 0: e < -band | col 1: -band <= e < band | col 2: e >= band
+    return {
+        0: [(1, -bands.band + bands.margin + 1)],
+        1: [(-1, lo - 1), (1, hi + 1)],
+        2: [(-1, bands.band - bands.margin - 1)],
+    }[index]
+
+
+def _add_vastu_terms(
+    model: cp_model.CpModel,
+    cfg: PlotConfig,
+    room_vars: list[_RoomVar],
+    ox: int,
+    oy: int,
+) -> list[tuple[int, cp_model.IntVar]]:
+    """Reify each room's Vastu zone and return (cost, bool) objective terms.
+
+    Membership is tested on the room CENTROID, matching `check_vastu` — the
+    area-weighted reading stays in `vastu_room_score`, where it costs nothing
+    and cannot be gamed by a decision variable.
+
+    Rooms whose type has no rule are skipped entirely (no vars, no terms), the
+    same exclusion `vastu_layout_score` applies: a room Vastu has no opinion
+    about should carry zero weight rather than a middling one.
+    """
+    bands = _vastu_bands(
+        _mm(cfg.plot_width), _mm(cfg.plot_length), resolve_north_angle(cfg)
+    )
+    terms: list[tuple[int, cp_model.IntVar]] = []
+
+    for rv in room_vars:
+        if _rule_for(rv.room_type) is None:
+            continue
+        excluded = _vastu_hard_excluded_zones(rv.room_type)
+
+        # east/north as linear expressions over the room's existing vars:
+        # cx2 = 2*ox + 2*x + w, cy2 = 2*oy + 2*y + d.
+        east = cp_model.LinearExpr.weighted_sum(
+            [rv.x, rv.w, rv.y, rv.d],
+            [2 * bands.ex, bands.ex, 2 * bands.ey, bands.ey],
+        ) + (2 * ox * bands.ex + 2 * oy * bands.ey + bands.ec)
+        north = cp_model.LinearExpr.weighted_sum(
+            [rv.x, rv.w, rv.y, rv.d],
+            [2 * bands.nx, bands.nx, 2 * bands.ny, bands.ny],
+        ) + (2 * ox * bands.nx + 2 * oy * bands.ny + bands.nc)
+
+        cols = [model.new_bool_var(f"vcol{i}_{rv.room_id}") for i in range(3)]
+        rows = [model.new_bool_var(f"vrow{i}_{rv.room_id}") for i in range(3)]
+        # The three bands partition the line, so `exactly_one` plus the
+        # forward implications is already a full reification — the reverse
+        # direction would be redundant clauses.
+        model.add_exactly_one(cols)
+        model.add_exactly_one(rows)
+        model.add(east <= -bands.band - 1).only_enforce_if(cols[0])
+        model.add(east >= -bands.band).only_enforce_if(cols[1])
+        model.add(east <= bands.band - 1).only_enforce_if(cols[1])
+        model.add(east >= bands.band).only_enforce_if(cols[2])
+        model.add(north >= bands.band + 1).only_enforce_if(rows[0])
+        model.add(north <= bands.band).only_enforce_if(rows[1])
+        model.add(north >= -bands.band + 1).only_enforce_if(rows[1])
+        model.add(north <= -bands.band).only_enforce_if(rows[2])
+
+        for ri in range(3):
+            for ci in range(3):
+                zone = ZONE_GRID_ROAD_S[ri][ci]
+                if zone in excluded:
+                    # Structurally impossible, not penalised. Expressed against
+                    # the CLOSED cell rather than via the cols/rows bools above
+                    # so a boundary-sitting centroid is forbidden too — see
+                    # `_vastu_escape_bounds`.
+                    escapes = []
+                    for expr, index, is_row in ((north, ri, True), (east, ci, False)):
+                        for sign, bound in _vastu_escape_bounds(index, bands, is_row):
+                            eb = model.new_bool_var(
+                                f"vout_{rv.room_id}_{zone}_{'r' if is_row else 'c'}{sign}"
+                            )
+                            if sign < 0:
+                                model.add(expr <= bound).only_enforce_if(eb)
+                            else:
+                                model.add(expr >= bound).only_enforce_if(eb)
+                            escapes.append(eb)
+                    model.add_bool_or(escapes)
+                    continue
+                row_b, col_b = rows[ri], cols[ci]
+                cost = _vastu_zone_cost(rv.room_type, zone)
+                if cost <= 0:
+                    continue
+                zb = model.new_bool_var(f"vz_{rv.room_id}_{zone}")
+                # Half-reified: the objective is minimised and `cost` is
+                # positive, so the solver only ever wants zb == 0; forcing
+                # zb == 1 when the room IS in the zone is the direction that
+                # has to hold.
+                model.add_bool_or([row_b.Not(), col_b.Not(), zb])
+                terms.append((cost, zb))
+
+    return terms
+
+
 def _solve_one(
     cfg: PlotConfig,
     ewt: float,
@@ -1225,8 +1531,13 @@ def _solve_one(
     span_caps: dict[str, float] | None = None,
     seed_rooms: dict[str, Room] | None = None,
     deviation_weight: int = 0,
+    vastu_steering: bool = True,
 ) -> Layout | None:
     """Run a single CP-SAT solve and return a Layout if successful.
+
+    `vastu_steering=False` drops the Vastu zone vars, hard exclusions and
+    objective terms even when `cfg.vastu_enabled` — the retry arm of
+    `_vastu_feasibility_fallback`.
 
     Stage 2 closed-loop knobs:
     - span_caps: {"x": metres, "y": metres} — cap every room's dimension on
@@ -1687,6 +1998,16 @@ def _solve_one(
                 model.add_abs_equality(dv, var - clamped)
                 deviation_terms.append(dv)
 
+    # ── Vastu steering ───────────────────────────────────────────────────────
+    # Soft costs (plus the data-derived hard exclusions added inside) that pull
+    # each ruled room toward a zone its rule prefers. Part of `base_objective`
+    # rather than `penalty_terms` on purpose: `penalty_terms` is what the
+    # phase-1 warm start deliberately omits, and Vastu placement is exactly the
+    # kind of whole-plan trade phase 1 should already be making.
+    vastu_terms: list[tuple[int, cp_model.IntVar]] = []
+    if cfg.vastu_enabled and vastu_steering:
+        vastu_terms = _add_vastu_terms(model, cfg, room_vars, ox, oy)
+
     base_objective = (
         sum(dist_terms)
         - sum(size_terms)
@@ -1694,6 +2015,7 @@ def _solve_one(
         - CROSS_FLOOR_ALIGN_BONUS * sum(cross_floor_align_bools)
         + sum(wet_shrink_terms)
         + deviation_weight * sum(deviation_terms)
+        + sum(cost * var for cost, var in vastu_terms)
     )
 
     # ── Solve ─────────────────────────────────────────────────────────────────
@@ -1916,6 +2238,24 @@ def resolve_with_constraints(
         return None
 
 
+def _vastu_feasibility_fallback(
+    cfg: PlotConfig, solve: Callable[[bool], Layout | None]
+) -> Layout | None:
+    """Run `solve(True)`, and if Vastu steering cost us the layout, retry without.
+
+    Vastu is a preference. Returning no plan at all because the zone
+    constraints made the search miss its deterministic budget is strictly worse
+    than returning a Vastu-imperfect plan, and it does happen: at the wrong
+    coefficient scale two of three orientations went UNKNOWN (see
+    `_VASTU_BAND_SCALE`). The retry costs a second solve only in the case that
+    would otherwise have returned None, so a healthy plot never pays for it.
+    """
+    layout = solve(True)
+    if layout is not None or not cfg.vastu_enabled:
+        return layout
+    return solve(False)
+
+
 def solve_layout(cfg: PlotConfig, ewt: float | None = None) -> Layout | None:
     """One solve, centre-staircase zone. Returns None when infeasible.
 
@@ -1932,12 +2272,23 @@ def solve_layout(cfg: PlotConfig, ewt: float | None = None) -> Layout | None:
     # Outside the try: a notch that cannot house the programme is a user-input
     # error and must reach the caller, not be flattened into `None`.
     validate_plot_envelope(cfg, ewt, room_defs, specs)
-    try:
-        return _solve_one(
-            cfg, ewt, room_defs, specs, "mid", "S2", "Layout S2 — Centre Staircase"
-        )
-    except Exception:
-        return None
+
+    def _run(vastu_steering: bool) -> Layout | None:
+        try:
+            return _solve_one(
+                cfg,
+                ewt,
+                room_defs,
+                specs,
+                "mid",
+                "S2",
+                "Layout S2 — Centre Staircase",
+                vastu_steering=vastu_steering,
+            )
+        except Exception:
+            return None
+
+    return _vastu_feasibility_fallback(cfg, _run)
 
 
 def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:
@@ -1958,11 +2309,29 @@ def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:
 
     results: list[Layout] = []
     for zone, lid, lname in zones:
-        try:
-            layout = _solve_one(cfg, ewt, room_defs, specs, zone, lid, lname)
-            if layout is not None:
-                results.append(layout)
-        except Exception:
-            pass  # solver failure → skip this zone
+
+        def _run(
+            vastu_steering: bool,
+            zone: str = zone,
+            lid: str = lid,
+            lname: str = lname,
+        ) -> Layout | None:
+            try:
+                return _solve_one(
+                    cfg,
+                    ewt,
+                    room_defs,
+                    specs,
+                    zone,
+                    lid,
+                    lname,
+                    vastu_steering=vastu_steering,
+                )
+            except Exception:
+                return None  # solver failure → skip this zone
+
+        layout = _vastu_feasibility_fallback(cfg, _run)
+        if layout is not None:
+            results.append(layout)
 
     return results
