@@ -26,7 +26,7 @@ from .vastu import ZONE_GRID_ROAD_S, _rule_for, _verdict, resolve_north_angle
 from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
-SOLVE_TIME_S = 14.0  # per-run wall-clock budget (generation runs async)
+SOLVE_TIME_S = 70.0  # per-solve wall-clock budget (generation runs async)
 # Wall cap for the penalty-free phase-1 warm start: it only needs A feasible
 # solution to hint phase 2, not a good one, so it doesn't get the full
 # SOLVE_TIME_S (which would let one zone double to ~28 s worst case).
@@ -48,7 +48,35 @@ SOLVE_TIME_S = 14.0  # per-run wall-clock budget (generation runs async)
 # Widening the caps doesn't make the search itself faster, it just gives
 # the deterministic budget more real-world headroom to actually be the
 # thing that binds, which is what restores reproducibility.
-PHASE1_TIME_S = 5.0
+#
+# Widened AGAIN 2026-08-19 (14.0/5.0 -> 70.0/25.0), and this time the sizing is
+# measured rather than doubled-and-hoped. Wrapping CpSolver.solve to time every
+# call on the 18.3 x 12.2 m G+1 config, with the wall caps lifted to 600 s so
+# only the deterministic budget bound:
+#
+#   phase1 (det=0.7, cap was  5.0s): n=3  max= 5.92s  median= 4.82s  over-cap 1/3
+#   phase2 (det=1.5, cap was 14.0s): n=3  max=16.58s  median=15.37s  over-cap 2/3
+#
+# That was at load average 3.75 — a QUIET box. Phase 2's *median* solve already
+# exceeded its cap, so the wall clock was the binding constraint in the normal
+# case, not a pathological one, and the deterministic budget almost never got to
+# do its job. Measured consequence, 8 runs at the old caps vs 2 with them lifted:
+# four of the eight returned ONE layout instead of three, with three DIFFERENT
+# geometry fingerprints between them, while every lifted-cap run produced the
+# same three layouts bit-for-bit. Users were being handed one plan instead of a
+# choice of three, roughly half the time, with no error.
+#
+# The new values give ~4x headroom over the measured quiet-box need. The
+# phase1:phase2 ratio is unchanged because the measurement vindicated it:
+# 5.92/16.58 = 0.36, and the old caps were 5/14 = 0.36. The proportion was
+# right; only the magnitude was wrong.
+#
+# Cost: on a box so slow the deterministic budget genuinely cannot finish, one
+# generate() can now spend 3*25 + 3*70 = 285 s of wall clock instead of 57 s.
+# That is acceptable because generation is an async Inngest job, and because the
+# cap only binds in exactly the regime where the old behaviour returned wrong
+# output rather than slow output.
+PHASE1_TIME_S = 25.0
 # Deterministic (machine-independent) work budgets — see the comment above
 # PHASE1_TIME_S. These are the values meant to actually bind; module-level so
 # a test that needs the search to fully escape a penalty zone can raise them
