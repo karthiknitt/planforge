@@ -334,15 +334,15 @@ def _ecfg(**over) -> PlotConfig:
 FRONT_ROW = {
     "S": ["SW", "S", "SE"],
     "N": ["NE", "N", "NW"],
-    "E": ["NW", "W", "SW"],
-    "W": ["SE", "E", "NE"],
+    "E": ["SE", "E", "NE"],
+    "W": ["NW", "W", "SW"],
 }
 # The tie-break prefers N/NE/E. Only two road sides put such a cell on the
 # front row; on the other two it is provably inert. Literal on purpose — the
 # rule itself is imported from production, so widening production's rule to a
 # cell that appears on an S or E front row makes this assertion fail instead of
 # silently agreeing with itself.
-TIE_BREAK_CAN_FIRE = {"N", "W"}
+TIE_BREAK_CAN_FIRE = {"N", "E"}
 
 
 @pytest.mark.parametrize("road_side", ["S", "N", "E", "W"])
@@ -405,10 +405,11 @@ def test_tie_break_fires_on_a_north_road():
     assert on.cx < 3.0, f"Vastu did not move the entrance to the NE third: {on.cx}"
 
 
-def test_tie_break_fires_on_a_west_road():
-    """road_side='W' mirrors it: NE is on the HIGH-x third."""
-    cfg = _ecfg(road_side="W")
-    off = _entrance(_front(GEOM_B), _ecfg(road_side="W", vastu_enabled=False), False)
+def test_tie_break_fires_on_an_east_road():
+    """road_side='E' mirrors it: the front row is [SE, E, NE], so NE is on the
+    HIGH-x third."""
+    cfg = _ecfg(road_side="E")
+    off = _entrance(_front(GEOM_B), _ecfg(road_side="E", vastu_enabled=False), False)
     on = _entrance(_front(GEOM_B), cfg, True)
     assert off is not None and on is not None
     assert off.cx < 4.5, f"expected the low-x room to win on distance, got {off.cx}"
@@ -436,24 +437,24 @@ MIDDLE_THIRD_CASES = [
     # high-x third; the high-x candidate (NW) wins on distance, and only "N"
     # being in the rule can move the door to the middle third.
     ("N", 4.5, 0.9, [(6.0, 7.5, "living"), (4.5, 6.0, "living")], 5.25),
-    # West road, front row [SE, E, NE]. Mirrored: gate_x = (0.9 + 4.5) / 2 =
+    # East road, front row [SE, E, NE]. Mirrored: gate_x = (0.9 + 4.5) / 2 =
     # 2.7, in the low-x third; the low-x candidate (SE) wins on distance, and
     # only "E" being in the rule can move the door to the middle third.
-    ("W", 0.9, 4.5, [(1.5, 3.0, "living"), (3.0, 4.5, "living")], 3.75),
+    ("E", 0.9, 4.5, [(1.5, 3.0, "living"), (3.0, 4.5, "living")], 3.75),
 ]
 
 
 @pytest.mark.parametrize(
     ("road_side", "sb_left", "sb_right", "spans", "middle_mid"),
     MIDDLE_THIRD_CASES,
-    ids=["N-middle-is-N", "W-middle-is-E"],
+    ids=["N-middle-is-N", "E-middle-is-E"],
 )
 def test_tie_break_reaches_the_middle_third(
     road_side, sb_left, sb_right, spans, middle_mid
 ):
     """The middle cell of the front row is auspicious and Vastu must reach it.
 
-    Fails if the shipped rule drops "N" (north case) or "E" (west case): the
+    Fails if the shipped rule drops "N" (north case) or "E" (east case): the
     middle candidate stops being auspicious, both candidates tie at 1, and the
     distance winner — the outer third — keeps the door.
     """
@@ -473,12 +474,13 @@ def test_tie_break_reaches_the_middle_third(
     )
 
 
-@pytest.mark.parametrize("road_side", ["S", "E"])
+@pytest.mark.parametrize("road_side", ["S", "W"])
 @pytest.mark.parametrize("geom", [GEOM_A, GEOM_B])
-def test_tie_break_is_inert_on_south_and_east_roads(road_side, geom):
-    """Pinned limitation: the front row on a S or E road holds no N/NE/E cell,
-    so enabling Vastu cannot move the entrance. `road_side='S'` is the
-    PlotConfig default, i.e. the most common configuration."""
+def test_tie_break_is_inert_on_south_and_west_roads(road_side, geom):
+    """Pinned limitation: the front row on a S road ([SW, S, SE]) or a W road
+    ([NW, W, SW]) holds no N/NE/E cell, so enabling Vastu cannot move the
+    entrance. `road_side='S'` is the PlotConfig default, i.e. the most common
+    configuration."""
     on = _entrance(_front(geom), _ecfg(road_side=road_side), True)
     off = _entrance(
         _front(geom), _ecfg(road_side=road_side, vastu_enabled=False), False
@@ -487,10 +489,10 @@ def test_tie_break_is_inert_on_south_and_east_roads(road_side, geom):
     assert on.cx == off.cx
 
 
-@pytest.mark.parametrize("road_side", ["S", "E"])
+@pytest.mark.parametrize("road_side", ["S", "W"])
 def test_tie_break_is_inert_on_a_middle_third_candidate_too(road_side):
-    """The inert claim has to hold for the MIDDLE cell of the S/E front rows —
-    "S" on a south road, "W" on an east road — and that is the one place the
+    """The inert claim has to hold for the MIDDLE cell of the S/W front rows —
+    "S" on a south road, "W" on a west road — and that is the one place the
     outer-third fixtures above never reach.
 
     Reuses the north case's asymmetric setbacks so the middle-third candidate
@@ -530,21 +532,21 @@ def test_vastu_disabled_config_does_not_move_the_entrance():
 def test_explicit_north_angle_overrides_the_road_side():
     """`resolve_north_angle`, not `north_angle_for_road_side(cfg.road_side)`.
 
-    road_side='W' would put NE on the HIGH-x third, so the distance winner
+    road_side='E' would put NE on the HIGH-x third, so the distance winner
     (also high-x, see GEOM_A) would already be auspicious and the door would not
     move. north_angle_deg=180.0 is the north orientation, which puts NE on the
     LOW-x third — so the door must move there instead.
     """
     rooms = _front(GEOM_A)
-    cfg = _ecfg(road_side="W", north_angle_deg=180.0)
+    cfg = _ecfg(road_side="E", north_angle_deg=180.0)
     off = _entrance(
-        rooms, _ecfg(road_side="W", north_angle_deg=180.0, vastu_enabled=False), False
+        rooms, _ecfg(road_side="E", north_angle_deg=180.0, vastu_enabled=False), False
     )
     on = _entrance(rooms, cfg, True)
     assert off is not None and on is not None
     assert off.cx > 4.5, off.cx
     assert on.cx < 3.0, (
-        f"north_angle_deg=180 was ignored in favour of road_side='W': {on.cx}"
+        f"north_angle_deg=180 was ignored in favour of road_side='E': {on.cx}"
     )
 
 

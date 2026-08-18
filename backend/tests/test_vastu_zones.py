@@ -144,10 +144,98 @@ def test_band_boundary_ties_diverge_when_the_third_is_not_representable():
     assert zone_for_point(SQ_W / 2, 2 * y_third + 0.01, SQ_W, SQ_L, 0.0) == "N"
 
 
+# ── EXTERNAL COMPASS ANCHOR ────────────────────────────────────────────────
+#
+# Everything else in this file checks the engine against ``ZONE_GRIDS`` and
+# ``ROAD_SIDE_NORTH_ANGLE_DEG`` — data that lives in ``vastu.py``, and from
+# which the angles were themselves derived. That is circular: it proves the
+# engine and the table agree with *each other*, never that either agrees with a
+# compass. It is exactly how the swapped E/W grids survived undetected until
+# Task 19 — the tests reproduced the wrong data faithfully.
+#
+# The expectations below are literals derived from the compass alone. Nothing
+# here may be computed from ``ZONE_GRIDS``, ``ROAD_SIDE_NORTH_ANGLE_DEG`` or any
+# helper that reads them — reintroducing that would reintroduce the blind spot.
+#
+# Derivation. Plot geometry puts the road-facing edge at y-min by hard
+# convention (``_place_main_entrance``, ``plan_geometry``, ``section_geometry``:
+# "the road is always the y-min edge"), x points right in plan view, and
+# ``road_side`` names the compass direction that front edge faces. Therefore:
+#
+#   * the y-min (front) third of the plot is that compass direction's third of
+#     the Vastu grid, and the y-max (rear) third is the opposite direction's;
+#   * left-to-right order follows from east = north turned 90 deg clockwise, so
+#     +x is +y turned 90 deg clockwise.
+#
+#     road S: +y = N, +x = E  ->  front [SW, S, SE]   rear [NW, N, NE]
+#     road N: +y = S, +x = W  ->  front [NE, N, NW]   rear [SE, S, SW]
+#     road E: +y = W, +x = N  ->  front [SE, E, NE]   rear [SW, W, NW]
+#     road W: +y = E, +x = S  ->  front [NW, W, SW]   rear [NE, E, SE]
+#
+# Front rows are asserted so a 180 deg error is caught; rear rows so a 90 deg
+# error (which preserves neither) is caught as well.
+
+COMPASS_FRONT_ROW: dict[str, list[str]] = {
+    "S": ["SW", "S", "SE"],
+    "N": ["NE", "N", "NW"],
+    "E": ["SE", "E", "NE"],
+    "W": ["NW", "W", "SW"],
+}
+
+COMPASS_REAR_ROW: dict[str, list[str]] = {
+    "S": ["NW", "N", "NE"],
+    "N": ["SE", "S", "SW"],
+    "E": ["SW", "W", "NW"],
+    "W": ["NE", "E", "SE"],
+}
+
+
+def _row_zones(side: str, y_frac: float) -> list[str]:
+    """The three zones across a horizontal band of the plot, left to right."""
+    angle = north_angle_for_road_side(side)
+    return [
+        zone_for_point(NS_W * x_frac, NS_L * y_frac, NS_W, NS_L, angle)
+        for x_frac in (1 / 6, 3 / 6, 5 / 6)
+    ]
+
+
+@pytest.mark.parametrize("side", ["S", "N", "E", "W"])
+def test_road_facing_row_is_that_compass_directions_third(side):
+    """The y-min row of a plot must be the third of the direction it faces.
+
+    Compass-anchored: the expected rows are literals (see the derivation above),
+    not lookups into ``vastu.py``. This is the test the grid-reproduction suite
+    could not be — it fails on a 180 deg error even when engine and table agree
+    perfectly with each other.
+    """
+    assert _row_zones(side, 1 / 6) == COMPASS_FRONT_ROW[side], (
+        f"road_side={side!r}: the road-facing (y-min) row must be the {side} "
+        f"third of the plot"
+    )
+
+
+@pytest.mark.parametrize("side", ["S", "N", "E", "W"])
+def test_rear_row_is_the_opposite_compass_directions_third(side):
+    """The y-max row must be the third opposite the road — catches a 90 deg error.
+
+    A 180 deg error swaps front and rear rows, so the front-row test alone
+    cannot distinguish it from a 90 deg one; pinning the rear row too makes any
+    quarter-turn of the map visible.
+    """
+    assert _row_zones(side, 5 / 6) == COMPASS_REAR_ROW[side], (
+        f"road_side={side!r}: the rear (y-max) row must be the third opposite the road"
+    )
+
+
 # ── road_side -> north_angle_deg mapping, proven against all four grids ─────
 
 
-EXPECTED_ROAD_SIDE_ANGLES = {"S": 0.0, "W": 90.0, "N": 180.0, "E": 270.0}
+# Independently re-derived from the compass, not copied from `vastu.py`:
+# `north_angle_deg` is measured clockwise from plot +y to true north, and +y
+# points from the road-facing edge into the plot, i.e. opposite `road_side`.
+#   road S -> +y = North -> 0 deg;    road E -> +y = West  -> 90 deg
+#   road N -> +y = South -> 180 deg;  road W -> +y = East  -> 270 deg
+EXPECTED_ROAD_SIDE_ANGLES = {"S": 0.0, "E": 90.0, "N": 180.0, "W": 270.0}
 
 
 def test_road_side_angles_reproduce_every_grid_cell():
@@ -202,7 +290,7 @@ def test_unknown_road_side_still_falls_back_to_south():
 
 
 def test_road_side_is_case_insensitive():
-    assert north_angle_for_road_side("e") == north_angle_for_road_side("E") == 270.0
+    assert north_angle_for_road_side("e") == north_angle_for_road_side("E") == 90.0
 
 
 # ── rotation semantics ──────────────────────────────────────────────────────
@@ -213,8 +301,9 @@ def test_ninety_degree_rotation_sends_the_ne_corner_to_nw():
 
     At 90 deg true north points along +x, so the plot's +x/+y corner — which
     sits 45 deg clockwise of plot-north — ends up 45 deg *anticlockwise* of true
-    north, i.e. NW. Equivalently: 90 deg must reproduce ``road_side="W"``, whose
-    grid puts "NW" in the rear-right cell.
+    north, i.e. NW. Equivalently: 90 deg must reproduce ``road_side="E"`` (a
+    plot whose front faces East has North along +x), whose grid puts "NW" in the
+    rear-right cell.
     """
     for plot_w, plot_l in ((SQ_W, SQ_L), (NS_W, NS_L)):
         assert zone_for_point(0.9 * plot_w, 0.9 * plot_l, plot_w, plot_l, 90.0) == "NW"
@@ -226,9 +315,9 @@ def test_ninety_degrees_on_a_non_square_plot_keeps_four_distinct_corners():
 
     Measured, not assumed: at a 1.67 aspect ratio a metric-space rotation still
     yields four distinct corners, so what it gets wrong here is the *direction*
-    (it produces the road_side="E" grid where road_side="W" is required), which
-    the second half of this test pins. Outright corner collapse needs a taller
-    plot — see `test_high_aspect_corners_do_not_collapse_onto_edges`.
+    (it produces the 270 deg grid where the 90 deg one is required), which the
+    second half of this test pins. Outright corner collapse needs a taller plot
+    — see `test_high_aspect_corners_do_not_collapse_onto_edges`.
     """
     corners = {
         "rear-right": (0.95 * NS_W, 0.95 * NS_L),
@@ -240,11 +329,12 @@ def test_ninety_degrees_on_a_non_square_plot_keeps_four_distinct_corners():
         name: zone_for_point(x, y, NS_W, NS_L, 90.0) for name, (x, y) in corners.items()
     }
     assert set(zones.values()) == {"NW", "SW", "NE", "SE"}, zones
-    # And it agrees with the pre-existing road_side="W" grid corner-for-corner.
-    assert zones["rear-right"] == ZONE_GRIDS["W"][0][2]
-    assert zones["rear-left"] == ZONE_GRIDS["W"][0][0]
-    assert zones["front-right"] == ZONE_GRIDS["W"][2][2]
-    assert zones["front-left"] == ZONE_GRIDS["W"][2][0]
+    # And it agrees corner-for-corner with the grid for the road side whose
+    # north angle is 90 deg — road_side="E" (see EXPECTED_ROAD_SIDE_ANGLES).
+    assert zones["rear-right"] == ZONE_GRIDS["E"][0][2]
+    assert zones["rear-left"] == ZONE_GRIDS["E"][0][0]
+    assert zones["front-right"] == ZONE_GRIDS["E"][2][2]
+    assert zones["front-left"] == ZONE_GRIDS["E"][2][0]
 
 
 def test_high_aspect_corners_do_not_collapse_onto_edges():
