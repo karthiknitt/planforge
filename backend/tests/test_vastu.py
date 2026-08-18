@@ -201,13 +201,32 @@ def test_score_vastu_grades_a_prohibited_room_to_zero():
     assert _score_vastu(layout, _cfg()) == 0.0
 
 
-def test_score_vastu_is_bounded_at_zero_however_bad_the_layout():
-    # Was: 6 toilets x -20 = -120 clamped to 0 by a max(0.0, ...). There is no
-    # clamp now — every verdict factor is in [0, 1], so an area-weighted mean
-    # of them cannot leave [0, 100] no matter how many rooms are misplaced.
-    rooms = [_make_room(f"t{i}", "toilet", 7.5, 11.5, 1, 1) for i in range(6)]
-    layout = _make_layout(rooms)
-    assert _score_vastu(layout, _cfg()) == 0.0
+def test_score_vastu_grades_a_mixed_layout_by_ruled_area_inside_the_bound():
+    """Was "floors at zero": 6 NE toilets, `== 0.0`, which proved only that the
+    old `max(0.0, ...)` clamp caught a -120 raw score. There is no clamp now, and
+    that fixture is all-avoid, so it cannot show the bound holds *between* the
+    endpoints — nor distinguish the graded component from the old arithmetic.
+
+    This fixture is genuinely mixed: two large `avoid` rooms (12 m2 NE kitchen,
+    12 m2 C toilet), a tiny `preferred` one (0.36 m2 SW bedroom), a small
+    `acceptable` one (1 m2 N pooja), and a large rule-less duct. Hand-computed:
+    ruled area = 12 + 12 + 0.36 + 1 = 25.36 m2 (the 12 m2 duct has no rule, so it
+    carries no weight at all); credited = 1.0 x 0.36 + 0.7 x 1 = 1.06 m2;
+    1.06 / 25.36 = 4.18%. Area, not room count, decides it — three of the four
+    ruled rooms are not `avoid`, yet the score sits near the floor.
+    """
+    layout = _make_layout(
+        [
+            _make_room("k", "kitchen", 6.0, 8.0, 3.0, 4.0),  # NE — avoid
+            _make_room("t", "toilet", 3.0, 4.0, 3.0, 4.0),  # C — avoid
+            _make_room("b", "bedroom", 0.2, 0.2, 0.6, 0.6),  # SW — preferred
+            _make_room("p", "pooja", 3.5, 9.0, 1.0, 1.0),  # N — acceptable
+            _make_room("d", "duct", 0.0, 4.0, 3.0, 4.0),  # no rule — excluded
+        ]
+    )
+    score = _score_vastu(layout, _cfg())
+    assert 0.0 < score < 100.0
+    assert score == 4.18
 
 
 def test_score_vastu_ranks_acceptable_between_avoided_and_preferred():
