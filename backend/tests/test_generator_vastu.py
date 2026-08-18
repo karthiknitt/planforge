@@ -259,11 +259,14 @@ def test_solver_does_not_drop_a_layout_over_a_prohibited_zone_room():
     emitted twice, once here and once in `generator._attach_vastu`.
 
     `check_vastu` is stubbed to report a prohibited-zone room on every layout, so
-    the old code would discard the entire candidate set. Two assertions, because
-    they fail for different reasons: the call count is deterministic and pins the
-    call site itself; the layout count is the user-facing consequence and is what
-    a *partial* restoration (violations without the `passed` flip) would still
-    let through.
+    the old code would discard the entire candidate set.
+
+    More than one assertion, because each catches a different regression, as
+    measured: restoring the whole block trips both the call count (5 != 0) and
+    the layout count (0 > 0 fails, the 3-to-0 collapse). Restoring it *without*
+    the `passed` flip leaves the layout count satisfied — nothing is dropped —
+    and is caught only by the call count and by `[Vastu]` reappearing in
+    `violations`. So neither assertion subsumes the other.
     """
     import app.engine.vastu as vastu_mod
     from app.engine.compliance import load_rules
