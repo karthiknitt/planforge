@@ -876,7 +876,16 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             walls = derive_walls(fp.rooms, buildable)
             columns = derive_columns(walls, rooms=fp.rooms)
             openings = derive_openings(
-                fp.rooms, walls, columns, std, buildable, floor=fp.floor
+                fp.rooms,
+                walls,
+                columns,
+                std,
+                buildable,
+                floor=fp.floor,
+                # Same cfg the drawing path passes. Without it the layout
+                # validated for connectivity would have its entrance somewhere
+                # other than the layout actually drawn.
+                vastu_cfg=cfg,
             )
             if validate_floor_connectivity(fp.rooms, openings, fp.floor):
                 ok = False
