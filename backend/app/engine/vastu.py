@@ -396,6 +396,32 @@ def _get_zone(
     return zone_for_point(cx, cy, plot_w, plot_l, north_angle_for_road_side(road_side))
 
 
+_FLOOR_LABELS: dict[str, str] = {
+    "basement": "basement",
+    "stilt": "stilt floor",
+    "ground": "ground floor",
+    "first": "first floor",
+    "second": "second floor",
+}
+
+
+def _floor_label(floor: FloorPlan) -> str:
+    """Human-readable identifier for the floor a Vastu finding is about.
+
+    `check_vastu` reads every floor, and stacked floors are the normal case: a
+    G+1's first-floor toilet sits directly above the ground-floor one with the
+    same `name` and the same (x, y), so both land in the same zone and produce a
+    byte-identical sentence. `generator._apply_vastu` extends
+    `layout.compliance.warnings` with these strings verbatim, so the duplicate
+    reaches the API/UI payload and the user cannot tell which floor is meant.
+
+    `floor_type` is an unvalidated `str` on `FloorPlan`, so an unrecognised value
+    falls back to the numeric `floor` rather than raising or silently dropping
+    the identifier.
+    """
+    return _FLOOR_LABELS.get(floor.floor_type, f"floor {floor.floor}")
+
+
 def check_vastu(
     layout: Layout, cfg: PlotConfig, road_side: str = "S"
 ) -> tuple[list[str], list[str]]:
@@ -403,6 +429,13 @@ def check_vastu(
     Check Vastu compliance for a layout.
 
     Returns (violations, warnings) lists with [Vastu] prefix messages.
+
+    Every message carries a trailing `(<floor>)` label. The label is a SUFFIX,
+    not an infix, deliberately: `frontend/src/components/status-rail.tsx` does
+    `w.startsWith("[Vastu]")` and `w.replace("[Vastu] ", "")`, and the existing
+    engine tests substring-match on `"Kitchen is in"`, `"Pooja Room is in"` and
+    `"ideal for master bedroom"` — all of which an infix after the room name
+    would break. A suffix leaves every one of those intact.
     """
     violations: list[str] = []
     warnings: list[str] = []
@@ -430,45 +463,55 @@ def check_vastu(
         )
         if f is not None
     ]
-    all_rooms = [r for f in floors for r in f.rooms]
+    # (floor, room) pairs, not bare rooms: the floor is what disambiguates two
+    # otherwise byte-identical messages (see `_floor_label`).
+    all_rooms = [(f, r) for f in floors for r in f.rooms]
 
-    for room in all_rooms:
+    for floor, room in all_rooms:
         cx = room.x + room.width / 2
         cy = room.y + room.depth / 2
         zone = zone_for_point(cx, cy, plot_w, plot_l, north)
         rules = VASTU_RULES.get(zone, {})
+        # `notes` is optional and often empty; keep the label from growing a
+        # double space when it is.
+        notes = rules.get("notes", "")
+        tail = (
+            f"{notes} ({_floor_label(floor)})" if notes else f"({_floor_label(floor)})"
+        )
 
         if room.type in rules.get("prohibit", []):
             violations.append(
                 f"[Vastu] {room.name} in {rules['name']} zone — "
-                f"{room.type.title()} is strictly prohibited here. {rules.get('notes', '')}"
+                f"{room.type.title()} is strictly prohibited here. {tail}"
             )
         elif room.type in rules.get("avoid", []):
             warnings.append(
                 f"[Vastu] {room.name} in {rules['name']} zone — "
-                f"{room.type.title()} is inauspicious here. {rules.get('notes', '')}"
+                f"{room.type.title()} is inauspicious here. {tail}"
             )
 
     # Kitchen-specific: must be in SE or NW — violation if elsewhere
-    kitchens = [r for r in all_rooms if r.type == "kitchen"]
-    for k in kitchens:
+    kitchens = [(f, r) for f, r in all_rooms if r.type == "kitchen"]
+    for floor, k in kitchens:
         cx = k.x + k.width / 2
         cy = k.y + k.depth / 2
         zone = zone_for_point(cx, cy, plot_w, plot_l, north)
         if zone not in ("SE", "NW", "E"):
             warnings.append(
-                f"[Vastu] Kitchen is in {zone} zone — prefer Southeast (Agni) or Northwest for kitchen"
+                f"[Vastu] Kitchen is in {zone} zone — prefer Southeast (Agni) "
+                f"or Northwest for kitchen ({_floor_label(floor)})"
             )
 
     # Pooja room: prefer NE — warn if not in NE, E, or N
-    poojas = [r for r in all_rooms if r.type == "pooja"]
-    for p in poojas:
+    poojas = [(f, r) for f, r in all_rooms if r.type == "pooja"]
+    for floor, p in poojas:
         cx = p.x + p.width / 2
         cy = p.y + p.depth / 2
         zone = zone_for_point(cx, cy, plot_w, plot_l, north)
         if zone not in ("NE", "N", "E"):
             warnings.append(
-                f"[Vastu] Pooja Room is in {zone} zone — Northeast (Ishanya) is ideal for prayer space"
+                f"[Vastu] Pooja Room is in {zone} zone — Northeast (Ishanya) "
+                f"is ideal for prayer space ({_floor_label(floor)})"
             )
 
     # Master bedroom: prefer SW — warn if not in SW or S
@@ -485,8 +528,13 @@ def check_vastu(
         cy = b.y + b.depth / 2
         zone = zone_for_point(cx, cy, plot_w, plot_l, north)
         if zone not in ("SW", "S", "W"):
+            # Labelled too, even though this check is ground-floor-only so the
+            # label is constant: a uniform format means the UI (and any future
+            # dedupe) needs no special case, and it makes the GF-only scope of
+            # this particular advisory visible to the reader of the message.
             warnings.append(
-                f"[Vastu] {b.name} is in {zone} zone — Southwest (Nairutya) is ideal for master bedroom"
+                f"[Vastu] {b.name} is in {zone} zone — Southwest (Nairutya) "
+                f"is ideal for master bedroom ({_floor_label(layout.ground_floor)})"
             )
 
     return violations, warnings
