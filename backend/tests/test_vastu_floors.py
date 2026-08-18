@@ -473,16 +473,8 @@ def test_tie_break_reaches_the_middle_third(
     )
 
 
-# Geometry C: a middle-third candidate on the inert road sides. Symmetric
-# setbacks are fine here — the assertion is that vastu-on equals vastu-off, so
-# it does not matter which candidate wins on distance, only that a middle-third
-# cell ("S" on a south road, "W" on an east road) is in play at all. Widening
-# the rule to either of those cells makes the two disagree.
-GEOM_C = [(1.2, 2.85, "living"), (3.4, 5.6, "living")]
-
-
 @pytest.mark.parametrize("road_side", ["S", "E"])
-@pytest.mark.parametrize("geom", [GEOM_A, GEOM_B, GEOM_C])
+@pytest.mark.parametrize("geom", [GEOM_A, GEOM_B])
 def test_tie_break_is_inert_on_south_and_east_roads(road_side, geom):
     """Pinned limitation: the front row on a S or E road holds no N/NE/E cell,
     so enabling Vastu cannot move the entrance. `road_side='S'` is the
@@ -491,6 +483,27 @@ def test_tie_break_is_inert_on_south_and_east_roads(road_side, geom):
     off = _entrance(
         _front(geom), _ecfg(road_side=road_side, vastu_enabled=False), False
     )
+    assert on is not None and off is not None
+    assert on.cx == off.cx
+
+
+@pytest.mark.parametrize("road_side", ["S", "E"])
+def test_tie_break_is_inert_on_a_middle_third_candidate_too(road_side):
+    """The inert claim has to hold for the MIDDLE cell of the S/E front rows —
+    "S" on a south road, "W" on an east road — and that is the one place the
+    outer-third fixtures above never reach.
+
+    Reuses the north case's asymmetric setbacks so the middle-third candidate
+    genuinely LOSES the distance key: with symmetric setbacks `gate_x` sits dead
+    centre of the middle third, the middle candidate wins on distance anyway,
+    and vastu-on would equal vastu-off no matter how wide the rule got. Widening
+    the shipped rule to "S" makes this fail on the south road.
+    """
+    _rs, sb_left, sb_right, spans, _mid = MIDDLE_THIRD_CASES[0]
+    kw = dict(road_side=road_side, setback_left=sb_left, setback_right=sb_right)
+    rooms = _front(spans)
+    on = _entrance(rooms, _ecfg(**kw), True)
+    off = _entrance(rooms, _ecfg(vastu_enabled=False, **kw), False)
     assert on is not None and off is not None
     assert on.cx == off.cx
 
