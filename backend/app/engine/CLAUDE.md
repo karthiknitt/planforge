@@ -41,3 +41,11 @@ structural sheets; member design itself happens in structapi, not here.
 
 OR-Tools 9.x: `new_interval_var(x, w, x + w, name)` fails because `x + w` is a two-IntVar
 sum, not affine. Introduce an explicit end var: `model.add(ex == x + w)`.
+
+`IntVar.proto.domain` does **not** honour negative indexing. It is a protobuf
+repeated-scalar container, so `v.proto.domain[-1]` silently returns `0` instead
+of the upper bound — no exception, just a wrong number. `tuple(v.proto.domain)`
+is `(lo, hi)` and `v.proto.domain[0]` is correct. This has already cost one
+mutation-testing round on the Vastu solver terms: a mutation written against
+`domain[-1]` was a no-op and was scored as evidence of coverage it never
+provided. Read bounds via `domain[0]` / `tuple(...)`, never a negative index.
