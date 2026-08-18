@@ -86,6 +86,7 @@ def layout_out_from_engine(lay: Any) -> LayoutOut:
         )
         if lay.score
         else None,
+        vastu_score=getattr(lay, "vastu_score", None),
         space_notes=getattr(lay, "space_notes", []),
         auto_added_rooms=getattr(lay, "space_notes", []),
     )
@@ -274,5 +275,6 @@ def engine_layout_from_geometry(g: dict) -> Layout:
         )
         if score
         else None,
+        vastu_score=g.get("vastu_score"),
         space_notes=g.get("space_notes", []),
     )

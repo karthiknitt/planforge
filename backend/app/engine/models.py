@@ -194,6 +194,11 @@ class Layout:
     second_floor: FloorPlan | None = None
     basement_floor: FloorPlan | None = None
     score: LayoutScore | None = None
+    # Graded 0–100 Vastu compliance (vastu.vastu_layout_score) over the final
+    # post-fill geometry of every floor, or None when cfg.vastu_enabled is False.
+    # Ranking already consumes this through scorer._score_vastu; it is stored so
+    # the API/UI can show the number that drove the ranking.
+    vastu_score: float | None = None
     space_notes: list[str] = field(default_factory=list)  # auto-fill notes for user
 
 
