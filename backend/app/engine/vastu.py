@@ -325,20 +325,64 @@ def vastu_room_score(
 
 
 def vastu_layout_score(floors: list[FloorPlan], cfg: PlotConfig) -> float:
-    """0..100 mean room score across every floor.
+    """0..100 Vastu score across every floor: an **area-weighted** mean over
+    **only the rooms that have a rule**.
+
+    Do not "simplify" this back to a plain mean over all rooms. A plain mean was
+    measured to have three ranking pathologies, and this function is a ranking
+    signal (Task 16) and a CP-SAT objective term (Task 17), not a display number:
+
+    1. *Rule-less rooms shifted the score.* A `duct` has no entry in
+       `VASTU_ROOM_RULES` and no alias, so `_verdict` gives it NEUTRAL 0.45. Under
+       a plain mean that 0.45 is not neutral at all — it drags every mean toward
+       itself. Two prohibited rooms scored 0.0, and adding three ducts took them
+       to 27.0; two perfect rooms scored 100.0 and one duct dropped them to 81.67.
+       As an objective that rewards filler in bad plans and penalises good ones.
+       Excluding rule-less rooms is the fix at the root: a room Vastu has no
+       opinion about should carry zero *weight*, not a middling opinion.
+    2. *Room area was ignored between rooms.* Each room is area-weighted across
+       zones by `vastu_room_score`, but rooms were then averaged one-for-one, so
+       four 0.36 m2 utilities outvoted a 16 m2 master bedroom in prohibited NE
+       (20.93 alone -> 84.19). Weighting by area is how a consultant reads a plan.
+    3. *Scores were incomparable across room counts.* One perfect kitchen scored
+       72.5 / 58.75 / 51.88 at 2 / 4 / 8 rooms. With (1) and (2) the denominator
+       is ruled floor area rather than a raw count, so padding cannot move it.
+
+    Together (1) and (2) make this exactly "the verdict-weighted fraction of
+    ruled floor area": sum over (room, zone) of the room's physical area in that
+    zone times its verdict, over the total ruled area. Range is [0, 100] because
+    every verdict factor is in [0, 1].
+
+    Returns 0.0 both for an empty layout and for a layout whose rooms all lack a
+    rule. Neither is "45% compliant" — there is no Vastu content to credit, and
+    0.0 is the incentive-safe choice: retyping the last ruled room away can then
+    never *raise* the score. (Room *type* is fixed before the model is built —
+    `solver.py` passes `room_type=rtype` as a Python constant — so exclusion is
+    not something a solver can game; room *width/depth* are decision variables,
+    so area-weighting does let a badly-placed room shrink toward its
+    `fit.min_area` floor to shed weight. That floor plus the area-utilisation
+    objective bound it, but weigh it when tuning Task 17's objective weights.)
 
     Ground-floor-only scoring was the old behaviour; a first-floor master bedroom
-    is now counted. Returns 0.0 for an empty layout — there is nothing to score,
-    and a neutral 45 would falsely credit a plan with no rooms.
+    is counted.
     """
     rooms = [room for floor in floors for room in floor.rooms]
     if not rooms:
         return 0.0
     north = resolve_north_angle(cfg)
-    total = sum(
-        vastu_room_score(room, cfg.plot_width, cfg.plot_length, north) for room in rooms
-    )
-    return round(100.0 * total / len(rooms), 2)
+    weighted = 0.0
+    ruled_area = 0.0
+    for room in rooms:
+        if _rule_for(room.type) is None:
+            continue
+        area = room.width * room.depth
+        weighted += area * vastu_room_score(
+            room, cfg.plot_width, cfg.plot_length, north
+        )
+        ruled_area += area
+    if ruled_area <= 0.0:
+        return 0.0
+    return round(100.0 * weighted / ruled_area, 2)
 
 
 def _get_zone(

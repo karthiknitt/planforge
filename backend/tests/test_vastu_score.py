@@ -23,6 +23,7 @@ from app.engine.vastu import (
     VERDICT_AVOID,
     VERDICT_NEUTRAL,
     VERDICT_PREFERRED,
+    _rule_for,
     resolve_north_angle,
     vastu_layout_score,
     vastu_room_score,
@@ -259,27 +260,99 @@ def test_rotation_moves_the_verdict() -> None:
 # ── Aliases ─────────────────────────────────────────────────────────────────
 
 
-def test_alias_types_inherit_the_generic_rule() -> None:
+# Every alias pinned against a LITERAL, not against `VASTU_RULE_ALIASES` itself.
+# The previous guard was `checked == 4 * len(VASTU_RULE_ALIASES)` — derived from
+# the very dict it was iterating, so it shrank quietly with the dict: deleting
+# `wc_only`, `master_bedroom`, `parking_2w` or `garage` outright left all 22
+# tests passing. Without its alias a modern token carries no Vastu opinion at
+# all and scores a flat neutral 0.45.
+EXPECTED_ALIASES = {
+    "master_bedroom": "bedroom",
+    "wc_only": "toilet",
+    "bathroom_master": "toilet",
+    "parking_4w": "parking",
+    "parking_2w": "parking",
+    "garage": "parking",
+}
+
+# (alias, x, y, expected score) — one literal non-neutral verdict per alias, so
+# losing any single alias flips its row to the neutral 0.45 and fails loudly.
+# NE (7.5, 7.5) prohibits bedroom, toilet and parking alike; SE (7.5, 0.5) is
+# silent for all three, which is what makes the neutral value observable.
+ALIAS_ANCHORS = (
+    ("master_bedroom", 7.5, 7.5, 0.0),
+    ("wc_only", 7.5, 7.5, 0.0),
+    ("bathroom_master", 7.5, 7.5, 0.0),
+    ("parking_4w", 7.5, 7.5, 0.0),
+    ("parking_2w", 7.5, 7.5, 0.0),
+    ("garage", 7.5, 7.5, 0.0),
+    ("master_bedroom", 0.5, 0.5, 1.0),
+    ("parking_4w", 4.0, 0.5, 1.0),
+    ("parking_2w", 4.0, 0.5, 1.0),
+    ("garage", 4.0, 0.5, 1.0),
+    ("wc_only", 0.5, 7.5, 1.0),
+    ("bathroom_master", 0.5, 7.5, 1.0),
+)
+
+
+def test_the_alias_map_is_exactly_these_six_pairs() -> None:
+    """Literal, so deleting an alias or silently retargeting one fails here."""
+    assert VASTU_RULE_ALIASES == EXPECTED_ALIASES
+
+
+@pytest.mark.parametrize(("alias", "x", "y", "expected"), ALIAS_ANCHORS)
+def test_each_alias_scores_its_targets_literal_verdict(
+    alias: str, x: float, y: float, expected: float
+) -> None:
     """`parking_4w` is the token models.py tells new layouts to prefer; without
-    the alias only the deprecated `parking` would carry a Vastu opinion."""
+    the alias only the deprecated `parking` would carry a Vastu opinion.
+
+    Pinned against a literal verdict rather than against the target's own score,
+    so this cannot pass by both sides degrading to neutral together.
+    """
+    assert vastu_room_score(_room(alias, x, y), 10.0, 10.0, 0.0) == expected
+    # Not vacuous: the neutral value an unaliased token would take is different.
+    assert expected != VERDICT_NEUTRAL
+
+
+def test_alias_types_inherit_the_generic_rule() -> None:
+    """The literal anchors cover one or two zones each; this sweeps all six
+    aliases across four zones against their target, catching a partial
+    divergence the anchors would miss."""
     checked = 0
-    for alias, target in VASTU_RULE_ALIASES.items():
+    for alias, target in EXPECTED_ALIASES.items():
         for x, y in ((7.5, 7.5), (0.5, 0.5), (5.0, 5.0), (0.5, 7.5)):
             assert vastu_room_score(_room(alias, x, y), 10.0, 10.0, 0.0) == (
                 vastu_room_score(_room(target, x, y), 10.0, 10.0, 0.0)
             )
             checked += 1
-    assert checked == 4 * len(VASTU_RULE_ALIASES)
-    # Not vacuous: at least one of those positions is a non-neutral verdict.
-    assert vastu_room_score(_room("bathroom_master", 7.5, 7.5), 10.0, 10.0, 0.0) == 0.0
-    assert vastu_room_score(_room("parking_4w", 4.0, 0.5), 10.0, 10.0, 0.0) == 1.0
+    assert checked == 24
 
 
-def test_an_alias_does_not_chain() -> None:
+def test_an_alias_does_not_chain(monkeypatch: pytest.MonkeyPatch) -> None:
     """One hop only. A chained lookup would be a silent way for an alias to a
-    non-existent rule to resolve to something unrelated."""
+    non-existent rule to resolve to something unrelated.
+
+    This must exercise `_rule_for`, not just assert facts about the data. The
+    data-only version of this test could not observe the resolution strategy at
+    all: rewriting `_rule_for` to follow aliases in a `while` loop — full
+    recursive chaining, exactly what this test forbids — left it passing.
+
+    `passage` -> `garage` -> `parking` is a two-hop path that only exists inside
+    this test, since the real alias keys and rule keys are disjoint. One hop
+    stops at `garage`, which has no rule of its own, and yields None.
+    """
     assert "garage" not in VASTU_ROOM_RULES
     assert VASTU_RULE_ALIASES["garage"] in VASTU_ROOM_RULES
+
+    monkeypatch.setitem(VASTU_RULE_ALIASES, "passage", "garage")
+    assert _rule_for("passage") is None, "alias resolution chained past one hop"
+    # Control: one hop does resolve, so the None above is the hop limit and not
+    # a lookup that is broken outright.
+    assert _rule_for("garage") == VASTU_ROOM_RULES["parking"]
+    # And the chained target is reachable, so None is not "parking is missing".
+    assert vastu_room_score(_room("passage", 7.5, 7.5), 10.0, 10.0, 0.0) == 0.45
+    assert vastu_room_score(_room("garage", 7.5, 7.5), 10.0, 10.0, 0.0) == 0.0
 
 
 # ── Layout score and orientation resolution ─────────────────────────────────
@@ -320,6 +393,101 @@ def test_layout_score_is_the_mean_over_every_floor() -> None:
 def test_layout_score_of_an_empty_plan_is_zero() -> None:
     assert vastu_layout_score([_floor(0)], _cfg(north_angle_deg=0.0)) == 0.0
     assert vastu_layout_score([], _cfg(north_angle_deg=0.0)) == 0.0
+
+
+# ── The three ranking pathologies of a plain mean, pinned as fixed ──────────
+#
+# `vastu_layout_score` was a plain unweighted mean over all rooms. Task 15's
+# review measured three ways that misranks layouts, and every number in the
+# "was" column below is that review's own measurement, reproduced against the
+# old implementation before this fix. They are literals, not recomputed from
+# the code under test.
+
+
+def _sized(rtype: str, x: float, y: float, w: float, d: float) -> Room:
+    return Room(id="r", name="R", type=rtype, x=x, y=y, width=w, depth=d)
+
+
+def _score(*rooms: Room) -> float:
+    return vastu_layout_score([_floor(0, *rooms)], _cfg(north_angle_deg=0.0))
+
+
+def test_rooms_with_no_rule_do_not_move_the_score() -> None:
+    """Pathology (a). A `duct` has no rule, so `_verdict` calls it NEUTRAL 0.45
+    — which under a plain mean dragged every layout toward 0.45 rather than
+    leaving it alone.
+
+    Was: two prohibited toilets 0.0, +1 duct 15.0, +3 ducts 27.0 — padding a bad
+    plan with rooms Vastu is silent about improved it. And two perfect rooms
+    100.0 dropped to 81.67 on one duct — padding a good plan hurt it.
+    """
+    bad = (_room("toilet", 7.5, 7.5), _room("toilet", 7.4, 7.4))
+    duct = _room("duct", 5.0, 5.0)
+    assert _score(*bad) == 0.0
+    assert _score(*bad, duct) == 0.0
+    assert _score(*bad, duct, duct, duct) == 0.0
+
+    good = (_room("kitchen", 7.5, 0.5), _room("parking", 4.0, 0.5))
+    assert _score(*good) == 100.0
+    assert _score(*good, duct) == 100.0
+
+
+def test_a_ruled_room_in_a_silent_zone_still_counts() -> None:
+    """The exclusion is "no rule at all", NOT "verdict came out neutral" — the
+    distinction the fix turns on, so it is pinned.
+
+    A kitchen in W is a room Vastu has an opinion about that was placed where
+    that opinion is silent; it is assessable and scored a mediocre 0.45, so it
+    must dilute a perfect kitchen. A duct, on the same 0.45, must not.
+    """
+    perfect = _room("kitchen", 7.5, 0.5)
+    silent_placement = _room("kitchen", 0.5, 4.0)
+    assert vastu_room_score(silent_placement, 10.0, 10.0, 0.0) == 0.45
+    assert _score(perfect, silent_placement) == 72.5
+    assert _score(perfect, _room("duct", 0.5, 4.0)) == 100.0
+
+
+def test_a_large_room_outweighs_a_small_one() -> None:
+    """Pathology (b). Rooms used to be averaged one-for-one, so 1.44 m2 of
+    correctly-placed utility outvoted a 16 m2 master bedroom in the worst zone.
+
+    Was: bedroom alone 20.93, + four 0.36 m2 utilities 84.19 — quadrupled by
+    1.4 m2 while the bedroom sat in prohibited NE. Area-weighting moves it to
+    27.46, i.e. barely, which is what 8% of the floor area should do.
+    """
+    bedroom = _sized("bedroom", 6.0, 6.0, 4.0, 4.0)
+    utilities = [_sized("utility", 7.5 + i * 0.1, 7.5, 0.6, 0.6) for i in range(4)]
+    assert _score(bedroom) == 20.93
+    assert _score(bedroom, *utilities) == 27.46
+
+
+def test_the_score_does_not_drift_with_room_count() -> None:
+    """Pathology (c). The same one perfect kitchen used to score 72.5 / 58.75 /
+    51.88 at 2 / 4 / 8 total rooms, so a 2BHK variant and a 3BHK variant were
+    ranked against different denominators."""
+    kitchen = _room("kitchen", 7.5, 0.5)
+    duct = _room("duct", 5.0, 5.0)
+    for total in (2, 4, 8):
+        assert _score(kitchen, *[duct] * (total - 1)) == 100.0, total
+
+
+def test_a_layout_with_no_ruled_rooms_scores_zero_not_neutral() -> None:
+    """The denominator is ruled floor area, so it can be zero while rooms exist.
+
+    0.0, not 45.0: there is no Vastu content to credit, and it is the
+    incentive-safe answer — a layout can never *gain* by shedding its last
+    ruled room. Zero-area rooms take the same path.
+    """
+    assert _score(_room("duct", 5.0, 5.0), _room("foyer", 1.0, 1.0)) == 0.0
+    assert _score(_sized("kitchen", 7.5, 0.5, 0.0, 0.0)) == 0.0
+
+
+def test_alias_rooms_are_not_excluded_as_ruleless() -> None:
+    """`master_bedroom` reaches a rule only through `VASTU_RULE_ALIASES`, so an
+    exclusion test written against `VASTU_ROOM_RULES` alone would silently drop
+    the most Vastu-significant room in an Indian plan from the denominator."""
+    assert _score(_room("master_bedroom", 7.5, 7.5)) == 0.0
+    assert _score(_room("kitchen", 7.5, 0.5), _room("master_bedroom", 7.5, 7.5)) == 50.0
 
 
 def test_unsurveyed_north_falls_back_to_the_road_side() -> None:
