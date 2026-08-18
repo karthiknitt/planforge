@@ -492,7 +492,7 @@ def test_alias_rooms_are_not_excluded_as_ruleless() -> None:
 
 def test_unsurveyed_north_falls_back_to_the_road_side() -> None:
     """`cfg.north_angle_deg` is `float | None`; None must resolve via
-    `road_side` and never reach the trigonometry. A west-facing plot is 90
+    `road_side` and never reach the trigonometry. A west-facing plot is 270
     degrees, so the same kitchen that is preferred on a south-facing plot is
     not preferred here — proving the fallback consults road_side rather than
     defaulting to 0.0.
@@ -504,13 +504,13 @@ def test_unsurveyed_north_falls_back_to_the_road_side() -> None:
     west = vastu_layout_score(floors, _cfg(road_side="W", north_angle_deg=None))
     assert west != 100.0
     # And it equals the explicitly-surveyed equivalent of that road side.
-    assert west == vastu_layout_score(floors, _cfg(north_angle_deg=90.0))
+    assert west == vastu_layout_score(floors, _cfg(north_angle_deg=270.0))
 
 
 def test_explicit_zero_north_angle_beats_the_road_side() -> None:
     """0.0 is a surveyed value, not a missing one — the classic falsy-check bug."""
     assert resolve_north_angle(_cfg(road_side="W", north_angle_deg=0.0)) == 0.0
-    assert resolve_north_angle(_cfg(road_side="W", north_angle_deg=None)) == 90.0
+    assert resolve_north_angle(_cfg(road_side="W", north_angle_deg=None)) == 270.0
 
 
 def test_resolve_north_angle_prefers_the_explicit_road_side_argument() -> None:
@@ -518,5 +518,5 @@ def test_resolve_north_angle_prefers_the_explicit_road_side_argument() -> None:
     from `cfg.road_side`; the argument must win, as it did before this helper
     existed."""
     cfg = _cfg(road_side="S", north_angle_deg=None)
-    assert resolve_north_angle(cfg, "E") == 270.0
+    assert resolve_north_angle(cfg, "E") == 90.0
     assert resolve_north_angle(cfg) == 0.0

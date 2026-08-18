@@ -16,7 +16,7 @@ sides are the four axis-aligned special cases of it (see
     y=0 → South,  y=max → North
     x=0 → West,   x=max → East
 
-  roadSide="W" (90°):
+  roadSide="E" (90°):
     y=0 → East,   y=max → West
     x=0 → South,  x=max → North
 
@@ -24,7 +24,7 @@ sides are the four axis-aligned special cases of it (see
     y=0 → North,  y=max → South
     x=0 → East,   x=max → West   (east/west swap when facing North)
 
-  roadSide="E" (270°):
+  roadSide="W" (270°):
     y=0 → West,   y=max → East
     x=0 → North,  x=max → South  (north/south swap)
 
@@ -64,16 +64,19 @@ ZONE_GRID_ROAD_N = [
     ["NE", "N", "NW"],
 ]
 
+# For road E: y=0 is East, y=max is West; +x (right in plan) is +y turned 90°
+# clockwise on the compass, i.e. North. So the front row is the East third.
 ZONE_GRID_ROAD_E = [
-    ["NE", "E", "SE"],
-    ["N", "C", "S"],
-    ["NW", "W", "SW"],
+    ["SW", "W", "NW"],  # rear (y near plot_length) = West
+    ["S", "C", "N"],
+    ["SE", "E", "NE"],  # front (y near 0) = East
 ]
 
+# For road W: y=0 is West, y=max is East, +x is South.
 ZONE_GRID_ROAD_W = [
-    ["SW", "W", "NW"],
-    ["S", "C", "N"],
-    ["SE", "E", "NE"],
+    ["NE", "E", "SE"],  # rear (y near plot_length) = East
+    ["N", "C", "S"],
+    ["NW", "W", "SW"],  # front (y near 0) = West
 ]
 
 ZONE_GRIDS: dict[str, list[list[str]]] = {
@@ -89,18 +92,28 @@ ZONE_GRIDS: dict[str, list[list[str]]] = {
 # were derived from them, and `tests/test_vastu_zones.py` pins the engine to
 # reproduce all 9 cells of all 4 grids, so the two can never drift apart.
 #
+# These grids are NOT self-justifying: E and W held each other's contents from
+# the day they were written, and because the angles below were read off them and
+# the tests pinned the engine back to them, engine, table and tests all agreed
+# with each other while all three disagreed with a compass (fixed in Task 19).
+# The anchor is therefore external — `road_side` names the direction the y-min
+# (road-facing) edge faces, so that edge's third of the grid must be that
+# direction's third — and it is pinned by
+# `tests/test_vastu_zones.py::test_road_facing_row_is_that_compass_directions_third`,
+# whose expectations are compass literals that import nothing from this module.
+#
 # Derivation of each angle — read the grid for the compass direction of +y:
 #   S: grid[0][1] == "N"  → north is +y      →   0°
-#   W: grid[1][2] == "N"  → north is +x      →  90°
+#   E: grid[1][2] == "N"  → north is +x      →  90°
 #   N: grid[2][1] == "N"  → north is -y      → 180°
-#   E: grid[1][0] == "N"  → north is -x      → 270°
+#   W: grid[1][0] == "N"  → north is -x      → 270°
 # All four are proper rotations (east = north turned 90° clockwise), which is why
 # a single continuous angle can express them.
 ROAD_SIDE_NORTH_ANGLE_DEG: dict[str, float] = {
     "S": 0.0,
-    "W": 90.0,
+    "E": 90.0,
     "N": 180.0,
-    "E": 270.0,
+    "W": 270.0,
 }
 
 # Band boundary in normalized plot coordinates: the outer thirds start at ±1/6 of
