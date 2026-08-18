@@ -9,9 +9,9 @@ from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; hist
 )
 from .compliance import check, load_rules
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
-from .scorer import rank_and_select
+from .scorer import layout_floors, rank_and_select
 from .solver import solve_layouts, validate_plot_envelope
-from .vastu import check_vastu
+from .vastu import check_vastu, vastu_layout_score
 
 logger = logging.getLogger(__name__)
 
@@ -674,6 +674,29 @@ def _absorb_into_adjacent(
     return absorbed_any
 
 
+def _attach_vastu(layout: Layout, cfg: PlotConfig) -> None:
+    """Record Vastu on a layout as a *warning* and a graded score — never as a
+    compliance violation.
+
+    Vastu is a cultural preference, not a building bye-law, but it used to be
+    appended to `compliance.violations` and then flip `compliance.passed`, so a
+    single prohibited-zone room deleted an otherwise legal layout from the
+    candidate set — on some configs, every candidate. The graded score feeds
+    ranking through `scorer._score_vastu` (10% of the layout score) instead, so
+    a Vastu-poor layout is now out-ranked rather than dropped.
+
+    Applied once per layout on the final post-fill geometry, so `vastu_score`
+    is the same number `score_layout` sees. Both the solver and archetype paths
+    flow through here; the archetype loop used to be the only path that ran
+    `check_vastu` at all, so solver layouts silently carried no Vastu warnings.
+    """
+    if not cfg.vastu_enabled:
+        return
+    _v_violations, v_warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
+    layout.compliance.warnings.extend(v_warnings)
+    layout.vastu_score = vastu_layout_score(layout_floors(layout), cfg)
+
+
 def generate(cfg: PlotConfig) -> list[Layout]:
     """Generate layouts using the CP-SAT solver (primary) with archetype fallback.
 
@@ -756,12 +779,9 @@ def generate(cfg: PlotConfig) -> list[Layout]:
         _snap_layout_floors(layout)
         layout.compliance = check(layout, cfg, rules)
 
-        if cfg.vastu_enabled:
-            v_violations, v_warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
-            layout.compliance.violations.extend(v_violations)
-            layout.compliance.warnings.extend(v_warnings)
-            layout.compliance.passed = len(layout.compliance.violations) == 0
-
+        # Vastu is deliberately absent here: it neither adds violations nor
+        # gates admission any more. Both were applied once per layout, on the
+        # final post-fill geometry, just before ranking (see _attach_vastu).
         if layout.compliance.passed and layout.id not in solver_ids:
             archetype_layouts.append(layout)
 
@@ -772,11 +792,6 @@ def generate(cfg: PlotConfig) -> list[Layout]:
         if lf is not None:
             _snap_layout_floors(lf)
             lf.compliance = check(lf, cfg, rules)
-            if cfg.vastu_enabled:
-                v_violations, v_warnings = check_vastu(lf, cfg, road_side=cfg.road_side)
-                lf.compliance.violations.extend(v_violations)
-                lf.compliance.warnings.extend(v_warnings)
-                lf.compliance.passed = len(lf.compliance.violations) == 0
             if lf.compliance.passed and lf.id not in solver_ids:
                 archetype_layouts.append(lf)
 
@@ -875,6 +890,10 @@ def generate(cfg: PlotConfig) -> list[Layout]:
         logger.warning(
             "navigability gate rejected every layout; keeping unfiltered set"
         )
+
+    # ── Vastu: warnings + graded score on the final geometry ─────────────────
+    for layout in all_layouts:
+        _attach_vastu(layout, cfg)
 
     # ── Score and select top 3 ────────────────────────────────────────────────
     top = rank_and_select(all_layouts, cfg, top_n=3)
