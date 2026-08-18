@@ -222,20 +222,195 @@ def _one_room_terms(width_mm: int, depth_mm: int, room_type: str = "kitchen"):
     return S._add_vastu_terms(model, cfg, [rv], 0, 0)
 
 
-def test_zone_costs_do_not_shrink_with_the_room():
-    """The objective must not let a badly-placed room pay less by getting smaller.
+def test_zone_costs_are_the_same_multiset_whatever_the_room_size():
+    """Half of the anti-shrink property: the COST of a cell is area-free.
 
     `vastu_layout_score` is area-weighted, and room width/depth ARE decision
-    variables — so mirroring that weighting here would hand the solver a way to
-    improve the objective by shrinking an ill-placed room toward `fit.min_area`
-    instead of moving it. The costs are per-room constants for exactly that
-    reason, and this pins it: a 1.2 x 1.0 m room and a 5 x 4 m room of the same
-    type produce the same cost multiset.
+    variables — so mirroring that weighting here would let the solver improve
+    the objective by shrinking an ill-placed room toward `fit.min_area` instead
+    of moving it. A 1.2 x 1.0 m room and a 5 x 4 m room of the same type
+    therefore produce the same cost multiset.
+
+    This is NOT the whole property, and the version of this test that claimed
+    it was shipped a real bug: an area-free cost still leaves `w`/`d` inside
+    the *cell* predicate, so the solver could shrink to move its centroid
+    across a band boundary. The other half —
+    `test_enabling_vastu_does_not_change_the_chosen_room_size` — is what pins
+    that, by solving.
     """
     small = sorted(cost for cost, _ in _one_room_terms(1200, 1000))
     large = sorted(cost for cost, _ in _one_room_terms(5000, 4000))
     assert small, "no Vastu terms were produced at all"
     assert small == large
+
+
+def _best_size_for_pinned_room(
+    x_mm: int, y_mm: int, vastu: bool, room_type: str = "bedroom"
+) -> tuple[int, int]:
+    """Solve a one-room model that trades size against Vastu, return (w, d).
+
+    The room's anchor is PINNED (as a room boxed in by neighbours effectively
+    is) and only `w`/`d` are free, under the production growth reward — the
+    objective is `-(w + d)`, `size_terms`' 1-per-mm coefficient — plus, when
+    `vastu` is set, this task's zone terms. So the solve answers exactly one
+    question: does enabling Vastu make the solver pick a smaller room?
+
+    Single-worker and fully determined by the objective (no tie between two
+    different sizes at the optimum), so this does not repeat the
+    solve-twice-and-compare-geometry pattern `tests/CLAUDE.md` forbids.
+    """
+    model = cp_model.CpModel()
+    cfg = _cfg(True)
+    x = model.new_int_var(x_mm, x_mm, "x")
+    y = model.new_int_var(y_mm, y_mm, "y")
+    w = model.new_int_var(1000, 4000, "w")
+    d = model.new_int_var(1000, 4000, "d")
+    rv = S._RoomVar(
+        room_id="r1",
+        room_type=room_type,
+        room_name="R1",
+        floor=0,
+        x=x,
+        y=y,
+        w=w,
+        d=d,
+        xe=model.new_int_var(0, 9000, "xe"),
+        ye=model.new_int_var(0, 15000, "ye"),
+        template="RECT",
+        shape_ratio=1.0,
+    )
+    obj = [-w, -d]
+    if vastu:
+        obj += [cost * var for cost, var in S._add_vastu_terms(model, cfg, [rv], 0, 0)]
+    model.minimize(sum(obj))
+    solver = cp_model.CpSolver()
+    solver.parameters.num_workers = 1
+    status = solver.solve(model)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    return solver.value(w), solver.value(d)
+
+
+@pytest.mark.parametrize(
+    ("x_mm", "y_mm"),
+    [
+        pytest.param(3000, 4000, id="C-to-S-by-halving-depth"),
+        pytest.param(2000, 4000, id="C-westward-by-halving-width"),
+        pytest.param(4000, 4000, id="E-to-SE"),
+        pytest.param(5000, 9000, id="NE-to-E"),
+        pytest.param(5000, 1000, id="SE-band-hop"),
+    ],
+)
+def test_enabling_vastu_does_not_change_the_chosen_room_size(x_mm: int, y_mm: int):
+    """Turning Vastu on must never make the solver pick a SMALLER room.
+
+    Shrinking a room by D moves its centroid by D/2, so leaving `w`/`d` inside
+    the zone predicate lets the solver buy a cheaper cell through the geometry
+    even though the cost itself is area-free. The exchange rate makes that
+    decisive rather than theoretical: one zone change is worth up to
+    VASTU_WEIGHT = 300 000 against a growth reward of 1 per mm.
+
+    Every case here is a MEASURED regression of the pre-fix code, e.g. at
+    (3.0 m, 4.0 m) a bedroom went 4.0 x 4.0 m -> 4.0 x 2.0 m, 16 m2 -> 8 m2,
+    purely to drag its centroid from C into S. `_add_vastu_terms` reifies the
+    soft cells on an anchor point built from the room's CONSTANT minimum
+    extents for exactly this reason.
+    """
+    assert _best_size_for_pinned_room(x_mm, y_mm, vastu=False) == (4000, 4000), (
+        "sanity: without Vastu the growth reward alone must max the room out"
+    )
+    assert _best_size_for_pinned_room(x_mm, y_mm, vastu=True) == (4000, 4000)
+
+
+def _solved_zone_of(x_mm: int, y_mm: int, size_mm: int = 1000) -> set[str]:
+    """Solve a one-room model and return the zones whose cost bool came back true.
+
+    Unlike `_one_room_terms` this SOLVES, so it exercises the reified band
+    constraints in `_add_vastu_terms` — a second, independent transcription of
+    the band logic that `_vastu_zone_of_centroid_mm` only mirrors. Mutations
+    that invert or neuter that transcription leave the returned `(cost, var)`
+    pairs untouched and are invisible without a solve.
+
+    `living` is the room type because it has a non-zero cost in eight of the
+    nine cells (only its preferred N is free), so almost every point forces
+    exactly one bool; the model is minimised so the half-reification cannot
+    set a bool the constraints do not force.
+    """
+    model = cp_model.CpModel()
+    cfg = _cfg(True)
+    x = model.new_int_var(x_mm, x_mm, "x")
+    y = model.new_int_var(y_mm, y_mm, "y")
+    w = model.new_int_var(size_mm, size_mm, "w")
+    d = model.new_int_var(size_mm, size_mm, "d")
+    rv = S._RoomVar(
+        room_id="r1",
+        room_type="living",
+        room_name="R1",
+        floor=0,
+        x=x,
+        y=y,
+        w=w,
+        d=d,
+        xe=model.new_int_var(0, 9000, "xe"),
+        ye=model.new_int_var(0, 15000, "ye"),
+        template="RECT",
+        shape_ratio=1.0,
+    )
+    terms = S._add_vastu_terms(model, cfg, [rv], 0, 0)
+    # Literal, hand-counted, not derived from the grid: 9 cells minus the one
+    # `living` prefers (N, verdict 1.0 -> cost 0, no bool built).
+    assert len(terms) == 8
+    model.minimize(sum(cost * var for cost, var in terms))
+    solver = cp_model.CpSolver()
+    solver.parameters.num_workers = 1
+    status = solver.solve(model)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    return {var.name.split("_")[-1] for _, var in terms if solver.value(var) == 1}
+
+
+@pytest.mark.parametrize(
+    ("centre_x", "centre_y", "expected", "charged"),
+    [
+        (1.5, 2.5, "SW", True),
+        (4.5, 2.5, "S", True),
+        (7.5, 2.5, "SE", True),
+        (1.5, 7.5, "W", True),
+        (4.5, 7.5, "C", True),
+        (7.5, 7.5, "E", True),
+        (1.5, 12.5, "NW", True),
+        # N is `living`'s preferred cell: cost 0, so no bool is built for it
+        # and NOTHING may be charged. A mutation that reads the band upside
+        # down charges S (300 000) here, so this case is not a free pass.
+        (4.5, 12.5, "N", False),
+        (7.5, 12.5, "NE", True),
+    ],
+)
+def test_solved_band_bools_charge_the_cell_the_room_is_actually_in(
+    centre_x: float, centre_y: float, expected: str, charged: bool
+):
+    """The MODEL's band transcription, solved — not the reference reimplementation.
+
+    `test_band_predicate_reproduces_zone_for_point_away_from_boundaries` pins
+    `_vastu_zone_of_centroid_mm`, which the constraints in `_add_vastu_terms`
+    only mirror; and the end-to-end toilet test rides on the hard exclusion,
+    which bypasses these bools by design. So without this test the entire soft
+    objective can be switched off — every cost bool left unconstrained and
+    minimised to zero — with the suite still green.
+
+    The expected zone is a LITERAL per case, never `_vastu_zone_of_centroid_mm`
+    of the same point: an assertion that imports its own expected value from
+    the code under test passes on a shared bug. The cross-check against the
+    reference below is additional, not the assertion.
+    """
+    size = 1000
+    x_mm = S._mm(centre_x) - size // 2
+    y_mm = S._mm(centre_y) - size // 2
+    assert _solved_zone_of(x_mm, y_mm, size) == ({expected} if charged else set())
+    # Additional, not sole: the same point read by the pure reference.
+    bands = S._vastu_bands(S._mm(9.0), S._mm(15.0), 0.0)
+    assert (
+        S._vastu_zone_of_centroid_mm(2 * x_mm + size, 2 * y_mm + size, bands)
+        == expected
+    )
 
 
 def test_rooms_without_a_rule_get_no_vastu_vars_at_all():
@@ -329,7 +504,8 @@ def test_toilets_never_land_in_ne_or_centre_when_vastu_enabled():
 def test_solver_stays_feasible_with_vastu_enabled(kw: dict):
     """Over-constraining is the real risk — preferences must stay soft.
 
-    The tight case is a 7.5 x 12 m plot (33.8 m2 buildable plate) carrying 3
+    The tight case is a 7.5 x 12 m plot (5.7 x 9.0 m = 51.3 m2 buildable
+    plate, before wall thickness) carrying 3
     bedrooms and 2 toilets, and the off-axis case is the one that actually
     regressed during development: at a larger `_VASTU_BAND_SCALE` the zone
     coefficients grew to ~2e9 and CP-SAT stopped finding ANY solution inside

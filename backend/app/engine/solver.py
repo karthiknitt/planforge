@@ -1412,6 +1412,17 @@ def _vastu_escape_bounds(
     plot at 90/180/270 degrees). Inflating by a unit makes the forbidden region
     a strict superset of the float one, so a hard exclusion can never be
     satisfied by a room the scorer still reads as being in the excluded zone.
+
+    WARNING for whoever widens `VASTU_HARD_EXCLUDE_ZONES`. Swapping the two
+    axes at the call site — passing the row index with `is_row=False` and vice
+    versa — is currently a NO-OP, and a mutation that does so survives the
+    suite. That is a coincidence of the only two zones in the set today: NE is
+    the high-north/high-east corner (row index 0, column index 2, whose escape
+    sets mirror each other) and C is symmetric (index 1 on both axes). Add a
+    third zone — SE, say — and the same swap becomes a real inversion that no
+    current test catches, including the leak test, which derives its own axis
+    pairing the same way the code does rather than independently. Pin the
+    pairing with a dedicated test before widening the set.
     """
     hi = bands.band + bands.margin
     lo = -bands.band - bands.margin
@@ -1430,6 +1441,16 @@ def _vastu_escape_bounds(
     }[index]
 
 
+def _var_min(var: cp_model.IntVar) -> int:
+    """Declared lower bound of an IntVar, as a plain int.
+
+    Used to lift a room's minimum extent out of the model and into the
+    coefficients of the SOFT Vastu predicate, so that predicate contains no
+    decision variable that the solver could shrink — see `_add_vastu_terms`.
+    """
+    return int(var.proto.domain[0])
+
+
 def _add_vastu_terms(
     model: cp_model.CpModel,
     cfg: PlotConfig,
@@ -1439,13 +1460,39 @@ def _add_vastu_terms(
 ) -> list[tuple[int, cp_model.IntVar]]:
     """Reify each room's Vastu zone and return (cost, bool) objective terms.
 
-    Membership is tested on the room CENTROID, matching `check_vastu` — the
-    area-weighted reading stays in `vastu_room_score`, where it costs nothing
-    and cannot be gamed by a decision variable.
-
     Rooms whose type has no rule are skipped entirely (no vars, no terms), the
     same exclusion `vastu_layout_score` applies: a room Vastu has no opinion
     about should carry zero weight rather than a middling one.
+
+    THE SOFT TERM AND THE HARD EXCLUSION DELIBERATELY READ DIFFERENT POINTS.
+
+    * The **hard exclusion** tests the TRUE centroid, `2*ox + 2*x + w` /
+      `2*oy + 2*y + d`, exactly as `check_vastu` and `vastu_room_score` do. It
+      is the guarantee users depend on ("a toilet is never in NE"), so it must
+      agree with the scorer on the room's real centre — and a toilet that
+      shrinks its way out of NE has genuinely left NE, which is a legitimate
+      way to satisfy the constraint and is bounded below by the room's spec
+      minima.
+    * The **soft steering term** tests an anchor point, `2*ox + 2*x + min_w` /
+      `2*oy + 2*y + min_d`, where `min_w`/`min_d` are the room's CONSTANT
+      minimum extents. `w`/`d` are decision variables, so leaving them inside
+      the soft predicate lets the solver buy a cheaper zone by SHRINKING the
+      room instead of moving it: shrinking by D moves the centroid by D/2, and
+      one zone change is worth up to `VASTU_WEIGHT` (300 000) against a growth
+      reward of 1 per mm (`size_terms`), so shrinking wins wherever a band
+      boundary is in reach. Measured before this split: a bedroom pinned at
+      (3.0 m, 4.0 m) went 4.0 x 4.0 m -> 4.0 x 2.0 m, 16 m2 -> 8 m2, purely to
+      drag its centroid from C into S. With `w`/`d` out of the predicate the
+      only way to pay less is to move.
+
+    The obvious simplification — one size-independent point for BOTH — is
+    rejected on purpose: for a large room the anchor point can sit in a
+    different cell than the true centre, which would let the hard exclusion
+    leak. That trades a quality bug for a correctness bug.
+
+    The asymmetry has one benign consequence: a room whose ANCHOR point falls
+    in a hard-excluded cell pays no soft cost for that cell (no `zb` is built
+    for it), while its true centroid is still forbidden from it outright.
     """
     bands = _vastu_bands(
         _mm(cfg.plot_width), _mm(cfg.plot_length), resolve_north_angle(cfg)
@@ -1457,7 +1504,7 @@ def _add_vastu_terms(
             continue
         excluded = _vastu_hard_excluded_zones(rv.room_type)
 
-        # east/north as linear expressions over the room's existing vars:
+        # HARD path — the true centroid, size included:
         # cx2 = 2*ox + 2*x + w, cy2 = 2*oy + 2*y + d.
         east = cp_model.LinearExpr.weighted_sum(
             [rv.x, rv.w, rv.y, rv.d],
@@ -1468,6 +1515,30 @@ def _add_vastu_terms(
             [2 * bands.nx, bands.nx, 2 * bands.ny, bands.ny],
         ) + (2 * ox * bands.nx + 2 * oy * bands.ny + bands.nc)
 
+        # SOFT path — the same expressions with the VARIABLE half-extent
+        # replaced by the room's constant minimum one, so no decision variable
+        # but the anchor survives into the steering predicate. See the
+        # docstring for why the two points differ.
+        min_w, min_d = _var_min(rv.w), _var_min(rv.d)
+        east_soft = cp_model.LinearExpr.weighted_sum(
+            [rv.x, rv.y], [2 * bands.ex, 2 * bands.ey]
+        ) + (
+            2 * ox * bands.ex
+            + 2 * oy * bands.ey
+            + bands.ec
+            + min_w * bands.ex
+            + min_d * bands.ey
+        )
+        north_soft = cp_model.LinearExpr.weighted_sum(
+            [rv.x, rv.y], [2 * bands.nx, 2 * bands.ny]
+        ) + (
+            2 * ox * bands.nx
+            + 2 * oy * bands.ny
+            + bands.nc
+            + min_w * bands.nx
+            + min_d * bands.ny
+        )
+
         cols = [model.new_bool_var(f"vcol{i}_{rv.room_id}") for i in range(3)]
         rows = [model.new_bool_var(f"vrow{i}_{rv.room_id}") for i in range(3)]
         # The three bands partition the line, so `exactly_one` plus the
@@ -1475,23 +1546,24 @@ def _add_vastu_terms(
         # direction would be redundant clauses.
         model.add_exactly_one(cols)
         model.add_exactly_one(rows)
-        model.add(east <= -bands.band - 1).only_enforce_if(cols[0])
-        model.add(east >= -bands.band).only_enforce_if(cols[1])
-        model.add(east <= bands.band - 1).only_enforce_if(cols[1])
-        model.add(east >= bands.band).only_enforce_if(cols[2])
-        model.add(north >= bands.band + 1).only_enforce_if(rows[0])
-        model.add(north <= bands.band).only_enforce_if(rows[1])
-        model.add(north >= -bands.band + 1).only_enforce_if(rows[1])
-        model.add(north <= -bands.band).only_enforce_if(rows[2])
+        model.add(east_soft <= -bands.band - 1).only_enforce_if(cols[0])
+        model.add(east_soft >= -bands.band).only_enforce_if(cols[1])
+        model.add(east_soft <= bands.band - 1).only_enforce_if(cols[1])
+        model.add(east_soft >= bands.band).only_enforce_if(cols[2])
+        model.add(north_soft >= bands.band + 1).only_enforce_if(rows[0])
+        model.add(north_soft <= bands.band).only_enforce_if(rows[1])
+        model.add(north_soft >= -bands.band + 1).only_enforce_if(rows[1])
+        model.add(north_soft <= -bands.band).only_enforce_if(rows[2])
 
         for ri in range(3):
             for ci in range(3):
                 zone = ZONE_GRID_ROAD_S[ri][ci]
                 if zone in excluded:
                     # Structurally impossible, not penalised. Expressed against
-                    # the CLOSED cell rather than via the cols/rows bools above
-                    # so a boundary-sitting centroid is forbidden too — see
-                    # `_vastu_escape_bounds`.
+                    # the CLOSED cell and on the TRUE centroid (`north`/`east`,
+                    # not the `_soft` anchor point) rather than via the
+                    # cols/rows bools above, so a boundary-sitting centroid is
+                    # forbidden too — see `_vastu_escape_bounds`.
                     escapes = []
                     for expr, index, is_row in ((north, ri, True), (east, ci, False)):
                         for sign, bound in _vastu_escape_bounds(index, bands, is_row):
