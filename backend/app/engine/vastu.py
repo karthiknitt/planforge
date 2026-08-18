@@ -417,8 +417,22 @@ def check_vastu(
     # every pre-existing caller passes.
     north = resolve_north_angle(cfg, road_side)
 
-    # Check ground floor rooms (Vastu is primarily for ground floor)
-    for room in layout.ground_floor.rooms:
+    # Every floor, not just the ground one. A first-floor toilet in the NE is
+    # the same Vastu complaint as a ground-floor one; the old ground-only read
+    # meant every upper-floor room was silently exempt.
+    floors = [
+        f
+        for f in (
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+            layout.basement_floor,
+        )
+        if f is not None
+    ]
+    all_rooms = [r for f in floors for r in f.rooms]
+
+    for room in all_rooms:
         cx = room.x + room.width / 2
         cy = room.y + room.depth / 2
         zone = zone_for_point(cx, cy, plot_w, plot_l, north)
@@ -436,7 +450,7 @@ def check_vastu(
             )
 
     # Kitchen-specific: must be in SE or NW — violation if elsewhere
-    kitchens = [r for r in layout.ground_floor.rooms if r.type == "kitchen"]
+    kitchens = [r for r in all_rooms if r.type == "kitchen"]
     for k in kitchens:
         cx = k.x + k.width / 2
         cy = k.y + k.depth / 2
@@ -447,7 +461,7 @@ def check_vastu(
             )
 
     # Pooja room: prefer NE — warn if not in NE, E, or N
-    poojas = [r for r in layout.ground_floor.rooms if r.type == "pooja"]
+    poojas = [r for r in all_rooms if r.type == "pooja"]
     for p in poojas:
         cx = p.x + p.width / 2
         cy = p.y + p.depth / 2
@@ -458,6 +472,12 @@ def check_vastu(
             )
 
     # Master bedroom: prefer SW — warn if not in SW or S
+    # Deliberately NOT `all_rooms`: "the first bedroom" identifies the master
+    # bedroom only on the ground floor. On a GF with no bedroom at all,
+    # iterating every floor would promote an ordinary upstairs bedroom to
+    # "master" and warn about its zone — an advisory the user cannot act on.
+    # The cost of staying ground-only is a genuinely upstairs master bedroom
+    # going unwarned; a missing advisory beats a wrong one.
     bedrooms = [r for r in layout.ground_floor.rooms if r.type == "bedroom"]
     if bedrooms:
         b = bedrooms[0]  # first bedroom = master bedroom on ground floor

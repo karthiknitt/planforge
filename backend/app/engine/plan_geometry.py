@@ -1470,6 +1470,29 @@ def _make_door(
     )
 
 
+def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> int:
+    """0 when a main-entrance candidate centred at (x, y) sits in an auspicious
+    (N/NE/E) Vastu zone, else 1. Always 1 when Vastu is off, so the key is a
+    constant and the ordering is untouched.
+
+    The point scored is the midpoint of the candidate's usable frontage span —
+    the same quantity the distance-to-gate key uses — rather than the door
+    centre `_fit_along` will later pick, which is not known until after the
+    ordering is decided.
+    """
+    if vastu_cfg is None or not vastu_cfg.vastu_enabled:
+        return 1
+    from app.engine.vastu import resolve_north_angle, zone_for_point
+
+    # `cfg.north_angle_deg` is `float | None`; `resolve_north_angle` is the one
+    # place that turns it into a real angle (an explicit 0.0 wins, `None` falls
+    # back to the road side). Passing the raw field would send `None` into the
+    # trigonometry.
+    north = resolve_north_angle(vastu_cfg)
+    zone = zone_for_point(x, y, vastu_cfg.plot_width, vastu_cfg.plot_length, north)
+    return 0 if zone in ("N", "NE", "E") else 1
+
+
 def _place_main_entrance(
     rooms: list[Room],
     obstacles: _ObstacleIndex,
@@ -1479,6 +1502,7 @@ def _place_main_entrance(
     tol: float,
     reasons: list[str] | None = None,
     status: dict | None = None,
+    vastu_cfg: PlotConfig | None = None,
 ) -> Opening | None:
     """Main entrance door (MD) in the road-facing external wall.
 
@@ -1499,6 +1523,17 @@ def _place_main_entrance(
     columns-blocked), so a caller can surface it deliberately (e.g. a
     landing-door design, or an explicit "entrance not on ground floor"
     label) rather than reading it out of the free-text diagnostic string.
+
+    ``vastu_cfg``, when given with ``vastu_enabled``, adds an auspicious-zone
+    key to the candidate ordering. Because every candidate sits on the same
+    (y-min) frontage, they can only differ across ONE row of the 3x3 Vastu
+    grid, and that row contains an N/NE/E cell for just two of the four road
+    sides: it is ``['NE', 'N', 'NW']`` on a north road and ``['SE', 'E', 'NE']``
+    on a west road, but ``['SW', 'S', 'SE']`` on a south road (the PlotConfig
+    default) and ``['NW', 'W', 'SW']`` on an east road. On those last two the
+    key is provably inert — no candidate can ever be auspicious. That is a
+    property of "the entrance is always on the road-facing wall", not a bug;
+    ``tests/test_vastu_floors.py`` pins both the firing and the inert cases.
     """
     bx1, _by1, bx2, _by2 = buildable.bounds
     _px1, py1, _px2, _py2 = _plate_bounds(rooms, buildable, ewt)
@@ -1520,8 +1555,23 @@ def _place_main_entrance(
             )
             continue
         prio = _ENTRY_PRIORITY.get(room.type, 4)
-        cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
-    for _prio, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
+        # Ranked immediately after `prio` and ABOVE distance-to-gate: Vastu
+        # outranks gate alignment, never room-type suitability (an auspicious
+        # dining room must not beat an inauspicious living room). Below `dist`
+        # it would be inert a second way — `dist` is a float, so ties in it
+        # essentially never occur. 0 sorts first, so 0 == auspicious.
+        cands.append(
+            (
+                prio,
+                _entrance_auspicious(vastu_cfg, (lo + hi) / 2, coord),
+                abs((lo + hi) / 2 - gate_x),
+                room.id,
+                room,
+                lo,
+                hi,
+            )
+        )
+    for _prio, _ausp, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:4]):
         centre = _fit_along(
             gate_x, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
         )
@@ -1562,6 +1612,7 @@ def derive_openings(
     floor: int = 0,
     reasons: list[str] | None = None,
     status: dict | None = None,
+    vastu_cfg: PlotConfig | None = None,
 ) -> list[Opening]:
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
@@ -1580,7 +1631,7 @@ def derive_openings(
     if floor == 0:
         place(
             _place_main_entrance(
-                rooms, obstacles, std, buildable, ewt, tol, reasons, status
+                rooms, obstacles, std, buildable, ewt, tol, reasons, status, vastu_cfg
             )
         )
 
@@ -2454,6 +2505,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         floor=floorplan.floor,
         reasons=diagnostics,
         status=status,
+        vastu_cfg=cfg,
     )
     for d in diagnostics:
         logger.warning("floor %s: %s", floorplan.floor, d)
