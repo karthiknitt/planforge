@@ -1470,6 +1470,14 @@ def _make_door(
     )
 
 
+# The sourced main-entrance rule: an entrance in the north, north-east or east
+# zone is auspicious. Module-level so tests can import it instead of keeping a
+# second copy — two independent copies drifted apart once already (three
+# mutations to this tuple survived the suite because the test that "documented"
+# the rule asserted against its own literal).
+ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
+
+
 def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> int:
     """0 when a main-entrance candidate centred at (x, y) sits in an auspicious
     (N/NE/E) Vastu zone, else 1. Always 1 when Vastu is off, so the key is a
@@ -1490,7 +1498,7 @@ def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> in
     # trigonometry.
     north = resolve_north_angle(vastu_cfg)
     zone = zone_for_point(x, y, vastu_cfg.plot_width, vastu_cfg.plot_length, north)
-    return 0 if zone in ("N", "NE", "E") else 1
+    return 0 if zone in ENTRANCE_AUSPICIOUS_ZONES else 1
 
 
 def _place_main_entrance(
