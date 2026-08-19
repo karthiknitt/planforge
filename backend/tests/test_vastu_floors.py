@@ -503,14 +503,20 @@ def test_tie_break_reaches_the_middle_third(
     )
 
 
+# `test_tie_break_is_inert_on_a_west_road` (and its south-inclusive
+# predecessor) lived here — both retired now that south AND west fire via
+# their NW/SE overrides, leaving nothing road-wide left to pin as inert. The
+# narrower claim that survives, that each override's own MIDDLE cell stays
+# inauspicious, is `test_middle_front_row_cell_is_not_auspicious` below.
+
+
 # Which of the two asymmetric geometries above to reuse when pinning that a
 # road side's MIDDLE front-row cell is NOT auspicious. The geometry must be the
 # one whose middle candidate LOSES the distance key, otherwise vastu-on equals
 # vastu-off for a reason that has nothing to do with the rule.
 #
 # W borrows the north geometry (gate in the HIGH-x third): candidates are SW
-# (outer, wins on distance) and W (middle). Only the NW END of the west front
-# row is sanctioned now, so neither SW nor the middle W is auspicious.
+# (outer, wins on distance) and W (middle) — neither sanctioned.
 # S borrows the east geometry (gate in the LOW-x third): candidates are SW
 # (outer, wins on distance) and S (middle). The north geometry would NOT work
 # for S: its outer candidate lands in SE, which the override makes auspicious
