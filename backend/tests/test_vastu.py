@@ -67,12 +67,16 @@ def test_zone_grid_road_n_front_left_is_ne():
     assert _get_zone(1.0, 1.0, PLOT_W, PLOT_L, "N") == "NE"
 
 
-def test_zone_grid_road_e_front_left_is_nw():
-    assert _get_zone(1.0, 1.0, PLOT_W, PLOT_L, "E") == "NW"
+def test_zone_grid_road_e_front_left_is_se():
+    # road_side E: the y=0 (front) edge faces East, so the front row is the East
+    # third; +x is North, so the front-LEFT corner is the southern end of it.
+    assert _get_zone(1.0, 1.0, PLOT_W, PLOT_L, "E") == "SE"
 
 
-def test_zone_grid_road_w_front_left_is_se():
-    assert _get_zone(1.0, 1.0, PLOT_W, PLOT_L, "W") == "SE"
+def test_zone_grid_road_w_front_left_is_nw():
+    # road_side W: front row is the West third; +x is South, so front-left is
+    # the northern end of it.
+    assert _get_zone(1.0, 1.0, PLOT_W, PLOT_L, "W") == "NW"
 
 
 def test_zone_grid_unknown_road_side_falls_back_to_south():

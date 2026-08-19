@@ -1197,15 +1197,23 @@ const VASTU_GRID_ROAD_N = [
   ["E", "C", "W"],
   ["NE", "N", "NW"],
 ];
+// row 0 = rear (high y), row 2 = front (low y, the road-facing edge).
+// `roadSide` names the compass direction the FRONT edge faces, so the front row
+// must be that direction's third of the plot: an east road's front row is
+// [SE, E, NE]. These two constants used to hold each other's contents — each
+// the other rotated 180 degrees — which silently mirrored the overlay on every
+// east- and west-facing plot. Keep in sync with ZONE_GRID_ROAD_E/_W in
+// backend/app/engine/vastu.py, whose compass anchor test
+// (test_road_facing_row_is_that_compass_directions_third) pins the same rows.
 const VASTU_GRID_ROAD_E = [
-  ["NE", "E", "SE"],
-  ["N", "C", "S"],
-  ["NW", "W", "SW"],
+  ["SW", "W", "NW"], // rear = West
+  ["S", "C", "N"],
+  ["SE", "E", "NE"], // front = East
 ];
 const VASTU_GRID_ROAD_W = [
-  ["SW", "W", "NW"],
-  ["S", "C", "N"],
-  ["SE", "E", "NE"],
+  ["NE", "E", "SE"], // rear = East
+  ["N", "C", "S"],
+  ["NW", "W", "SW"], // front = West
 ];
 const VASTU_GRIDS: Record<string, string[][]> = {
   S: VASTU_GRID_ROAD_S,

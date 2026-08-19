@@ -1537,8 +1537,8 @@ def _place_main_entrance(
     (y-min) frontage, they can only differ across ONE row of the 3x3 Vastu
     grid, and that row contains an N/NE/E cell for just two of the four road
     sides: it is ``['NE', 'N', 'NW']`` on a north road and ``['SE', 'E', 'NE']``
-    on a west road, but ``['SW', 'S', 'SE']`` on a south road (the PlotConfig
-    default) and ``['NW', 'W', 'SW']`` on an east road. On those last two the
+    on an east road, but ``['SW', 'S', 'SE']`` on a south road (the PlotConfig
+    default) and ``['NW', 'W', 'SW']`` on a west road. On those last two the
     key is provably inert — no candidate can ever be auspicious. That is a
     property of "the entrance is always on the road-facing wall", not a bug;
     ``tests/test_vastu_floors.py`` pins both the firing and the inert cases.
