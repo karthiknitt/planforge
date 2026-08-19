@@ -76,8 +76,97 @@ def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
     return Polygon(vertices)
 
 
+def notch_rect(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
+    """The off-plot cutout (x0, y0, x1, y1) in plot metres, or None.
+
+    `plot_template` surface only — the legacy `plot_shape == "l_shaped"`
+    cutout keeps its own long-standing geometry (`compute_l_shaped_polygon`)
+    untouched. Lives here rather than in solver.py because the boundary, the
+    compliance check and the fill passes all need it and none of them may
+    import the solver.
+
+    Raises ValueError if a `plot_template` notch is combined with a
+    non-rectangular `plot_shape`. Every consumer of this function models the
+    notch as a corner cut out of a RECTANGLE — `plot_polygon` builds the
+    hexagon from `plot_width`/`plot_length`, and `buildable_polygon` insets a
+    plain box — so a trapezoid/quad/legacy-`l_shaped` outline would be
+    silently discarded and the plan drawn on a plot the user does not have.
+    Unreachable while the fields are engine-only, but Task 22 plumbs them
+    through, and a wrong answer is worse than a refusal.
+    """
+    if cfg.plot_template == "RECT" or cfg.notch_width <= 0 or cfg.notch_depth <= 0:
+        return None
+    if cfg.plot_shape != "rectangular":
+        raise ValueError(
+            f"plot_template={cfg.plot_template!r} (a notch) cannot be combined with "
+            f"plot_shape={cfg.plot_shape!r}: the notch is only defined as a corner "
+            "cut out of a rectangular plot. Use one or the other — for an L-shaped "
+            'trapezoid/quadrilateral neither surface applies, and plot_shape="l_shaped" '
+            "already has its own cutout fields."
+        )
+    return (
+        cfg.plot_width - cfg.notch_width,
+        cfg.plot_length - cfg.notch_depth,
+        cfg.plot_width,
+        cfg.plot_length,
+    )
+
+
+def notch_keepout(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon | None:
+    """The notch GROWN by the setbacks its two new plot edges attract.
+
+    Cutting a corner out of a plot creates two new boundary edges, and a
+    boundary edge earns a setback like any other: the rear-right cutout's
+    vertical face looks outward in +x, so it takes `setback_right`, and its
+    horizontal face looks outward in +y, so it takes `setback_rear`.
+
+    Growing both and keeping a single rectangle also removes the little square
+    diagonally inside the reflex corner. That is deliberate, not sloppiness:
+    a point there is within the setback distance of the corner itself, so a
+    perpendicular-distance reading of the byelaw excludes it anyway.
+
+    This one rectangle is THE forbidden region — `buildable_polygon` subtracts
+    it and `solver._forbid_notch` constrains parts out of it, so the solver,
+    the compliance check and the fill passes cannot disagree about where the
+    notch begins.
+    """
+    rect = notch_rect(cfg)
+    if rect is None:
+        return None
+    x0, y0, x1, y1 = rect
+    gx0, gy0, gx1, gy1 = rect  # grown copy; tests read the ORIGINAL edges
+    if x1 >= cfg.plot_width:  # cutout on the right edge
+        gx0 -= cfg.setback_right + wall_clearance
+    if x0 <= 0:  # cutout on the left edge
+        gx1 += cfg.setback_left + wall_clearance
+    if y1 >= cfg.plot_length:  # cutout at the rear
+        gy0 -= cfg.setback_rear + wall_clearance
+    if y0 <= 0:  # cutout at the front
+        gy1 += cfg.setback_front + wall_clearance
+    return box(gx0, gy0, gx1, gy1)
+
+
 def plot_polygon(cfg: PlotConfig) -> Polygon:
-    """The plot boundary polygon for any supported plot shape (CCW)."""
+    """The plot boundary polygon for any supported plot shape (CCW).
+
+    `plot_template` is checked FIRST and independently of `plot_shape`, which
+    stays "rectangular" on that surface. Without this, every downstream
+    consumer of the boundary — `buildable_polygon`, `compliance.check`,
+    generator.py's blank-area fill/absorb passes, the archetype floor plate —
+    would see the full rectangle and could put a room straight back into the
+    notch that the solver's `_forbid_notch` had just kept clear, with
+    compliance unable to see it.
+    """
+    rect = notch_rect(cfg)
+    if rect is not None:
+        # Rear-right corner cut out (the only `plot_template` geometry there
+        # is; T/U are rejected in `solver.validate_plot_envelope`).
+        nx0, ny0, _, _ = rect
+        w, ln = cfg.plot_width, cfg.plot_length
+        return orient(
+            Polygon([(0.0, 0.0), (w, 0.0), (w, ny0), (nx0, ny0), (nx0, ln), (0.0, ln)]),
+            1.0,
+        )
     shape = cfg.plot_shape
     if shape == "quadrilateral" and cfg.plot_corners:
         return orient(Polygon(cfg.plot_corners), 1.0)
@@ -133,7 +222,43 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
 
     Returns an empty Polygon when the setbacks consume the plot. If the inset
     splits (deep L-shape cutouts), the largest piece is returned.
+
+    A `plot_template` notch is handled by SUBTRACTION rather than by the
+    half-plane loop below. That loop intersects one inward half-plane per edge,
+    which is only correct for a convex outline: on a notched plot the two
+    cutout edges' half-planes extend across the whole plot and shear off
+    buildable land nowhere near the notch (91.8 m² -> 37.1 m² on the 12x15 m L
+    fixture). The new surface instead gets the exact region: rectangle inset by
+    the four outer setbacks, minus the setback-grown notch keep-out.
+
+    The legacy `plot_shape == "l_shaped"` surface is left on the loop only
+    because changing it is out of this change's scope — NOT because anything
+    depends on its conservatism. Nothing is calibrated against it: for the
+    12x15 m NE-cutout config this loop returns 37.09 m² while
+    `archetypes._l_shaped_floor_plate` hands back a 61.65 m² plate reaching
+    y=13.27, so `compliance.check(archetypes.layout_a(cfg), ...)` fails with
+    six "extends outside the setback boundary" violations. The two disagree,
+    and the legacy surface is broken end to end today — a 3BHK needing ~96 m²
+    cannot fit in 37 m², and the archetype fallback fails compliance. Fixing
+    this loop is a P1 correctness fix; see the Task 9 report.
     """
+    keepout = notch_keepout(cfg, wall_clearance)
+    if keepout is not None:
+        outer = box(
+            cfg.setback_left + wall_clearance,
+            cfg.setback_front + wall_clearance,
+            cfg.plot_width - cfg.setback_right - wall_clearance,
+            cfg.plot_length - cfg.setback_rear - wall_clearance,
+        )
+        if outer.is_empty or outer.area <= 0:
+            return Polygon()
+        result = outer.difference(keepout)
+        if result.geom_type == "MultiPolygon":
+            result = max(result.geoms, key=lambda g: g.area)
+        if result.geom_type != "Polygon" or result.is_empty:
+            return Polygon()
+        return orient(result, 1.0)
+
     poly = orient(plot_polygon(cfg), 1.0)
     result: Polygon = poly
     coords = list(poly.exterior.coords)[:-1]

@@ -1,0 +1,1431 @@
+{
+  "rect_2bhk_g1": {
+    "cfg": {
+      "plot_length": 30.0,
+      "plot_width": 50.0,
+      "setback_front": 3.0,
+      "setback_rear": 2.0,
+      "setback_left": 1.5,
+      "setback_right": 1.5,
+      "num_bedrooms": 2,
+      "toilets": 2,
+      "parking": true,
+      "city": "other",
+      "vastu_enabled": false,
+      "road_width_m": 9.0,
+      "road_side": "S",
+      "has_pooja": false,
+      "has_study": false,
+      "has_balcony": false,
+      "attached_toilets": false,
+      "plot_shape": "rectangular",
+      "plot_front_width": 0.0,
+      "plot_rear_width": 0.0,
+      "plot_side_offset": 0.0,
+      "plot_corners": null,
+      "cutout_corner": "NE",
+      "cutout_width": 0.0,
+      "cutout_height": 0.0,
+      "num_floors": 2,
+      "has_stilt": false,
+      "has_basement": false,
+      "municipality": null,
+      "custom_room_config": null,
+      "allow_shape_templates": false,
+      "plot_template": "RECT",
+      "notch_width": 0.0,
+      "notch_depth": 0.0
+    },
+    "geometry": {
+      "floor": 0,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "living_0",
+          "name": "Living Room",
+          "type": "living",
+          "x": 19.864,
+          "y": 3.23,
+          "width": 3.478,
+          "depth": 9.661
+        },
+        {
+          "id": "kitchen_0",
+          "name": "Kitchen",
+          "type": "kitchen",
+          "x": 23.342,
+          "y": 3.23,
+          "width": 13.5,
+          "depth": 5.68
+        },
+        {
+          "id": "bedroom_0",
+          "name": "Bedroom 1",
+          "type": "bedroom",
+          "x": 25.842,
+          "y": 8.91,
+          "width": 22.428,
+          "depth": 2.425
+        },
+        {
+          "id": "toilet_0",
+          "name": "Toilet 1",
+          "type": "toilet",
+          "x": 31.342,
+          "y": 11.335,
+          "width": 1.8,
+          "depth": 1.556
+        },
+        {
+          "id": "stair_0",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 23.342,
+          "y": 8.91,
+          "width": 2.5,
+          "depth": 2.425
+        },
+        {
+          "id": "parking_0",
+          "name": "Parking",
+          "type": "parking",
+          "x": 36.842,
+          "y": 3.23,
+          "width": 11.428,
+          "depth": 5.68
+        },
+        {
+          "id": "store_auto_1",
+          "name": "Store Room",
+          "type": "store_room",
+          "x": 1.73,
+          "y": 12.891,
+          "width": 46.54,
+          "depth": 14.879
+        },
+        {
+          "id": "store_auto_2",
+          "name": "Store Room",
+          "type": "store_room",
+          "x": 1.73,
+          "y": 3.23,
+          "width": 18.134,
+          "depth": 9.661
+        },
+        {
+          "id": "utility_auto_1",
+          "name": "Utility",
+          "type": "utility",
+          "x": 33.142,
+          "y": 11.335,
+          "width": 15.128,
+          "depth": 1.556
+        },
+        {
+          "id": "utility_auto_2",
+          "name": "Utility",
+          "type": "utility",
+          "x": 23.342,
+          "y": 11.335,
+          "width": 8.0,
+          "depth": 1.556
+        }
+      ],
+      "columns": [
+        {
+          "x": 1.615,
+          "y": 3.115
+        },
+        {
+          "x": 1.615,
+          "y": 12.891
+        },
+        {
+          "x": 1.615,
+          "y": 27.885
+        },
+        {
+          "x": 19.864,
+          "y": 3.115
+        },
+        {
+          "x": 19.864,
+          "y": 12.891
+        },
+        {
+          "x": 23.342,
+          "y": 3.115
+        },
+        {
+          "x": 23.342,
+          "y": 8.91
+        },
+        {
+          "x": 23.342,
+          "y": 12.891
+        },
+        {
+          "x": 25.842,
+          "y": 8.91
+        },
+        {
+          "x": 25.842,
+          "y": 11.335
+        },
+        {
+          "x": 31.342,
+          "y": 11.335
+        },
+        {
+          "x": 31.342,
+          "y": 12.891
+        },
+        {
+          "x": 33.142,
+          "y": 11.335
+        },
+        {
+          "x": 33.142,
+          "y": 12.891
+        },
+        {
+          "x": 36.842,
+          "y": 3.115
+        },
+        {
+          "x": 36.842,
+          "y": 8.91
+        },
+        {
+          "x": 48.385,
+          "y": 3.115
+        },
+        {
+          "x": 48.385,
+          "y": 8.91
+        },
+        {
+          "x": 48.385,
+          "y": 11.335
+        },
+        {
+          "x": 48.385,
+          "y": 12.891
+        },
+        {
+          "x": 48.385,
+          "y": 27.885
+        }
+      ]
+    },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 19.864,
+        "cy": 3.795,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 20.474,
+        "cy": 12.891,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 22.647,
+        "cy": 3.115,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "door",
+        "cx": 23.342,
+        "cy": 3.795,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 23.342,
+        "cy": 9.52,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 23.342,
+        "cy": 11.825,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 25.842,
+        "cy": 9.52,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 31.877,
+        "cy": 11.335,
+        "width": 0.75,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 33.677,
+        "cy": 11.335,
+        "width": 0.75,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 37.452,
+        "cy": 8.91,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 48.385,
+        "cy": 12.113,
+        "width": 0.6,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 21.512,
+        "cy": 3.115,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 30.092,
+        "cy": 3.115,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 48.385,
+        "cy": 10.1225,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
+    "opening_clearance_reasons": [
+      "door @(22.647,3.115) pier 0.000m to window @(21.512,3.115) < 0.115m",
+      "window @(21.512,3.115) pier 0.000m to door @(22.647,3.115) < 0.115m"
+    ],
+    "baseline": {
+      "total": 65.0,
+      "max": 100,
+      "phantom_walls": 10,
+      "collisions": 0,
+      "label_overflow": 0,
+      "dimension_coverage_pct": 100.0,
+      "standard_scale": false,
+      "doors_per_room_ok": true,
+      "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
+      "column_count": 21,
+      "frozen_input_column_count": 21
+    }
+  },
+  "l_shaped_3bhk": {
+    "cfg": {
+      "plot_length": 15.0,
+      "plot_width": 12.0,
+      "setback_front": 1.2,
+      "setback_rear": 1.2,
+      "setback_left": 1.0,
+      "setback_right": 1.0,
+      "num_bedrooms": 3,
+      "toilets": 2,
+      "parking": false,
+      "city": "other",
+      "vastu_enabled": false,
+      "road_width_m": 9.0,
+      "road_side": "S",
+      "has_pooja": false,
+      "has_study": false,
+      "has_balcony": false,
+      "attached_toilets": false,
+      "plot_shape": "l_shaped",
+      "plot_front_width": 0.0,
+      "plot_rear_width": 0.0,
+      "plot_side_offset": 0.0,
+      "plot_corners": null,
+      "cutout_corner": "NE",
+      "cutout_width": 4.0,
+      "cutout_height": 4.0,
+      "num_floors": 1,
+      "has_stilt": false,
+      "has_basement": false,
+      "municipality": null,
+      "custom_room_config": null,
+      "allow_shape_templates": false,
+      "plot_template": "RECT",
+      "notch_width": 0.0,
+      "notch_depth": 0.0
+    },
+    "geometry": {
+      "floor": 0,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "living_0",
+          "name": "Living Room",
+          "type": "living",
+          "x": 1.23,
+          "y": 1.57,
+          "width": 2.667,
+          "depth": 8.0
+        },
+        {
+          "id": "kitchen_0",
+          "name": "Kitchen",
+          "type": "kitchen",
+          "x": 3.897,
+          "y": 1.43,
+          "width": 2.855,
+          "depth": 2.713
+        },
+        {
+          "id": "bedroom_0",
+          "name": "Bedroom 1",
+          "type": "bedroom",
+          "x": 3.897,
+          "y": 6.242,
+          "width": 2.855,
+          "depth": 3.328
+        },
+        {
+          "id": "toilet_0",
+          "name": "Toilet 1",
+          "type": "toilet",
+          "x": 5.418,
+          "y": 4.143,
+          "width": 1.334,
+          "depth": 2.099
+        },
+        {
+          "id": "stair_0",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 3.897,
+          "y": 4.143,
+          "width": 1.521,
+          "depth": 2.099
+        }
+      ],
+      "columns": [
+        {
+          "x": 1.115,
+          "y": 1.455
+        },
+        {
+          "x": 1.115,
+          "y": 9.685
+        },
+        {
+          "x": 3.782,
+          "y": 1.455
+        },
+        {
+          "x": 3.897,
+          "y": 4.143
+        },
+        {
+          "x": 3.897,
+          "y": 6.242
+        },
+        {
+          "x": 3.897,
+          "y": 9.685
+        },
+        {
+          "x": 6.867,
+          "y": 1.315
+        },
+        {
+          "x": 6.867,
+          "y": 4.143
+        },
+        {
+          "x": 6.867,
+          "y": 6.242
+        },
+        {
+          "x": 6.867,
+          "y": 9.685
+        }
+      ]
+    },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 3.897,
+        "cy": 2.135,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 3.897,
+        "cy": 4.753,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 3.897,
+        "cy": 6.852,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 5.908,
+        "cy": 6.242,
+        "width": 0.75,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 6.867,
+        "cy": 5.1925,
+        "width": 0.6,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 1.115,
+        "cy": 5.57,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 2.5635,
+        "cy": 9.685,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.3245,
+        "cy": 9.685,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.682,
+        "cy": 1.315,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.867,
+        "cy": 2.7865,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.867,
+        "cy": 7.906,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
+    "opening_clearance_reasons": [],
+    "baseline": {
+      "total": 80.0,
+      "max": 100,
+      "phantom_walls": 5,
+      "collisions": 0,
+      "label_overflow": 0,
+      "dimension_coverage_pct": 100.0,
+      "standard_scale": true,
+      "doors_per_room_ok": true,
+      "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 0,
+      "column_count": 10,
+      "frozen_input_column_count": 10
+    }
+  },
+  "trapezoid_2bhk": {
+    "cfg": {
+      "plot_length": 18.0,
+      "plot_width": 14.0,
+      "setback_front": 1.5,
+      "setback_rear": 1.0,
+      "setback_left": 1.0,
+      "setback_right": 1.0,
+      "num_bedrooms": 2,
+      "toilets": 2,
+      "parking": false,
+      "city": "other",
+      "vastu_enabled": false,
+      "road_width_m": 9.0,
+      "road_side": "S",
+      "has_pooja": false,
+      "has_study": false,
+      "has_balcony": false,
+      "attached_toilets": false,
+      "plot_shape": "trapezoid",
+      "plot_front_width": 14.0,
+      "plot_rear_width": 9.0,
+      "plot_side_offset": 0.0,
+      "plot_corners": null,
+      "cutout_corner": "NE",
+      "cutout_width": 0.0,
+      "cutout_height": 0.0,
+      "num_floors": 1,
+      "has_stilt": false,
+      "has_basement": false,
+      "municipality": null,
+      "custom_room_config": null,
+      "allow_shape_templates": false,
+      "plot_template": "RECT",
+      "notch_width": 0.0,
+      "notch_depth": 0.0
+    },
+    "geometry": {
+      "floor": 0,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "gf_stair",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 3.571,
+          "y": 1.73,
+          "width": 0.9,
+          "depth": 3.0
+        },
+        {
+          "id": "gf_living",
+          "name": "Living / Hall",
+          "type": "living",
+          "x": 4.471,
+          "y": 1.73,
+          "width": 5.958,
+          "depth": 5.264
+        },
+        {
+          "id": "gf_kitchen",
+          "name": "Kitchen",
+          "type": "kitchen",
+          "x": 3.571,
+          "y": 6.994,
+          "width": 3.571,
+          "depth": 9.776
+        },
+        {
+          "id": "gf_dining",
+          "name": "Dining",
+          "type": "dining",
+          "x": 7.142,
+          "y": 6.994,
+          "width": 2.487,
+          "depth": 9.776
+        },
+        {
+          "id": "gf_toilet_1",
+          "name": "Toilet 1",
+          "type": "toilet",
+          "x": 9.63,
+          "y": 7.109,
+          "width": 0.799,
+          "depth": 9.661
+        },
+        {
+          "id": "store_auto_1",
+          "name": "Store",
+          "type": "store_room",
+          "x": 3.571,
+          "y": 4.73,
+          "width": 0.9,
+          "depth": 2.264
+        }
+      ],
+      "columns": [
+        {
+          "x": 3.456,
+          "y": 1.615
+        },
+        {
+          "x": 3.456,
+          "y": 4.73
+        },
+        {
+          "x": 3.456,
+          "y": 6.994
+        },
+        {
+          "x": 3.456,
+          "y": 16.885
+        },
+        {
+          "x": 4.471,
+          "y": 1.615
+        },
+        {
+          "x": 7.142,
+          "y": 16.885
+        },
+        {
+          "x": 9.63,
+          "y": 16.885
+        },
+        {
+          "x": 9.687,
+          "y": 7.051
+        },
+        {
+          "x": 10.544,
+          "y": 1.615
+        },
+        {
+          "x": 10.544,
+          "y": 7.051
+        },
+        {
+          "x": 10.544,
+          "y": 16.885
+        }
+      ]
+    },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 4.471,
+        "cy": 2.295,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 4.471,
+        "cy": 5.295,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 5.036,
+        "cy": 6.994,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 7.0,
+        "cy": 1.615,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "door",
+        "cx": 7.707,
+        "cy": 6.994,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 9.6295,
+        "cy": 7.599,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 10.544,
+        "cy": 11.9395,
+        "width": 0.6,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 3.456,
+        "cy": 11.882,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.3565,
+        "cy": 16.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 8.135,
+        "cy": 1.615,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 8.3855,
+        "cy": 16.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 10.544,
+        "cy": 4.362,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
+    "opening_clearance_reasons": [
+      "door @(7.000,1.615) pier 0.000m to window @(8.135,1.615) < 0.115m",
+      "window @(8.135,1.615) pier 0.000m to door @(7.000,1.615) < 0.115m"
+    ],
+    "baseline": {
+      "total": 70.0,
+      "max": 100,
+      "phantom_walls": 6,
+      "collisions": 0,
+      "label_overflow": 0,
+      "dimension_coverage_pct": 100.0,
+      "standard_scale": true,
+      "doors_per_room_ok": true,
+      "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
+      "column_count": 11,
+      "frozen_input_column_count": 11
+    }
+  },
+  "setback_heavy_1bhk": {
+    "cfg": {
+      "plot_length": 12.0,
+      "plot_width": 9.0,
+      "setback_front": 3.0,
+      "setback_rear": 3.0,
+      "setback_left": 2.0,
+      "setback_right": 2.0,
+      "num_bedrooms": 1,
+      "toilets": 1,
+      "parking": false,
+      "city": "other",
+      "vastu_enabled": false,
+      "road_width_m": 9.0,
+      "road_side": "S",
+      "has_pooja": false,
+      "has_study": false,
+      "has_balcony": false,
+      "attached_toilets": false,
+      "plot_shape": "rectangular",
+      "plot_front_width": 0.0,
+      "plot_rear_width": 0.0,
+      "plot_side_offset": 0.0,
+      "plot_corners": null,
+      "cutout_corner": "NE",
+      "cutout_width": 0.0,
+      "cutout_height": 0.0,
+      "num_floors": 1,
+      "has_stilt": false,
+      "has_basement": false,
+      "municipality": null,
+      "custom_room_config": null,
+      "allow_shape_templates": false,
+      "plot_template": "RECT",
+      "notch_width": 0.0,
+      "notch_depth": 0.0
+    },
+    "geometry": {
+      "floor": 0,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "gf_stair",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 2.23,
+          "y": 3.23,
+          "width": 0.9,
+          "depth": 3.0
+        },
+        {
+          "id": "gf_living",
+          "name": "Living / Hall",
+          "type": "living",
+          "x": 3.13,
+          "y": 3.23,
+          "width": 3.64,
+          "depth": 3.096
+        },
+        {
+          "id": "gf_kitchen",
+          "name": "Kitchen",
+          "type": "kitchen",
+          "x": 2.23,
+          "y": 6.326,
+          "width": 2.497,
+          "depth": 2.444
+        },
+        {
+          "id": "gf_dining",
+          "name": "Dining",
+          "type": "dining",
+          "x": 4.727,
+          "y": 6.345,
+          "width": 2.043,
+          "depth": 2.425
+        }
+      ],
+      "columns": [
+        {
+          "x": 2.115,
+          "y": 3.115
+        },
+        {
+          "x": 2.115,
+          "y": 6.278
+        },
+        {
+          "x": 2.115,
+          "y": 8.885
+        },
+        {
+          "x": 3.13,
+          "y": 3.115
+        },
+        {
+          "x": 4.727,
+          "y": 8.885
+        },
+        {
+          "x": 6.885,
+          "y": 3.115
+        },
+        {
+          "x": 6.885,
+          "y": 6.335
+        },
+        {
+          "x": 6.885,
+          "y": 8.885
+        }
+      ]
+    },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 3.13,
+        "cy": 3.795,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 3.695,
+        "cy": 6.326,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 4.5,
+        "cy": 3.115,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "door",
+        "cx": 5.292,
+        "cy": 6.3355,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 2.115,
+        "cy": 7.548,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 3.4785,
+        "cy": 8.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.635,
+        "cy": 3.115,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 5.7485,
+        "cy": 8.885,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.885,
+        "cy": 4.778,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 6.885,
+        "cy": 7.5575,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
+    "opening_clearance_reasons": [
+      "door @(4.500,3.115) pier 0.000m to window @(5.635,3.115) < 0.115m",
+      "window @(5.635,3.115) pier 0.000m to door @(4.500,3.115) < 0.115m"
+    ],
+    "baseline": {
+      "total": 70.0,
+      "max": 100,
+      "phantom_walls": 4,
+      "collisions": 0,
+      "label_overflow": 0,
+      "dimension_coverage_pct": 100.0,
+      "standard_scale": true,
+      "doors_per_room_ok": true,
+      "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
+      "column_count": 8,
+      "frozen_input_column_count": 8
+    }
+  },
+  "g2_stilt_parking": {
+    "cfg": {
+      "plot_length": 20.0,
+      "plot_width": 15.0,
+      "setback_front": 1.5,
+      "setback_rear": 1.0,
+      "setback_left": 1.0,
+      "setback_right": 1.0,
+      "num_bedrooms": 4,
+      "toilets": 3,
+      "parking": true,
+      "city": "other",
+      "vastu_enabled": false,
+      "road_width_m": 9.0,
+      "road_side": "S",
+      "has_pooja": false,
+      "has_study": false,
+      "has_balcony": false,
+      "attached_toilets": false,
+      "plot_shape": "rectangular",
+      "plot_front_width": 0.0,
+      "plot_rear_width": 0.0,
+      "plot_side_offset": 0.0,
+      "plot_corners": null,
+      "cutout_corner": "NE",
+      "cutout_width": 0.0,
+      "cutout_height": 0.0,
+      "num_floors": 3,
+      "has_stilt": true,
+      "has_basement": false,
+      "municipality": null,
+      "custom_room_config": null,
+      "allow_shape_templates": false,
+      "plot_template": "RECT",
+      "notch_width": 0.0,
+      "notch_depth": 0.0
+    },
+    "geometry": {
+      "floor": 0,
+      "floor_type": "ground",
+      "rooms": [
+        {
+          "id": "living_0",
+          "name": "Living Room",
+          "type": "living",
+          "x": 1.23,
+          "y": 10.516,
+          "width": 6.325,
+          "depth": 8.254
+        },
+        {
+          "id": "kitchen_0",
+          "name": "Kitchen",
+          "type": "kitchen",
+          "x": 8.635,
+          "y": 10.516,
+          "width": 5.135,
+          "depth": 8.254
+        },
+        {
+          "id": "bedroom_0",
+          "name": "Bedroom 1",
+          "type": "bedroom",
+          "x": 8.635,
+          "y": 1.73,
+          "width": 5.135,
+          "depth": 8.786
+        },
+        {
+          "id": "toilet_0",
+          "name": "Toilet 1",
+          "type": "toilet",
+          "x": 6.535,
+          "y": 6.843,
+          "width": 2.1,
+          "depth": 1.334
+        },
+        {
+          "id": "toilet_1",
+          "name": "Toilet 2",
+          "type": "toilet",
+          "x": 6.535,
+          "y": 4.417,
+          "width": 2.099,
+          "depth": 1.433
+        },
+        {
+          "id": "stair_0",
+          "name": "Staircase",
+          "type": "staircase",
+          "x": 7.555,
+          "y": 9.817,
+          "width": 1.08,
+          "depth": 2.5
+        },
+        {
+          "id": "parking_0",
+          "name": "Parking",
+          "type": "parking",
+          "x": 1.23,
+          "y": 1.73,
+          "width": 5.305,
+          "depth": 8.786
+        },
+        {
+          "id": "utility_auto_1",
+          "name": "Utility",
+          "type": "utility",
+          "x": 6.535,
+          "y": 1.73,
+          "width": 2.1,
+          "depth": 2.687
+        },
+        {
+          "id": "store_auto_1",
+          "name": "Store",
+          "type": "store_room",
+          "x": 6.535,
+          "y": 8.177,
+          "width": 2.1,
+          "depth": 1.64
+        }
+      ],
+      "columns": [
+        {
+          "x": 1.115,
+          "y": 1.615
+        },
+        {
+          "x": 1.115,
+          "y": 10.516
+        },
+        {
+          "x": 1.115,
+          "y": 18.885
+        },
+        {
+          "x": 6.535,
+          "y": 1.615
+        },
+        {
+          "x": 6.535,
+          "y": 8.177
+        },
+        {
+          "x": 6.65,
+          "y": 5.965
+        },
+        {
+          "x": 6.65,
+          "y": 6.728
+        },
+        {
+          "x": 6.65,
+          "y": 9.932
+        },
+        {
+          "x": 6.65,
+          "y": 10.401
+        },
+        {
+          "x": 7.67,
+          "y": 12.432
+        },
+        {
+          "x": 7.67,
+          "y": 18.885
+        },
+        {
+          "x": 8.52,
+          "y": 5.965
+        },
+        {
+          "x": 8.52,
+          "y": 6.728
+        },
+        {
+          "x": 8.52,
+          "y": 18.885
+        },
+        {
+          "x": 8.635,
+          "y": 1.615
+        },
+        {
+          "x": 8.635,
+          "y": 8.177
+        },
+        {
+          "x": 13.885,
+          "y": 1.615
+        },
+        {
+          "x": 13.885,
+          "y": 10.516
+        },
+        {
+          "x": 13.885,
+          "y": 18.885
+        }
+      ]
+    },
+    "openings": [
+      {
+        "kind": "door",
+        "cx": 1.115,
+        "cy": 15.693,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 1.795,
+        "cy": 10.516,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 7.555,
+        "cy": 11.081,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.6345,
+        "cy": 4.907,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.635,
+        "cy": 2.22,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.635,
+        "cy": 7.333,
+        "width": 0.75,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 8.635,
+        "cy": 8.787,
+        "width": 0.9,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 9.2,
+        "cy": 10.516,
+        "width": 0.9,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "door",
+        "cx": 9.33,
+        "cy": 1.615,
+        "width": 1.07,
+        "is_horizontal": true,
+        "is_main": true
+      },
+      {
+        "kind": "ventilator",
+        "cx": 7.5847,
+        "cy": 5.965,
+        "width": 0.6,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 7.585,
+        "cy": 1.615,
+        "width": 0.6,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "ventilator",
+        "cx": 7.585,
+        "cy": 6.728,
+        "width": 0.6,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 1.115,
+        "cy": 14.643,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 7.67,
+        "cy": 15.5723,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 8.52,
+        "cy": 15.5723,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 11.2025,
+        "cy": 1.615,
+        "width": 1.2,
+        "is_horizontal": true,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 13.885,
+        "cy": 6.123,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      },
+      {
+        "kind": "window",
+        "cx": 13.885,
+        "cy": 14.643,
+        "width": 1.2,
+        "is_horizontal": false,
+        "is_main": false
+      }
+    ],
+    "opening_clearance_reasons": [
+      "door @(1.115,15.693) pier 0.000m to window @(1.115,14.643) < 0.115m",
+      "window @(1.115,14.643) pier 0.000m to door @(1.115,15.693) < 0.115m"
+    ],
+    "baseline": {
+      "total": 70.0,
+      "max": 100,
+      "phantom_walls": 9,
+      "collisions": 0,
+      "label_overflow": 0,
+      "dimension_coverage_pct": 100.0,
+      "standard_scale": true,
+      "doors_per_room_ok": true,
+      "windows_per_habitable_ok": true,
+      "opening_clearance_violations": 2,
+      "column_count": 19,
+      "frozen_input_column_count": 19
+    }
+  }
+}

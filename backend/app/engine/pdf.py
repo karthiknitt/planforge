@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 
 from app.engine.cad_primitives import metres_to_ftin
 from app.engine.geometry import buildable_polygon
-from app.engine.models import FloorPlan, Layout, PlotConfig
+from app.engine.models import FloorPlan, Layout, PlotConfig, Room
 from app.engine.section_geometry import (
     derive_elevation,
     derive_section,
@@ -1377,6 +1377,35 @@ def _standard_scale(
     return _PT_PER_PAPER_M / denom, denom
 
 
+def _draw_voids(
+    c: canvas.Canvas, rooms: list[Room], s: float, ox: float, oy: float
+) -> None:
+    """Void rooms (`Room.is_void`, Task 10) are holes, not slabs: no fill (the
+    architectural page never hatches room floors to begin with, so there is
+    no slab hatch to skip), a dashed boundary over the room's footprint
+    instead of the solid wall poché a real room's edge implies, and an
+    "OPEN TO BELOW" label under the room name.
+    """
+    void_rooms = [r for r in rooms if r.is_void]
+    if not void_rooms:
+        return
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.4)
+    c.setDash(3, 2)
+    for r in void_rooms:
+        for p in r.rects:
+            c.rect(
+                ox + p.x * s, oy + p.y * s, p.width * s, p.depth * s, fill=0, stroke=1
+            )
+    c.setDash()
+    c.setFillColor(HexColor("#000000"))
+    c.setFont("Helvetica-Oblique", 6)
+    for r in void_rooms:
+        cx = ox + (r.x + r.width / 2) * s
+        cy = oy + (r.y + r.depth / 2) * s
+        c.drawCentredString(cx, cy - 8, "OPEN TO BELOW")
+
+
 def _shape_path(c: canvas.Canvas, geom, s: float, ox: float, oy: float):
     """Fill+outline a shapely (Multi)Polygon with even-odd holes."""
     polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
@@ -1646,6 +1675,7 @@ def _draw_floor_projected(
         stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
     )
     _draw_labels(c, drawing, s, ox, oy, denom)
+    _draw_voids(c, floor_plan.rooms, s, ox, oy)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)

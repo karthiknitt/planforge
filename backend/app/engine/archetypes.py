@@ -172,6 +172,14 @@ def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
 
 
 def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    # A `plot_template` notch keeps plot_shape == "rectangular", so it must be
+    # caught BEFORE the plain-rectangle fallback at the bottom — otherwise the
+    # archetypes would lay rooms straight across the cutout. `_inscribed_plate`
+    # is safe on this outline even though its docstring says convex: the
+    # notched region spans the full width at the front and a prefix of it at
+    # the rear, so an x-interval valid at both extremes is valid throughout.
+    if cfg.plot_template != "RECT" and cfg.notch_width > 0 and cfg.notch_depth > 0:
+        return _inscribed_plate(cfg, ewt)
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         return _quad_floor_plate(cfg, ewt)
     if cfg.plot_shape == "l_shaped":

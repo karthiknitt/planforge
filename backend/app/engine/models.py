@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.engine.shapes import Rect, ShapeTemplate, parts_for, validate_shape
+
 RoomType = Literal[
     "living",
     "bedroom",
@@ -63,8 +65,20 @@ class Room:
     # (an ensuite toilet sitting in a corner of a bedroom's rectangle).
     # Defaults to None, so every existing layout is unaffected.
     parent_id: str | None = None
+    # Shape template: the room's footprint is the union of 1-3 axis-aligned
+    # rectangles derived from its bounding box (x, y, width, depth) and this
+    # template. "RECT" — the default — yields exactly one rectangle equal to
+    # that bounding box, so every existing caller is unaffected.
+    template: ShapeTemplate = "RECT"
+    shape_ratio: float = 0.6
+    # id of a room on the floor below that this room opens onto. A void has no
+    # slab, no ceiling, and no carpet area — it is a hole, not a room (a
+    # double-height living area or courtyard). Defaults to None, so every
+    # existing layout is unaffected.
+    void_over: str | None = None
 
     def __post_init__(self) -> None:
+        validate_shape(self.template, self.shape_ratio)
         bad = set(self.open_sides) - _VALID_SIDES
         if bad:
             raise ValueError(
@@ -82,16 +96,36 @@ class Room:
         return bool(self.open_sides)
 
     @property
+    def is_void(self) -> bool:
+        return self.void_over is not None
+
+    @property
+    def rects(self) -> tuple[Rect, ...]:
+        """The room's occupied rectangles.
+
+        A 1-tuple equal to the room's own rectangle for "RECT", so every
+        caller that assumed one rectangle per room keeps working unchanged.
+        """
+        return parts_for(
+            self.x, self.y, self.width, self.depth, self.template, self.shape_ratio
+        )
+
+    @property
     def area(self) -> float:
-        return round(self.width * self.depth, 2)
+        """Occupied area — the union of the shape-template parts.
+
+        Identical to `width * depth` for "RECT" rooms.
+        """
+        return round(sum(p.area for p in self.rects), 2)
 
     def net_area(self, children: list["Room"]) -> float:
         """Area minus any rooms carved out of this one.
 
-        Derived from `self.area` (not `width * depth`) so it stays correct
-        once `area` becomes the union of a room's shape-template parts.
+        Both terms use `.area` (not `width * depth`) so a non-RECT parent or
+        carve is measured by its part union rather than its bounding box — an
+        L/T/U carve would otherwise over-subtract by up to half its bbox.
         """
-        carved = sum(c.width * c.depth for c in children if c.parent_id == self.id)
+        carved = sum(c.area for c in children if c.parent_id == self.id)
         return round(self.area - carved, 2)
 
 
@@ -173,6 +207,22 @@ class PlotConfig:
     # En-suite toilets: one attached bath per bedroom, additive to `toilets`
     # (which then counts COMMON toilets only)
     attached_toilets: bool = False
+    # Opt-in: let the solver give eligible rooms a non-RECT shape template, so
+    # two rooms can interlock (an L's notch filled by its neighbour). Off by
+    # default — every room then comes out `template="RECT"` and the CP-SAT
+    # model is exactly the one that existed before shape templates.
+    allow_shape_templates: bool = False
+    # Rectilinear PLOT envelope — INDEPENDENT of `allow_shape_templates` above,
+    # which is about ROOM shape. "RECT" (the default) is today's plain
+    # rectangular site and changes nothing at all: the solver's notch pass
+    # returns immediately and the CP-SAT model is byte-identical. "L"/"T"/"U"
+    # cut a `notch_width` x `notch_depth` rectangle out of the plot's
+    # REAR-RIGHT corner; that land is off-plot, so the solver forbids room
+    # parts from entering it (it used to place rooms there and delete them
+    # afterwards, silently losing programme).
+    plot_template: ShapeTemplate = "RECT"
+    notch_width: float = 0.0  # metres, x-extent of the cutout
+    notch_depth: float = 0.0  # metres, y-extent of the cutout
 
     @property
     def bhk(self) -> int:

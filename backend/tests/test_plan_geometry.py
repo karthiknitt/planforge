@@ -18,9 +18,11 @@ from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig, Room
 from app.engine.plan_geometry import (
     _SNAP,
+    _adjacencies,
     _merge_adjacent_columns,
     _near_staircase,
     _plate_bounds,
+    _room_label_lines,
     _structural_rooms,
     derive_columns,
     derive_junctions,
@@ -922,3 +924,172 @@ def test_carve_within_containment_tolerance_does_not_inflate_the_plate():
     assert px2 == pytest.approx(5.0), (
         f"carve mass leaked into the plate: east bound {px2} != parent's 5.0"
     )
+
+
+# --- Task 7: walls derive from the part union, not the bbox -----------------
+
+
+def test_l_shaped_room_has_six_wall_runs_not_four():
+    """An L room's notch must be a real re-entrant corner: 6 boundary runs,
+    and NO wall closing the notch off as if it were a rectangle."""
+    r = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=1.0,
+        y=1.0,
+        width=10.0,
+        depth=10.0,
+        template="L",
+        shape_ratio=0.6,
+    )
+    walls = derive_walls([r], box(0, 0, 14, 14))
+    # Base band spans y=1..7 full width; leg spans x=1..7 up to y=11.
+    # The notch corner is at (7, 7): there must be walls along x=7 above y=7
+    # and along y=7 to the right of x=7 ...
+    assert _walls_on_edge(walls, vertical=True, coord=7.0), "missing notch E wall"
+    assert _walls_on_edge(walls, vertical=False, coord=7.0), "missing notch N wall"
+    # ... and NO wall spanning the top of the bbox across the notch. The bound
+    # is the notch's x plus EWT/2 (+tol), not x itself: `_snap_ends`
+    # legitimately extends the north run out to the notch wall's *centreline*
+    # (x = 7 + EWT/2) for corner closure. A wall genuinely drawn across the
+    # notch would run all the way to the bbox's east ring at x = 11 + EWT/2.
+    top = _walls_on_edge(walls, vertical=False, coord=11.0)
+    assert top, "the L's north run is missing entirely"
+    for w in top:
+        assert max(w.x1, w.x2) <= 7.0 + EWT / 2 + 0.01, (
+            "a wall was drawn across the L's notch — the room was treated as "
+            "its bounding rectangle"
+        )
+
+
+def test_rect_room_still_has_exactly_four_runs():
+    """Regression: RECT rooms are untouched by the union-boundary rewrite."""
+    r = Room(id="r", name="R", type="living", x=1.0, y=1.0, width=4.0, depth=3.0)
+    walls = derive_walls([r], box(0, 0, 12, 12))
+    for vertical, coord in ((False, 1.0), (False, 4.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord)
+
+
+def test_u_shaped_room_leaves_its_central_notch_wall_less():
+    """The U template's mid-edge notch is the case `_plate_bounds`'s corner
+    probe cannot see, so only a union-boundary walk can keep it open."""
+    r = Room(
+        id="u",
+        name="U Hall",
+        type="living",
+        x=1.0,
+        y=1.0,
+        width=10.0,
+        depth=10.0,
+        template="U",
+        shape_ratio=0.6,
+    )
+    walls = derive_walls([r], box(0, 0, 14, 14))
+    # legs: x in [1,3] and [9,11]; notch floor at y=7 spanning x in [3,9].
+    assert _walls_on_edge(walls, vertical=False, coord=7.0), "missing notch floor wall"
+    north = _walls_on_edge(walls, vertical=False, coord=11.0)
+    assert north, "the U's leg tops lost their walls"
+    for w in north:
+        lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+        assert hi <= 3.0 + EWT / 2 + 0.01 or lo >= 9.0 - EWT / 2 - 0.01, (
+            "a wall bridges the U's notch at the top of its bounding box"
+        )
+
+
+def test_merged_ring_wall_is_split_at_an_open_side():
+    """Task 2's deferred under-firing case.
+
+    The porch's south run and its neighbour's south run are separated only by
+    a partition slit, so `_merge_intervals` joins them into ONE ring wall.
+    The old containment-only filter kept that wall whole (the merged wall is
+    not *wholly* inside the porch's open interval), leaving a wall across the
+    porch opening. Interval SUBTRACTION must remove only the porch's share.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=4.115,
+        y=0.0,
+        width=3.885,
+        depth=5.0,
+    )
+    walls = derive_walls([porch, living], _buildable())
+    south = _walls_on_edge(walls, vertical=False, coord=0.0)
+    assert south, "the neighbour's south wall was deleted along with the porch's"
+    for w in south:
+        assert min(w.x1, w.x2) >= 4.0 - EWT / 2 - 0.01, (
+            "a wall still runs across the porch's declared-open south side — "
+            "the merged run was kept whole instead of being split"
+        )
+    assert any(max(w.x1, w.x2) >= 7.9 for w in south), (
+        "the living room's south wall no longer reaches its east end"
+    )
+
+
+def test_label_area_uses_the_part_union_not_the_bbox():
+    """`_room_label_lines` reported round(width * depth * 10.7639) — the
+    bounding box. An L room's printed SQFT must be its occupied area."""
+    r = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=1.0,
+        y=1.0,
+        width=10.0,
+        depth=10.0,
+        template="L",
+        shape_ratio=0.6,
+    )
+    lines = _room_label_lines(r)
+    sqft = next(int(t.split()[0]) for t in lines if t.endswith("SQFT"))
+    assert sqft == round(r.area * 10.7639)
+    assert sqft < round(10.0 * 10.0 * 10.7639)
+
+
+def test_rect_label_area_is_unchanged():
+    r = _room("r", 1.0, 1.0, 3.5, 4.0)
+    lines = _room_label_lines(r)
+    sqft = next(int(t.split()[0]) for t in lines if t.endswith("SQFT"))
+    assert sqft == round(3.5 * 4.0 * 10.7639)
+
+
+def test_adjacency_of_an_l_room_covers_only_the_parts_that_touch():
+    """Doors are hung on `_adjacencies` runs. An L room touches its
+    neighbour only along the part that actually reaches it — a bbox-derived
+    run would claim a shared wall across the notch, where a door would open
+    onto open air."""
+    l_room = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=0.0,
+        y=0.0,
+        width=6.0,
+        depth=6.0,
+        template="L",
+        shape_ratio=0.5,
+    )
+    nbr = _room("nbr", 6.115, 0.0, 3.0, 6.0)
+    adjs = [
+        a
+        for a in _adjacencies([l_room, nbr], IWT, 0.01)
+        if a.vertical and abs(a.coord - 6.0575) < 0.01
+    ]
+    assert adjs, "the L's base band lost its contact with the neighbour"
+    for a in adjs:
+        assert a.hi <= 3.0 + 0.01, (
+            f"adjacency spans y=[{a.lo}, {a.hi}] — past the base band's top at "
+            "3.0, i.e. across the notch where the L is not present"
+        )

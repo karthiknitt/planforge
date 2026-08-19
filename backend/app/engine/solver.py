@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
+from math import ceil, gcd, lcm
 from pathlib import Path
+from typing import NamedTuple
 
 from ortools.sat.python import cp_model
 
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
+from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
 from app.engine.adjacency import load_adjacency_pairs
 
 SCALE = 1000  # 1 metre = 1000 mm units
@@ -134,6 +137,25 @@ PARKING_ROAD_PENALTY = 250_000
 
 _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 
+# ── Shape templates (opt-in via cfg.allow_shape_templates) ────────────────────
+# Which room types may be given a non-RECT footprint, and which template.
+# Deliberately narrow: an L-shaped bedroom or toilet has nowhere to put a bed
+# or a WC, whereas a social/circulation room folding around a neighbour is the
+# common non-rectangular room in the reverse_engr corpus. Anything not listed
+# here stays RECT even with the flag on.
+_TEMPLATE_TYPES: dict[str, ShapeTemplate] = {
+    "living": "L",
+    "dining": "L",
+    "passage": "L",
+}
+# Fraction of the bounding box kept by the narrow leg (shapes.parts_for).
+_TEMPLATE_RATIO = 0.6
+# Denominator of the fixed part offsets. Each part's origin/size is
+# `u / _FRACTION_SCALE` of the room's bbox, so it stays an affine expression
+# over the room's EXISTING x/y/w/d decision vars — the model gains intervals,
+# not degrees of freedom.
+_FRACTION_SCALE = 1000
+
 _SPECS_PATH = Path(__file__).parent.parent / "config" / "room_specs.json"
 
 
@@ -162,12 +184,225 @@ class _RoomVar:
     d: cp_model.IntVar
     xe: cp_model.IntVar  # x + w (explicit end var, OR-Tools 9.x affine rule)
     ye: cp_model.IntVar  # y + d
-    ix: cp_model.IntervalVar
-    iy: cp_model.IntervalVar
+    template: ShapeTemplate
+    shape_ratio: float
+
+
+class _PartVars(NamedTuple):
+    """The CP-SAT vars of ONE occupied rectangle of a room.
+
+    A RECT room contributes exactly one of these, holding the room's own
+    x/y/w/d vars; an L/T/U room contributes one per part. `_solve_one` keeps
+    the full list (`part_vars`) so later passes can constrain the rectangles a
+    room actually occupies rather than its bounding box — e.g. forbidding the
+    notch region of an L-shaped PLOT, where a bbox test would either leak a
+    part into the notch or reject a room that only overhangs it with a hole.
+
+    `room_id`/`room_type` identify the owning room, so such a pass can EXEMPT
+    rooms rather than apply itself blindly — parking above all: PR #81 already
+    had to exempt parking from the connectivity repair pass, because a car
+    porch is legitimately reachable only from the driveway. They are last in
+    the field order so `pv[:4]` and `pv.px` both keep working.
+    """
+
+    px: cp_model.IntVar
+    py: cp_model.IntVar
+    pw: cp_model.IntVar
+    pd: cp_model.IntVar
+    room_id: str
+    room_type: str
 
 
 def _mm(metres: float) -> int:
     return int(round(metres * SCALE))
+
+
+def _unit_parts_mm(
+    template: ShapeTemplate, ratio: float
+) -> tuple[tuple[int, int, int, int], ...]:
+    """The template's parts over a unit bbox, as integer /_FRACTION_SCALE fractions.
+
+    Returns (x, y, width, depth) per part. Rounding is validated, not assumed:
+    two parts of the SAME room go into the same add_no_overlap_2d call, so a
+    rounding error that made them overlap by one unit would not produce a
+    slightly-wrong plan — it would make the whole model infeasible.
+    """
+    scale = _FRACTION_SCALE
+    parts = parts_for(0.0, 0.0, 1.0, 1.0, template, ratio)
+    ints = tuple(
+        (
+            round(p.x * scale),
+            round(p.y * scale),
+            round(p.width * scale),
+            round(p.depth * scale),
+        )
+        for p in parts
+    )
+    for x, y, w, d in ints:
+        if w <= 0 or d <= 0 or x < 0 or y < 0 or x + w > scale or y + d > scale:
+            raise ValueError(
+                f"template {template!r} at ratio {ratio} rounds to a part "
+                f"outside its own bounding box: {(x, y, w, d)}"
+            )
+    for i, (ax, ay, aw, ad) in enumerate(ints):
+        for bx, by, bw, bd in ints[i + 1 :]:
+            if min(ax + aw, bx + bw) > max(ax, bx) and min(ay + ad, by + bd) > max(
+                ay, by
+            ):
+                raise ValueError(
+                    f"template {template!r} at ratio {ratio} rounds to "
+                    "overlapping parts — the model would be infeasible"
+                )
+    return ints
+
+
+def _grid_step(fractions: tuple[int, ...]) -> int:
+    """Smallest k such that `dim * u` is divisible by _FRACTION_SCALE for all u.
+
+    A part's coordinate is `dim * u / _FRACTION_SCALE`, which must land on a
+    whole millimetre because CP-SAT is integer-only. Restricting the room's
+    dimension to multiples of k is what makes every such division exact (5 mm
+    for the default 0.6 ratio — two orders of magnitude below any construction
+    tolerance).
+    """
+    step = 1
+    for u in fractions:
+        step = lcm(step, _FRACTION_SCALE // gcd(_FRACTION_SCALE, u))
+    return step
+
+
+@dataclass(frozen=True)
+class _ShapeFit:
+    """How a shape template changes one room's dimension/area bounds.
+
+    A non-RECT room's real area is the part union, a fixed fraction of its
+    bounding box, and its narrow leg is `ratio` of the bbox — but the solver's
+    area and min-width constraints are written on the bbox. Both minima are
+    therefore inflated here; when the inflated version no longer fits the
+    room's spec, the fit degrades to RECT rather than going infeasible.
+    """
+
+    template: ShapeTemplate
+    ratio: float
+    min_w: int
+    min_d: int
+    min_area: int
+    max_area: int
+    grid_x: int
+    grid_y: int
+
+
+def _fit_template(
+    template: ShapeTemplate,
+    ratio: float,
+    min_w: int,
+    max_w: int,
+    min_d: int,
+    max_d: int,
+    min_area: int,
+    max_area: int,
+) -> _ShapeFit:
+    """Bounds for `template`, or the plain RECT bounds when it cannot fit."""
+    rect = _ShapeFit("RECT", ratio, min_w, min_d, min_area, max_area, 1, 1)
+    if template == "RECT":
+        return rect
+
+    unit = _unit_parts_mm(template, ratio)
+    frac = sum(w * d for _, _, w, d in unit) / float(_FRACTION_SCALE**2)
+    grid_x = _grid_step(tuple(u for x, _, w, _ in unit for u in (x, w)))
+    grid_y = _grid_step(tuple(u for _, y, _, d in unit for u in (y, d)))
+
+    def _round_up(value: int, step: int) -> int:
+        return -(-value // step) * step
+
+    t_min_w = _round_up(ceil(min_w / ratio), grid_x)
+    t_min_d = _round_up(ceil(min_d / ratio), grid_y)
+    t_min_area = ceil(min_area / frac)
+    t_max_area = int(max_area / frac)
+    # Largest bbox the room can actually reach: max_w/max_d quantised DOWN to
+    # the template's grid, because w/d are pinned to multiples of it.
+    reach_w = (max_w // grid_x) * grid_x
+    reach_d = (max_d // grid_y) * grid_y
+    if (
+        t_min_w > reach_w
+        or t_min_d > reach_d
+        or t_min_area > t_max_area
+        or t_min_w * t_min_d > t_max_area
+        # The inflated area minimum must be reachable at all. Without this the
+        # template can demand more bbox area than max_w*max_d can supply and
+        # make a room infeasible that was perfectly feasible as a RECT —
+        # breaking the "a template is never the reason a solve fails" rule,
+        # and (worse) surfacing as an unexplained infeasibility in the passes
+        # layered on top of this one.
+        or t_min_area > reach_w * reach_d
+    ):
+        return rect
+    return _ShapeFit(
+        template, ratio, t_min_w, t_min_d, t_min_area, t_max_area, grid_x, grid_y
+    )
+
+
+def _add_room_parts(
+    model: cp_model.CpModel,
+    rid: str,
+    rtype: str,
+    xv: cp_model.IntVar,
+    yv: cp_model.IntVar,
+    wv: cp_model.IntVar,
+    dv: cp_model.IntVar,
+    xe: cp_model.IntVar,
+    ye: cp_model.IntVar,
+    template: ShapeTemplate,
+    ratio: float,
+    bw: int,
+    bd: int,
+    x_ivs: list[cp_model.IntervalVar],
+    y_ivs: list[cp_model.IntervalVar],
+    part_vars: list[_PartVars],
+) -> None:
+    """Append this room's no-overlap intervals — one pair PER PART, not per room.
+
+    Part offsets are fixed fractions of the room's bbox, so each part's
+    position is an affine expression over the room's existing anchor/size
+    decision vars: no new degrees of freedom, the model just gets more
+    intervals over the same unknowns. That is what lets two templated rooms
+    interlock — an L's notch can be filled by a neighbour, which a single
+    bbox-level interval pair per room can never express.
+
+    `part_vars` is the caller's list and is appended to for EVERY part,
+    including a RECT room's single one (where the "part" vars are the room's
+    own x/y/w/d), each tagged with `rid`/`rtype` so a later pass can constrain
+    occupied rectangles directly and still exempt rooms by type.
+    """
+    if template == "RECT":
+        x_ivs.append(model.new_interval_var(xv, wv, xe, f"ix_{rid}"))
+        y_ivs.append(model.new_interval_var(yv, dv, ye, f"iy_{rid}"))
+        part_vars.append(_PartVars(xv, yv, wv, dv, rid, rtype))
+        return
+
+    scale = _FRACTION_SCALE
+    for k, (ux, uy, uw, ud) in enumerate(_unit_parts_mm(template, ratio)):
+        px = model.new_int_var(0, bw, f"px_{rid}_{k}")
+        py = model.new_int_var(0, bd, f"py_{rid}_{k}")
+        pw = model.new_int_var(1, bw, f"pw_{rid}_{k}")
+        pd = model.new_int_var(1, bd, f"pd_{rid}_{k}")
+        # px = xv + wv*ux/scale, exact in integers because the room's w/d
+        # domains are restricted to multiples of the template's grid step
+        # (see _ShapeFit.grid_x / grid_y) — every product below is divisible
+        # by `scale`, so no solution is lost to a rounding-driven infeasibility.
+        model.add(px * scale == xv * scale + wv * ux)
+        model.add(py * scale == yv * scale + dv * uy)
+        model.add(pw * scale == wv * uw)
+        model.add(pd * scale == dv * ud)
+        # OR-Tools 9.x: an interval's end must be an IntVar, never a start+size
+        # expression (two-var sum is not affine).
+        pxe = model.new_int_var(0, bw, f"pxe_{rid}_{k}")
+        pye = model.new_int_var(0, bd, f"pye_{rid}_{k}")
+        model.add(pxe == px + pw)
+        model.add(pye == py + pd)
+        x_ivs.append(model.new_interval_var(px, pw, pxe, f"pxi_{rid}_{k}"))
+        y_ivs.append(model.new_interval_var(py, pd, pye, f"pyi_{rid}_{k}"))
+        part_vars.append(_PartVars(px, py, pw, pd, rid, rtype))
 
 
 def _plate_and_planes_from_polygon(
@@ -208,6 +443,280 @@ def _plate_and_planes_from_polygon(
         planes.append((dx, dy, rhs))
 
     return bw, bd, ox, oy, planes
+
+
+def _plate_geom_mm(
+    cfg: PlotConfig, ewt: float
+) -> tuple[int, int, int, int, list[tuple[int, int, int]]] | None:
+    """(bw, bd, ox, oy, half_planes) of the buildable plate, in millimetres.
+
+    Extracted from `_solve_one` so the pre-solve envelope validation measures
+    exactly the plate the solve will use. The arithmetic is unchanged.
+
+    A `plot_template` notch stays on the RECTANGULAR branch on purpose: the
+    plate is the full setback-inset rectangle and the notch is carved out of it
+    by `_forbid_notch`, exactly. Routing it through the polygon branch instead
+    would hand `_plate_and_planes_from_polygon` a NON-CONVEX polygon, and a
+    half-plane intersection of a non-convex outline collapses to its convex
+    core — for the 12x15 m L fixture, 91.8 m² of plate down to 37.1 m².
+    """
+    if cfg.plot_shape != "rectangular":
+        from app.engine.geometry import buildable_polygon
+
+        inset = buildable_polygon(cfg, wall_clearance=ewt)
+        if inset.is_empty:
+            return None
+        return _plate_and_planes_from_polygon(inset)
+    bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
+    bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
+    ox = _mm(cfg.setback_left + ewt)
+    oy = _mm(cfg.setback_front + ewt)
+    return bw, bd, ox, oy, []
+
+
+# ── Rectilinear PLOT envelope: the notch ──────────────────────────────────────
+
+# `ShapeTemplate` is shared with ROOM shapes, where all four names are real.
+# As a PLOT template only "RECT" and "L" have geometry here; see `notch_rect_m`.
+_UNIMPLEMENTED_PLOT_TEMPLATES: frozenset[str] = frozenset({"T", "U"})
+
+
+def _unimplemented_plot_template_msg(template: str) -> str:
+    shape = "two rear-corner notches" if template == "T" else "a central notch"
+    return (
+        f"plot_template={template!r} is not supported: a {template} plot has "
+        f"{shape}, and only the single rear-right cutout of an L plot is "
+        'implemented. Use plot_template="L" (or the legacy '
+        'plot_shape="l_shaped" cutout) instead.'
+    )
+
+
+def notch_rect_m(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
+    """The off-plot cutout rectangle (x0, y0, x1, y1) in PLOT metres, or None.
+
+    Two config surfaces describe the same thing and both resolve here:
+
+    * `plot_template == "L"` with `notch_width`/`notch_depth` — the cutout is
+      the plot's REAR-RIGHT corner.
+    * the legacy `plot_shape == "l_shaped"` with
+      `cutout_corner`/`cutout_width`/`cutout_height`, whose cutout may sit at
+      any of the four corners. `generator.py` used to service that surface by
+      DELETING rooms that landed in the cutout after the solve; covering it
+      here is what makes removing that pass an upgrade rather than a
+      regression.
+
+    `plot_template` wins when both are set.
+
+    "T" and "U" are NOT implemented: a T plot has a notch in each rear corner
+    and a U plot a central one, so returning the single rear-right rectangle
+    for them would silently under-constrain the model and hand the user a plan
+    that builds on land they do not own. They raise instead — see
+    `validate_plot_envelope`, which rejects them before any solve begins; this
+    raise is the defence-in-depth behind it.
+    """
+    if cfg.plot_template in _UNIMPLEMENTED_PLOT_TEMPLATES:
+        raise ValueError(_unimplemented_plot_template_msg(cfg.plot_template))
+    if cfg.plot_template != "RECT":
+        return (
+            cfg.plot_width - cfg.notch_width,
+            cfg.plot_length - cfg.notch_depth,
+            cfg.plot_width,
+            cfg.plot_length,
+        )
+    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
+        cw, ch = cfg.cutout_width, cfg.cutout_height
+        pw, pl = cfg.plot_width, cfg.plot_length
+        return {
+            "NE": (pw - cw, pl - ch, pw, pl),
+            "NW": (0.0, pl - ch, cw, pl),
+            "SE": (pw - cw, 0.0, pw, ch),
+            "SW": (0.0, 0.0, cw, ch),
+        }.get((cfg.cutout_corner or "NE").upper(), (pw - cw, pl - ch, pw, pl))
+    return None
+
+
+def _forbid_notch(
+    model: cp_model.CpModel,
+    cfg: PlotConfig,
+    parts: list[_PartVars],
+    *,
+    ox_mm: int,
+    oy_mm: int,
+    bw: int,
+    bd: int,
+    ewt: float = 0.0,
+) -> None:
+    """Forbid every room PART from intersecting the plot's notch.
+
+    Replaces generator.py's post-hoc "delete rooms in the cutout zone" pass,
+    which silently dropped programme instead of never placing it there.
+
+    A part avoids an axis-aligned notch iff it lies wholly to one side of it —
+    a disjunction of (at most) four linear constraints, one reified BoolVar
+    each. Disjuncts that no part could ever satisfy inside the plate are not
+    emitted at all, so the ordinary rear-right cutout costs exactly two
+    BoolVars per part: "left of the notch" or "in front of it".
+
+    This runs over parts, not bounding boxes, so it is exact for an L/T/U ROOM
+    too — a bbox test would either leak a part into the notch or reject a room
+    that merely overhangs the notch with its hole. Plot shape and room shape
+    stay independent; nothing here needs `cfg.allow_shape_templates`.
+
+    NO ROOM TYPE IS EXEMPT. The notch is land that is not part of the site, so
+    unlike PR #81's parking exemption (about reachability from a driveway — a
+    car porch still stands on your own plot) there is no type, open or roofed,
+    that may occupy it: not parking, not a balcony overhanging it, not a
+    garden or terrace. `room_type` is still used, to name the BoolVars so an
+    infeasible model can be read.
+
+    The region forbidden is the notch GROWN by the setbacks its two new plot
+    edges attract (`geometry.notch_keepout`) — the very region
+    `buildable_polygon` subtracts — so the solver, `compliance.check` and
+    generator.py's fill passes share one definition of where the notch starts.
+    Constraining the raw notch instead would let the solver park a room flush
+    against a plot boundary that compliance then fails it for.
+    """
+    from app.engine.geometry import notch_keepout
+
+    keepout = notch_keepout(cfg, wall_clearance=ewt)
+    if keepout is not None:
+        rect: tuple[float, float, float, float] | None = keepout.bounds
+    else:
+        rect = notch_rect_m(cfg)  # legacy l_shaped cutout, or nothing
+    if rect is None:  # plot_template == "RECT" and no legacy cutout
+        return
+    nlo_x = _mm(rect[0]) - ox_mm
+    nlo_y = _mm(rect[1]) - oy_mm
+    nhi_x = _mm(rect[2]) - ox_mm
+    nhi_y = _mm(rect[3]) - oy_mm
+    if nlo_x >= bw or nlo_y >= bd or nhi_x <= 0 or nhi_y <= 0:
+        return  # the notch misses the buildable plate entirely
+
+    for k, pv in enumerate(parts):
+        escapes: list[cp_model.IntVar] = []
+        candidates = (
+            ("left", nlo_x > 0, pv.px + pv.pw <= nlo_x),
+            ("front", nlo_y > 0, pv.py + pv.pd <= nlo_y),
+            ("right", nhi_x < bw, pv.px >= nhi_x),
+            ("rear", nhi_y < bd, pv.py >= nhi_y),
+        )
+        for tag, reachable, expr in candidates:
+            if not reachable:
+                continue  # unsatisfiable inside the plate — do not emit
+            lit = model.new_bool_var(f"notch_{tag}_{pv.room_type}_{pv.room_id}_{k}")
+            model.add(expr).only_enforce_if(lit)
+            escapes.append(lit)
+        if not escapes:
+            raise ValueError(
+                "the plot notch covers the entire buildable plate — no room "
+                "can be placed; reduce the notch or the setbacks"
+            )
+        model.add_bool_or(escapes)
+
+
+def validate_plot_envelope(
+    cfg: PlotConfig,
+    ewt: float,
+    room_defs: list[dict] | None = None,
+    specs: dict | None = None,
+) -> None:
+    """Raise ValueError when the notch makes the requested programme impossible.
+
+    **Scope: the `plot_template` surface ONLY.** A `plot_template == "RECT"`
+    config returns immediately, which deliberately leaves the legacy
+    `plot_shape == "l_shaped"` + `cutout_*` surface on exactly the path it had
+    before this task. That surface is user-reachable and DB-persisted, and no
+    route along `generate` -> `layout_store.solve_layouts_async` -> the
+    generate/export/share/revisions/structural routes handles a `ValueError`,
+    so validating it here turned realistic saved projects (12x15 m, 3BHK, a
+    3x4 m NE cutout) into an uncaught HTTP 500 where they used to degrade
+    gracefully to an empty layout list. Legacy configs still get the hard
+    `_forbid_notch` constraint — they just are not gated on it.
+
+    For the new surface the error is raised UP FRONT rather than letting CP-SAT
+    return INFEASIBLE: an INFEASIBLE status is indistinguishable from "the
+    solver ran out of budget", and `solve_layout`, `solve_layouts` and
+    `generate` all swallow exceptions from the solve itself, so the user would
+    only ever see an empty result. Relaxing the constraint instead is not an
+    option — the notch is land the user does not own.
+
+    The area test is a NECESSARY condition only (rooms cannot overlap, so the
+    sum of their minimum areas must fit on the floor), never a sufficient one.
+    It measures `_plate_geom_mm`, and on the `plot_template` surface that is
+    also what the archetype fallback measures — `archetypes._floor_plate` falls
+    through to `_inscribed_plate`, whose bounds come from the same
+    `buildable_polygon`. (This is NOT true of the legacy surface, whose
+    archetype plate is the larger `_l_shaped_floor_plate`; gating that surface
+    would have over-rejected by ~24 m². Another reason the scope above is what
+    it is.)
+    """
+    if cfg.plot_template == "RECT":
+        return
+    if cfg.plot_template not in SHAPE_TEMPLATES:
+        raise ValueError(
+            f"unknown plot_template {cfg.plot_template!r}; expected one of "
+            f"{sorted(SHAPE_TEMPLATES)}"
+        )
+    if cfg.plot_template in _UNIMPLEMENTED_PLOT_TEMPLATES:
+        raise ValueError(_unimplemented_plot_template_msg(cfg.plot_template))
+    if cfg.notch_width <= 0 or cfg.notch_depth <= 0:
+        raise ValueError(
+            f"plot_template={cfg.plot_template!r} needs a positive notch; got "
+            f"notch_width={cfg.notch_width} m, notch_depth={cfg.notch_depth} m "
+            '(use plot_template="RECT" for a plain rectangular plot)'
+        )
+    if cfg.notch_width >= cfg.plot_width or cfg.notch_depth >= cfg.plot_length:
+        raise ValueError(
+            f"the {cfg.notch_width:g}x{cfg.notch_depth:g} m notch is as large as "
+            f"the {cfg.plot_width:g}x{cfg.plot_length:g} m plot — nothing is left "
+            "to build on"
+        )
+
+    from app.engine.geometry import notch_keepout
+
+    keepout = notch_keepout(cfg, wall_clearance=ewt)
+    if keepout is None:
+        return
+    rect = keepout.bounds  # the same region `_forbid_notch` will constrain
+    geom = _plate_geom_mm(cfg, ewt)
+    if geom is None:
+        return  # setbacks already consume the plot; the solve returns None
+    bw, bd, ox, oy, _ = geom
+    if bw <= 0 or bd <= 0:
+        return
+
+    # keep-out ∩ plate is itself a rectangle (both are axis-aligned), so the
+    # buildable area lost to it is exact, not an estimate.
+    lost_w = max(0, min(ox + bw, _mm(rect[2])) - max(ox, _mm(rect[0])))
+    lost_d = max(0, min(oy + bd, _mm(rect[3])) - max(oy, _mm(rect[1])))
+    usable_mm2 = bw * bd - lost_w * lost_d
+
+    if specs is None:
+        specs = _load_specs()
+    if room_defs is None:
+        room_defs = _build_room_list(cfg, specs)
+
+    needed: dict[int, int] = {}
+    counts: dict[int, int] = {}
+    for rd in room_defs:
+        spec = specs.get(rd["type"], specs.get("utility"))
+        raw = rd.get("custom_min_area") or spec["min_area_sqm"]
+        floor = rd["floor"]
+        needed[floor] = needed.get(floor, 0) + int(raw * SCALE * SCALE)
+        counts[floor] = counts.get(floor, 0) + 1
+
+    for floor, required in sorted(needed.items()):
+        if required > usable_mm2:
+            raise ValueError(
+                f"the {cfg.notch_width:g}x{cfg.notch_depth:g} m plot notch (plus its "
+                f"own setbacks) leaves only "
+                f"{usable_mm2 / (SCALE * SCALE):.1f} m² buildable per "
+                f"floor, but floor {floor}'s programme ({counts[floor]} rooms for "
+                f"{cfg.num_bedrooms} bedrooms / {cfg.toilets} toilets) needs at "
+                f"least {required / (SCALE * SCALE):.1f} m² — shortfall "
+                f"{(required - usable_mm2) / (SCALE * SCALE):.1f} m². Reduce the "
+                "notch, the setbacks, or the programme."
+            )
 
 
 def ensuite_attachment(room_id: str) -> str | None:
@@ -327,6 +836,24 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
             )
 
     return rooms
+
+
+def _rooms_overlap(a: Room, b: Room) -> bool:
+    """Do the two rooms' OCCUPIED rectangles overlap?
+
+    Part-level, not bounding-box: two interlocked templated rooms (one sitting
+    in the other's notch) have overlapping bboxes and disjoint footprints, and
+    a bbox test would wrongly call that a collision. Reduces to the plain
+    rectangle test for RECT rooms, which is every room unless
+    cfg.allow_shape_templates is on.
+    """
+    for pa in a.rects:
+        for pb in b.rects:
+            x_ov = min(pa.x + pa.width, pb.x + pb.width) - max(pa.x, pb.x)
+            y_ov = min(pa.y + pa.depth, pb.y + pb.depth) - max(pa.y, pb.y)
+            if x_ov > 1e-6 and y_ov > 1e-6:
+                return True
+    return False
 
 
 @dataclass
@@ -639,11 +1166,17 @@ def snap_rooms_to_shared_grid(
         )
         mins = min_dims.get(r.id, {})
         eps = 1e-9
+        # Area is the PART UNION, not the bounding box — a templated room's
+        # bbox overstates its area by up to half. Summed unrounded (identical
+        # to width*depth for a RECT room, so the pre-template snap decisions
+        # are bit-for-bit unchanged; Room.area would round to 2 dp and could
+        # flip a borderline revert).
+        cand_area = sum(p.area for p in cand.rects)
         if (
             cand.width < mins.get("min_width_m", 0.0) - eps
             or cand.depth < mins.get("min_depth_m", 0.0) - eps
-            or cand.width * cand.depth < mins.get("min_area_sqm", 0.0) - eps
-            or cand.width * cand.depth > mins.get("max_area_sqm", float("inf")) + eps
+            or cand_area < mins.get("min_area_sqm", 0.0) - eps
+            or cand_area > mins.get("max_area_sqm", float("inf")) + eps
         ):
             return r  # revert: snap would violate this room's spec min/max
         return cand
@@ -660,9 +1193,7 @@ def snap_rooms_to_shared_grid(
             for i, ra in enumerate(rooms):
                 for j in range(i + 1, len(rooms)):
                     rb = rooms[j]
-                    x_ov = min(ra.x + ra.width, rb.x + rb.width) - max(ra.x, rb.x)
-                    y_ov = min(ra.y + ra.depth, rb.y + rb.depth) - max(ra.y, rb.y)
-                    if x_ov > 1e-6 and y_ov > 1e-6:
+                    if _rooms_overlap(ra, rb):
                         rooms[i] = originals[(fi, ra.id)]
                         rooms[j] = originals[(fi, rb.id)]
                         ra = rooms[i]
@@ -698,19 +1229,10 @@ def _solve_one(
     """
 
     # Buildable plate dimensions in mm
-    quad_planes: list[tuple[int, int, int]] = []
-    if cfg.plot_shape != "rectangular":
-        from app.engine.geometry import buildable_polygon
-
-        inset = buildable_polygon(cfg, wall_clearance=ewt)
-        if inset.is_empty:
-            return None
-        bw, bd, ox, oy, quad_planes = _plate_and_planes_from_polygon(inset)
-    else:
-        bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
-        bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
-        ox = _mm(cfg.setback_left + ewt)
-        oy = _mm(cfg.setback_front + ewt)
+    geom = _plate_geom_mm(cfg, ewt)
+    if geom is None:
+        return None
+    bw, bd, ox, oy, quad_planes = geom
 
     if bw <= 0 or bd <= 0:
         return None
@@ -719,6 +1241,11 @@ def _solve_one(
     room_vars: list[_RoomVar] = []
     gf_vars: list[_RoomVar] = []
     ff_vars: list[_RoomVar] = []
+    # No-overlap intervals, one pair PER PART (a RECT room has exactly one).
+    part_ivs: dict[int, tuple[list, list]] = {0: ([], []), 1: ([], [])}
+    # Every part's (px, py, pw, pd) vars, both floors — retained for passes
+    # that must constrain occupied rectangles rather than bounding boxes.
+    part_vars: list[_PartVars] = []
 
     for rd in room_defs:
         rtype = rd["type"]
@@ -746,34 +1273,78 @@ def _solve_one(
             if span_caps.get("y"):
                 max_d = min(max_d, max(_mm(span_caps["y"]), min_d))
 
-        if max_w < min_w or max_d < min_d:
+        # Shape template (opt-in). `fit` carries the RECT bounds verbatim when
+        # the feature is off OR the room type is not eligible OR the templated
+        # variant would not fit the spec — so the default path builds exactly
+        # the model that existed before shape templates.
+        fit = _fit_template(
+            _TEMPLATE_TYPES[rtype]
+            if cfg.allow_shape_templates and rtype in _TEMPLATE_TYPES
+            else "RECT",
+            _TEMPLATE_RATIO,
+            min_w,
+            max_w,
+            min_d,
+            max_d,
+            min_area_mm2,
+            max_area_mm2,
+        )
+
+        if max_w < fit.min_w or max_d < fit.min_d:
             return None
 
         floor = rd["floor"]
-        x = model.new_int_var(0, bw - min_w, f"x_{rd['id']}")
-        y = model.new_int_var(0, bd - min_d, f"y_{rd['id']}")
-        w = model.new_int_var(min_w, max_w, f"w_{rd['id']}")
-        d = model.new_int_var(min_d, max_d, f"d_{rd['id']}")
+        x = model.new_int_var(0, bw - fit.min_w, f"x_{rd['id']}")
+        y = model.new_int_var(0, bd - fit.min_d, f"y_{rd['id']}")
+        w = model.new_int_var(fit.min_w, max_w, f"w_{rd['id']}")
+        d = model.new_int_var(fit.min_d, max_d, f"d_{rd['id']}")
         # OR-Tools 9.x: new_interval_var end must be an IntVar (affine), not x+w (two-var sum)
-        ex = model.new_int_var(min_w, bw, f"ex_{rd['id']}")
-        ey = model.new_int_var(min_d, bd, f"ey_{rd['id']}")
+        ex = model.new_int_var(fit.min_w, bw, f"ex_{rd['id']}")
+        ey = model.new_int_var(fit.min_d, bd, f"ey_{rd['id']}")
         model.add(ex == x + w)
         model.add(ey == y + d)
-        ix = model.new_interval_var(x, w, ex, f"ix_{rd['id']}")
-        iy = model.new_interval_var(y, d, ey, f"iy_{rd['id']}")
+        x_ivs, y_ivs = part_ivs[0 if floor == 0 else 1]
+        _add_room_parts(
+            model,
+            rd["id"],
+            rtype,
+            x,
+            y,
+            w,
+            d,
+            ex,
+            ey,
+            fit.template,
+            fit.ratio,
+            bw,
+            bd,
+            x_ivs,
+            y_ivs,
+            part_vars,
+        )
 
         # Bounds: x+w <= bw, y+d <= bd
         model.add(x + w <= bw)
         model.add(y + d <= bd)
 
         # Area lower bound (linearised product via AddMultiplicationEquality)
-        area = model.new_int_var(0, max_area_mm2, f"area_{rd['id']}")
+        area = model.new_int_var(0, fit.max_area, f"area_{rd['id']}")
         model.add_multiplication_equality(area, [w, d])
-        model.add(area >= min_area_mm2)
+        model.add(area >= fit.min_area)
 
         # Aspect ratio max 3:1
         model.add(w * 3 >= d)
         model.add(d * 3 >= w)
+
+        # Templated rooms only: pin w/d to the template's millimetre grid so
+        # every part offset divides exactly (see _add_room_parts).
+        for dim, lo, hi, step, tag in (
+            (w, fit.min_w, max_w, fit.grid_x, "wq"),
+            (d, fit.min_d, max_d, fit.grid_y, "dq"),
+        ):
+            if step > 1:
+                q = model.new_int_var(-(-lo // step), hi // step, f"{tag}_{rd['id']}")
+                model.add(dim == step * q)
 
         rv = _RoomVar(
             room_id=rd["id"],
@@ -786,8 +1357,8 @@ def _solve_one(
             d=d,
             xe=ex,
             ye=ey,
-            ix=ix,
-            iy=iy,
+            template=fit.template,
+            shape_ratio=fit.ratio,
         )
         room_vars.append(rv)
         (gf_vars if floor == 0 else ff_vars).append(rv)
@@ -804,11 +1375,17 @@ def _solve_one(
                 for dx, dy, rhs in quad_planes:
                     model.add(dx * corner_y - dy * corner_x >= rhs)
 
-    # No-overlap per floor
-    if gf_vars:
-        model.add_no_overlap_2d([v.ix for v in gf_vars], [v.iy for v in gf_vars])
-    if ff_vars:
-        model.add_no_overlap_2d([v.ix for v in ff_vars], [v.iy for v in ff_vars])
+    # No-overlap per floor, over PARTS rather than rooms: a RECT room still
+    # contributes exactly one interval pair (so this is the pre-template model
+    # when no template is active), while a templated room contributes one per
+    # part and may therefore interlock with its neighbours.
+    for x_ivs, y_ivs in part_ivs.values():
+        if x_ivs:
+            model.add_no_overlap_2d(x_ivs, y_ivs)
+
+    # Rectilinear plot: keep every part out of the off-plot notch. A no-op
+    # (returns before touching the model) on the default RECT plot.
+    _forbid_notch(model, cfg, part_vars, ox_mm=ox, oy_mm=oy, bw=bw, bd=bd, ewt=ewt)
 
     # Staircase alignment across floors
     gf_stairs = [v for v in gf_vars if v.room_type == "staircase"]
@@ -1176,6 +1753,8 @@ def _solve_one(
             y=round(ry, 3),
             width=round(rw, 3),
             depth=round(rd, 3),
+            template=rv.template,
+            shape_ratio=rv.shape_ratio,
         )
         (gf_rooms if rv.floor == 0 else ff_rooms).append(room)
 
@@ -1240,9 +1819,15 @@ def _solve_one(
     solved_areas = {r.id: r.area for r in gf_rooms + ff_rooms}
     for rd2 in room_defs:
         spec2 = specs.get(rd2["type"], specs.get("utility"))
+        # A templated room's narrow leg is `shape_ratio` of the bbox, so the
+        # BBOX minimum the snap pass must respect is that much larger — the
+        # same inflation _fit_template applied in the model. 1.0 for RECT, so
+        # the numbers are unchanged on the default path.
+        rv2 = by_id.get(rd2["id"])
+        leg = rv2.shape_ratio if rv2 is not None and rv2.template != "RECT" else 1.0
         min_dims[rd2["id"]] = {
-            "min_width_m": spec2["min_width_m"],
-            "min_depth_m": spec2["min_width_m"],
+            "min_width_m": spec2["min_width_m"] / leg,
+            "min_depth_m": spec2["min_width_m"] / leg,
             "min_area_sqm": rd2.get("custom_min_area") or spec2["min_area_sqm"],
         }
         # Wet rooms leave the solve at min-compliant size (WET_SHRINK_WEIGHT)
@@ -1319,10 +1904,39 @@ def resolve_with_constraints(
         return None
 
 
-def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:
-    """Generate up to 3 diverse solver layouts. Returns empty list on failure."""
+def solve_layout(cfg: PlotConfig, ewt: float | None = None) -> Layout | None:
+    """One solve, centre-staircase zone. Returns None when infeasible.
+
+    `solve_layouts` runs the same solve three times with the staircase pinned
+    to a different third of the plate; callers that want *a* layout (and tests
+    that want one reproducible layout) should not pay for all three.
+    """
+    if ewt is None:
+        from .compliance import load_rules
+
+        ewt = load_rules()["external_wall_thickness_mm"] / SCALE
     specs = _load_specs()
     room_defs = _build_room_list(cfg, specs)
+    # Outside the try: a notch that cannot house the programme is a user-input
+    # error and must reach the caller, not be flattened into `None`.
+    validate_plot_envelope(cfg, ewt, room_defs, specs)
+    try:
+        return _solve_one(
+            cfg, ewt, room_defs, specs, "mid", "S2", "Layout S2 — Centre Staircase"
+        )
+    except Exception:
+        return None
+
+
+def solve_layouts(cfg: PlotConfig, ewt: float) -> list[Layout]:
+    """Generate up to 3 diverse solver layouts. Returns empty list on failure.
+
+    Raises ValueError (rather than returning []) when the plot's notch cannot
+    house the requested programme — see `validate_plot_envelope`.
+    """
+    specs = _load_specs()
+    room_defs = _build_room_list(cfg, specs)
+    validate_plot_envelope(cfg, ewt, room_defs, specs)
 
     zones = [
         ("front", "S1", "Layout S1 — Front Staircase"),
