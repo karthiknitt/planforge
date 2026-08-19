@@ -1477,11 +1477,60 @@ def _make_door(
 # the rule asserted against its own literal).
 ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
 
+# Per-road-side override, REPLACING the default set for that orientation.
+#
+# The entrance always sits on the y-min (road-facing) wall, so every candidate
+# shares one row of the 3x3 grid. On a south road that row is [SW, S, SE], which
+# holds no N/NE/E cell, so the sourced rule is provably inert on `PlotConfig`'s
+# DEFAULT configuration. Karthik ruled explicitly that a south-facing entrance
+# should prefer the SE end of the frontage; that is a product-owner decision, not
+# something derivable from the rules data, so it is scoped to south alone.
+#
+# NOT extended to west (front row [NW, W, SW], equally inert): classical practice
+# would suggest NW there, but that doctrine was never asked for and inventing it
+# is not this code's call. West stays inert, and the tests pin that.
+#
+# Replacement, not union with the default: a union would make widening the
+# override to every road side undetectable, because every road side would keep
+# the cells it already had. Replacement makes such a mistake fail the north/east
+# firing tests immediately.
+ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE: dict[str, tuple[str, ...]] = {
+    "S": ("SE",),
+}
+
+
+def entrance_auspicious_zones(north_angle_deg: float) -> tuple[str, ...]:
+    """Auspicious main-entrance zones for a plot at `north_angle_deg`.
+
+    Keyed off the RESOLVED orientation rather than `cfg.road_side`, because
+    `north_angle_deg` — when set — is what decides which zones the frontage
+    actually spans. Keying off the raw road side would let the two disagree:
+    `road_side="S"` with a surveyed `north_angle_deg=180.0` faces north, its
+    front row is [NE, N, NW], and the south override would strip its genuine NE
+    preference while offering an SE cell that no candidate can occupy. Going
+    through the resolved angle keeps the rule and the zones on the same
+    orientation in every case, including the reverse pairing (`road_side="N"`
+    with an explicit `0.0`, which really does face south and really should
+    prefer SE).
+
+    A non-cardinal surveyed bearing (say 37°) belongs to no road side, so it gets
+    the default sourced rule.
+    """
+    from app.engine.vastu import road_side_for_north_angle
+
+    side = road_side_for_north_angle(north_angle_deg)
+    if side is None:
+        return ENTRANCE_AUSPICIOUS_ZONES
+    return ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE.get(side, ENTRANCE_AUSPICIOUS_ZONES)
+
 
 def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> int:
     """0 when a main-entrance candidate centred at (x, y) sits in an auspicious
-    (N/NE/E) Vastu zone, else 1. Always 1 when Vastu is off, so the key is a
-    constant and the ordering is untouched.
+    Vastu zone for the plot's orientation, else 1. Always 1 when Vastu is off, so
+    the key is a constant and the ordering is untouched.
+
+    The auspicious set is N/NE/E by default and SE on a south-facing plot; see
+    `entrance_auspicious_zones`.
 
     The point scored is the midpoint of the candidate's usable frontage span —
     the same quantity the distance-to-gate key uses — rather than the door
@@ -1498,7 +1547,7 @@ def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> in
     # trigonometry.
     north = resolve_north_angle(vastu_cfg)
     zone = zone_for_point(x, y, vastu_cfg.plot_width, vastu_cfg.plot_length, north)
-    return 0 if zone in ENTRANCE_AUSPICIOUS_ZONES else 1
+    return 0 if zone in entrance_auspicious_zones(north) else 1
 
 
 def _place_main_entrance(
@@ -1535,13 +1584,16 @@ def _place_main_entrance(
     ``vastu_cfg``, when given with ``vastu_enabled``, adds an auspicious-zone
     key to the candidate ordering. Because every candidate sits on the same
     (y-min) frontage, they can only differ across ONE row of the 3x3 Vastu
-    grid, and that row contains an N/NE/E cell for just two of the four road
-    sides: it is ``['NE', 'N', 'NW']`` on a north road and ``['SE', 'E', 'NE']``
-    on an east road, but ``['SW', 'S', 'SE']`` on a south road (the PlotConfig
-    default) and ``['NW', 'W', 'SW']`` on a west road. On those last two the
-    key is provably inert — no candidate can ever be auspicious. That is a
-    property of "the entrance is always on the road-facing wall", not a bug;
-    ``tests/test_vastu_floors.py`` pins both the firing and the inert cases.
+    grid: ``['NE', 'N', 'NW']`` on a north road, ``['SE', 'E', 'NE']`` on an
+    east road, ``['SW', 'S', 'SE']`` on a south road (the PlotConfig default)
+    and ``['NW', 'W', 'SW']`` on a west road. The default N/NE/E rule can fire
+    on north and east roads; the south road gets the product-owner SE override
+    (``ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE``) and so fires too. Only the
+    WEST road is inert — no candidate on ``['NW', 'W', 'SW']`` can ever be
+    auspicious under the sourced rule, and no override was sanctioned for it.
+    That is a property of "the entrance is always on the road-facing wall", not
+    a bug; ``tests/test_vastu_floors.py`` pins both the firing and the inert
+    cases.
     """
     bx1, _by1, bx2, _by2 = buildable.bounds
     _px1, py1, _px2, _py2 = _plate_bounds(rooms, buildable, ewt)
