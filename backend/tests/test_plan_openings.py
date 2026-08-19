@@ -629,6 +629,77 @@ def test_gapped_parking_gets_no_repair_door():
         )
 
 
+def test_no_opening_on_an_open_side():
+    """A room with a declared-open N and E side (e.g. an open-air sit-out
+    off the living room) gets no door, window, or vent cut into either edge:
+    there is no wall there for an opening to cut into.
+
+    `Opening` has no `x1/y1/x2/y2` fields (see `cad_elements.py`) — it stores
+    a centre `(cx, cy)` sitting ON the wall centreline plus `width` running
+    along the wall, and `is_horizontal` selects which axis that is. A wall
+    centreline sits `ewt / 2` (0.115 m) outside the raw room edge, so we
+    compare against the centreline position with a 0.125 tolerance — the
+    same slack `derive_walls` uses for its own open-edge drop (Task 2).
+
+    Two scenario choices matter to avoid a vacuous pass (Task 2 already
+    learned this the hard way):
+
+    1. The target room's type is `"living"` (in `_WINDOW_TYPES`), not
+       `"parking_4w"` — parking rooms never get windows/vents at all
+       (`_WINDOW_TYPES`/`_WET_TYPES` exclude them), so an open-sided
+       *parking* room would pass this assertion regardless of whether the
+       open-edge filter under test does anything.
+    2. The room sits in the plate's NE corner, so its N and E edges land
+       exactly on the buildable plate boundary (x2=7.77/y2=13.77 for
+       `_cfg_9x15`) — `_all_exterior_edges`'s plate-boundary source
+       (`_exterior_edges`) yields a candidate edge purely from plate
+       geometry, independent of whether `derive_walls` drew a wall there.
+       Its S and W sides are filled by neighbour rooms so they read as
+       internal walls, not additional exterior edges an opening could
+       legitimately land on instead.
+    """
+    from app.engine.models import Room
+
+    rooms = [
+        _room("west", 2.27, 10.77, 2.0, 3.0, rtype="bedroom"),
+        _room("south", 4.27, 9.77, 3.5, 1.0, rtype="bedroom"),
+        Room(
+            id="target",
+            name="Open Sit-out",
+            type="living",
+            x=4.27,
+            y=10.77,
+            width=3.5,
+            depth=3.0,
+            open_sides=frozenset({"N", "E"}),
+        ),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    ewt = EWT
+    tol = 0.125
+    # target's declared-open N edge: y = 13.77 (== plate y2), x in [4.27, 7.77].
+    n_centreline = 10.77 + 3.0 + ewt / 2
+    n_span = (4.27, 7.77)
+    # target's declared-open E edge: x = 7.77 (== plate x2), y in [10.77, 13.77].
+    e_centreline = 4.27 + 3.5 + ewt / 2
+    e_span = (10.77, 13.77)
+
+    def _overlaps(along_lo: float, along_hi: float, span: tuple[float, float]) -> bool:
+        return along_lo < span[1] - tol and along_hi > span[0] + tol
+
+    for o in openings:
+        if o.is_horizontal and abs(o.cy - n_centreline) < tol:
+            along_lo, along_hi = o.cx - o.width / 2, o.cx + o.width / 2
+            assert not _overlaps(along_lo, along_hi, n_span), (
+                f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on the target's open N edge"
+            )
+        if (not o.is_horizontal) and abs(o.cx - e_centreline) < tol:
+            along_lo, along_hi = o.cy - o.width / 2, o.cy + o.width / 2
+            assert not _overlaps(along_lo, along_hi, e_span), (
+                f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on the target's open E edge"
+            )
+
+
 # ── Entrance-placement diagnostics (Task 6: #6, #6b, G, #6d) ─────────────────
 
 

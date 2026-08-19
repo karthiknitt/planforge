@@ -20,6 +20,8 @@ from app.engine.plan_geometry import (
     _SNAP,
     _merge_adjacent_columns,
     _near_staircase,
+    _plate_bounds,
+    _structural_rooms,
     derive_columns,
     derive_junctions,
     derive_walls,
@@ -514,3 +516,409 @@ def test_external_ring_leaves_notch_open_no_false_wall():
     for w in ext:
         for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
             assert not (x > 5.0 and y > 10.0), f"false wall in notch corner: {w}"
+
+
+# --- Room.open_sides: walls omitted on declared-open edges -----------------
+
+
+def _buildable():
+    return box(0, 0, 12, 12)
+
+
+def _walls_on_edge(walls, *, vertical: bool, coord: float, tol: float = 0.12):
+    """WallSegments whose centreline sits on x=coord (vertical) or y=coord.
+
+    `tol` must exceed EWT/2 (0.115): a room edge on the plate boundary is
+    walled by the external ring, whose centreline sits ewt/2 *outside* the
+    edge (a room at y=0 gets its south wall at y=-0.115). Room edges in
+    these fixtures are metres apart, so 0.12 is still unambiguous.
+    """
+    out = []
+    for w in walls:
+        is_v = abs(w.x1 - w.x2) < 1e-6
+        if is_v != vertical:
+            continue
+        c = w.x1 if is_v else w.y1
+        if abs(c - coord) <= tol:
+            out.append(w)
+    return out
+
+
+def test_open_side_gets_no_wall():
+    """A car porch open on its road-facing (S) edge gets no wall there,
+    but keeps its other three walls."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    walls = derive_walls([porch], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=0.0) == []
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), "N wall must remain"
+    assert _walls_on_edge(walls, vertical=True, coord=1.0), "W wall must remain"
+    assert _walls_on_edge(walls, vertical=True, coord=4.0), "E wall must remain"
+
+
+def test_closed_room_unchanged_by_the_feature():
+    """Regression: a room with no open_sides derives exactly the walls it
+    derived before this feature existed — all four edges present."""
+    r = Room(id="r", name="Living", type="living", x=1.0, y=1.0, width=4.0, depth=3.0)
+    walls = derive_walls([r], _buildable())
+    for vertical, coord in ((False, 1.0), (False, 4.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord), (
+            f"missing wall at {'x' if vertical else 'y'}={coord}"
+        )
+
+
+def test_party_wall_survives_neighbour_declaring_open():
+    """A porch open on its N edge that abuts a living room must NOT delete the
+    living room's S wall — the shared wall is still real."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=1.0,
+        y=5.0,
+        width=3.0,
+        depth=4.0,
+    )
+    walls = derive_walls([porch, living], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), (
+        "shared porch/living wall was wrongly deleted"
+    )
+
+
+def test_party_wall_survives_two_neighbours_declaring_open():
+    """Horizontal party wall shared by TWO non-open rooms.
+
+    The wall the pairing pass builds is a single merged segment spanning both
+    neighbours, so the rescue must see the neighbours' south edges as one
+    merged run too — matching each raw per-room edge on its own never
+    contains the merged wall, and the wall gets dropped. Note both
+    neighbours here have EMPTY open_sides: they must not lose a wall
+    because some *other* room declared itself open.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=4.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living", name="Living", type="living", x=1.0, y=5.0, width=2.0, depth=4.0
+    )
+    kitchen = Room(
+        id="kitchen", name="Kitchen", type="kitchen", x=3.0, y=5.0, width=2.0, depth=4.0
+    )
+    rooms = [porch, living, kitchen]
+    walls = derive_walls(rooms, _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), (
+        "party wall shared by two non-open neighbours was wrongly deleted"
+    )
+    # ...and the feature is still a no-op for the closed rooms: the same
+    # layout with nothing declared open derives the same wall count.
+    closed = derive_walls(
+        [
+            Room(
+                id="porch",
+                name="Car Porch",
+                type="parking_4w",
+                x=1.0,
+                y=0.0,
+                width=4.0,
+                depth=5.0,
+            ),
+            living,
+            kitchen,
+        ],
+        _buildable(),
+    )
+    assert len(walls) == len(closed)
+
+
+def test_vertical_party_wall_survives_two_neighbours_declaring_open():
+    """Same multi-neighbour rescue on the VERTICAL axis.
+
+    Guards the covered_v/covered_h split: a porch open on its E edge abutting
+    two stacked rooms must not delete their shared W wall.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=0.0,
+        y=0.0,
+        width=3.0,
+        depth=6.0,
+        open_sides=frozenset({"E"}),
+    )
+    r1 = Room(id="r1", name="Bed 1", type="bedroom", x=3.0, y=0.0, width=4.0, depth=3.0)
+    r2 = Room(id="r2", name="Bed 2", type="bedroom", x=3.0, y=3.0, width=4.0, depth=3.0)
+    walls = derive_walls([porch, r1, r2], _buildable())
+    assert _walls_on_edge(walls, vertical=True, coord=3.0), (
+        "vertical party wall shared by two non-open neighbours was deleted"
+    )
+
+
+def test_perpendicular_edge_does_not_rescue_an_open_wall():
+    """The party-wall rescue must not match across axes.
+
+    A corner porch open to the road on S: its south wall's centreline is
+    y=-0.115 and the wall spans x=[-0.115, 3.115]. The porch's OWN west edge
+    is the vertical line x=0.0 spanning y=[0, 5] — numerically close enough
+    to -0.115, and wide enough to contain the span, that an orientation-blind
+    `covered` set rescues the very wall the porch declared open. Keeping the
+    covered edges split by axis is what prevents that.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=0.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    walls = derive_walls([porch], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=0.0) == [], (
+        "S wall survived: a perpendicular (vertical) edge wrongly rescued it"
+    )
+    assert _walls_on_edge(walls, vertical=True, coord=0.0), "W wall must remain"
+
+
+# --- carved / nested rooms (Room.parent_id) ---------------------------------
+
+
+def _carve_pair() -> tuple[Room, Room]:
+    """A 4x4 bedroom with a 1.5x2.0 toilet carved into its SW corner."""
+    bedroom = Room(
+        id="bed",
+        name="Bedroom",
+        type="bedroom",
+        x=1.0,
+        y=1.0,
+        width=4.0,
+        depth=4.0,
+    )
+    toilet = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="bed",
+    )
+    return bedroom, toilet
+
+
+def test_carved_room_does_not_duplicate_parent_walls():
+    """A toilet carved into a bedroom's rectangle gets its own two internal
+    separating walls, and the bedroom keeps all four of its own outer walls —
+    the carve must not punch a hole in the parent's envelope."""
+    bedroom, toilet = _carve_pair()
+    walls = derive_walls([bedroom, toilet], _buildable())
+    # Parent envelope intact on all four sides.
+    for vertical, coord in ((False, 1.0), (False, 5.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord), (
+            f"parent lost its wall at {'x' if vertical else 'y'}={coord}"
+        )
+    # Carve produces the two interior separating walls (x=2.5 and y=3.0).
+    assert _walls_on_edge(walls, vertical=True, coord=2.5), "missing carve E wall"
+    assert _walls_on_edge(walls, vertical=False, coord=3.0), "missing carve N wall"
+
+
+def test_carve_separating_walls_are_internal_not_exterior():
+    """The carve's own edges face the parent's mass, so they must read as
+    interior partitions (iwt) — never as void-facing external surfaces."""
+    bedroom, toilet = _carve_pair()
+    walls = derive_walls([bedroom, toilet], _buildable())
+    for vertical, coord in ((True, 2.5), (False, 3.0)):
+        segs = _walls_on_edge(walls, vertical=vertical, coord=coord)
+        assert segs, f"no wall at {'x' if vertical else 'y'}={coord}"
+        assert all(w.kind == "internal" for w in segs), (
+            f"carve wall at {'x' if vertical else 'y'}={coord} is not internal: "
+            f"{[(w.kind, w.thickness) for w in segs]}"
+        )
+        assert all(abs(w.thickness - IWT) < 1e-9 for w in segs)
+
+
+def test_carved_child_excluded_from_parent_net_area():
+    bedroom, toilet = _carve_pair()
+    assert bedroom.area == 16.0
+    assert bedroom.net_area([toilet]) == 13.0
+    # An unrelated room never reduces the parent's net area.
+    other = Room(
+        id="oth", name="Store", type="store_room", x=20.0, y=20.0, width=2.0, depth=2.0
+    )
+    assert bedroom.net_area([other]) == 16.0
+    # No children at all -> net area equals gross area (default behaviour).
+    assert bedroom.net_area([]) == bedroom.area
+
+
+def test_carve_must_lie_inside_its_parent():
+    bedroom, _ = _carve_pair()
+    stray = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=9.0,
+        y=9.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="bed",
+    )
+    with pytest.raises(ValueError, match="not contained"):
+        derive_walls([bedroom, stray], _buildable())
+
+
+def test_carve_with_unknown_parent_is_rejected():
+    bedroom, _ = _carve_pair()
+    orphan = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="nope",
+    )
+    with pytest.raises(ValueError, match="unknown parent_id"):
+        derive_walls([bedroom, orphan], _buildable())
+
+
+# Golden wall set for the 6-room ground floor of the shared fixture, captured
+# BEFORE `Room.parent_id` existed. Every entry is
+# (x1, y1, x2, y2, thickness, kind), rounded to 4 dp and sorted.
+_GOLDEN_GF_WALLS = [
+    (1.115, 1.615, 1.115, 4.845, 0.23, "external"),
+    (1.115, 1.615, 7.885, 1.615, 0.23, "external"),
+    (1.115, 4.845, 2.1875, 4.845, 0.23, "external"),
+    (1.115, 5.944, 1.115, 13.885, 0.23, "external"),
+    (1.115, 5.944, 4.995, 5.944, 0.23, "external"),
+    (1.115, 13.885, 7.885, 13.885, 0.23, "external"),
+    (2.1875, 1.615, 2.1875, 4.845, 0.115, "internal"),
+    (2.1875, 4.845, 4.995, 4.845, 0.23, "external"),
+    (4.8845, 5.944, 4.8845, 13.885, 0.115, "internal"),
+    (4.8845, 5.944, 5.0525, 5.944, 0.23, "external"),
+    (4.8845, 6.0015, 6.9615, 6.0015, 0.115, "internal"),
+    (4.995, 4.7875, 4.995, 5.944, 0.23, "external"),
+    (5.0525, 1.615, 5.0525, 4.845, 0.115, "internal"),
+    (6.904, 6.0015, 7.019, 6.0015, 0.115, "internal"),
+    (6.9615, 6.0015, 6.9615, 13.885, 0.115, "internal"),
+    (6.9615, 6.0015, 7.885, 6.0015, 0.115, "internal"),
+    (7.885, 1.615, 7.885, 13.885, 0.23, "external"),
+]
+
+
+def _wall_tuples(walls) -> list[tuple[float, float, float, float, float, str]]:
+    return sorted(
+        (
+            round(w.x1, 4),
+            round(w.y1, 4),
+            round(w.x2, 4),
+            round(w.y2, 4),
+            round(w.thickness, 4),
+            w.kind,
+        )
+        for w in walls
+    )
+
+
+def test_parent_id_defaults_to_none_and_changes_nothing():
+    """The load-bearing invariant of the whole phase: with no `parent_id`
+    anywhere, `derive_walls` must reproduce the pre-feature wall set exactly
+    — same count, same centrelines, same thicknesses, same kinds."""
+    rooms, cfg = golden_layout().ground_floor.rooms, golden_config()
+    assert all(r.parent_id is None for r in rooms)
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    assert len(walls) == len(_GOLDEN_GF_WALLS)
+    assert _wall_tuples(walls) == _GOLDEN_GF_WALLS
+
+
+def test_room_is_its_own_parent_is_rejected():
+    """Self-parent is trivially "contained", so only the cycle pass catches
+    it — and unchecked it empties `_structural_rooms` and degrades the plate
+    to the whole buildable inset."""
+    bedroom, _ = _carve_pair()
+    bedroom.parent_id = "bed"
+    with pytest.raises(ValueError, match="parent_id cycle"):
+        derive_walls([bedroom], _buildable())
+
+
+def test_two_node_parent_id_cycle_is_rejected():
+    a, b = _carve_pair()
+    a.parent_id = "wc"  # bed -> wc -> bed
+    with pytest.raises(ValueError, match="parent_id cycle") as exc:
+        derive_walls([a, b], _buildable())
+    assert "bed" in str(exc.value) and "wc" in str(exc.value)
+
+
+def test_three_node_parent_id_cycle_is_rejected():
+    a = Room(id="a", name="A", type="bedroom", x=1.0, y=1.0, width=4.0, depth=4.0)
+    b = Room(id="b", name="B", type="toilet", x=1.0, y=1.0, width=2.0, depth=2.0)
+    c = Room(id="c", name="C", type="store_room", x=1.0, y=1.0, width=1.0, depth=1.0)
+    a.parent_id, b.parent_id, c.parent_id = "b", "c", "a"
+    with pytest.raises(ValueError, match="parent_id cycle") as exc:
+        derive_walls([a, b, c], _buildable())
+    assert all(rid in str(exc.value) for rid in ("a", "b", "c"))
+
+
+def test_cycle_would_otherwise_degrade_the_plate_to_the_buildable():
+    """Pins WHY the cycle guard exists: without it, every room is filtered
+    out as a carve and the plate silently falls back to the buildable ring.
+    `_structural_rooms` alone still shows the degradation, so the guard in
+    `derive_walls` is the only thing standing between that and a wall ring
+    drawn around empty plot."""
+    bedroom, toilet = _carve_pair()
+    bedroom.parent_id = "wc"
+    assert _structural_rooms([bedroom, toilet]) == []
+    degraded = _plate_bounds([bedroom, toilet], _buildable(), EWT)
+    assert degraded == pytest.approx((EWT, EWT, 12.0 - EWT, 12.0 - EWT))
+    with pytest.raises(ValueError, match="parent_id cycle"):
+        derive_walls([bedroom, toilet], _buildable())
+
+
+def test_carve_within_containment_tolerance_does_not_inflate_the_plate():
+    """`_validate_carves` allows 1 cm of slop, so a carve CAN stick marginally
+    past its parent. It must still be filtered out of the footprint union, or
+    that slop silently grows the plate the exterior ring is built on."""
+    bedroom, _ = _carve_pair()
+    sloppy = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=4.01,  # 1 cm past the parent's E edge — inside the 0.01 tol
+        depth=2.0,
+        parent_id="bed",
+    )
+    assert _structural_rooms([bedroom, sloppy]) == [bedroom]
+    derive_walls([bedroom, sloppy], _buildable())  # tolerated, not an error
+    _px1, _py1, px2, _py2 = _plate_bounds([bedroom, sloppy], _buildable(), EWT)
+    assert px2 == pytest.approx(5.0), (
+        f"carve mass leaked into the plate: east bound {px2} != parent's 5.0"
+    )

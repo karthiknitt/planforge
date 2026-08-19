@@ -20,6 +20,14 @@ export const TYPE_LABELS: Record<string, string> = {
   foyer: "Foyer",
   courtyard: "Courtyard",
   wardrobe: "Wardrobe",
+  // open / semi-open programme (reverse_engr corpus)
+  terrace: "Terrace",
+  garden: "Garden",
+  verandah: "Verandah",
+  seating: "Seating",
+  open_to_sky: "Open to Sky",
+  duct: "Duct",
+  washbasin_nook: "Wash Basin",
 };
 
 // Light values are the original palette. Dark variants are hue-matched to
@@ -49,4 +57,13 @@ export const SWATCH: Record<string, string> = {
   foyer: "bg-slate-100 border-slate-400 dark:bg-slate-800/50 dark:border-slate-500",
   courtyard: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
   wardrobe: "bg-slate-50 border-slate-400 dark:bg-slate-800/40 dark:border-slate-500",
+  // open / semi-open programme — reuse the courtyard/balcony open-space family
+  terrace: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
+  garden: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
+  verandah: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
+  seating: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
+  open_to_sky: "bg-blue-50 border-blue-400 dark:bg-sky-950/40 dark:border-sky-500",
+  // service nooks — reuse the utility/wardrobe slate family
+  duct: "bg-slate-50 border-slate-400 dark:bg-slate-800/40 dark:border-slate-500",
+  washbasin_nook: "bg-sky-100 border-sky-500 dark:bg-sky-950/40 dark:border-sky-500",
 };

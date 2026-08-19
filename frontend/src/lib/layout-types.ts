@@ -228,6 +228,13 @@ export const ROOM_TYPES = [
   { value: "study", label: "Study" },
   { value: "balcony", label: "Balcony" },
   { value: "courtyard", label: "Courtyard" },
+  { value: "terrace", label: "Terrace" },
+  { value: "garden", label: "Garden" },
+  { value: "verandah", label: "Verandah" },
+  { value: "seating", label: "Seating" },
+  { value: "open_to_sky", label: "Open to Sky" },
+  { value: "duct", label: "Duct" },
+  { value: "washbasin_nook", label: "Wash Basin" },
 ] as const;
 
 export type RoomTypeValue = (typeof ROOM_TYPES)[number]["value"];

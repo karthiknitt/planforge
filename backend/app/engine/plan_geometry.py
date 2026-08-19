@@ -239,6 +239,141 @@ def _edge_faces_open_space(
     return footprint.intersection(strip).area < 1e-9
 
 
+def _open_edge_intervals(
+    rooms: list[Room], tol: float
+) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+    """Centreline intervals declared wall-less by `Room.open_sides`.
+
+    Returns (vertical, horizontal); each entry is (coord, lo, hi). Vertical
+    entries are x-coords spanning [y_lo, y_hi]; horizontal are y-coords
+    spanning [x_lo, x_hi]. `tol` is unused for the interval itself but kept
+    in the signature so callers pass the same slack used to match walls to
+    these intervals.
+    """
+    _ = tol
+    vertical: list[tuple[float, float, float]] = []
+    horizontal: list[tuple[float, float, float]] = []
+    for r in rooms:
+        x0, y0 = r.x, r.y
+        x1, y1 = r.x + r.width, r.y + r.depth
+        for side in r.open_sides:
+            if side == "W":
+                vertical.append((x0, y0, y1))
+            elif side == "E":
+                vertical.append((x1, y0, y1))
+            elif side == "S":
+                horizontal.append((y0, x0, x1))
+            elif side == "N":
+                horizontal.append((y1, x0, x1))
+    return vertical, horizontal
+
+
+def _is_declared_open(
+    w: WallSegment,
+    open_v: list[tuple[float, float, float]],
+    open_h: list[tuple[float, float, float]],
+    covered_v: set[tuple[float, float, float]],
+    covered_h: set[tuple[float, float, float]],
+    tol: float,
+) -> bool:
+    """True if `w` lies on a declared-open interval and is not a party wall.
+
+    `covered_v`/`covered_h` hold intervals that a *non-open* room edge also
+    occupies — a shared wall where only one side declared itself open stays
+    built. They are kept split by orientation so a vertical covered edge
+    cannot rescue a horizontal wall that merely shares its coordinate value.
+
+    `tol` must absorb the offset between a room edge and the centreline of
+    the wall serving it: an external ring wall sits ewt/2 *outside* the edge
+    and is snapped out to the ring corners, a paired internal wall sits at
+    the half-gap midpoint. Callers pass `ewt / 2 + tol`, the worst case.
+    """
+    is_v = abs(w.x1 - w.x2) < 1e-6
+    coord = w.x1 if is_v else w.y1
+    lo, hi = (
+        (min(w.y1, w.y2), max(w.y1, w.y2))
+        if is_v
+        else (min(w.x1, w.x2), max(w.x1, w.x2))
+    )
+    for c, ilo, ihi in open_v if is_v else open_h:
+        if abs(c - coord) > tol:
+            continue
+        if lo >= ilo - tol and hi <= ihi + tol:
+            if any(
+                abs(cc - coord) <= tol and lo >= clo - tol and hi <= chi + tol
+                for cc, clo, chi in (covered_v if is_v else covered_h)
+            ):
+                return False
+            return True
+    return False
+
+
+def _validate_carves(rooms: list[Room], tol: float = 0.01) -> None:
+    """Every room with a `parent_id` must resolve, be acyclic, and lie inside
+    that parent's rectangle.
+
+    A carve that escapes its parent would add mass to the floor footprint
+    that `_structural_rooms` has already filtered out, silently shrinking the
+    plate and the void-classification footprint. Fail loudly instead.
+
+    Cycles are rejected for a nastier reason: every room in a cycle has a
+    `parent_id`, so `_structural_rooms` returns an EMPTY list and the plate
+    silently degrades from the room union to the whole buildable plate inset
+    by ewt — a 4-sided ring drawn around metres of empty plot, with no error
+    anywhere. Containment alone cannot catch this (`r.parent_id == r.id` is
+    trivially "contained"), so it is a separate pass.
+    """
+    by_id = {r.id: r for r in rooms}
+
+    # Pass 1: every parent_id resolves.
+    for r in rooms:
+        if r.parent_id is not None and r.parent_id not in by_id:
+            raise ValueError(f"room {r.id!r} has unknown parent_id {r.parent_id!r}")
+
+    # Pass 2: no cycles (self-parent is the length-1 case).
+    for r in rooms:
+        if r.parent_id is None:
+            continue
+        chain = [r.id]
+        seen = {r.id}
+        node = r
+        while node.parent_id is not None:
+            node = by_id[node.parent_id]
+            chain.append(node.id)
+            if node.id in seen:
+                raise ValueError(
+                    "parent_id cycle among carved rooms: " + " -> ".join(chain)
+                )
+            seen.add(node.id)
+
+    # Pass 3: containment.
+    for r in rooms:
+        if r.parent_id is None:
+            continue
+        p = by_id[r.parent_id]
+        if not (
+            r.x >= p.x - tol
+            and r.y >= p.y - tol
+            and r.x + r.width <= p.x + p.width + tol
+            and r.y + r.depth <= p.y + p.depth + tol
+        ):
+            raise ValueError(
+                f"carved room {r.id!r} is not contained in parent {p.id!r}"
+            )
+
+
+def _structural_rooms(rooms: list[Room]) -> list[Room]:
+    """Rooms that contribute mass to the floor footprint.
+
+    Carved children (`parent_id` set) do NOT: they sit inside a parent that
+    already contributes the same area, so unioning them in again would
+    double-count that mass. Only the FOOTPRINT UNION is filtered — edge
+    pairing still runs over the full room list, so a carve's own edges
+    become real interior partitions.
+    """
+    return [r for r in rooms if r.parent_id is None]
+
+
 def _plate_bounds(
     rooms: list[Room], buildable: Polygon, ewt: float
 ) -> tuple[float, float, float, float]:
@@ -246,10 +381,16 @@ def _plate_bounds(
 
     Room-union bbox when rooms exist (matches the derive_walls ring);
     buildable inset by ewt otherwise. THE single source of truth for both
-    wall rings and opening placement."""
-    if rooms:
+    wall rings and opening placement — hence the carve filter lives here,
+    not at the call sites, so `derive_walls` and `derive_openings` can never
+    disagree about what the plate is."""
+    # Bound to a distinct name (not a rebind of `rooms`) so it stays obvious
+    # that the plate is built from STRUCTURAL mass only, while callers still
+    # hand in the full room list.
+    structural = _structural_rooms(rooms)
+    if structural:
         footprint = unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in structural]
         )
         px1, py1, px2, py2 = footprint.bounds
         # Clear-rect rooms always leave iwt slits between neighbours, so an
@@ -307,6 +448,7 @@ def derive_walls(
     Only `_place_main_entrance`'s `gate_x` (compound-wall gate/road
     alignment) still keys off the buildable plate.
     """
+    _validate_carves(rooms, tol)
     px1, py1, px2, py2 = _plate_bounds(rooms, buildable, ewt)
 
     cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
@@ -415,12 +557,28 @@ def derive_walls(
     # ring + paired-internal walls already placed above (real built
     # structure) closes that sliver correctly, while a genuine void (roof
     # void, light well) — far wider than any wall — still reads as open.
+    # Carved children are excluded from the union (`_structural_rooms`): their
+    # mass is already contributed by the parent they sit inside, and counting
+    # it twice would let a stray carve inflate the footprint. Their EDGES are
+    # still present in `vert_edges`/`hor_edges` below, so a carve's own sides
+    # are classified against the parent's mass and become internal partitions.
+    #
+    # NOT DEAD CODE, but currently unobservable HERE: a validated carve is a
+    # subset of its parent, so the union polygon is identical either way, and
+    # `_validate_carves`'s 0.01 m slack cannot reach `_edge_faces_open_space`
+    # either — that probe starts its strip at eps = 0.02 outward. The filter
+    # is what keeps that true: raise the carve tolerance above 0.02, or let a
+    # carve be anything other than a strict sub-rectangle (Task 6's shape
+    # templates), and removing it starts corrupting void classification.
+    # `_plate_bounds` applies the same filter and IS observable today (a carve
+    # exploiting the 0.01 m slack would otherwise inflate the plate bbox).
+    structural = _structural_rooms(rooms)
     footprint = (
         unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in structural]
             + [_raw_wall_box(w) for w in walls]
         )
-        if rooms
+        if structural
         else None
     )
     orphan_groups: dict[tuple[str, float, str], list[tuple[float, float]]] = {}
@@ -449,6 +607,63 @@ def derive_walls(
 
     _snap_ends(walls)
     _trim_room_overreach(walls, rooms, ewt, iwt)
+
+    # Drop walls on edges the room declared open (`Room.open_sides`) — a car
+    # porch open to the driveway, a balcony open to the front. Applied last,
+    # after snapping/trimming, so the comparison sees final centrelines.
+    # Slack is ewt/2 + tol: the wall serving a room edge does NOT sit on that
+    # edge — an external ring wall is ewt/2 outside it and snapped out to the
+    # ring corners; a paired internal wall sits at the inter-room gap's
+    # midpoint. Only a wall lying *wholly within* one declared-open interval
+    # is dropped, so a ring wall merged across an open room and a normal
+    # neighbour is conservatively kept.
+    open_slack = ewt / 2 + tol
+    open_v, open_h = _open_edge_intervals(rooms, open_slack)
+    if open_v or open_h:
+        # A room edge that is NOT declared open, sitting on the same
+        # centreline, keeps the wall alive (party wall).
+        #
+        # The covered edges MUST be merged per centreline before the
+        # containment test. By this point the wall list has been through
+        # `_merge_intervals` and `_snap_ends`, so a party wall running past
+        # several neighbours is ONE segment; matching it against raw
+        # per-room edges would require a single neighbour to span the whole
+        # merged wall, which fails as soon as two rooms share the open
+        # room's edge -- and the wall would be deleted out from under
+        # neighbours that never declared themselves open at all. Merging
+        # with an `iwt + tol` gap (the ring's `ring_gap` rationale) joins
+        # neighbours separated by a normal partition slit: that slit is
+        # filled by the partition itself, so the covered run is continuous.
+        raw_v: dict[float, list[tuple[float, float]]] = {}
+        raw_h: dict[float, list[tuple[float, float]]] = {}
+        for r in rooms:
+            x0, y0 = r.x, r.y
+            x1, y1 = r.x + r.width, r.y + r.depth
+            for side, coord, lo, hi, sink in (
+                ("W", x0, y0, y1, raw_v),
+                ("E", x1, y0, y1, raw_v),
+                ("S", y0, x0, x1, raw_h),
+                ("N", y1, x0, x1, raw_h),
+            ):
+                if side not in r.open_sides:
+                    sink.setdefault(round(coord, 6), []).append((lo, hi))
+        covered_v: set[tuple[float, float, float]] = {
+            (coord, lo, hi)
+            for coord, spans in raw_v.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        }
+        covered_h: set[tuple[float, float, float]] = {
+            (coord, lo, hi)
+            for coord, spans in raw_h.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        }
+        walls = [
+            w
+            for w in walls
+            if not _is_declared_open(
+                w, open_v, open_h, covered_v, covered_h, open_slack
+            )
+        ]
     return walls
 
 
@@ -912,6 +1127,39 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
                     yield (True, wall_y, overlap_lo, overlap_hi)
 
 
+def _is_declared_open_edge(
+    room: Room, is_horizontal: bool, coord: float, ewt: float, tol: float
+) -> bool:
+    """True if `coord` sits on a room edge the room declared open via
+    `Room.open_sides` — no wall was ever drawn there (see `derive_walls`'s
+    own open-edge drop), so no opening may be cut into it either.
+
+    A wall centreline serving a room edge sits `ewt / 2` outside the raw
+    room edge (external ring convention), so the match slack must absorb
+    that offset — `ewt / 2 + tol`, matching `derive_walls`'s `open_slack`.
+    """
+    if not room.open_sides:
+        return False
+    slack = ewt / 2 + tol
+    if is_horizontal:
+        if "S" in room.open_sides and abs(coord - (room.y - ewt / 2)) <= slack:
+            return True
+        if (
+            "N" in room.open_sides
+            and abs(coord - (room.y + room.depth + ewt / 2)) <= slack
+        ):
+            return True
+    else:
+        if "W" in room.open_sides and abs(coord - (room.x - ewt / 2)) <= slack:
+            return True
+        if (
+            "E" in room.open_sides
+            and abs(coord - (room.x + room.width + ewt / 2)) <= slack
+        ):
+            return True
+    return False
+
+
 def _all_exterior_edges(
     room,
     walls: list[WallSegment],
@@ -921,16 +1169,24 @@ def _all_exterior_edges(
 ):
     """Yield all (is_horizontal, coord, lo, hi) exterior edges for a room,
     combining both plate-boundary edges and void-facing orphan walls marked
-    kind="external". Deduplicates edges that appear in both sources."""
+    kind="external". Deduplicates edges that appear in both sources.
+
+    Edges lying on a side the room declared open (`Room.open_sides`) are
+    skipped entirely — there is no wall there for an opening to cut into.
+    """
     seen = set()
     # First collect from plate bounds
     for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol):
+            continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
             seen.add(key)
             yield (is_h, coord, lo, hi)
     # Then add any external walls not on plate boundary (void-facing orphans)
     for is_h, coord, lo, hi in _exterior_wall_edges(room, walls, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol):
+            continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
             seen.add(key)

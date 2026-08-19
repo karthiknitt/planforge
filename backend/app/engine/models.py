@@ -30,7 +30,17 @@ RoomType = Literal[
     "foyer",  # entry vestibule
     "courtyard",  # interior open-to-sky court (light-well)
     "wardrobe",  # walk-in closet
+    # open / semi-open programme, evidenced by the reverse_engr corpus
+    "terrace",  # open or semi-covered roof terrace
+    "garden",  # landscaped ground area inside the plot
+    "verandah",  # covered open-sided edge space (osari / otla / attole)
+    "seating",  # outdoor seating pocket / conversation pit
+    "open_to_sky",  # skylight void / open-to-sky cut-out
+    "duct",  # service shaft
+    "washbasin_nook",  # wash-basin alcove outside a toilet
 ]
+
+_VALID_SIDES = frozenset({"N", "S", "E", "W"})
 
 
 @dataclass
@@ -42,10 +52,47 @@ class Room:
     y: float  # front edge in plot coordinates (metres from road/front)
     width: float  # metres (x direction)
     depth: float  # metres (y direction, away from road)
+    # Plot-relative edges carrying no wall. "S" = y edge nearest the road,
+    # "N" = far y edge, "W" = low x edge, "E" = high x edge. Empty means a
+    # normal fully-enclosed room — the default, so existing layouts are
+    # unaffected.
+    open_sides: frozenset[str] = field(default_factory=frozenset)
+    # When set, this room is carved out of the interior of the room with this
+    # id: its area is subtracted from the parent's usable area and its edges
+    # become interior partitions. 22% of the reverse_engr corpus needs this
+    # (an ensuite toilet sitting in a corner of a bedroom's rectangle).
+    # Defaults to None, so every existing layout is unaffected.
+    parent_id: str | None = None
+
+    def __post_init__(self) -> None:
+        bad = set(self.open_sides) - _VALID_SIDES
+        if bad:
+            raise ValueError(
+                f"open_sides contains unknown side(s) {sorted(bad)}; "
+                f"expected a subset of {sorted(_VALID_SIDES)}"
+            )
+        if len(self.open_sides) == 4:
+            raise ValueError(
+                "open_sides cannot contain all four sides — a room with no "
+                "walls has no derivable footprint; use a plot-level feature"
+            )
+
+    @property
+    def is_open(self) -> bool:
+        return bool(self.open_sides)
 
     @property
     def area(self) -> float:
         return round(self.width * self.depth, 2)
+
+    def net_area(self, children: list["Room"]) -> float:
+        """Area minus any rooms carved out of this one.
+
+        Derived from `self.area` (not `width * depth`) so it stays correct
+        once `area` becomes the union of a room's shape-template parts.
+        """
+        carved = sum(c.width * c.depth for c in children if c.parent_id == self.id)
+        return round(self.area - carved, 2)
 
 
 @dataclass

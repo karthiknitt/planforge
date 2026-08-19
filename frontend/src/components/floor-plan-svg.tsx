@@ -62,6 +62,16 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   foyer: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
   courtyard: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
   wardrobe: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  // open / semi-open programme (reverse_engr corpus) — reuse the
+  // courtyard/balcony open-space family
+  terrace: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  garden: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  verandah: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  seating: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  open_to_sky: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  // service nooks — reuse the utility/wardrobe slate family
+  duct: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  washbasin_nook: { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
 };
 
 // Dark-mode counterpart of PALETTE — same room-type keys, values chosen so
@@ -95,6 +105,13 @@ const PALETTE_DARK: Record<string, { fill: string; stroke: string; text: string 
   foyer: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
   courtyard: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
   wardrobe: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  terrace: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  garden: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  verandah: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  seating: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  open_to_sky: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  duct: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  washbasin_nook: { fill: "#1f3d4c", stroke: "#4cb8f0", text: "#d9e9f2" },
 };
 
 const color = (type: string, dark = false) => {
