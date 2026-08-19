@@ -893,7 +893,15 @@ def layout_c(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
         _r("ff_stair", "Staircase", "staircase", stair_x, stair_y, STAIR_W, d_stair)
     )
     toilet_zone_w = W - STAIR_W - iwt
-    ff_rooms += _stair_band_rooms(cfg, ox, stair_y, toilet_zone_w, d_stair, iwt)
+    # Same trailing-edge stair as the GF band above: `stair_x` is the RIGHT
+    # end of this strip, so the band precedes it and `reverse=True` is what
+    # keeps the circulation filler (not the toilet) hard against the stair.
+    # Without it the FF stair had a WC as its only doorable partition and no
+    # circulation neighbour at all — run 0.000 m against every circulation
+    # room, on both test configs.
+    ff_rooms += _stair_band_rooms(
+        cfg, ox, stair_y, toilet_zone_w, d_stair, iwt, reverse=True
+    )
 
     gf = FloorPlan(floor=0, rooms=gf_rooms, columns=_columns_from_rooms(gf_rooms))
     ff = FloorPlan(floor=1, rooms=ff_rooms, columns=_columns_from_rooms(ff_rooms))
