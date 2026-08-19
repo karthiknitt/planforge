@@ -131,6 +131,26 @@ def north_angle_for_road_side(road_side: str) -> float:
     return ROAD_SIDE_NORTH_ANGLE_DEG.get(road_side.upper(), 0.0)
 
 
+def road_side_for_north_angle(north_angle_deg: float) -> str | None:
+    """Inverse of `north_angle_for_road_side`, or None when the orientation is
+    not one of the four cardinal road sides.
+
+    `PlotConfig.north_angle_deg` is a free float (a surveyed bearing), so it need
+    not correspond to any road side at all — hence `None` rather than a fallback.
+    Callers that key a rule off "which way does the frontage face" must go
+    through the RESOLVED angle, not `cfg.road_side`: an explicit `north_angle_deg`
+    overrides the road side for zone lookup, so keying a rule off the raw
+    `road_side` would pair a rule chosen for one orientation with zones computed
+    for another.
+    """
+    angle = north_angle_deg % 360.0
+    for side, cardinal in ROAD_SIDE_NORTH_ANGLE_DEG.items():
+        delta = abs(angle - cardinal)
+        if min(delta, 360.0 - delta) <= 1e-6:
+            return side
+    return None
+
+
 def zone_for_point(
     x: float,
     y: float,
