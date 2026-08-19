@@ -191,15 +191,55 @@ def test_score_vastu_perfect_layout_scores_100():
     assert _score_vastu(layout, _cfg()) == 100.0
 
 
-def test_score_vastu_deducts_20_per_violation_and_5_per_warning():
-    # SW kitchen: 1 prohibit violation (-20) + 1 placement warning (-5) = 75
+def test_score_vastu_grades_a_prohibited_room_to_zero():
+    # Was: "deducts 20 per violation and 5 per warning" — an SW kitchen scored
+    # 75.0 because the old component subtracted fixed amounts per check_vastu
+    # finding. The component is now the graded vastu_layout_score: a kitchen
+    # wholly inside an `avoid` zone earns verdict 0.0 for all of its area.
     kitchen = _make_room("k", "kitchen", 0.5, 0.5, 2, 2)
     layout = _make_layout([kitchen])
-    assert _score_vastu(layout, _cfg()) == 75.0
-
-
-def test_score_vastu_floors_at_zero():
-    # 6 toilets in NE (prohibited: -20 each) = -120, well past 100 → floors at 0
-    rooms = [_make_room(f"t{i}", "toilet", 7.5, 11.5, 1, 1) for i in range(6)]
-    layout = _make_layout(rooms)
     assert _score_vastu(layout, _cfg()) == 0.0
+
+
+def test_score_vastu_grades_a_mixed_layout_by_ruled_area_inside_the_bound():
+    """Was "floors at zero": 6 NE toilets, `== 0.0`, which proved only that the
+    old `max(0.0, ...)` clamp caught a -120 raw score. There is no clamp now, and
+    that fixture is all-avoid, so it cannot show the bound holds *between* the
+    endpoints — nor distinguish the graded component from the old arithmetic.
+
+    This fixture is genuinely mixed: two large `avoid` rooms (12 m2 NE kitchen,
+    12 m2 C toilet), a tiny `preferred` one (0.36 m2 SW bedroom), a small
+    `acceptable` one (1 m2 N pooja), and a large rule-less duct. Hand-computed:
+    ruled area = 12 + 12 + 0.36 + 1 = 25.36 m2 (the 12 m2 duct has no rule, so it
+    carries no weight at all); credited = 1.0 x 0.36 + 0.7 x 1 = 1.06 m2;
+    1.06 / 25.36 = 4.18%. Area, not room count, decides it — three of the four
+    ruled rooms are not `avoid`, yet the score sits near the floor.
+    """
+    layout = _make_layout(
+        [
+            _make_room("k", "kitchen", 6.0, 8.0, 3.0, 4.0),  # NE — avoid
+            _make_room("t", "toilet", 3.0, 4.0, 3.0, 4.0),  # C — avoid
+            _make_room("b", "bedroom", 0.2, 0.2, 0.6, 0.6),  # SW — preferred
+            _make_room("p", "pooja", 3.5, 9.0, 1.0, 1.0),  # N — acceptable
+            _make_room("d", "duct", 0.0, 4.0, 3.0, 4.0),  # no rule — excluded
+        ]
+    )
+    score = _score_vastu(layout, _cfg())
+    assert 0.0 < score < 100.0
+    assert score == 4.18
+
+
+def test_score_vastu_ranks_acceptable_between_avoided_and_preferred():
+    # The behaviour the old penalty arithmetic could not express: a toilet in S
+    # is "acceptable" — worse than the preferred E, better than the avoided NE.
+    def _score(x, y):
+        return _score_vastu(
+            _make_layout([_make_room("t", "toilet", x, y, 2, 2)]), _cfg()
+        )
+
+    preferred = _score(6.5, 5.0)  # E
+    acceptable = _score(3.5, 1.0)  # S
+    avoided = _score(6.5, 9.0)  # NE
+    assert preferred == 100.0
+    assert acceptable == 70.0
+    assert avoided == 0.0

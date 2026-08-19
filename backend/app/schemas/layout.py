@@ -54,6 +54,7 @@ class LayoutOut(BaseModel):
     second_floor: FloorPlanOut | None = None
     basement_floor: FloorPlanOut | None = None
     score: LayoutScoreOut | None = None
+    vastu_score: float | None = None  # None when the project has Vastu disabled
     space_notes: list[str] = []
     auto_added_rooms: list[str] = []
 

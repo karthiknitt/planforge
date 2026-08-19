@@ -5,14 +5,14 @@ Scores each Layout on 7 components (weighted sum → 0–100), see _WEIGHTS:
   25% Adjacency        — kitchen↔dining, bedroom↔toilet, living↔staircase
   10% Aspect ratio     — penalty when width/depth > 2:1 for habitable rooms
   15% Circulation      — room area / buildable area (fill efficiency)
-  10% Vastu            — reuses check_vastu(); −20/violation, −5/warning
+  10% Vastu            — graded vastu_layout_score() over all floors (100 when off)
   10% Grid regularity  — structural_grid confidence + GF/FF column stacking
   10% Toilet placement — penalizes front-facade/stair-parking/no-ventilation toilets
 """
 
 from __future__ import annotations
 
-from .models import Layout, LayoutScore, PlotConfig, Room
+from .models import FloorPlan, Layout, LayoutScore, PlotConfig, Room
 from app.engine.adjacency import load_adjacency_pairs
 
 
@@ -139,14 +139,40 @@ def _score_circulation(layout: Layout, cfg: PlotConfig, ewt: float) -> float:
     return max(0.0, 100.0 - (fill_ratio - 0.90) * 200.0)
 
 
+def layout_floors(layout: Layout) -> list[FloorPlan]:
+    """Every populated floor of a layout, in storey order."""
+    return [
+        fp
+        for fp in (
+            layout.ground_floor,
+            layout.first_floor,
+            layout.second_floor,
+            layout.basement_floor,
+        )
+        if fp is not None
+    ]
+
+
 def _score_vastu(layout: Layout, cfg: PlotConfig) -> float:
+    """Graded 0–100 Vastu compliance — the channel Vastu ranks through.
+
+    This component (weight 0.10) is the *only* place Vastu influences which
+    layouts `rank_and_select` returns; Vastu no longer drops candidates in
+    `generator.generate`. It used to score a binary `check_vastu()` by
+    subtracting 20 per violation and 5 per warning, which made the signal a
+    step function of finding counts — two rooms one metre outside a preferred
+    zone outranked nothing at all. `vastu_layout_score` replaces that with an
+    area-weighted mean of graded per-room verdicts over every floor.
+
+    The disabled case still returns a neutral 100.0 rather than
+    `vastu_layout_score`'s 0.0-for-no-ruled-rooms: with Vastu off this
+    component must be inert, not a 10-point penalty on every layout.
+    """
     if not cfg.vastu_enabled:
         return 100.0  # neutral when vastu not requested
-    from .vastu import check_vastu
+    from .vastu import vastu_layout_score
 
-    violations, warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
-    score = 100.0 - len(violations) * 20.0 - len(warnings) * 5.0
-    return max(0.0, score)
+    return vastu_layout_score(layout_floors(layout), cfg)
 
 
 def _score_grid_regularity(layout: Layout) -> float:
