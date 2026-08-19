@@ -47,39 +47,45 @@ assertion is the regression test to write first.
 
 ---
 
-## 2. The north arrow ignores `road_side` and always points up
+## 2. Every north arrow in the product is wrong
 
-**Severity: medium — every approval PDF for a non-south plot has a wrong north
-arrow.**
+**Severity: high — corrected upward after a closer look. There are THREE arrow
+drawers and none of them is right, including on the default south plot.**
 
-`approval_pdf._draw_large_north_arrow(c, cx, cy, r, road_side)` accepts
-`road_side` and **never references it**. The arrow is drawn straight up
-unconditionally, under a comment that reads "Arrow always points geographic N —
-road_side tells which edge faces road".
+| drawer | orientation input | behaviour |
+|---|---|---|
+| `approval_pdf._draw_large_north_arrow` | takes `road_side` | **never references it**; always drawn straight up |
+| `pdf._draw_north_arrow` | takes none at all | always drawn straight up |
+| `cad_primitives.draw_north_arrow` | takes `north_dir` and does use it | fed `north_dir = cfg.road_side` by the DXF export |
 
-The plan is drawn with the road at the bottom (y-min), so the top of the sheet is
-geographic north **only** when `road_side == "S"`. For a north road the top of
-the sheet is south, and the arrow is 180 degrees wrong; for east and west roads
-it is 90 degrees wrong.
+The plan is drawn road-at-bottom (y-min), so the sheet's up direction is
+geographic north **only** when `road_side == "S"`. The two ReportLab drawers are
+therefore correct for a south plot and 90 or 180 degrees wrong otherwise.
 
-This appears on approval drawings, which are the documents most likely to be
-handed to a third party.
+The DXF one is worse. `export.py` passes `north_dir = getattr(cfg, "road_side", "S")`,
+and `draw_north_arrow` maps `{"N": 90, "E": 0, "S": 270, "W": 180}` degrees. So a
+south-facing plot -- the default -- gets its filled north spike drawn at 270
+degrees, pointing **down the sheet, at the road**, when true north is up. It is
+180 degrees wrong on the most common configuration, and wrong differently on the
+other three. The arrow points at the road on every plot.
 
-**Where:** `backend/app/engine/approval_pdf.py:376` (definition), called at `:272`
-and `:632`.
+**Where:** `approval_pdf.py` `_draw_large_north_arrow` (called twice);
+`pdf.py` `_draw_north_arrow` (called at two sheets, plus `structural_sheet.py`);
+`cad_primitives.py` `draw_north_arrow`, fed from `api/routes/export.py`.
 
-**Fix direction:** rotate the arrow by the plan's own orientation. The engine
-already has the exact number — `vastu.ROAD_SIDE_NORTH_ANGLE_DEG[road_side]` is
-the clockwise angle from the plan's +y to true north, and
-`vastu.resolve_north_angle(cfg)` handles a surveyed `north_angle_deg` overriding
-the road side. Rotate the glyph by that, and the arrow becomes correct for
-non-cardinal bearings too.
+**Fix direction:** one orientation source for all three.
+`vastu.resolve_north_angle(cfg)` already returns the clockwise angle from the
+plan's +y to true north, honouring a surveyed `north_angle_deg` over the road
+side, and works for non-cardinal bearings. Rotate each glyph by it. The DXF
+drawer additionally needs its caller to stop passing `road_side` as if it were a
+north direction.
 
-**Note:** those angles were themselves wrong for E and W until commit `e11e500`
-on this branch. Any earlier attempt to fix the arrow from that table would have
-inherited the error.
+**Note:** `ROAD_SIDE_NORTH_ANGLE_DEG` was itself wrong for E and W until commit
+`e11e500` on this branch, so any earlier attempt to fix the arrows from that
+table would have inherited the error.
 
----
+**Why no test caught it:** nothing asserts anything about arrow direction; the
+PDF/DXF tests check that an arrow is emitted, not where it points.
 
 ## 3. A west-facing entrance has no auspicious cell
 
