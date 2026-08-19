@@ -555,6 +555,20 @@ MIDDLE_THIRD_INERT_GEOMETRY = {"W": MIDDLE_THIRD_CASES[0], "S": MIDDLE_THIRD_CAS
 MIDDLE_THIRD_INERT_GEOMETRY = {"W": MIDDLE_THIRD_CASES[0], "S": MIDDLE_THIRD_CASES[1]}
 
 
+# Which of the two asymmetric geometries above to reuse when pinning that a
+# road side's MIDDLE front-row cell is NOT auspicious. The geometry must be the
+# one whose middle candidate LOSES the distance key, otherwise vastu-on equals
+# vastu-off for a reason that has nothing to do with the rule.
+#
+# W borrows the north geometry (gate in the HIGH-x third): candidates are SW
+# (outer, wins on distance) and W (middle) — neither sanctioned.
+# S borrows the east geometry (gate in the LOW-x third): candidates are SW
+# (outer, wins on distance) and S (middle). The north geometry would NOT work
+# for S: its outer candidate lands in SE, which the override makes auspicious
+# AND which already wins on distance, so the middle cell would never be tested.
+MIDDLE_THIRD_INERT_GEOMETRY = {"W": MIDDLE_THIRD_CASES[0], "S": MIDDLE_THIRD_CASES[1]}
+
+
 @pytest.mark.parametrize("road_side", ["S", "W"])
 def test_middle_front_row_cell_is_not_auspicious(road_side):
     """The MIDDLE cell of the S and W front rows — "S" on a south road, "W" on a
