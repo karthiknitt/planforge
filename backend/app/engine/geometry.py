@@ -17,12 +17,23 @@ from __future__ import annotations
 
 import math
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon, Polygon, box
 from shapely.geometry.polygon import orient
 
 from app.engine.models import PlotConfig
 
 _BIG = 1e5
+
+# Compound (boundary) wall — shared between the DXF poché renderer
+# (cad_advanced.draw_compound_wall) and the PDF site plan
+# (pdf._draw_compound_wall). GATE_WIDTH_M is the shipping DXF value (this was
+# already 3.6 m before this module existed); it does NOT match the 3.0 m
+# figure in the Task 11 spec sample, which was illustrative only.
+GATE_WIDTH_M = 3.6
+COMPOUND_WALL_HALF_THICKNESS_M = 0.115  # Shapely buffer distance (DXF poché)
+COMPOUND_WALL_THICKNESS_M = (
+    COMPOUND_WALL_HALF_THICKNESS_M * 2
+)  # 0.23 m, PDF stroke width
 
 
 def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
@@ -277,3 +288,178 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
     if result.geom_type != "Polygon" or result.is_empty:
         return Polygon()
     return orient(result, 1.0)
+
+
+def landscape_region(cfg: PlotConfig) -> Polygon | MultiPolygon:
+    """The setback margin: `plot_polygon(cfg)` minus `buildable_polygon(cfg)`.
+
+    Deliberately built from the two canonical polygons rather than
+    `box(plot_width, plot_length).difference(box(...))`: the naive rectangle
+    difference is only correct when the plot itself is an axis-aligned
+    rectangle. `plot_polygon` honours `plot_template` notches and the
+    trapezoid/quadrilateral/L-shaped `plot_shape`s, and `buildable_polygon`
+    honours PER-EDGE setbacks on all of those — see this module's docstring.
+    A rectangle-diff implementation would report a chunk of the trapezoid's
+    narrowing rear corner (which is not plot land at all) as landscaped, and
+    would use the same uniform inset on every edge of a quad or notched plot.
+
+    Returns a `MultiPolygon`, not just `Polygon`, whenever the buildable
+    envelope divides the margin into disjoint pieces. The verified trigger is
+    a zero setback on both the left and right edges, which bridges the
+    envelope across the full plot width and leaves disjoint front and rear
+    strips. Notched and L-shaped plots were tested across a range of sizes and
+    corners and all produced a single `Polygon`, so do not cite them as the
+    splitting case. Unlike `buildable_polygon`, this does NOT collapse to the
+    largest piece. Every disjoint scrap of margin is real landscaped ground
+    and `_draw_landscape` (pdf.py) is written to hatch all of them, so
+    dropping pieces here would silently under-draw the fill.
+
+    `buildable_polygon` also keeps only its largest piece when an inset
+    splits it (see its own docstring); a smaller discarded fragment is then
+    NOT part of `buildable_polygon`'s result and so gets folded into this
+    function's `plot - buildable` difference and hatched as landscaped
+    ground. Defensible — nothing may be legally built there either — but
+    worth knowing if the two ever need to agree pixel-for-pixel.
+
+    `buildable_polygon` returns an empty Polygon when the setbacks consume
+    the whole plot. There is then no legal buildable envelope, so every
+    square metre of the plot IS the landscaped margin — this returns the
+    whole plot rather than an empty region in that case.
+    """
+    plot = orient(plot_polygon(cfg), 1.0)
+    buildable = buildable_polygon(cfg)
+    if buildable.is_empty:
+        return plot
+    return plot.difference(buildable)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compound (boundary) wall — pure geometry shared by both renderers
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _compound_wall_sides(
+    pw: float, pl: float
+) -> list[tuple[tuple[float, float], tuple[float, float], str]]:
+    """The 4 plot-edge runs as (start, end, side_id), same order/winding as
+    the pre-existing DXF implementation this was extracted from."""
+    return [
+        ((0.0, 0.0), (pw, 0.0), "S"),
+        ((pw, 0.0), (pw, pl), "E"),
+        ((pw, pl), (0.0, pl), "N"),
+        ((0.0, pl), (0.0, 0.0), "W"),
+    ]
+
+
+def _gate_span(
+    p1: tuple[float, float], p2: tuple[float, float], gate_cx: float | None
+) -> tuple[float, float, float, float, float]:
+    """Gate-gap placement along p1->p2. Returns (length, dx, dy, gate_start_d,
+    gate_end_d), all as distances along the p1->p2 direction.
+
+    Centred by default; centred on `gate_cx` (clamped to stay on the wall)
+    when given and the run is horizontal — matches the main-entrance-aligned
+    gate the DXF renderer has always drawn.
+    """
+    length = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+    if length < 0.01:
+        return length, 0.0, 0.0, 0.0, 0.0
+    dx = (p2[0] - p1[0]) / length
+    dy = (p2[1] - p1[1]) / length
+    gate_w = min(GATE_WIDTH_M, length)
+    if gate_cx is not None and abs(dx) > 0.5:
+        gate_start_d = max(
+            0.0, min((gate_cx - p1[0]) / dx - gate_w / 2, length - gate_w)
+        )
+    else:
+        gate_start_d = max(0.0, (length - gate_w) / 2)
+    gate_end_d = min(length, gate_start_d + gate_w)
+    return length, dx, dy, gate_start_d, gate_end_d
+
+
+def compound_wall_segments(
+    cfg: PlotConfig, gate_cx: float | None = None
+) -> list[tuple[float, float, float, float]]:
+    """Boundary-wall centrelines as (x1, y1, x2, y2) in plot metres.
+
+    One run per plot edge, except the road-facing edge (`cfg.road_side`),
+    which is split into two runs around a `GATE_WIDTH_M`-wide gate gap —
+    centred on the edge, or on `gate_cx` when given (see `_gate_span`).
+
+    Plot coords: y=0 is the front/road edge, x=0 the left edge — the same
+    convention `plan_geometry` and `cad_advanced` use.
+    """
+    pw, pl = cfg.plot_width, cfg.plot_length
+    road = (cfg.road_side or "S").upper()
+    out: list[tuple[float, float, float, float]] = []
+    for p1, p2, side_id in _compound_wall_sides(pw, pl):
+        if side_id != road:
+            if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) >= 0.01:
+                out.append((p1[0], p1[1], p2[0], p2[1]))
+            continue
+        length, dx, dy, gate_start_d, gate_end_d = _gate_span(p1, p2, gate_cx)
+        if length < 0.01:
+            continue
+        if gate_start_d > 0.1:
+            ep = (p1[0] + gate_start_d * dx, p1[1] + gate_start_d * dy)
+            out.append((p1[0], p1[1], ep[0], ep[1]))
+        if gate_end_d < length - 0.1:
+            sp = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
+            out.append((sp[0], sp[1], p2[0], p2[1]))
+    return out
+
+
+def compound_wall_gate_posts(
+    cfg: PlotConfig, gate_cx: float | None = None
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Centre points of the two gate posts bracketing the road-side gate gap,
+    or None if the road-side run has ~zero length. Shares `_gate_span` with
+    `compound_wall_segments` so post positions always agree with the gap."""
+    pw, pl = cfg.plot_width, cfg.plot_length
+    road = (cfg.road_side or "S").upper()
+    for p1, p2, side_id in _compound_wall_sides(pw, pl):
+        if side_id != road:
+            continue
+        length, dx, dy, gate_start_d, gate_end_d = _gate_span(p1, p2, gate_cx)
+        if length < 0.01:
+            return None
+        gp1 = (p1[0] + gate_start_d * dx, p1[1] + gate_start_d * dy)
+        gp2 = (p1[0] + gate_end_d * dx, p1[1] + gate_end_d * dy)
+        return gp1, gp2
+    return None
+
+
+def arc_points(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    bulge: float,
+    segments: int = 16,
+) -> list[tuple[float, float]]:
+    """Render-only polyline approximating a bowed edge from p0 to p1, with
+    sagitta = bulge * |p1 - p0| (positive bulge bows to the left of p0->p1).
+
+    Pure geometry — no dependency on Room/FloorPlan — so both the PDF
+    renderer (a stroked polyline) and any future DXF consumer can share it.
+    A quadratic (parabola) approximation is deliberate, not a shortcut: a
+    true circular arc needs a degenerate-radius special case as bulge -> 0,
+    which this sidesteps, at the cost of the curve not being a true circular
+    arc (an exact-radius consumer, e.g. a DXF ARC entity, cannot reuse this
+    curve unchanged — see Task 13's DXF-scope note).
+    """
+    if segments < 1:
+        raise ValueError(f"segments must be >= 1, got {segments}")
+    x0, y0 = p0
+    x1, y1 = p1
+    dx, dy = x1 - x0, y1 - y0
+    length = (dx * dx + dy * dy) ** 0.5
+    if length < 1e-9 or abs(bulge) < 1e-9:
+        return [p0, p1]
+    nx, ny = -dy / length, dx / length  # unit normal
+    sag = bulge * length
+    out: list[tuple[float, float]] = []
+    for i in range(segments + 1):
+        t = i / segments
+        # parabola peaking at t = 0.5 with height `sag`
+        off = 4.0 * sag * t * (1.0 - t)
+        out.append((x0 + dx * t + nx * off, y0 + dy * t + ny * off))
+    return out

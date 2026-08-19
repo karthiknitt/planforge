@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date
 from io import BytesIO
@@ -7,9 +8,10 @@ from io import BytesIO
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from shapely.geometry import LineString
 
 from app.engine.cad_primitives import metres_to_ftin
-from app.engine.geometry import buildable_polygon
+from app.engine.geometry import arc_points, buildable_polygon, landscape_region
 from app.engine.models import FloorPlan, Layout, PlotConfig, Room
 from app.engine.section_geometry import (
     derive_elevation,
@@ -22,6 +24,8 @@ from app.engine.section_render import (
     render_section_view,
 )
 from app.engine.title_block import draw_title_block
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Internal CAD drawing helpers (ReportLab, not ezdxf)
@@ -330,6 +334,14 @@ def render_pdf(
     c = canvas.Canvas(buf, pagesize=A4)
     show_watermark = watermark_preliminary and structural_design is None
 
+    # The compound wall is a single site-level structure, so its gate aligns to
+    # the ground floor's main entrance on every page. Derived once, before the
+    # loop rather than inside it: `ordered_floors` may yield a basement or stilt
+    # ahead of the ground floor, and those pages must not draw a centred gate
+    # while later pages draw an aligned one. Matches the DXF path
+    # (`api/routes/export.py`), which aligns the gate to the same door.
+    gf_main_door_x = _ground_floor_main_door_x(layout, cfg)
+
     # ── Architectural pages ────────────────────────────────────────────────────
     for floor_plan in ordered_floors(layout):
         _draw_floor_projected(
@@ -342,6 +354,7 @@ def render_pdf(
             _floor_label(floor_plan),
             annotations=annotations,
             watermark_preliminary=show_watermark,
+            gf_main_door_x=gf_main_door_x,
         )
         c.showPage()
 
@@ -838,6 +851,108 @@ def _draw_openings_schedule_table(
         c.setLineWidth(0.25)
         c.line(x, ry, x + w, ry)
     return height
+
+
+def _ground_floor_main_door_x(layout: Layout, cfg: PlotConfig) -> float | None:
+    """The ground floor's main-entrance x, or None if it has no main entrance.
+
+    Mirrors the derivation in `api/routes/export.py` so PDF and DXF align the
+    compound-wall gate to the same door. Returns None when no `is_main` opening
+    was derived — a real and observed case, not a defensive branch — in which
+    case `compound_wall_segments` centres the gate on the road-side edge.
+    """
+    from app.engine.plan_geometry import build_floor_drawing
+
+    ground = next((fp for fp in ordered_floors(layout) if fp.floor == 0), None)
+    if ground is None:
+        return None
+    drawing = build_floor_drawing(ground, cfg)
+    return next((o.cx for o in drawing.openings if o.is_main), None)
+
+
+def _draw_landscape(
+    c: canvas.Canvas, cfg: PlotConfig, ox: float, oy: float, s: float
+) -> None:
+    """Hatch the setback margin (`landscape_region`) as open/planted ground.
+
+    Diagonal line hatch, NOT a solid fill: CCQS's monochrome component scores
+    mean pixel saturation (`app/quality/ccqs.py:compute_monochromaticity`) —
+    low is good — and the setback margin can be a third of the plot area on a
+    tight site, so a solid green wash would visibly hurt that score. Thin
+    grey (zero-saturation) diagonal lines are the standard site-plan
+    convention for landscaped/planted ground, read correctly on a monochrome
+    print, and match every other `_draw_*` helper in this file, which strokes
+    in black/grey rather than filling with colour.
+
+    Each 45-degree sweep line is intersected with `region` in Shapely first
+    and only the resulting (possibly several, possibly zero) clipped
+    segments are stroked — rather than drawing full-bbox lines and relying on
+    a PDF clip path — so every stroked segment is provably inside the margin,
+    correct for the MultiPolygon case (disjoint margin pieces on a notched or
+    L-shaped plot) for free, and inspectable in tests without replaying
+    ReportLab's clip operators.
+
+    Hatch spacing (`step`) is defined in PAGE points and converted to plot
+    metres via `/ s`, not a flat metre figure — a flat metre spacing would
+    make on-paper density vary with plot size (lines crowd together as the
+    plot, and therefore `s`, shrinks). This keeps the ink density constant
+    across plot sizes.
+    """
+    from shapely.geometry import LineString
+
+    region = landscape_region(cfg)
+    if region.is_empty:
+        return
+    minx, miny, maxx, maxy = region.bounds
+    c.setStrokeColor(HexColor("#999999"))
+    c.setLineWidth(0.3)
+    step = 4.0 / s  # 4 pt on paper, in plot metres, between hatch lines
+    diag = (maxx - minx) + (maxy - miny)
+    n = int(diag / step) + 2
+    for i in range(-n, n):
+        x_at_ymin = minx + i * step
+        sweep = LineString([(x_at_ymin, miny), (x_at_ymin + (maxy - miny), maxy)])
+        clipped = sweep.intersection(region)
+        if clipped.is_empty:
+            continue
+        # `.geoms` covers both MultiLineString (the common split-by-a-hole
+        # case) and GeometryCollection (the rarer case where the sweep line
+        # is also tangent to a vertex, mixing in a Point) — checking for the
+        # attribute rather than one specific geom_type keeps every LineString
+        # member instead of silently dropping the whole result when the type
+        # isn't the one we expected.
+        segments = clipped.geoms if hasattr(clipped, "geoms") else [clipped]
+        for seg in segments:
+            if seg.geom_type != "LineString" or seg.is_empty:
+                continue
+            (px1, py1), (px2, py2) = seg.coords[0], seg.coords[-1]
+            c.line(ox + px1 * s, oy + py1 * s, ox + px2 * s, oy + py2 * s)
+
+
+def _draw_compound_wall(
+    c: canvas.Canvas,
+    cfg: PlotConfig,
+    ox: float,
+    oy: float,
+    s: float,
+    gate_cx: float | None = None,
+) -> None:
+    """Boundary wall ring with a road-side gate gap.
+
+    Strokes the same centrelines the DXF path buffers into a poché polygon
+    (`app.engine.geometry.compound_wall_segments`) — this is a thin ReportLab
+    wrapper, not a second derivation of the wall/gate geometry. `gate_cx`
+    (the ground floor's main-entrance x, or None) is threaded through so the
+    gate lines up with the same door DXF aligns it to (see `render_pdf`,
+    which derives it once from the ground floor and passes it to every floor
+    page — upper floors have no compound-wall gate of their own).
+    """
+    from app.engine.geometry import COMPOUND_WALL_THICKNESS_M, compound_wall_segments
+
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(COMPOUND_WALL_THICKNESS_M * s)
+    for x1, y1, x2, y2 in compound_wall_segments(cfg, gate_cx=gate_cx):
+        c.line(ox + x1 * s, oy + y1 * s, ox + x2 * s, oy + y2 * s)
 
 
 def _draw_setback_callouts(
@@ -1406,6 +1521,181 @@ def _draw_voids(
         c.drawCentredString(cx, cy - 8, "OPEN TO BELOW")
 
 
+# Outward unit normal per side, matching the CCW chord winding in
+# `_draw_edge_arcs` (S/N/W/E each ordered so `arc_points`' left-normal
+# convention bows a positive bulge OUTWARD of the room, never inward).
+_SIDE_OUTWARD_NORMAL = {
+    "S": (0.0, -1.0),
+    "N": (0.0, 1.0),
+    "W": (-1.0, 0.0),
+    "E": (1.0, 0.0),
+}
+
+# Tolerance for "does this room edge sit on the floor's exterior plate
+# boundary" — matches the tolerance `derive_walls`/`_plate_bounds` already
+# use for the same room-union bbox comparison.
+_PLATE_EDGE_TOL = 0.01
+
+
+def _edge_chord(
+    room: Room, side: str
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Room-edge chord for `side`, wound CCW about the room so `arc_points`'
+    left-normal convention bows a positive bulge OUTWARD on every side, not
+    just some of them (Critical #2 — the original S/E ordering bowed
+    inward)."""
+    x0, y0 = room.x, room.y
+    x1, y1 = room.x + room.width, room.y + room.depth
+    return {
+        "S": ((x1, y0), (x0, y0)),
+        "N": ((x0, y1), (x1, y1)),
+        "W": ((x0, y0), (x0, y1)),
+        "E": ((x1, y1), (x1, y0)),
+    }[side]
+
+
+def _is_external_edge(
+    room: Room, side: str, plate_bounds: tuple[float, float, float, float]
+) -> bool:
+    """Whether `side` sits on the floor's exterior plate boundary (the same
+    room-union bbox `derive_walls`/`_plate_bounds` use) rather than an
+    interior partition."""
+    x0, y0 = room.x, room.y
+    x1, y1 = room.x + room.width, room.y + room.depth
+    px1, py1, px2, py2 = plate_bounds
+    return {
+        "S": abs(y0 - py1) < _PLATE_EDGE_TOL,
+        "N": abs(y1 - py2) < _PLATE_EDGE_TOL,
+        "W": abs(x0 - px1) < _PLATE_EDGE_TOL,
+        "E": abs(x1 - px2) < _PLATE_EDGE_TOL,
+    }[side]
+
+
+def _edge_arc_bands(
+    room: Room,
+    side: str,
+    bulge: float,
+    plate_bounds: tuple[float, float, float, float],
+    ewt: float,
+    iwt: float,
+    opening_polys: list,
+):
+    """The two Shapely band polygons for one arced room edge: the straight
+    poché band to erase, and the curved band to fill in its place (already
+    cut against `opening_polys`). Pure geometry, factored out of
+    `_draw_edge_arcs` so the band SHAPES — does the erase band exactly cover
+    the real poché band, does the curve bow outward, does an opening
+    actually shrink it — can be asserted on directly in tests instead of
+    reverse-engineered from ReportLab canvas calls.
+
+    `thickness`/offset: EWT offset outward by half its own width on the
+    floor's exterior plate boundary (matching `derive_walls`' cxl/cxr/cyb/cyt
+    centreline), IWT centred on the shared edge otherwise (Critical #1/#4) —
+    so the erase band exactly matches the real poché band instead of
+    approximating it with a guessed stroke width.
+    """
+    p0, p1 = _edge_chord(room, side)
+    external = _is_external_edge(room, side, plate_bounds)
+    thickness = ewt if external else iwt
+    if external:
+        nx, ny = _SIDE_OUTWARD_NORMAL[side]
+        dx, dy = nx * thickness / 2, ny * thickness / 2
+        c0 = (p0[0] + dx, p0[1] + dy)
+        c1 = (p1[0] + dx, p1[1] + dy)
+    else:
+        c0, c1 = p0, p1
+
+    straight_band = LineString([c0, c1]).buffer(
+        thickness / 2, cap_style=2, join_style=2
+    )
+    curve_band = LineString(arc_points(c0, c1, bulge)).buffer(
+        thickness / 2, cap_style=2, join_style=2
+    )
+    # Cut against openings so an arced edge does not refill a door/window
+    # gap the poché deliberately left open (Critical #3) — a verandah
+    # front, the motivating case, is exactly the edge most likely to carry
+    # the main entrance.
+    for op in opening_polys:
+        if curve_band.intersects(op):
+            curve_band = curve_band.difference(op)
+            if curve_band.is_empty:
+                break
+    return straight_band, curve_band
+
+
+def _draw_edge_arcs(
+    c: canvas.Canvas,
+    rooms: list[Room],
+    cfg: PlotConfig,
+    opening_polys: list,
+    s: float,
+    ox: float,
+    oy: float,
+) -> None:
+    """Overlay bowed edges for rooms with `Room.edge_arcs` set (Task 13).
+
+    Render-only: `edge_arcs` never reaches wall derivation (`derive_walls`
+    consumes `Room` but discards per-room identity when it emits bare
+    `WallSegment`s — see plan_geometry.py — so there is no wall run to route
+    this through). Instead this reads straight from each room's own
+    rectangle, as a decoration pass drawn AFTER the wall poché.
+
+    A straight wall poché edge is already drawn under this room's boundary
+    by the time this runs, so it is first ERASED (a white fill over exactly
+    the real poché band, from `_edge_arc_bands`) and then the curved band is
+    filled over it in black.
+
+    This white-fill technique assumes an opaque white page ground under the
+    poché (true today — no page tint or room-fill colour exists yet); it
+    would need revisiting if either is ever added.
+
+    Draw order: this MUST run immediately after the wall poché fill
+    (`_shape_path` for `polys["external"]`/`["internal"]`) and before every
+    later pass in `_draw_floor_projected` — anything drawn between the
+    poché and this call gets silently erased by the white band.
+    `test_edge_arcs_run_immediately_after_the_poche` in
+    `test_render_arcs.py` asserts this ordering directly (not just via
+    comment) because this function's call site has already moved twice on
+    this branch for the same reason (Tasks 11/12).
+    """
+    if not any(room.edge_arcs for room in rooms):
+        return
+    buildable = buildable_polygon(cfg)
+    from app.engine.plan_geometry import EWT, IWT, _plate_bounds
+
+    plate_bounds = _plate_bounds(rooms, buildable, EWT)
+
+    c.saveState()
+    try:
+        for room in rooms:
+            if not room.edge_arcs:
+                continue
+            for side, bulge in room.edge_arcs.items():
+                if side not in _SIDE_OUTWARD_NORMAL:
+                    # Room.__post_init__ already rejects unknown sides; this
+                    # only guards a post-construction mutation of the dict
+                    # (Room.edge_arcs is a plain mutable dict) so a bad key
+                    # skips the edge instead of a KeyError 500 mid-render.
+                    logger.warning(
+                        "room %s: edge_arcs has unknown side %r, skipping",
+                        room.id,
+                        side,
+                    )
+                    continue
+                straight_band, curve_band = _edge_arc_bands(
+                    room, side, bulge, plate_bounds, EWT, IWT, opening_polys
+                )
+                c.setFillColor(white)
+                c.setStrokeColor(white)
+                _shape_path(c, straight_band, s, ox, oy)
+                if not curve_band.is_empty:
+                    c.setFillColor(HexColor("#000000"))
+                    c.setStrokeColor(HexColor("#000000"))
+                    _shape_path(c, curve_band, s, ox, oy)
+    finally:
+        c.restoreState()
+
+
 def _shape_path(c: canvas.Canvas, geom, s: float, ox: float, oy: float):
     """Fill+outline a shapely (Multi)Polygon with even-odd holes."""
     polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
@@ -1591,8 +1881,15 @@ def _draw_floor_projected(
     floor_label: str,
     annotations: dict | None = None,
     watermark_preliminary: bool = False,
+    gf_main_door_x: float | None = None,
 ) -> None:
-    """Architectural floor page rendered purely from the canonical FloorDrawing."""
+    """Architectural floor page rendered purely from the canonical FloorDrawing.
+
+    `gf_main_door_x` is the GROUND FLOOR's main-entrance x (or None), passed
+    in by `render_pdf` so every floor page's compound-wall gate aligns to the
+    same physical gate — the wall is a single site-level structure, not one
+    per floor, so an upper floor's own door (if any) must never drive it.
+    """
     from app.engine.plan_geometry import (
         build_floor_drawing,
         opening_boxes,
@@ -1638,14 +1935,24 @@ def _draw_floor_projected(
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
 
+    # Landscaped setback margin: ground texture, so it must be under
+    # everything drawn on top of it — the building poché, the compound wall
+    # (drawn later, at line ~1788, deliberately above the dim chains — see
+    # the comment there), and the dim chains themselves.
+    _draw_landscape(c, cfg, ox, oy, s)
+
     # Walls: poché (solid fill) from the unioned polygons with openings cut
-    polys = wall_polygons(drawing.walls, openings=opening_boxes(drawing.openings))
+    opening_polys = opening_boxes(drawing.openings)
+    polys = wall_polygons(drawing.walls, openings=opening_polys)
     c.setFillColor(HexColor("#000000"))
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(0.5)
     _shape_path(c, polys["external"], s, ox, oy)
     c.setLineWidth(0.35)
     _shape_path(c, polys["internal"], s, ox, oy)
+    # MUST run immediately after the poché fill above — see the ordering
+    # note in _draw_edge_arcs' own docstring and the test that pins it.
+    _draw_edge_arcs(c, floor_plan.rooms, cfg, opening_polys, s, ox, oy)
 
     # Section A-A cut marker
     line, _along_y = section_cut_line(floor_plan.rooms, buildable_polygon(cfg))
@@ -1676,6 +1983,10 @@ def _draw_floor_projected(
     )
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_voids(c, floor_plan.rooms, s, ox, oy)
+    # Before the dim chains, not after: the wall strokes at 0.23 m * scale
+    # along the plot edges, exactly where dimension extension lines and ticks
+    # land, so drawing it later paints over them.
+    _draw_compound_wall(c, cfg, ox, oy, s, gate_cx=gf_main_door_x)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     marks, opening_rows = _opening_marks(drawing)
