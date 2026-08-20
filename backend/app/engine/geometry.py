@@ -338,16 +338,43 @@ def landscape_region(cfg: PlotConfig) -> Polygon | MultiPolygon:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+_COMPASS_LABELS_BY_ROAD_SIDE = {
+    # The y-min run always faces the road; the other three follow compass order
+    # clockwise around the plot. Order matches `_compound_wall_sides`' runs:
+    # (y-min, x-max, y-max, x-min).
+    "S": ("S", "E", "N", "W"),
+    "E": ("E", "S", "W", "N"),
+    "N": ("N", "W", "S", "E"),
+    "W": ("W", "N", "E", "S"),
+}
+
+
 def _compound_wall_sides(
-    pw: float, pl: float
+    pw: float, pl: float, road_side: str = "S"
 ) -> list[tuple[tuple[float, float], tuple[float, float], str]]:
     """The 4 plot-edge runs as (start, end, side_id), same order/winding as
-    the pre-existing DXF implementation this was extracted from."""
+    the pre-existing DXF implementation this was extracted from.
+
+    `side_id` is the COMPASS direction each run faces, read from `road_side`
+    (the direction the y-min/road edge faces) — NOT a plot-local edge id.
+    The y-min run therefore always carries `side_id == road_side`, so callers
+    that gate "the run whose side_id is the road" gate the road-facing edge no
+    matter which way it faces. This is the reading `plan_geometry`.
+    `_place_main_entrance`, the Vastu engine and the frontend all use, and the
+    gate must share it or the compound-wall gate and the main entrance land on
+    different edges of the house for N/E/W roads.
+    """
+    # `PlotConfig.road_side` is an unvalidated str; an unrecognised value must
+    # stay tolerated (not raise), exactly as `vastu.py`'s
+    # `north_angle_for_road_side` falls back to south for unknown sides.
+    labels = _COMPASS_LABELS_BY_ROAD_SIDE.get(
+        road_side.upper(), _COMPASS_LABELS_BY_ROAD_SIDE["S"]
+    )
     return [
-        ((0.0, 0.0), (pw, 0.0), "S"),
-        ((pw, 0.0), (pw, pl), "E"),
-        ((pw, pl), (0.0, pl), "N"),
-        ((0.0, pl), (0.0, 0.0), "W"),
+        ((0.0, 0.0), (pw, 0.0), labels[0]),
+        ((pw, 0.0), (pw, pl), labels[1]),
+        ((pw, pl), (0.0, pl), labels[2]),
+        ((0.0, pl), (0.0, 0.0), labels[3]),
     ]
 
 
@@ -392,7 +419,7 @@ def compound_wall_segments(
     pw, pl = cfg.plot_width, cfg.plot_length
     road = (cfg.road_side or "S").upper()
     out: list[tuple[float, float, float, float]] = []
-    for p1, p2, side_id in _compound_wall_sides(pw, pl):
+    for p1, p2, side_id in _compound_wall_sides(pw, pl, road):
         if side_id != road:
             if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) >= 0.01:
                 out.append((p1[0], p1[1], p2[0], p2[1]))
@@ -417,7 +444,7 @@ def compound_wall_gate_posts(
     `compound_wall_segments` so post positions always agree with the gap."""
     pw, pl = cfg.plot_width, cfg.plot_length
     road = (cfg.road_side or "S").upper()
-    for p1, p2, side_id in _compound_wall_sides(pw, pl):
+    for p1, p2, side_id in _compound_wall_sides(pw, pl, road):
         if side_id != road:
             continue
         length, dx, dy, gate_start_d, gate_end_d = _gate_span(p1, p2, gate_cx)
