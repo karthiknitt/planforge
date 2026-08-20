@@ -3,6 +3,7 @@
 import math
 
 from app.engine.geometry import buildable_polygon
+from app.engine.models import Room
 from app.engine.plan_geometry import (
     _all_exterior_edges,
     _plate_bounds,
@@ -629,6 +630,46 @@ def test_gapped_parking_gets_no_repair_door():
         assert porch_doors == [], (
             f"{rtype} got a repair-pass door despite being gapped from every neighbour"
         )
+
+
+def test_gapped_parking_is_not_flagged_unreachable():
+    """A car porch gapped from every neighbour is intentionally door-less
+    (reachable only from the driveway). The reachability gate must agree
+    with `_repair_connectivity`'s parking exemption and not flag it."""
+    for rtype in ("parking", "parking_4w", "parking_2w"):
+        rooms = [
+            _room("living", 1.23, 1.73, 3.5, 5.0),
+            _room("porch", 1.23, 6.93, 3.5, 3.0, rtype=rtype),
+        ]
+        openings, _walls = _openings_for(rooms, _cfg_9x15())
+        problems = validate_floor_connectivity(rooms, openings, 0)
+        flagged = {p.split()[0] for p in problems}
+        assert "porch" not in flagged, (
+            f"{rtype}: gapped car porch wrongly flagged: {problems}"
+        )
+
+
+def test_open_to_sky_void_is_not_flagged_unreachable():
+    """A double-height void has no door and needs none; the gate must not
+    flag it just because it is not on the door graph."""
+    rooms = [
+        _room("st", 1.23, 1.73, 6.54, 1.27, rtype="staircase"),
+        _room("liv", 1.23, 3.115, 6.54, 2.0),
+        Room(
+            id="void",
+            name="void",
+            type="open_to_sky",
+            x=2.5,
+            y=3.5,
+            width=1.5,
+            depth=1.5,
+            void_over="liv",
+        ),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=1)
+    problems = validate_floor_connectivity(rooms, openings, 1)
+    flagged = {p.split()[0] for p in problems}
+    assert "void" not in flagged, f"open_to_sky void wrongly flagged: {problems}"
 
 
 def test_no_opening_on_an_open_side():
