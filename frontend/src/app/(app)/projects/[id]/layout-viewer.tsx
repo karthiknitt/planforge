@@ -189,8 +189,8 @@ interface ApprovalInfo {
 
 interface LayoutViewerProps {
   generateData: GenerateResponse | null;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide: string;
   northDirection: string;
   projectId: string;
@@ -213,8 +213,8 @@ interface LayoutViewerProps {
 
 export function LayoutViewer({
   generateData,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide,
   projectId,
   projectName,
@@ -1824,8 +1824,8 @@ export function LayoutViewer({
             <Plan3DScene
               ref={plan3dApiRef}
               floorPlan={r3fFloorPlan}
-              plotWidth={plotWidth}
-              plotLength={plotLength}
+              plotXExtent={plotXExtent}
+              plotYExtent={plotYExtent}
               roadSide={roadSide}
               view={r3fView}
               annotate={r3fView === "top"}
@@ -1947,8 +1947,8 @@ export function LayoutViewer({
             editSaveError={editSaveError}
             complianceIssues={complianceIssues}
             floorPlan={floorPlan}
-            plotWidth={plotWidth}
-            plotLength={plotLength}
+            plotXExtent={plotXExtent}
+            plotYExtent={plotYExtent}
             roadSide={roadSide}
             plotShape={plotShape}
             plotFrontWidth={plotFrontWidth}
@@ -1978,7 +1978,7 @@ export function LayoutViewer({
               residential construction.
             </p>
             <SectionViewSVG
-              buildingWidth={plotWidth}
+              buildingWidth={plotXExtent}
               className="w-full md:max-w-xl rounded-xl border"
               stairTreadCount={layout.ground_floor.drawing?.stair?.tread_count}
             />
@@ -2020,8 +2020,8 @@ export function LayoutViewer({
         {activeTab === "compare" && (
           <LayoutCompareView
             layouts={activeData.layouts}
-            plotWidth={plotWidth}
-            plotLength={plotLength}
+            plotXExtent={plotXExtent}
+            plotYExtent={plotYExtent}
             roadSide={roadSide}
             plotShape={plotShape}
             plotFrontWidth={plotFrontWidth}
@@ -2040,8 +2040,8 @@ export function LayoutViewer({
             layout={layout}
             floor={floor}
             liveLayout={liveLayout}
-            plotWidth={plotWidth}
-            plotLength={plotLength}
+            plotXExtent={plotXExtent}
+            plotYExtent={plotYExtent}
             roadSide={roadSide}
             plotShape={plotShape}
             plotFrontWidth={plotFrontWidth}

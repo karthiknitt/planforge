@@ -38,8 +38,8 @@ IWT = 0.115
 
 def _cfg_9x15() -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,
@@ -243,8 +243,8 @@ def _cfg_narrow_5x15() -> PlotConfig:
     # Buildable width ~4.27 m ring-to-ring — under max_beam_span_m (4.5 m)
     # even without any intermediate column.
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=5.5,
+        plot_y_extent=15.0,
+        plot_x_extent=5.5,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.5,

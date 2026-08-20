@@ -15,8 +15,8 @@ from app.engine.models import PlotConfig
 
 def _cfg(**over) -> PlotConfig:
     base = dict(
-        plot_length=18.0,
-        plot_width=12.0,
+        plot_y_extent=18.0,
+        plot_x_extent=12.0,
         setback_front=4.5,
         setback_rear=2.0,
         setback_left=1.2,

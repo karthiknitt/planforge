@@ -37,8 +37,8 @@ def plot_config_from_project(project: Project) -> PlotConfig:
     )
 
     return PlotConfig(
-        plot_length=_f(project.plot_length),
-        plot_width=_f(project.plot_width),
+        plot_y_extent=_f(project.plot_length),
+        plot_x_extent=_f(project.plot_width),
         setback_front=_f(project.setback_front),
         setback_rear=_f(project.setback_rear),
         setback_left=_f(project.setback_left),

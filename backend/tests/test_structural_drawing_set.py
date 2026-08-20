@@ -18,8 +18,8 @@ from app.engine.structural_sheet import SHEET_REGISTER
 from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 
 CFG = PlotConfig(
-    plot_width=12.192,
-    plot_length=18.288,
+    plot_x_extent=12.192,
+    plot_y_extent=18.288,
     num_bedrooms=2,
     toilets=2,
     setback_front=1.5,

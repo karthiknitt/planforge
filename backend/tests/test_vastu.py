@@ -32,8 +32,8 @@ def _make_layout(gf_rooms, id="X"):
 
 def _cfg(road_side="S", vastu_enabled=True):
     return PlotConfig(
-        plot_length=PLOT_L,
-        plot_width=PLOT_W,
+        plot_y_extent=PLOT_L,
+        plot_x_extent=PLOT_W,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,

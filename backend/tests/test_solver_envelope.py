@@ -45,8 +45,8 @@ def _a_part(model: cp_model.CpModel, room_type: str) -> _PartVars:
 
 def _l_cfg() -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,
@@ -67,13 +67,13 @@ def test_no_room_part_enters_the_plot_notch():
     cfg = _l_cfg()
     layout = solve_layout(cfg)
     assert layout is not None
-    nx0 = cfg.plot_width - cfg.notch_width
-    ny0 = cfg.plot_length - cfg.notch_depth
+    nx0 = cfg.plot_x_extent - cfg.notch_width
+    ny0 = cfg.plot_y_extent - cfg.notch_depth
     for fp in (layout.ground_floor, layout.first_floor):
         for r in fp.rooms:
             for p in r.rects:
-                ox = max(0.0, min(p.x + p.width, cfg.plot_width) - max(p.x, nx0))
-                oy = max(0.0, min(p.y + p.depth, cfg.plot_length) - max(p.y, ny0))
+                ox = max(0.0, min(p.x + p.width, cfg.plot_x_extent) - max(p.x, nx0))
+                oy = max(0.0, min(p.y + p.depth, cfg.plot_y_extent) - max(p.y, ny0))
                 assert ox * oy < 1e-6, f"{r.id} part {p} intrudes into the notch"
 
 
@@ -179,8 +179,8 @@ def _legacy_l_cfg() -> PlotConfig:
     `plot_shape`/`cutout_*` fields instead of `plot_template`/`notch_*`.
     """
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,

@@ -12,8 +12,8 @@ HEADERS = {"X-Test-User-Id": USER_ID}
 # A valid 9 m × 12 m residential plot
 BASE_PAYLOAD = {
     "name": "E2E Test Plot",
-    "plot_length": 12.0,
-    "plot_width": 9.0,
+    "plot_y_extent": 12.0,
+    "plot_x_extent": 9.0,
     "setback_front": 1.5,
     "setback_rear": 1.5,
     "setback_left": 1.0,
@@ -184,7 +184,7 @@ async def test_validation_rejects_bad_payload(client):
 
 async def test_plot_below_minimum_rejected(client):
     """Schema rejects plots smaller than 5 m on either dimension."""
-    bad = {**BASE_PAYLOAD, "plot_length": 4.9}
+    bad = {**BASE_PAYLOAD, "plot_y_extent": 4.9}
     r = await client.post("/api/projects", json=bad, headers=HEADERS)
     assert r.status_code == 422
 
@@ -198,8 +198,8 @@ async def test_non_compliant_plot_returns_no_layouts(client):
     tiny_payload = {
         **BASE_PAYLOAD,
         "name": "Non-Compliant Plot",
-        "plot_length": 5.0,
-        "plot_width": 5.0,
+        "plot_y_extent": 5.0,
+        "plot_x_extent": 5.0,
         "setback_front": 0.0,
         "setback_rear": 0.0,
         "setback_left": 0.0,
@@ -282,8 +282,8 @@ async def test_4bhk_project(client):
     payload = {
         **BASE_PAYLOAD,
         "name": "4BHK Plot",
-        "plot_length": 15.0,
-        "plot_width": 15.0,
+        "plot_y_extent": 15.0,
+        "plot_x_extent": 15.0,
         "num_bedrooms": 4,
         "toilets": 4,
     }
@@ -298,8 +298,8 @@ async def test_4bhk_small_plot_rejected(client):
     payload = {
         **BASE_PAYLOAD,
         "name": "4BHK Small Plot",
-        "plot_length": 10.0,
-        "plot_width": 10.0,
+        "plot_y_extent": 10.0,
+        "plot_x_extent": 10.0,
         "num_bedrooms": 4,
         "toilets": 3,
     }

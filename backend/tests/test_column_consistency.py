@@ -19,8 +19,8 @@ from app.engine.models import PlotConfig
 from app.engine.plan_geometry import derive_columns, derive_walls
 
 CFG = PlotConfig(
-    plot_width=10.0,
-    plot_length=15.2,
+    plot_x_extent=10.0,
+    plot_y_extent=15.2,
     num_bedrooms=3,
     setback_front=1.5,
     setback_rear=1.5,

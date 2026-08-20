@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 
 
 Direction = Literal["N", "S", "E", "W"]
@@ -37,14 +37,21 @@ class CustomRoomSpec(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    plot_length: float = Field(
+    plot_x_extent: float = Field(
         ge=5.0,
         le=100.0,
         allow_inf_nan=False,
-        description="Plot length in metres (5–100 m, residential)",
+        validation_alias=AliasChoices("plot_x_extent", "plot_width"),
+        serialization_alias="plot_x_extent",
+        description="Plot x-extent in metres (5–100 m, residential)",
     )
-    plot_width: float = Field(
-        ge=5.0, le=100.0, allow_inf_nan=False, description="Plot width in metres"
+    plot_y_extent: float = Field(
+        ge=5.0,
+        le=100.0,
+        allow_inf_nan=False,
+        validation_alias=AliasChoices("plot_y_extent", "plot_length"),
+        serialization_alias="plot_y_extent",
+        description="Plot y-extent in metres (5–100 m, residential)",
     )
     setback_front: float = Field(ge=0, le=20.0, allow_inf_nan=False)
     setback_rear: float = Field(ge=0, le=20.0, allow_inf_nan=False)
@@ -98,13 +105,13 @@ class ProjectCreate(BaseModel):
 
     @model_validator(mode="after")
     def _geometry_consistency(self) -> "ProjectCreate":
-        if self.setback_left + self.setback_right >= self.plot_width:
+        if self.setback_left + self.setback_right >= self.plot_x_extent:
             raise ValueError("Left + right setbacks consume the entire plot width")
-        if self.setback_front + self.setback_rear >= self.plot_length:
+        if self.setback_front + self.setback_rear >= self.plot_y_extent:
             raise ValueError("Front + rear setbacks consume the entire plot length")
         if self.plot_shape == "l_shaped":
-            if not (0 < self.cutout_width < self.plot_width) or not (
-                0 < self.cutout_height < self.plot_length
+            if not (0 < self.cutout_width < self.plot_x_extent) or not (
+                0 < self.cutout_height < self.plot_y_extent
             ):
                 raise ValueError(
                     "L-shaped plot needs a cutout larger than 0 and smaller than the plot"
@@ -125,11 +132,21 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    plot_length: float | None = Field(
-        default=None, ge=5.0, le=100.0, allow_inf_nan=False
+    plot_x_extent: float | None = Field(
+        default=None,
+        ge=5.0,
+        le=100.0,
+        allow_inf_nan=False,
+        validation_alias=AliasChoices("plot_x_extent", "plot_width"),
+        serialization_alias="plot_x_extent",
     )
-    plot_width: float | None = Field(
-        default=None, ge=5.0, le=100.0, allow_inf_nan=False
+    plot_y_extent: float | None = Field(
+        default=None,
+        ge=5.0,
+        le=100.0,
+        allow_inf_nan=False,
+        validation_alias=AliasChoices("plot_y_extent", "plot_length"),
+        serialization_alias="plot_y_extent",
     )
     setback_front: float | None = Field(
         default=None, ge=0, le=20.0, allow_inf_nan=False
@@ -183,8 +200,14 @@ class ProjectRead(BaseModel):
     id: str
     user_id: str
     name: str
-    plot_length: float
-    plot_width: float
+    plot_x_extent: float = Field(
+        validation_alias=AliasChoices("plot_x_extent", "plot_width"),
+        serialization_alias="plot_x_extent",
+    )
+    plot_y_extent: float = Field(
+        validation_alias=AliasChoices("plot_y_extent", "plot_length"),
+        serialization_alias="plot_y_extent",
+    )
     setback_front: float
     setback_rear: float
     setback_left: float

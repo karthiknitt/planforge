@@ -34,8 +34,8 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
       project={{
         id: project.id,
         name: project.name,
-        plotLength: project.plotLength,
-        plotWidth: project.plotWidth,
+        plotYExtent: project.plotLength,
+        plotXExtent: project.plotWidth,
         setbackFront: project.setbackFront,
         setbackRear: project.setbackRear,
         setbackLeft: project.setbackLeft,

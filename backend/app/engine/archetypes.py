@@ -76,8 +76,8 @@ def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     """
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
-    width = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    width = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    depth = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     return FloorPlate(ox=ox, oy=oy, width=width, depth=depth)
 
 
@@ -114,8 +114,8 @@ def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     sb_l = cfg.setback_left + ewt
     sb_f = cfg.setback_front + ewt
 
-    W = cfg.plot_width
-    L = cfg.plot_length
+    W = cfg.plot_x_extent
+    L = cfg.plot_y_extent
     cw = cfg.cutout_width
     ch = cfg.cutout_height
     corner = (cfg.cutout_corner or "NE").upper()
@@ -194,8 +194,8 @@ def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
         return _l_shaped_floor_plate(cfg, ewt)
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
-    width = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    width = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    depth = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     return FloorPlate(ox=ox, oy=oy, width=width, depth=depth)
 
 

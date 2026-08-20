@@ -64,6 +64,14 @@ def _serialize_project_data(data: dict) -> dict:
             json.dumps(corners) if isinstance(corners, list) else None
         )
 
+    # API uses the new plot-axis names; the DB columns remain plot_length /
+    # plot_width (auto-migrate is add-only and cannot rename, so a column
+    # rename would orphan stored rows). Translate back to the persisted names.
+    if "plot_x_extent" in data:
+        data["plot_width"] = data.pop("plot_x_extent")
+    if "plot_y_extent" in data:
+        data["plot_length"] = data.pop("plot_y_extent")
+
     return data
 
 

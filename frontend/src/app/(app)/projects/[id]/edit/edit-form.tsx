@@ -29,8 +29,8 @@ function metresToFeet(metres: string | number): string {
 interface ProjectData {
   id: string;
   name: string;
-  plotLength: string;
-  plotWidth: string;
+  plotYExtent: string;
+  plotXExtent: string;
   setbackFront: string;
   setbackRear: string;
   setbackLeft: string;
@@ -200,8 +200,8 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
   const [form, setForm] = useState({
     name: project.name,
     plot_shape: project.plotShape ?? "rectangular",
-    plot_length: metresToFeet(project.plotLength),
-    plot_width: metresToFeet(project.plotWidth),
+    plot_y_extent: metresToFeet(project.plotYExtent),
+    plot_x_extent: metresToFeet(project.plotXExtent),
     plot_front_width: project.plotFrontWidth ? metresToFeet(project.plotFrontWidth) : "",
     plot_rear_width: project.plotRearWidth ? metresToFeet(project.plotRearWidth) : "",
     setback_front: metresToFeet(project.setbackFront),
@@ -261,8 +261,8 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
               const xs = pts.map(([x]) => x);
               const ys = pts.map(([, y]) => y);
               base.plot_corners = pts;
-              base.plot_length = Math.max(...ys);
-              base.plot_width = Math.max(...xs);
+              base.plot_y_extent = Math.max(...ys);
+              base.plot_x_extent = Math.max(...xs);
               base.plot_front_width = null;
               base.plot_rear_width = null;
               base.cutout_width = 0;
@@ -270,8 +270,8 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
             } else if (form.plot_shape === "l_shaped") {
               const cw = feetToMetres(form.cutout_width);
               const ch = feetToMetres(form.cutout_height);
-              const pl = feetToMetres(form.plot_length);
-              const pw = feetToMetres(form.plot_width);
+              const pl = feetToMetres(form.plot_y_extent);
+              const pw = feetToMetres(form.plot_x_extent);
               if (cw <= 0 || ch <= 0)
                 throw new Error(
                   "Cutout width and height must be greater than 0 for L-shaped plots."
@@ -280,16 +280,16 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                 throw new Error(
                   "Cutout dimensions must be smaller than the overall plot dimensions."
                 );
-              base.plot_length = pl;
-              base.plot_width = pw;
+              base.plot_y_extent = pl;
+              base.plot_x_extent = pw;
               base.plot_front_width = null;
               base.plot_rear_width = null;
               base.cutout_corner = form.cutout_corner;
               base.cutout_width = cw;
               base.cutout_height = ch;
             } else {
-              base.plot_length = feetToMetres(form.plot_length);
-              base.plot_width =
+              base.plot_y_extent = feetToMetres(form.plot_y_extent);
+              base.plot_x_extent =
                 form.plot_shape === "trapezoid"
                   ? feetToMetres(
                       String(
@@ -299,7 +299,7 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
                         )
                       )
                     )
-                  : feetToMetres(form.plot_width);
+                  : feetToMetres(form.plot_x_extent);
               base.plot_front_width =
                 form.plot_shape === "trapezoid" ? feetToMetres(form.plot_front_width) : null;
               base.plot_rear_width =
@@ -425,28 +425,28 @@ export function EditProjectForm({ project }: { project: ProjectData }) {
           {form.plot_shape !== "quadrilateral" && (
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="plot_length">Length / Depth (feet)</Label>
+                <Label htmlFor="plot_y_extent">Length / Depth (feet)</Label>
                 <Input
-                  id="plot_length"
+                  id="plot_y_extent"
                   type="number"
                   min="16"
                   step="0.1"
                   required
-                  value={form.plot_length}
-                  onChange={(e) => set("plot_length", e.target.value)}
+                  value={form.plot_y_extent}
+                  onChange={(e) => set("plot_y_extent", e.target.value)}
                 />
               </div>
               {form.plot_shape === "rectangular" || form.plot_shape === "l_shaped" ? (
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="plot_width">Width (feet)</Label>
+                  <Label htmlFor="plot_x_extent">Width (feet)</Label>
                   <Input
-                    id="plot_width"
+                    id="plot_x_extent"
                     type="number"
                     min="16"
                     step="0.1"
                     required
-                    value={form.plot_width}
-                    onChange={(e) => set("plot_width", e.target.value)}
+                    value={form.plot_x_extent}
+                    onChange={(e) => set("plot_x_extent", e.target.value)}
                   />
                 </div>
               ) : (

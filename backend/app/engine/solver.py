@@ -554,8 +554,8 @@ def _plate_geom_mm(
         if inset.is_empty:
             return None
         return _plate_and_planes_from_polygon(inset)
-    bw = _mm(cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt)
-    bd = _mm(cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt)
+    bw = _mm(cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt)
+    bd = _mm(cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt)
     ox = _mm(cfg.setback_left + ewt)
     oy = _mm(cfg.setback_front + ewt)
     return bw, bd, ox, oy, []
@@ -605,14 +605,14 @@ def notch_rect_m(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
         raise ValueError(_unimplemented_plot_template_msg(cfg.plot_template))
     if cfg.plot_template != "RECT":
         return (
-            cfg.plot_width - cfg.notch_width,
-            cfg.plot_length - cfg.notch_depth,
-            cfg.plot_width,
-            cfg.plot_length,
+            cfg.plot_x_extent - cfg.notch_width,
+            cfg.plot_y_extent - cfg.notch_depth,
+            cfg.plot_x_extent,
+            cfg.plot_y_extent,
         )
     if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
         cw, ch = cfg.cutout_width, cfg.cutout_height
-        pw, pl = cfg.plot_width, cfg.plot_length
+        pw, pl = cfg.plot_x_extent, cfg.plot_y_extent
         return {
             "NE": (pw - cw, pl - ch, pw, pl),
             "NW": (0.0, pl - ch, cw, pl),
@@ -752,10 +752,10 @@ def validate_plot_envelope(
             f"notch_width={cfg.notch_width} m, notch_depth={cfg.notch_depth} m "
             '(use plot_template="RECT" for a plain rectangular plot)'
         )
-    if cfg.notch_width >= cfg.plot_width or cfg.notch_depth >= cfg.plot_length:
+    if cfg.notch_width >= cfg.plot_x_extent or cfg.notch_depth >= cfg.plot_y_extent:
         raise ValueError(
             f"the {cfg.notch_width:g}x{cfg.notch_depth:g} m notch is as large as "
-            f"the {cfg.plot_width:g}x{cfg.plot_length:g} m plot — nothing is left "
+            f"the {cfg.plot_x_extent:g}x{cfg.plot_y_extent:g} m plot — nothing is left "
             "to build on"
         )
 
@@ -1512,7 +1512,7 @@ def _add_vastu_terms(
     for it), while its true centroid is still forbidden from it outright.
     """
     bands = _vastu_bands(
-        _mm(cfg.plot_width), _mm(cfg.plot_length), resolve_north_angle(cfg)
+        _mm(cfg.plot_x_extent), _mm(cfg.plot_y_extent), resolve_north_angle(cfg)
     )
     terms: list[tuple[int, cp_model.IntVar]] = []
 
@@ -2305,7 +2305,7 @@ def resolve_with_constraints(
     )
     if stair is not None:
         by1 = cfg.setback_front + ewt
-        bd_m = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+        bd_m = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
         if bd_m > 0:
             rel = (stair.y + stair.depth / 2 - by1) / bd_m
             stair_zone = "front" if rel < 1 / 3 else ("mid" if rel < 2 / 3 else "rear")

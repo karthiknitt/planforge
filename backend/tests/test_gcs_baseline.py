@@ -101,8 +101,8 @@ _FIXTURE_PATH = Path(__file__).parent / "fixtures" / "gcs_baseline.json"
 # ── Five cases spanning the geometry surfaces under active rewrite ─────────
 _CASES: dict[str, PlotConfig] = {
     "rect_2bhk_g1": PlotConfig(
-        plot_length=30.0,
-        plot_width=50.0,
+        plot_y_extent=30.0,
+        plot_x_extent=50.0,
         setback_front=3.0,
         setback_rear=2.0,
         setback_left=1.5,
@@ -113,8 +113,8 @@ _CASES: dict[str, PlotConfig] = {
         num_floors=2,
     ),
     "l_shaped_3bhk": PlotConfig(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=1.2,
         setback_rear=1.2,
         setback_left=1.0,
@@ -128,8 +128,8 @@ _CASES: dict[str, PlotConfig] = {
         cutout_height=4.0,
     ),
     "trapezoid_2bhk": PlotConfig(
-        plot_length=18.0,
-        plot_width=14.0,
+        plot_y_extent=18.0,
+        plot_x_extent=14.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,
@@ -142,8 +142,8 @@ _CASES: dict[str, PlotConfig] = {
         plot_rear_width=9.0,
     ),
     "setback_heavy_1bhk": PlotConfig(
-        plot_length=12.0,
-        plot_width=9.0,
+        plot_y_extent=12.0,
+        plot_x_extent=9.0,
         setback_front=3.0,
         setback_rear=3.0,
         setback_left=2.0,
@@ -161,8 +161,8 @@ _CASES: dict[str, PlotConfig] = {
     # carrying parking alongside living rooms, not a dedicated stilt floor.
     # That is the honest current behaviour, not the aspirational one.
     "g2_stilt_parking": PlotConfig(
-        plot_length=20.0,
-        plot_width=15.0,
+        plot_y_extent=20.0,
+        plot_x_extent=15.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,

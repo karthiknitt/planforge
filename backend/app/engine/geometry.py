@@ -42,8 +42,8 @@ def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
     The L-shape is the full bounding rectangle with one rectangular corner
     cut out. Supports NE, NW, SE, SW cutout corners.
     """
-    W = cfg.plot_width
-    H = cfg.plot_length
+    W = cfg.plot_x_extent
+    H = cfg.plot_y_extent
     cw = cfg.cutout_width
     ch = cfg.cutout_height
 
@@ -116,10 +116,10 @@ def notch_rect(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
             "already has its own cutout fields."
         )
     return (
-        cfg.plot_width - cfg.notch_width,
-        cfg.plot_length - cfg.notch_depth,
-        cfg.plot_width,
-        cfg.plot_length,
+        cfg.plot_x_extent - cfg.notch_width,
+        cfg.plot_y_extent - cfg.notch_depth,
+        cfg.plot_x_extent,
+        cfg.plot_y_extent,
     )
 
 
@@ -146,11 +146,11 @@ def notch_keepout(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon | Non
         return None
     x0, y0, x1, y1 = rect
     gx0, gy0, gx1, gy1 = rect  # grown copy; tests read the ORIGINAL edges
-    if x1 >= cfg.plot_width:  # cutout on the right edge
+    if x1 >= cfg.plot_x_extent:  # cutout on the right edge
         gx0 -= cfg.setback_right + wall_clearance
     if x0 <= 0:  # cutout on the left edge
         gx1 += cfg.setback_left + wall_clearance
-    if y1 >= cfg.plot_length:  # cutout at the rear
+    if y1 >= cfg.plot_y_extent:  # cutout at the rear
         gy0 -= cfg.setback_rear + wall_clearance
     if y0 <= 0:  # cutout at the front
         gy1 += cfg.setback_front + wall_clearance
@@ -173,7 +173,7 @@ def plot_polygon(cfg: PlotConfig) -> Polygon:
         # Rear-right corner cut out (the only `plot_template` geometry there
         # is; T/U are rejected in `solver.validate_plot_envelope`).
         nx0, ny0, _, _ = rect
-        w, ln = cfg.plot_width, cfg.plot_length
+        w, ln = cfg.plot_x_extent, cfg.plot_y_extent
         return orient(
             Polygon([(0.0, 0.0), (w, 0.0), (w, ny0), (nx0, ny0), (nx0, ln), (0.0, ln)]),
             1.0,
@@ -190,13 +190,13 @@ def plot_polygon(cfg: PlotConfig) -> Polygon:
             [
                 (f0, 0.0),
                 (f0 + cfg.plot_front_width, 0.0),
-                (r0 + cfg.plot_rear_width, cfg.plot_length),
-                (r0, cfg.plot_length),
+                (r0 + cfg.plot_rear_width, cfg.plot_y_extent),
+                (r0, cfg.plot_y_extent),
             ]
         )
     if shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
         return orient(compute_l_shaped_polygon(cfg), 1.0)
-    return box(0.0, 0.0, cfg.plot_width, cfg.plot_length)
+    return box(0.0, 0.0, cfg.plot_x_extent, cfg.plot_y_extent)
 
 
 def _edge_setback(p1, p2, cfg: PlotConfig) -> float:
@@ -258,8 +258,8 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
         outer = box(
             cfg.setback_left + wall_clearance,
             cfg.setback_front + wall_clearance,
-            cfg.plot_width - cfg.setback_right - wall_clearance,
-            cfg.plot_length - cfg.setback_rear - wall_clearance,
+            cfg.plot_x_extent - cfg.setback_right - wall_clearance,
+            cfg.plot_y_extent - cfg.setback_rear - wall_clearance,
         )
         if outer.is_empty or outer.area <= 0:
             return Polygon()
@@ -415,7 +415,7 @@ def compound_wall_segments(
     Plot coords: y=0 is the front/road edge, x=0 the left edge — the same
     convention `plan_geometry` and `cad_advanced` use.
     """
-    pw, pl = cfg.plot_width, cfg.plot_length
+    pw, pl = cfg.plot_x_extent, cfg.plot_y_extent
     road = (cfg.road_side or "S").upper()
     out: list[tuple[float, float, float, float]] = []
     for p1, p2, side_id in _compound_wall_sides(pw, pl, road):
@@ -441,7 +441,7 @@ def compound_wall_gate_posts(
     """Centre points of the two gate posts bracketing the road-side gate gap,
     or None if the road-side run has ~zero length. Shares `_gate_span` with
     `compound_wall_segments` so post positions always agree with the gap."""
-    pw, pl = cfg.plot_width, cfg.plot_length
+    pw, pl = cfg.plot_x_extent, cfg.plot_y_extent
     road = (cfg.road_side or "S").upper()
     for p1, p2, side_id in _compound_wall_sides(pw, pl, road):
         if side_id != road:

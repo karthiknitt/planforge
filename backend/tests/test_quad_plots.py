@@ -15,8 +15,8 @@ from app.engine.models import PlotConfig
 NEAR_RECT_CORNERS = [(0.0, 0.0), (9.0, 0.0), (9.0, 12.0), (0.0, 12.0)]
 
 NEAR_RECT_CFG = PlotConfig(
-    plot_width=9.0,
-    plot_length=12.0,
+    plot_x_extent=9.0,
+    plot_y_extent=12.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -32,8 +32,8 @@ NEAR_RECT_CFG = PlotConfig(
 IRREGULAR_CORNERS = [(0.0, 0.0), (8.0, 0.0), (9.5, 12.0), (0.5, 12.0)]
 
 IRREGULAR_CFG = PlotConfig(
-    plot_width=9.0,
-    plot_length=12.0,
+    plot_x_extent=9.0,
+    plot_y_extent=12.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -49,8 +49,8 @@ IRREGULAR_CFG = PlotConfig(
 TINY_CORNERS = [(0.0, 0.0), (4.0, 0.0), (4.0, 6.0), (0.0, 6.0)]
 
 TINY_CFG = PlotConfig(
-    plot_width=4.0,
-    plot_length=6.0,
+    plot_x_extent=4.0,
+    plot_y_extent=6.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -79,8 +79,8 @@ def test_quad_floor_plate_basic():
 def test_quad_floor_plate_invalid_raises():
     """A degenerate (collinear) polygon raises ValueError."""
     cfg = PlotConfig(
-        plot_width=9.0,
-        plot_length=12.0,
+        plot_x_extent=9.0,
+        plot_y_extent=12.0,
         setback_front=1.5,
         setback_rear=1.5,
         setback_left=1.0,
@@ -101,7 +101,7 @@ def test_quad_far_area_uses_shapely():
     shapely_area = poly.area
 
     # Simple W*L would be 9.0 * 12.0 = 108
-    wl_area = IRREGULAR_CFG.plot_width * IRREGULAR_CFG.plot_length
+    wl_area = IRREGULAR_CFG.plot_x_extent * IRREGULAR_CFG.plot_y_extent
 
     # Irregular polygon area should differ from W*L
     assert not math.isclose(shapely_area, wl_area, rel_tol=0.01), (

@@ -10,7 +10,7 @@ interface PlumbingOverlayProps {
   scale: number; // metres → SVG pixels
   offsetX: number; // SVG coordinate origin X (px)
   offsetY: number; // SVG coordinate origin Y (px) — top of plot in SVG space
-  plotHeightPx: number; // drawH = plotLength * scale, needed for y-flip
+  plotHeightPx: number; // drawH = plotYExtent * scale, needed for y-flip
 }
 
 // Convert metre coords → SVG pixel coords (Y is flipped: metre y=0 is bottom of plot)

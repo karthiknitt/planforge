@@ -22,8 +22,8 @@ import { type Locale, useLocale } from "@/lib/locale-context";
 
 interface LayoutCompareViewProps {
   layouts: LayoutData[];
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide: string;
   plotShape?: string;
   plotFrontWidth?: number;
@@ -97,8 +97,8 @@ interface PanelProps {
   onSelect: (id: string) => void;
   floorKey: string;
   onFloorChange: (key: string) => void;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide: string;
   plotShape?: string;
   plotFrontWidth?: number;
@@ -116,8 +116,8 @@ function LayoutPanel({
   onSelect,
   floorKey,
   onFloorChange,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide,
   plotShape,
   plotFrontWidth,
@@ -212,8 +212,8 @@ function LayoutPanel({
       {/* Floor plan SVG */}
       <FloorPlanSVG
         floorPlan={currentFloor.plan}
-        plotWidth={plotWidth}
-        plotLength={plotLength}
+        plotXExtent={plotXExtent}
+        plotYExtent={plotYExtent}
         roadSide={roadSide}
         className="w-full rounded-xl border"
         plotShape={plotShape}
@@ -399,8 +399,8 @@ function ComparisonSummaryTable({ leftLayout, rightLayout }: SummaryTableProps) 
 
 export function LayoutCompareView({
   layouts,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide,
   plotShape,
   plotFrontWidth,
@@ -441,8 +441,8 @@ export function LayoutCompareView({
           }}
           floorKey={leftFloor}
           onFloorChange={setLeftFloor}
-          plotWidth={plotWidth}
-          plotLength={plotLength}
+          plotXExtent={plotXExtent}
+          plotYExtent={plotYExtent}
           roadSide={roadSide}
           plotShape={plotShape}
           plotFrontWidth={plotFrontWidth}
@@ -462,8 +462,8 @@ export function LayoutCompareView({
           }}
           floorKey={rightFloor}
           onFloorChange={setRightFloor}
-          plotWidth={plotWidth}
-          plotLength={plotLength}
+          plotXExtent={plotXExtent}
+          plotYExtent={plotYExtent}
           roadSide={roadSide}
           plotShape={plotShape}
           plotFrontWidth={plotFrontWidth}
