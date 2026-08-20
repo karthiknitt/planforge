@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
+import math
 
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
@@ -28,6 +29,7 @@ from app.engine.section_geometry import (
     derive_section,
     section_cut_line,
 )
+from app.engine.vastu import resolve_north_angle
 from app.engine.section_render import (
     draw_section_marker,
     render_elevation_view,
@@ -270,7 +272,7 @@ def _draw_site_location_plan(
 
     # North arrow — prominent, upper-right, fully inside the page margin
     _draw_large_north_arrow(
-        c, page_w - MARGIN - 24, page_h - 56 - 24, 20, cfg.road_side
+        c, page_w - MARGIN - 24, page_h - 56 - 24, 20, resolve_north_angle(cfg)
     )
 
     # Plot dimensions \u2014 dual-unit (ft-in prominent, metric beneath)
@@ -374,20 +376,37 @@ def _draw_setback_dim(
 
 
 def _draw_large_north_arrow(
-    c: canvas.Canvas, cx: float, cy: float, r: float, road_side: str
+    c: canvas.Canvas, cx: float, cy: float, r: float, north_angle_deg: float
 ) -> None:
-    """Prominent north arrow for approval plans."""
+    """Prominent north arrow for approval plans.
+
+    `north_angle_deg` is the clockwise angle from the plot's +y axis to true
+    north (see `app.engine.vastu.resolve_north_angle`). The spike is drawn as
+    an up-pointing triangle and rotated by that angle so its tip points at true
+    north on the sheet; the circle and the "NORTH" label stay horizontal.
+    """
     c.setFillColor(white)
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(1.5)
     c.circle(cx, cy, r, fill=1, stroke=1)
 
-    # Arrow always points geographic N — road_side tells which edge faces road
+    # Rotate the up-pointing triangle (tip on +y, sheet bearing 90°) clockwise
+    # by `north_angle_deg`, placing the tip at sheet bearing 90 - north_angle_deg.
+    theta = math.radians(-north_angle_deg)
+    cth, sth = math.cos(theta), math.sin(theta)
+    rel_pts = [
+        (0.0, r * 0.85),
+        (-r * 0.35, -r * 0.35),
+        (0.0, -r * 0.1),
+        (r * 0.35, -r * 0.35),
+    ]
+    pts = [(cx + x * cth - y * sth, cy + x * sth + y * cth) for x, y in rel_pts]
+
     p = c.beginPath()
-    p.moveTo(cx, cy + r * 0.85)
-    p.lineTo(cx - r * 0.35, cy - r * 0.35)
-    p.lineTo(cx, cy - r * 0.1)
-    p.lineTo(cx + r * 0.35, cy - r * 0.35)
+    p.moveTo(*pts[0])
+    p.lineTo(*pts[1])
+    p.lineTo(*pts[2])
+    p.lineTo(*pts[3])
     p.close()
     c.setFillColor(HexColor("#000000"))
     c.drawPath(p, fill=1, stroke=0)
@@ -630,7 +649,7 @@ def _draw_approval_floor_plan(
     _draw_scale_bar(c, MARGIN, TITLE_H + 22, s, _denom)
 
     _draw_large_north_arrow(
-        c, page_w - MARGIN - 20, page_h - MARGIN - 20, 18, cfg.road_side
+        c, page_w - MARGIN - 20, page_h - MARGIN - 20, 18, resolve_north_angle(cfg)
     )
     _draw_far_strip(c, layout, cfg, authority, page_w)
     _draw_approval_title_block(c, layout, cfg, owner, floor_label, authority, page_w)

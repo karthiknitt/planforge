@@ -24,6 +24,7 @@ from app.engine.section_render import (
     render_section_view,
 )
 from app.engine.title_block import draw_title_block
+from app.engine.vastu import resolve_north_angle
 
 logger = logging.getLogger(__name__)
 
@@ -1008,17 +1009,38 @@ def _draw_preliminary_watermark(c: canvas.Canvas, page_w: float, page_h: float) 
     c.restoreState()
 
 
-def _draw_north_arrow(c: canvas.Canvas, cx: float, cy: float, r: float) -> None:
+def _draw_north_arrow(
+    c: canvas.Canvas, cx: float, cy: float, r: float, north_angle_deg: float
+) -> None:
+    """North arrow whose filled spike points at true north on the sheet.
+
+    `north_angle_deg` is the clockwise angle from the plot's +y axis to true
+    north (see `app.engine.vastu.resolve_north_angle`). The spike is drawn as
+    an up-pointing triangle and rotated by that angle so its tip points at true
+    north; the circle and the "NORTH" label stay horizontal.
+    """
     c.setFillColor(white)
     c.setStrokeColor(HexColor("#808080"))
     c.setLineWidth(0.75)
     c.circle(cx, cy, r, fill=1, stroke=1)
 
+    # Rotate the up-pointing triangle (tip on +y, sheet bearing 90°) clockwise
+    # by `north_angle_deg`, placing the tip at sheet bearing 90 - north_angle_deg.
+    theta = math.radians(-north_angle_deg)
+    cth, sth = math.cos(theta), math.sin(theta)
+    rel_pts = [
+        (0.0, r * 0.8),
+        (-r * 0.3, -r * 0.3),
+        (0.0, -r * 0.1),
+        (r * 0.3, -r * 0.3),
+    ]
+    pts = [(cx + x * cth - y * sth, cy + x * sth + y * cth) for x, y in rel_pts]
+
     p = c.beginPath()
-    p.moveTo(cx, cy + r * 0.8)
-    p.lineTo(cx - r * 0.3, cy - r * 0.3)
-    p.lineTo(cx, cy - r * 0.1)
-    p.lineTo(cx + r * 0.3, cy - r * 0.3)
+    p.moveTo(*pts[0])
+    p.lineTo(*pts[1])
+    p.lineTo(*pts[2])
+    p.lineTo(*pts[3])
     p.close()
     c.setFillColor(HexColor("#000000"))
     c.drawPath(p, fill=1, stroke=0)
@@ -1408,7 +1430,9 @@ def _draw_structural_floor(
 
     # Scale bar + north arrow + title block — shared furniture
     _draw_scale_bar(c, MARGIN, TITLE_H + 2, s, denom)
-    _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
+    _draw_north_arrow(
+        c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16, resolve_north_angle(cfg)
+    )
     _draw_title_block(
         c,
         project_name,
@@ -2039,7 +2063,9 @@ def _draw_floor_projected(
     if opening_rows:
         openings_top = area_top + SCHED_PAD + _openings_schedule_height(opening_rows)
         _draw_openings_schedule_table(c, opening_rows, sched_x, openings_top)
-    _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
+    _draw_north_arrow(
+        c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16, resolve_north_angle(cfg)
+    )
     if watermark_preliminary:
         _draw_preliminary_watermark(c, page_w, page_h)
     _draw_title_block(

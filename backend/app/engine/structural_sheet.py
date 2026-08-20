@@ -46,6 +46,7 @@ from app.engine.pdf import (
     SCHED_RESERVE as SCHED_RESERVE,
 )
 from app.engine.title_block import draw_title_block
+from app.engine.vastu import resolve_north_angle
 
 #: Drawing register for the set. Ordered; the orchestrator emits them in this
 #: order and every renderer takes its number from here rather than hardcoding
@@ -182,7 +183,9 @@ def plan_sheet_frame(
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
 
-    _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
+    _draw_north_arrow(
+        c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16, resolve_north_angle(cfg)
+    )
     _drg_stamp(c, page_w, page_h, drg_no)
 
     return PlanFrame(ox, oy, s, denom, page_w, page_h, plot_px, plot_py)
