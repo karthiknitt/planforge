@@ -44,7 +44,9 @@ export const generateRequestSchema = z
     notch_width: z.number().nullable().default(null),
     notch_depth: z.number().nullable().default(null),
     style_preset: z.string().nullable().default(null),
-    programme: z.set(z.enum(programmeFlags)).default(new Set()),
+    programme: z
+      .set(z.enum(programmeFlags))
+      .default(() => new Set<(typeof programmeFlags)[number]>()),
     site: siteOptionsSchema.default({
       compound_wall: true,
       landscaped_setbacks: true,
