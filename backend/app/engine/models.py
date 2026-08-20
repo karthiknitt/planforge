@@ -463,6 +463,62 @@ class PlotConfig:
     def plot_length(self, v: float) -> None:
         self.plot_y_extent = v
 
+    def __init__(
+        self,
+        *,
+        plot_x_extent: float | None = None,
+        plot_y_extent: float | None = None,
+        plot_width: float | None = None,
+        plot_length: float | None = None,
+        **kwargs,
+    ) -> None:
+        """Construct with the new primary names, accepting the legacy
+        `plot_width`/`plot_length` aliases for one release so persisted configs
+        and in-flight API payloads keep working."""
+        if plot_width is not None:
+            if plot_x_extent is not None and plot_x_extent != plot_width:
+                raise ValueError("plot_x_extent and plot_width disagree")
+            plot_x_extent = plot_width
+        if plot_length is not None:
+            if plot_y_extent is not None and plot_y_extent != plot_length:
+                raise ValueError("plot_y_extent and plot_length disagree")
+            plot_y_extent = plot_length
+        if plot_x_extent is None or plot_y_extent is None:
+            raise TypeError("plot_x_extent and plot_y_extent are required")
+        kwargs["plot_x_extent"] = plot_x_extent
+        kwargs["plot_y_extent"] = plot_y_extent
+        fields = type(self).__dataclass_fields__
+        unknown = set(kwargs) - set(fields)
+        if unknown:
+            raise TypeError(
+                "PlotConfig got unexpected keyword argument(s): "
+                + ", ".join(sorted(unknown))
+            )
+        for name, f in fields.items():
+            if name in kwargs:
+                value = kwargs[name]
+            else:
+                value = f.default if f.default is not MISSING else None
+            object.__setattr__(self, name, value)
+
+    @property
+    def plot_width(self) -> float:
+        """Deprecated alias for plot_x_extent."""
+        return self.plot_x_extent
+
+    @plot_width.setter
+    def plot_width(self, v: float) -> None:
+        self.plot_x_extent = v
+
+    @property
+    def plot_length(self) -> float:
+        """Deprecated alias for plot_y_extent — NOT the longer axis."""
+        return self.plot_y_extent
+
+    @plot_length.setter
+    def plot_length(self, v: float) -> None:
+        self.plot_y_extent = v
+
     @property
     def bhk(self) -> int:
         """Backward-compat alias."""
