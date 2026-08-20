@@ -1484,7 +1484,8 @@ ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
 # holds no N/NE/E cell, so the sourced rule is provably inert on `PlotConfig`'s
 # DEFAULT configuration. Karthik ruled explicitly that a south-facing entrance
 # should prefer the SE end of the frontage; that is a product-owner decision, not
-# something derivable from the rules data, so it is scoped to south alone.
+# something derivable from the rules data. The same applies to the west override
+# below.
 #
 # Extended to west on the same principle (front row [NW, W, SW], equally inert
 # under the sourced rule): Karthik ruled the west-facing entrance should prefer
@@ -1542,8 +1543,8 @@ def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> in
     Vastu zone for the plot's orientation, else 1. Always 1 when Vastu is off, so
     the key is a constant and the ordering is untouched.
 
-    The auspicious set is N/NE/E by default and SE on a south-facing plot; see
-    `entrance_auspicious_zones`.
+    The auspicious set is N/NE/E by default, SE on a south-facing plot and NW
+    on a west-facing plot; see `entrance_auspicious_zones`.
 
     The point scored is the midpoint of the candidate's usable frontage span —
     the same quantity the distance-to-gate key uses — rather than the door
