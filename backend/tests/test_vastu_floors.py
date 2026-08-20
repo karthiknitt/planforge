@@ -4,12 +4,11 @@ frontage ties toward the auspicious zones.
 The entrance half of this file is deliberately heavy on *inertness* pinning.
 `_place_main_entrance` only ever considers the y-min (road-facing) frontage, so
 every candidate shares a y and can differ only across ONE row of the 3x3 Vastu
-grid. The sourced N/NE/E rule reaches that row on north and east roads only; the
-south road (`PlotConfig`'s default) reaches it via the product-owner SE override,
-and the WEST road reaches nothing at all — its front row `[NW, W, SW]` holds no
-sanctioned cell, so the tie-break provably cannot fire there. That remaining
-inertness is a design boundary, not a bug, so it is pinned here rather than left
-to be rediscovered.
+grid. The sourced N/NE/E rule reaches that row on north and east roads; the
+south road (`PlotConfig`'s default) reaches it via the product-owner SE override
+and the west road via the matching NW override — both prefer the auspicious end
+of the facing wall. Only the END cells are sanctioned on S/W, so their middle
+cells ("S" and "W") stay inert and are pinned inauspicious here.
 """
 
 from __future__ import annotations
@@ -340,11 +339,11 @@ FRONT_ROW = {
     "W": ["NW", "W", "SW"],
 }
 # Which road sides can move the entrance at all: N and E under the sourced
-# N/NE/E rule, S under the product-owner SE override, W under neither. Literal on
-# purpose — the rule itself is resolved by production code, so widening the
-# shipped rule (or the override) to a cell on the W front row makes this
-# assertion fail instead of silently agreeing with itself.
-TIE_BREAK_CAN_FIRE = {"N", "E", "S"}
+# N/NE/E rule, S under the product-owner SE override, W under the matching NW
+# override. Literal on purpose — the rule itself is resolved by production code,
+# so widening the shipped rule (or an override) to a cell on a front row makes
+# this assertion fail instead of silently agreeing with itself.
+TIE_BREAK_CAN_FIRE = {"N", "E", "S", "W"}
 
 
 @pytest.mark.parametrize("road_side", ["S", "N", "E", "W"])
@@ -434,6 +433,18 @@ def test_tie_break_fires_on_an_east_road():
     assert on.cx > 6.0, f"Vastu did not move the entrance to the NE third: {on.cx}"
 
 
+def test_tie_break_fires_on_a_west_road():
+    """road_side='W' front row is [NW, W, SW]. GEOM_A's distance winner is the
+    high-x room (SW, inauspicious); only the NW override can move the door to
+    the low-x third."""
+    cfg = _ecfg(road_side="W")
+    off = _entrance(_front(GEOM_A), _ecfg(road_side="W", vastu_enabled=False), False)
+    on = _entrance(_front(GEOM_A), cfg, True)
+    assert off is not None and on is not None
+    assert off.cx > 4.5, f"expected the high-x room to win on distance, got {off.cx}"
+    assert on.cx < 3.0, f"Vastu did not move the entrance to the NW third: {on.cx}"
+
+
 # ── middle-third coverage ────────────────────────────────────────────────────
 #
 # Without these, only the NE member of the ("N", "NE", "E") rule was ever
@@ -492,30 +503,14 @@ def test_tie_break_reaches_the_middle_third(
     )
 
 
-@pytest.mark.parametrize("geom", [GEOM_A, GEOM_B])
-def test_tie_break_is_inert_on_a_west_road(geom):
-    """Pinned limitation: the front row on a W road is [NW, W, SW], which holds
-    no N/NE/E cell and got no override, so enabling Vastu cannot move the
-    entrance.
-
-    South used to sit in this test and no longer does — it fires via the SE
-    override now (`test_tie_break_fires_on_a_south_road`). West is the last
-    inert road side; classical practice would suggest NW for it, but that
-    doctrine was never sanctioned, so this test is what stops it from drifting
-    in unnoticed."""
-    on = _entrance(_front(geom), _ecfg(road_side="W"), True)
-    off = _entrance(_front(geom), _ecfg(road_side="W", vastu_enabled=False), False)
-    assert on is not None and off is not None
-    assert on.cx == off.cx
-
-
 # Which of the two asymmetric geometries above to reuse when pinning that a
 # road side's MIDDLE front-row cell is NOT auspicious. The geometry must be the
 # one whose middle candidate LOSES the distance key, otherwise vastu-on equals
 # vastu-off for a reason that has nothing to do with the rule.
 #
 # W borrows the north geometry (gate in the HIGH-x third): candidates are SW
-# (outer, wins on distance) and W (middle) — neither sanctioned.
+# (outer, wins on distance) and W (middle). Only the NW END of the west front
+# row is sanctioned now, so neither SW nor the middle W is auspicious.
 # S borrows the east geometry (gate in the LOW-x third): candidates are SW
 # (outer, wins on distance) and S (middle). The north geometry would NOT work
 # for S: its outer candidate lands in SE, which the override makes auspicious
@@ -531,8 +526,8 @@ def test_middle_front_row_cell_is_not_auspicious(road_side):
 
     South is no longer inert overall (SE fires), but its middle cell must not
     move the door: widening the override from ("SE",) to ("S", "SE") makes this
-    fail on the south road. Likewise widening the shipped rule to "W" fails the
-    west case.
+    fail on the south road. West likewise fires at its NW end now, and widening
+    the west override from ("NW",) to ("NW", "W") fails the west case here.
     """
     _rs, sb_left, sb_right, spans, _mid = MIDDLE_THIRD_INERT_GEOMETRY[road_side]
     kw = dict(road_side=road_side, setback_left=sb_left, setback_right=sb_right)
