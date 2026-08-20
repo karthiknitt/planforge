@@ -45,24 +45,33 @@ def draw_north_arrow(
     msp,
     cx: float,
     cy: float,
-    north_dir: str,
+    north_angle_deg: float,
     size: float,
     layer: str,
 ) -> None:
-    """Draw an 8-point compass rose with filled north spike."""
+    """Draw an 8-point compass rose whose filled N spike points at true north.
+
+    `north_angle_deg` is the clockwise angle from the plot's +y axis to true
+    north (see `app.engine.vastu.resolve_north_angle`). The rose's spikes sit
+    at fixed sheet angles in CAD convention (0°=+x, counterclockwise):
+    N=90°, E=0°, S=270°, W=180°. Subtracting `north_angle_deg` from every
+    spike/label angle rotates the whole rose so its N spike points at true
+    north on the sheet — e.g. a south-facing road (0°) leaves N at 90° (up),
+    an east-facing road (90°) swings N to 0° (right).
+    """
     # Cardinal directions (N/S/E/W): full length spikes
     cardinal_angles = {"N": 90, "E": 0, "S": 270, "W": 180}
     # Diagonal directions: 60% length
     diag_angles = [45, 135, 225, 315]
 
     for direction, base_angle in cardinal_angles.items():
-        angle_rad = math.radians(base_angle)
+        angle_rad = math.radians(base_angle - north_angle_deg)
         tip_x = cx + size * math.cos(angle_rad)
         tip_y = cy + size * math.sin(angle_rad)
 
         # Wing points (15° either side at 30% of size from centre)
-        left_rad = math.radians(base_angle + 15)
-        right_rad = math.radians(base_angle - 15)
+        left_rad = math.radians(base_angle - north_angle_deg + 15)
+        right_rad = math.radians(base_angle - north_angle_deg - 15)
         lx = cx + size * 0.3 * math.cos(left_rad)
         ly = cy + size * 0.3 * math.sin(left_rad)
         rx = cx + size * 0.3 * math.cos(right_rad)
@@ -73,8 +82,8 @@ def draw_north_arrow(
             spike_pts, close=True, dxfattribs={"layer": layer, "lineweight": 25}
         )
 
-        # Fill north spike
-        if direction == north_dir:
+        # Fill the N spike — the rose is rotated to make N point at true north
+        if direction == "N":
             try:
                 hatch = msp.add_hatch(dxfattribs={"layer": layer})
                 hatch.set_solid_fill(color=7)  # white = black on print
@@ -101,7 +110,7 @@ def draw_north_arrow(
 
     # Short diagonal spikes
     for angle_deg in diag_angles:
-        angle_rad = math.radians(angle_deg)
+        angle_rad = math.radians(angle_deg - north_angle_deg)
         tip_x = cx + size * 0.6 * math.cos(angle_rad)
         tip_y = cy + size * 0.6 * math.sin(angle_rad)
         msp.add_line(
