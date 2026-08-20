@@ -1486,9 +1486,11 @@ ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
 # should prefer the SE end of the frontage; that is a product-owner decision, not
 # something derivable from the rules data, so it is scoped to south alone.
 #
-# NOT extended to west (front row [NW, W, SW], equally inert): classical practice
-# would suggest NW there, but that doctrine was never asked for and inventing it
-# is not this code's call. West stays inert, and the tests pin that.
+# Extended to west on the same principle (front row [NW, W, SW], equally inert
+# under the sourced rule): Karthik ruled the west-facing entrance should prefer
+# the NW end of the frontage, mirroring the sanctioned south rule — prefer the
+# auspicious end of the facing wall. That decision is recorded in the
+# solver-capability-uplift plan and the firing/pinning tests below.
 #
 # Replacement, not union with the default: a union would make widening the
 # override to every road side undetectable, because every road side would keep
@@ -1496,6 +1498,7 @@ ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
 # firing tests immediately.
 ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE: dict[str, tuple[str, ...]] = {
     "S": ("SE",),
+    "W": ("NW",),
 }
 
 
@@ -1588,12 +1591,11 @@ def _place_main_entrance(
     east road, ``['SW', 'S', 'SE']`` on a south road (the PlotConfig default)
     and ``['NW', 'W', 'SW']`` on a west road. The default N/NE/E rule can fire
     on north and east roads; the south road gets the product-owner SE override
-    (``ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE``) and so fires too. Only the
-    WEST road is inert — no candidate on ``['NW', 'W', 'SW']`` can ever be
-    auspicious under the sourced rule, and no override was sanctioned for it.
-    That is a property of "the entrance is always on the road-facing wall", not
-    a bug; ``tests/test_vastu_floors.py`` pins both the firing and the inert
-    cases.
+    and the west road the matching NW override
+    (``ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE``), so every road side can move
+    the door toward the auspicious end of its facing wall.
+    ``tests/test_vastu_floors.py`` pins both the firing and the still-inert
+    middle cells ("S" on south, "W" on west).
     """
     bx1, _by1, bx2, _by2 = buildable.bounds
     _px1, py1, _px2, _py2 = _plate_bounds(rooms, buildable, ewt)
