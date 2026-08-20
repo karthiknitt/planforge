@@ -1574,6 +1574,12 @@ def _place_main_entrance(
     desired position is the facade midpoint so the door lines up with the
     compound-wall gate (cad_advanced centres the gate on the road side).
 
+    When no road-facing habitable room exists, the entrance is routed through
+    a road-facing porch/parking room into the habitable room directly behind
+    it — the door lands on that room's own exterior elevation nearest the road
+    (the porch itself never hosts a door). Only if even that finds nothing is
+    the floor treated as the "upside-down duplex" typology.
+
     ``status``, if given, is set with ``entrance_not_on_ground_floor=True``
     when the ENTIRE road frontage is occupied by no-entry room types
     (parking/wet/staircase) — the "upside-down duplex" typology (#6d): all
@@ -1646,13 +1652,32 @@ def _place_main_entrance(
         )
         door.is_main = True
         return door
-    if (
-        status is not None
-        and not cands
-        and frontage_rooms
-        and all(r.type in _NO_ENTRY_TYPES for r in frontage_rooms)
-    ):
-        status["entrance_not_on_ground_floor"] = True
+    if not cands:
+        # Stage 2 — through-porch route: no road-facing habitable room, but a
+        # road-facing porch/parking room may have a habitable room directly
+        # behind it (the porch spans the frontage). Route the entrance onto
+        # that room's own exterior elevation nearest the road; the porch
+        # itself never hosts the door. The "upside-down duplex" flag is only
+        # for the case where even this finds nothing.
+        door = _through_porch_entrance(
+            frontage_rooms,
+            rooms,
+            obstacles,
+            std,
+            buildable,
+            gate_x,
+            ewt,
+            tol,
+            reasons,
+        )
+        if door is not None:
+            return door
+        if (
+            status is not None
+            and frontage_rooms
+            and all(r.type in _NO_ENTRY_TYPES for r in frontage_rooms)
+        ):
+            status["entrance_not_on_ground_floor"] = True
     detail = "; ".join(rejected) if rejected else "no road-facing room at front plate"
     if reasons is not None:
         reasons.append(f"main_entrance: {detail}")
@@ -1661,6 +1686,110 @@ def _place_main_entrance(
             "no suitable road-facing room for a main entrance door: %s", detail
         )
     return None
+
+
+def _through_porch_entrance(
+    frontage_rooms: list[Room],
+    rooms: list[Room],
+    obstacles: _ObstacleIndex,
+    std: OpeningStandards,
+    buildable: Polygon,
+    gate_x: float,
+    ewt: float,
+    tol: float,
+    reasons: list[str] | None,
+) -> Opening | None:
+    """Main entrance through a road-facing porch into the habitable room
+    directly behind it (see `_place_main_entrance` stage 2)."""
+    for t in frontage_rooms:
+        if t.type not in _PARKING_TYPES:
+            continue
+        behind = [
+            r
+            for r in rooms
+            if r.type not in _NO_ENTRY_TYPES
+            and abs(r.y - (t.y + t.depth)) <= 2 * tol
+            and not (r.x + r.width <= t.x or r.x >= t.x + t.width)
+        ]
+        if not behind:
+            continue
+        target = max(
+            behind,
+            key=lambda r: min(r.x + r.width, t.x + t.width) - max(r.x, t.x),
+        )
+        door = _main_door_on_nearest_exterior(
+            target, rooms, obstacles, std, buildable, gate_x, ewt, tol
+        )
+        if door is not None:
+            if reasons is not None:
+                reasons.append(
+                    "main_entrance: no road-facing habitable room; routed "
+                    f"through the {t.type} porch to {target.id}'s exterior"
+                )
+            return door
+    return None
+
+
+def _main_door_on_nearest_exterior(
+    room: Room,
+    rooms: list[Room],
+    obstacles: _ObstacleIndex,
+    std: OpeningStandards,
+    buildable: Polygon,
+    gate_x: float,
+    ewt: float,
+    tol: float,
+) -> Opening | None:
+    """Place a main door on `room`'s exterior edge nearest the road (y-min).
+
+    Used only by the through-porch route in `_place_main_entrance`, when no
+    road-facing habitable room exists but a habitable room sits directly
+    behind a road-facing porch. The porch itself never hosts a door (parking
+    is reachable only from the driveway), so the entrance lands on the room's
+    own elevation closest to the frontage — its side wall near the road end,
+    or its rear wall, whichever is nearer — instead of leaving the repair
+    pass to punch an arbitrary mid-wall exterior door.
+
+    ``gate_x`` keeps the door centred on the compound-wall gate when the
+    nearest edge is horizontal (a rear wall, where the whole span is
+    equidistant from the road).
+    """
+    plate = _plate_bounds(rooms, buildable, ewt)
+    _px1, py1, _px2, _py2 = plate
+    width = std.main_door_width_m
+    best: tuple[float, tuple] | None = None
+    for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol, lo, hi):
+            continue
+        # distance from the road (y-min): a horizontal edge is at `coord`;
+        # a vertical edge's nearest point is its lo (front) end.
+        dist = (coord - py1) if is_h else (lo - py1)
+        if best is None or dist < best[0]:
+            best = (dist, (is_h, coord, lo, hi))
+    if best is None:
+        return None
+    is_h, coord, lo, hi = best[1]
+    if is_h:
+        desired = gate_x
+        centre = _fit_along(
+            desired, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
+        )
+        door = _make_door(
+            room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
+        )
+    else:
+        # nearest the road end of the side wall
+        desired = lo + width / 2 + _JAMB
+        centre = _fit_along(
+            desired, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(False, coord)
+        )
+        door = _make_door(
+            room, True, coord, centre, width, ewt, centre <= (lo + hi) / 2
+        )
+    if centre is None:
+        return None
+    door.is_main = True
+    return door
 
 
 def derive_openings(
