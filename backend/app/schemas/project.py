@@ -247,3 +247,63 @@ class ProjectRead(BaseModel):
     has_layouts: bool = False
 
     model_config = {"from_attributes": True}
+
+
+ProgrammeFlag = Literal[
+    "courtyard", "verandah", "car_porch_open", "pooja", "terrace", "study"
+]
+
+
+class SiteOptions(BaseModel):
+    compound_wall: bool = True
+    landscaped_setbacks: bool = True
+    gate_side: Literal["N", "S", "E", "W"] | None = None
+
+
+class GenerateRequest(BaseModel):
+    """Wizard "Site & Style" request — the wire contract the frontend Zod
+    schema (`frontend/src/lib/schemas.ts`) must mirror byte-for-byte.
+
+    Distinct from `ProjectCreate`: it carries the fields that decide HOW a plot
+    is generated (orientation, plot template, style, programme, site options)
+    on top of the dimensions a project already persists.
+    """
+
+    plot_x_extent: float
+    plot_y_extent: float
+    setback_front: float
+    setback_rear: float
+    setback_left: float
+    setback_right: float
+    num_bedrooms: int = Field(ge=1, le=6)
+    toilets: int = Field(ge=1, le=6)
+    parking: bool
+    north_angle_deg: float = 0.0
+    # RECT and L only — Task 9 raises on T and U at the engine. See "Task 9
+    # rulings" in the solver-capability-uplift plan.
+    plot_template: Literal["RECT", "L"] = "RECT"
+    notch_width: float | None = None
+    notch_depth: float | None = None
+    style_preset: str | None = None
+    programme: set[ProgrammeFlag] = set()
+    site: SiteOptions = SiteOptions()
+
+    @model_validator(mode="after")
+    def _check(self) -> "GenerateRequest":
+        self.north_angle_deg %= 360.0
+        if self.plot_template != "RECT":
+            if self.notch_width is None or self.notch_depth is None:
+                raise ValueError(
+                    "notch_width and notch_depth are required for a non-rectangular plot"
+                )
+            if (
+                self.notch_width >= self.plot_x_extent
+                or self.notch_depth >= self.plot_y_extent
+            ):
+                raise ValueError("notch is larger than the plot")
+        if self.site.gate_side is None:
+            # road side is the plot edge nearest true south after rotation
+            self.site.gate_side = ("S", "W", "N", "E")[
+                int(((self.north_angle_deg + 45) % 360) // 90)
+            ]
+        return self
