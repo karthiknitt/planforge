@@ -2020,13 +2020,16 @@ def validate_floor_connectivity(
     """Human-readable navigability violations for a single floor (empty ⇒ OK).
 
     Read-only: drawing callers keep working; the generator gate calls this
-    after `derive_openings` (which already ran the repair pass)."""
+    after `derive_openings` (which already ran the repair pass). Exempts the
+    same types `_repair_connectivity` refuses to door — parking (reachable
+    from the driveway), passage (transit), and double-height voids — so the
+    gate cannot reject a deliberately door-less car porch as a defect."""
     adjs = _adjacencies(rooms, iwt, tol)
     graph = _door_graph(rooms, openings, adjs, tol)
     reachable = _reachable_rooms(rooms, graph, floor, openings)
     problems: list[str] = []
     for i, r in enumerate(rooms):
-        if r.type == "passage":
+        if r.type in ({"passage"} | _PARKING_TYPES) or r.is_void:
             continue
         if i not in reachable:
             problems.append(
