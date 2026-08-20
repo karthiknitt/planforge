@@ -3,8 +3,8 @@ edge for every road side.
 
 `plan_geometry._place_main_entrance` puts the main door on the y-min (road/front)
 exterior wall for ALL four road sides — in drawing coordinates y=0 is always the
-road, and `road_side` names which direction that edge faces. `geometry`.
-`_compound_wall_sides` used to read `road_side` as a plot-local edge id
+road, and `road_side` names which direction that edge faces.
+`geometry._compound_wall_sides` used to read `road_side` as a plot-local edge id
 (y-min="S", x-max="E", y-max="N", x-min="W"), which gated the x-max run on an
 east road, the y-max run on a north road and the x-min run on a west road — all
 on a DIFFERENT edge from the door, silently voiding `gate_cx`'s door-alignment
@@ -14,7 +14,8 @@ y-min (plot-local "S") edge, and the main door is ALWAYS on the same y-min wall.
 The expected edge per road side is a LITERAL table — `{"S": "S", "N": "S",
 "E": "S", "W": "S"}` (the plot-local id of the y-min edge) — deliberately NOT
 computed from either function under test, so the test cannot inherit whichever
-reading is wrong.
+reading is wrong. The run-side compass labels are pinned the same way below, so
+a future edit that swaps the x-max/x-min labels fails loudly.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from __future__ import annotations
 import pytest
 
 from app.engine.geometry import (
+    _compound_wall_sides,
     compound_wall_segments,
 )
 from app.engine.models import (
@@ -91,6 +93,32 @@ def test_gate_gap_is_always_on_the_y_min_edge(road_side):
     assert _gate_edge_local_id(segs, cfg.plot_width, cfg.plot_length) == expected, (
         f"road_side='{road_side}': the gate gap must be on the y-min edge "
         f"(plot-local '{expected}'), the same edge the main entrance is on"
+    )
+
+
+# LITERAL compass labels per road side for the runs (y-min, x-max, y-max,
+# x-min), pinned from the compass convention alone — see the derivation in
+# test_vastu_zones.py: the road-facing edge is always y-min and faces
+# `road_side`; with road N: +y=S, +x=W; road E: +y=W, +x=N; road W: +y=E,
+# +x=S. NOT computed from the functions under test — this guard exists so a
+# future edit that swaps the x-max/x-min labels fails loudly.
+EXPECTED_COMPASS_LABELS = {
+    "S": ("S", "E", "N", "W"),
+    "N": ("N", "W", "S", "E"),
+    "E": ("E", "N", "W", "S"),
+    "W": ("W", "S", "E", "N"),
+}
+
+
+@pytest.mark.parametrize("road_side", ["S", "N", "E", "W"])
+def test_compound_wall_runs_carry_the_compass_labels(road_side):
+    cfg = _cfg(road_side)
+    sides = _compound_wall_sides(cfg.plot_width, cfg.plot_length, road_side)
+    labels = tuple(side_id for _, _, side_id in sides)
+    assert labels == EXPECTED_COMPASS_LABELS[road_side], (
+        f"road_side='{road_side}': the (y-min, x-max, y-max, x-min) runs must "
+        f"carry the literal compass labels "
+        f"{EXPECTED_COMPASS_LABELS[road_side]}, got {labels}"
     )
 
 

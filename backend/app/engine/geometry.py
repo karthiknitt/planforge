@@ -338,15 +338,8 @@ def landscape_region(cfg: PlotConfig) -> Polygon | MultiPolygon:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-_COMPASS_LABELS_BY_ROAD_SIDE = {
-    # The y-min run always faces the road; the other three follow compass order
-    # clockwise around the plot. Order matches `_compound_wall_sides`' runs:
-    # (y-min, x-max, y-max, x-min).
-    "S": ("S", "E", "N", "W"),
-    "E": ("E", "S", "W", "N"),
-    "N": ("N", "W", "S", "E"),
-    "W": ("W", "N", "E", "S"),
-}
+_ROAD_SIDE_ROTATION = {"S": 0, "E": 1, "N": 2, "W": 3}
+_BASE_COMPASS_LABELS = ("S", "E", "N", "W")
 
 
 def _compound_wall_sides(
@@ -363,13 +356,19 @@ def _compound_wall_sides(
     `_place_main_entrance`, the Vastu engine and the frontend all use, and the
     gate must share it or the compound-wall gate and the main entrance land on
     different edges of the house for N/E/W roads.
+
+    The runs wind counterclockwise around the plot (y-min, x-max, y-max,
+    x-min), and the labels advance in the same counterclockwise compass order:
+    each row is a rotation of the base ``("S", "E", "N", "W")`` with
+    ``road_side`` rotated to index 0, so the y-min run's label always equals
+    ``road_side`` and the four rows can never diverge from one another (an
+    E/W row edit that swaps x-max/x-min is structurally impossible).
     """
     # `PlotConfig.road_side` is an unvalidated str; an unrecognised value must
     # stay tolerated (not raise), exactly as `vastu.py`'s
     # `north_angle_for_road_side` falls back to south for unknown sides.
-    labels = _COMPASS_LABELS_BY_ROAD_SIDE.get(
-        road_side.upper(), _COMPASS_LABELS_BY_ROAD_SIDE["S"]
-    )
+    k = _ROAD_SIDE_ROTATION.get(road_side.upper(), 0)
+    labels = _BASE_COMPASS_LABELS[k:] + _BASE_COMPASS_LABELS[:k]
     return [
         ((0.0, 0.0), (pw, 0.0), labels[0]),
         ((pw, 0.0), (pw, pl), labels[1]),
