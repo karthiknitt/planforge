@@ -546,7 +546,8 @@ MIDDLE_THIRD_INERT_GEOMETRY = {"W": MIDDLE_THIRD_CASES[0], "S": MIDDLE_THIRD_CAS
 # vastu-off for a reason that has nothing to do with the rule.
 #
 # W borrows the north geometry (gate in the HIGH-x third): candidates are SW
-# (outer, wins on distance) and W (middle) — neither sanctioned.
+# (outer, wins on distance) and W (middle). Only the NW END of the west front
+# row is sanctioned now, so neither SW nor the middle W is auspicious.
 # S borrows the east geometry (gate in the LOW-x third): candidates are SW
 # (outer, wins on distance) and S (middle). The north geometry would NOT work
 # for S: its outer candidate lands in SE, which the override makes auspicious
