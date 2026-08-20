@@ -9,8 +9,8 @@ from app.engine.models import PlotConfig
 # 12 m × 10 m L-shaped plot with NE cutout of 4 m × 3 m
 # Used for polygon geometry and compliance tests only.
 L_NE_CFG = PlotConfig(
-    plot_width=12.0,
-    plot_length=10.0,
+    plot_x_extent=12.0,
+    plot_y_extent=10.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -27,8 +27,8 @@ L_NE_CFG = PlotConfig(
 # 15 m × 12 m L-shaped plot with NE cutout of 4 m × 4 m — provides ≥ 52 sqm
 # buildable plate after setbacks + ewt, enough for a compliant 2BHK layout.
 L_NE_GEN_CFG = PlotConfig(
-    plot_width=15.0,
-    plot_length=12.0,
+    plot_x_extent=15.0,
+    plot_y_extent=12.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -43,8 +43,8 @@ L_NE_GEN_CFG = PlotConfig(
 )
 
 L_NW_CFG = PlotConfig(
-    plot_width=12.0,
-    plot_length=10.0,
+    plot_x_extent=12.0,
+    plot_y_extent=10.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -59,8 +59,8 @@ L_NW_CFG = PlotConfig(
 )
 
 L_SE_CFG = PlotConfig(
-    plot_width=12.0,
-    plot_length=10.0,
+    plot_x_extent=12.0,
+    plot_y_extent=10.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -75,8 +75,8 @@ L_SE_CFG = PlotConfig(
 )
 
 L_SW_CFG = PlotConfig(
-    plot_width=12.0,
-    plot_length=10.0,
+    plot_x_extent=12.0,
+    plot_y_extent=10.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -134,7 +134,7 @@ def test_l_shaped_polygon_sw():
 def test_l_shaped_polygon_smaller_than_bounding_rect():
     """L-shaped polygon area is less than bounding rectangle area."""
     poly = compute_l_shaped_polygon(L_NE_CFG)
-    bbox_area = L_NE_CFG.plot_width * L_NE_CFG.plot_length
+    bbox_area = L_NE_CFG.plot_x_extent * L_NE_CFG.plot_y_extent
     assert poly.area < bbox_area, "L-shape must be smaller than bounding rectangle"
 
 
@@ -161,8 +161,8 @@ def test_l_shaped_generation_no_rooms_in_cutout():
     layouts = generate(L_NE_GEN_CFG)
     assert len(layouts) >= 1, "Should produce at least 1 layout for L-shaped plot"
 
-    W = L_NE_GEN_CFG.plot_width
-    H = L_NE_GEN_CFG.plot_length
+    W = L_NE_GEN_CFG.plot_x_extent
+    H = L_NE_GEN_CFG.plot_y_extent
     cw = L_NE_GEN_CFG.cutout_width
     ch = L_NE_GEN_CFG.cutout_height
 

@@ -33,8 +33,8 @@ export function buildRoomLabels(rooms: RoomData[]): RoomLabelEntry[] {
 }
 
 /** "PLOT 12.0m × 9.0m" — overall plot footprint, drawn once at the margin. */
-export function plotDimensionLabel(plotWidth: number, plotLength: number): string {
-  return `PLOT ${plotWidth.toFixed(1)}m × ${plotLength.toFixed(1)}m`;
+export function plotDimensionLabel(plotXExtent: number, plotYExtent: number): string {
+  return `PLOT ${plotXExtent.toFixed(1)}m × ${plotYExtent.toFixed(1)}m`;
 }
 
 /** Plan-space unit vector pointing toward true north, given which edge faces

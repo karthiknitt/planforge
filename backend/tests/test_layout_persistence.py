@@ -18,8 +18,8 @@ HDRS = {"X-Test-User-Id": "layout-owner"}
 
 PROJECT_BODY = {
     "name": "Persistence Test",
-    "plot_length": 15.0,
-    "plot_width": 10.0,
+    "plot_y_extent": 15.0,
+    "plot_x_extent": 10.0,
     "setback_front": 1.5,
     "setback_rear": 1.0,
     "setback_left": 1.0,
@@ -272,7 +272,7 @@ async def test_project_update_invalidates_stored_layouts(client_db):
     await client.get(f"/api/projects/{pid}/generate", headers=HDRS)
 
     res = await client.patch(
-        f"/api/projects/{pid}", json={"plot_length": 20.0}, headers=HDRS
+        f"/api/projects/{pid}", json={"plot_y_extent": 20.0}, headers=HDRS
     )
     assert res.status_code == 200, res.text
 

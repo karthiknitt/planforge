@@ -28,8 +28,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "20x30-2bhk",
         "name": "20×30 2BHK",
-        "plot_length": 9.1,
-        "plot_width": 6.1,
+        "plot_y_extent": 9.1,
+        "plot_x_extent": 6.1,
         "num_bedrooms": 2,
         "num_toilets": 2,
         "parking": False,
@@ -39,8 +39,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "20x40-2bhk",
         "name": "20×40 2BHK",
-        "plot_length": 12.2,
-        "plot_width": 6.1,
+        "plot_y_extent": 12.2,
+        "plot_x_extent": 6.1,
         "num_bedrooms": 2,
         "num_toilets": 2,
         "parking": True,
@@ -50,8 +50,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "30x40-3bhk",
         "name": "30×40 3BHK",
-        "plot_length": 12.2,
-        "plot_width": 9.1,
+        "plot_y_extent": 12.2,
+        "plot_x_extent": 9.1,
         "num_bedrooms": 3,
         "num_toilets": 2,
         "parking": True,
@@ -61,8 +61,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "30x50-3bhk",
         "name": "30×50 3BHK",
-        "plot_length": 15.2,
-        "plot_width": 9.1,
+        "plot_y_extent": 15.2,
+        "plot_x_extent": 9.1,
         "num_bedrooms": 3,
         "num_toilets": 3,
         "parking": True,
@@ -72,8 +72,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "40x40-3bhk",
         "name": "40×40 3BHK",
-        "plot_length": 12.2,
-        "plot_width": 12.2,
+        "plot_y_extent": 12.2,
+        "plot_x_extent": 12.2,
         "num_bedrooms": 3,
         "num_toilets": 3,
         "parking": True,
@@ -83,8 +83,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "40x60-4bhk",
         "name": "40×60 4BHK",
-        "plot_length": 18.3,
-        "plot_width": 12.2,
+        "plot_y_extent": 18.3,
+        "plot_x_extent": 12.2,
         "num_bedrooms": 4,
         "num_toilets": 3,
         "parking": True,
@@ -94,8 +94,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "20x30-2bhk-chennai",
         "name": "20×30 2BHK Chennai",
-        "plot_length": 9.1,
-        "plot_width": 6.1,
+        "plot_y_extent": 9.1,
+        "plot_x_extent": 6.1,
         "num_bedrooms": 2,
         "num_toilets": 2,
         "parking": False,
@@ -105,8 +105,8 @@ GALLERY_PRESETS: list[dict[str, Any]] = [
     {
         "id": "30x40-3bhk-bangalore",
         "name": "30×40 3BHK Bangalore",
-        "plot_length": 12.2,
-        "plot_width": 9.1,
+        "plot_y_extent": 12.2,
+        "plot_x_extent": 9.1,
         "num_bedrooms": 3,
         "num_toilets": 2,
         "parking": True,
@@ -136,8 +136,8 @@ def _sqm_to_sqft(sqm: float) -> float:
 def _build_plan(preset: dict[str, Any]) -> dict[str, Any]:
     """Run the generator for one preset and return the serialised gallery card."""
     cfg = PlotConfig(
-        plot_length=preset["plot_length"],
-        plot_width=preset["plot_width"],
+        plot_y_extent=preset["plot_y_extent"],
+        plot_x_extent=preset["plot_x_extent"],
         setback_front=1.0,
         setback_rear=1.0,
         setback_left=0.6,
@@ -168,9 +168,9 @@ def _build_plan(preset: dict[str, Any]) -> dict[str, Any]:
         total_cost = 0.0
 
     gf = best.ground_floor
-    plot_area_sqft = _sqm_to_sqft(preset["plot_length"] * preset["plot_width"])
-    plot_w_ft = _metres_to_ft(preset["plot_width"])
-    plot_l_ft = _metres_to_ft(preset["plot_length"])
+    plot_area_sqft = _sqm_to_sqft(preset["plot_y_extent"] * preset["plot_x_extent"])
+    plot_w_ft = _metres_to_ft(preset["plot_x_extent"])
+    plot_l_ft = _metres_to_ft(preset["plot_y_extent"])
 
     # Determine BHK label
     bhk = preset["num_bedrooms"]
@@ -182,8 +182,8 @@ def _build_plan(preset: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": preset["id"],
         "name": preset["name"],
-        "plot_width_m": preset["plot_width"],
-        "plot_length_m": preset["plot_length"],
+        "plot_width_m": preset["plot_x_extent"],
+        "plot_length_m": preset["plot_y_extent"],
         "plot_width_ft": plot_w_ft,
         "plot_length_ft": plot_l_ft,
         "plot_area_sqft": plot_area_sqft,

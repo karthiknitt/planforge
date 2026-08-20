@@ -30,8 +30,8 @@ from app.engine.vastu import check_vastu, north_angle_for_road_side, zone_for_po
 
 def _cfg(**over) -> PlotConfig:
     base = dict(
-        plot_length=12.0,
-        plot_width=12.0,
+        plot_y_extent=12.0,
+        plot_x_extent=12.0,
         setback_front=1.5,
         setback_rear=1.5,
         setback_left=1.2,
@@ -327,7 +327,7 @@ E_PLOT_L = 15.0
 
 def _ecfg(**over) -> PlotConfig:
     """Entrance-half config: non-square, symmetric setbacks unless overridden."""
-    return _cfg(plot_width=E_PLOT_W, plot_length=E_PLOT_L, **over)
+    return _cfg(plot_x_extent=E_PLOT_W, plot_y_extent=E_PLOT_L, **over)
 
 
 # Hand-measured front (y-min) row of the 3x3 grid, one cell per third of the

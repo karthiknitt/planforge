@@ -41,8 +41,8 @@ def _mylatest_cfg() -> PlotConfig:
     60 x 40 ft (18.288 x 12.192 m), 2BHK, 2 attached toilets, G+1, road E.
     """
     return PlotConfig(
-        plot_length=12.192,
-        plot_width=18.288,
+        plot_y_extent=12.192,
+        plot_x_extent=18.288,
         setback_front=1.524,
         setback_rear=1.524,
         setback_left=0.914,
@@ -59,8 +59,8 @@ def _mylatest_cfg() -> PlotConfig:
 
 def _standard_cfg() -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,

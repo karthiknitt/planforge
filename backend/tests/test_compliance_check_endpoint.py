@@ -24,8 +24,8 @@ def PROJECT_HEADERS(pid):
 
 BASE_PROJECT = {
     "name": "Compliance Check Test",
-    "plot_length": 12.0,
-    "plot_width": 9.0,
+    "plot_y_extent": 12.0,
+    "plot_x_extent": 9.0,
     "setback_front": 1.5,
     "setback_rear": 1.5,
     "setback_left": 1.0,

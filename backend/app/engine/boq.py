@@ -251,7 +251,7 @@ class QuantityEngine:
 
         # ── Brick masonry walls ─────────────────────────────────────────────
         ext_wall_len = (
-            2 * (cfg.plot_width + cfg.plot_length) * 0.6
+            2 * (cfg.plot_x_extent + cfg.plot_y_extent) * 0.6
         )  # approx exterior perimeter
         ext_wall_vol = ext_wall_len * FLOOR_HEIGHT_M * ewt * 2  # both floors
         int_wall_vol = self._internal_wall_volume(gf, ff, iwt)

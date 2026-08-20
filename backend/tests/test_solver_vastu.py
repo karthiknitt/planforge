@@ -32,8 +32,8 @@ _HARD_TYPES = ("toilet", "wc_only", "bathroom_master")
 
 def _cfg(vastu: bool, **kw) -> PlotConfig:
     base = dict(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,
@@ -52,8 +52,8 @@ def _zone_of(room, cfg: PlotConfig) -> str:
     return zone_for_point(
         room.x + room.width / 2,
         room.y + room.depth / 2,
-        cfg.plot_width,
-        cfg.plot_length,
+        cfg.plot_x_extent,
+        cfg.plot_y_extent,
         resolve_north_angle(cfg),
     )
 
@@ -488,8 +488,8 @@ def test_toilets_never_land_in_ne_or_centre_when_vastu_enabled():
         pytest.param({"north_angle_deg": 37.5}, id="off-axis-north"),
         pytest.param(
             {
-                "plot_length": 12.0,
-                "plot_width": 7.5,
+                "plot_y_extent": 12.0,
+                "plot_x_extent": 7.5,
                 "setback_front": 2.0,
                 "setback_rear": 1.0,
                 "setback_left": 0.9,

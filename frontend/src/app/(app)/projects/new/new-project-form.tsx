@@ -607,8 +607,8 @@ export default function NewProjectPage() {
         const xs = pts.map(([x]) => x);
         const ys = pts.map(([, y]) => y);
         payload.plot_corners = pts;
-        payload.plot_length = Math.max(...ys);
-        payload.plot_width = Math.max(...xs);
+        payload.plot_y_extent = Math.max(...ys);
+        payload.plot_x_extent = Math.max(...xs);
         payload.plot_front_width = null;
         payload.plot_rear_width = null;
         payload.cutout_width = 0;
@@ -628,16 +628,16 @@ export default function NewProjectPage() {
           setLoading(false);
           return;
         }
-        payload.plot_length = pl;
-        payload.plot_width = pw;
+        payload.plot_y_extent = pl;
+        payload.plot_x_extent = pw;
         payload.plot_front_width = null;
         payload.plot_rear_width = null;
         payload.cutout_corner = form.cutout_corner;
         payload.cutout_width = cw;
         payload.cutout_height = ch;
       } else {
-        payload.plot_length = feetToMetres(form.plot_length);
-        payload.plot_width =
+        payload.plot_y_extent = feetToMetres(form.plot_length);
+        payload.plot_x_extent =
           form.plot_shape === "trapezoid"
             ? feetToMetres(
                 String(

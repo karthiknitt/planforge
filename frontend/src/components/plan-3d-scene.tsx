@@ -16,8 +16,8 @@ export type Plan3DView = "top" | "iso";
 
 interface Plan3DSceneProps {
   floorPlan: FloorPlanData;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide?: string;
   floorHeight?: number;
   className?: string;
@@ -103,21 +103,21 @@ function wallsFromRooms(rooms: RoomData[]): Seg[] {
 
 function SceneContents({
   floorPlan,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   floorHeight,
   roadSide,
   annotate = false,
 }: {
   floorPlan: FloorPlanData;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   floorHeight: number;
   roadSide?: string;
   annotate?: boolean;
 }) {
-  const cx = plotWidth / 2;
-  const cy = plotLength / 2;
+  const cx = plotXExtent / 2;
+  const cy = plotYExtent / 2;
   const worldX = (x: number) => x - cx;
   const worldZ = (y: number) => cy - y;
 
@@ -137,18 +137,21 @@ function SceneContents({
   // North-arrow anchor — derived from road_side via the same convention as
   // backend/app/engine/vastu.py (ZONE_GRIDS), not a fixed page-up assumption.
   const north = northUnitVector(roadSide);
-  const northPlanX = cx + north.dx * (plotWidth / 2 + plotWidth * 0.08);
-  const northPlanY = cy + north.dy * (plotLength / 2 + plotLength * 0.08);
+  const northPlanX = cx + north.dx * (plotXExtent / 2 + plotXExtent * 0.08);
+  const northPlanY = cy + north.dy * (plotYExtent / 2 + plotYExtent * 0.08);
 
   return (
     <group>
       <ambientLight intensity={0.75} />
       <hemisphereLight args={["#ffffff", "#b9bdc4", 0.6]} />
-      <directionalLight position={[plotWidth, plotLength * 1.4, plotWidth * 0.8]} intensity={1.1} />
+      <directionalLight
+        position={[plotXExtent, plotYExtent * 1.4, plotXExtent * 0.8]}
+        intensity={1.1}
+      />
 
       {/* Plot ground slab */}
       <mesh position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[plotWidth, plotLength]} />
+        <planeGeometry args={[plotXExtent, plotYExtent]} />
         <meshStandardMaterial color="#e5e7eb" />
       </mesh>
 
@@ -229,7 +232,7 @@ function SceneContents({
             anchorY="middle"
             outlineWidth={l.fontSize * 0.04}
             outlineColor="#ffffff"
-            maxWidth={plotWidth}
+            maxWidth={plotXExtent}
           >
             {l.text}
           </Text>
@@ -239,7 +242,7 @@ function SceneContents({
         <Text
           position={[worldX(northPlanX), 0.06, worldZ(northPlanY)]}
           rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={Math.max(0.3, Math.min(plotWidth, plotLength) * 0.05)}
+          fontSize={Math.max(0.3, Math.min(plotXExtent, plotYExtent) * 0.05)}
           color="#111111"
           anchorX="center"
           anchorY="middle"
@@ -254,14 +257,14 @@ function SceneContents({
           // sits at a mid-edge point (front/rear/left/right depending on
           // road_side), so a corner never collides with it regardless of
           // orientation.
-          position={[worldX(-plotWidth * 0.08), 0.06, worldZ(-plotLength * 0.08)]}
+          position={[worldX(-plotXExtent * 0.08), 0.06, worldZ(-plotYExtent * 0.08)]}
           rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={Math.max(0.25, Math.min(plotWidth, plotLength) * 0.04)}
+          fontSize={Math.max(0.25, Math.min(plotXExtent, plotYExtent) * 0.04)}
           color="#111111"
           anchorX="center"
           anchorY="middle"
         >
-          {plotDimensionLabel(plotWidth, plotLength)}
+          {plotDimensionLabel(plotXExtent, plotYExtent)}
         </Text>
       )}
     </group>
@@ -284,8 +287,8 @@ function CaptureRegistrar({ register }: { register: (fn: () => string | null) =>
 export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function Plan3DScene(
   {
     floorPlan,
-    plotWidth,
-    plotLength,
+    plotXExtent,
+    plotYExtent,
     roadSide,
     floorHeight = 3.0,
     className,
@@ -321,7 +324,7 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
     []
   );
 
-  const span = Math.max(plotWidth, plotLength);
+  const span = Math.max(plotXExtent, plotYExtent);
   const camDist = span * 1.15;
   // Top-down: camera straight above with a hair of z-offset so lookAt stays
   // stable with the default up vector; distance sized to fit the whole plot.
@@ -360,8 +363,8 @@ export const Plan3DScene = forwardRef<Plan3DHandle, Plan3DSceneProps>(function P
         <color attach="background" args={[bgColor]} />
         <SceneContents
           floorPlan={floorPlan}
-          plotWidth={plotWidth}
-          plotLength={plotLength}
+          plotXExtent={plotXExtent}
+          plotYExtent={plotYExtent}
           floorHeight={floorHeight}
           roadSide={roadSide}
           annotate={annotate}

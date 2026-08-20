@@ -38,8 +38,8 @@ from app.engine.plan_geometry import EWT, build_floor_drawing
 
 def _cfg(road_side: str) -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,
@@ -90,7 +90,7 @@ def test_gate_gap_is_always_on_the_y_min_edge(road_side):
     cfg = _cfg(road_side)
     segs = compound_wall_segments(cfg)
     expected = EXPECTED_GATE_EDGE_BY_ROAD_SIDE[road_side]
-    assert _gate_edge_local_id(segs, cfg.plot_width, cfg.plot_length) == expected, (
+    assert _gate_edge_local_id(segs, cfg.plot_x_extent, cfg.plot_y_extent) == expected, (
         f"road_side='{road_side}': the gate gap must be on the y-min edge "
         f"(plot-local '{expected}'), the same edge the main entrance is on"
     )
@@ -113,7 +113,7 @@ EXPECTED_COMPASS_LABELS = {
 @pytest.mark.parametrize("road_side", ["S", "N", "E", "W"])
 def test_compound_wall_runs_carry_the_compass_labels(road_side):
     cfg = _cfg(road_side)
-    sides = _compound_wall_sides(cfg.plot_width, cfg.plot_length, road_side)
+    sides = _compound_wall_sides(cfg.plot_x_extent, cfg.plot_y_extent, road_side)
     labels = tuple(side_id for _, _, side_id in sides)
     assert labels == EXPECTED_COMPASS_LABELS[road_side], (
         f"road_side='{road_side}': the (y-min, x-max, y-max, x-min) runs must "

@@ -360,8 +360,8 @@ def test_an_alias_does_not_chain(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _cfg(**kwargs: object) -> PlotConfig:
     base: dict[str, object] = dict(
-        plot_length=10.0,
-        plot_width=10.0,
+        plot_y_extent=10.0,
+        plot_x_extent=10.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,

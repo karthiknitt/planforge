@@ -28,8 +28,8 @@ PASSAGE_CAP_SQM = 12.0  # 2x spec max — generous, catches only blowups
 def _cfg(**kw) -> PlotConfig:
     # Mirrors the reported plot: 60' x 40' (18.3 m x 12.2 m), road south
     defaults = dict(
-        plot_length=12.2,
-        plot_width=18.3,
+        plot_y_extent=12.2,
+        plot_x_extent=18.3,
         setback_front=1.5,
         setback_rear=1.5,
         setback_left=0.9,
@@ -48,15 +48,15 @@ def _cfg(**kw) -> PlotConfig:
 
 CONFIGS = [
     _cfg(),
-    _cfg(plot_width=9.0, plot_length=12.0, num_bedrooms=2),
+    _cfg(plot_x_extent=9.0, plot_y_extent=12.0, num_bedrooms=2),
 ]
 
 
 def _plate(cfg: PlotConfig):
     ox = cfg.setback_left + EWT
     oy = cfg.setback_front + EWT
-    w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * EWT
-    d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * EWT
+    w = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * EWT
+    d = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * EWT
     return box(ox, oy, ox + w, oy + d)
 
 

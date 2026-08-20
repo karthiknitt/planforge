@@ -1087,16 +1087,16 @@ export function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
 
 // ── L-shape polygon point helper ─────────────────────────────────────────────
 function computeLShapePoints(
-  plotWidth: number,
-  plotLength: number,
+  plotXExtent: number,
+  plotYExtent: number,
   cutoutCorner: string,
   cutoutWidth: number,
   cutoutHeight: number,
   px: (x: number) => number,
   py: (y: number) => number
 ): string {
-  const W = plotWidth;
-  const H = plotLength;
+  const W = plotXExtent;
+  const H = plotYExtent;
   const cw = cutoutWidth;
   const ch = cutoutHeight;
   let vertices: [number, number][];
@@ -1142,8 +1142,8 @@ function computeLShapePoints(
 // ── Main component ────────────────────────────────────────────────────────────
 interface FloorPlanSVGProps {
   floorPlan: FloorPlanData;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide?: string;
   northDirection?: string;
   className?: string;
@@ -1224,8 +1224,8 @@ const VASTU_GRIDS: Record<string, string[][]> = {
 
 export function FloorPlanSVG({
   floorPlan,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide = "S",
   className,
   plotShape,
@@ -1324,12 +1324,12 @@ export function FloorPlanSVG({
   const availW = VP_W - 2 * PAD;
   const availH = VP_H - 2 * PAD - ROAD_H;
 
-  const scaleX = availW / plotWidth;
-  const scaleY = availH / plotLength;
+  const scaleX = availW / plotXExtent;
+  const scaleY = availH / plotYExtent;
   const scale = Math.min(scaleX, scaleY);
 
-  const drawW = plotWidth * scale;
-  const drawH = plotLength * scale;
+  const drawW = plotXExtent * scale;
+  const drawH = plotYExtent * scale;
 
   const originX = PAD + (availW - drawW) / 2;
   const originY = PAD + (availH - drawH) / 2;
@@ -1411,8 +1411,8 @@ export function FloorPlanSVG({
         dyM,
         getMinSide(target.type),
         base,
-        plotWidth,
-        plotLength
+        plotXExtent,
+        plotYExtent
       );
       setEditRooms(base.map((r) => (r.id === rz.roomId ? { ...r, ...resized } : r)));
       return;
@@ -1435,8 +1435,8 @@ export function FloorPlanSVG({
           depth: moving.depth,
         },
         base,
-        plotWidth,
-        plotLength
+        plotXExtent,
+        plotYExtent
       );
       setEditRooms(base.map((r) => (r.id === m.roomId ? { ...r, x: snapped.x, y: snapped.y } : r)));
       return;
@@ -1635,8 +1635,8 @@ export function FloorPlanSVG({
         ) : plotShape === "l_shaped" && cutoutWidth > 0 && cutoutHeight > 0 ? (
           <polygon
             points={computeLShapePoints(
-              plotWidth,
-              plotLength,
+              plotXExtent,
+              plotYExtent,
               cutoutCorner,
               cutoutWidth,
               cutoutHeight,
@@ -1953,7 +1953,7 @@ export function FloorPlanSVG({
               y1={originY + drawH}
               x2={originX + drawW}
               y2={originY + drawH}
-              label={`${plotWidth} m`}
+              label={`${plotXExtent} m`}
               offset={-28}
               horizontal
             />
@@ -1962,7 +1962,7 @@ export function FloorPlanSVG({
               y1={originY}
               x2={originX}
               y2={originY + drawH}
-              label={`${plotLength} m`}
+              label={`${plotYExtent} m`}
               offset={-28}
               horizontal={false}
             />

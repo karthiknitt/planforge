@@ -44,8 +44,8 @@ def _room(id_: str, type_: str, x: float, y: float, w: float, d: float) -> Room:
 
 def _cfg(road_side: str = "S", pw: float = 10.0, pl: float = 12.0) -> PlotConfig:
     return PlotConfig(
-        plot_length=pl,
-        plot_width=pw,
+        plot_y_extent=pl,
+        plot_x_extent=pw,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,

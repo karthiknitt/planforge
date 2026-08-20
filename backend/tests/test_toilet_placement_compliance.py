@@ -8,8 +8,8 @@ from app.engine.models import ComplianceResult, FloorPlan, Layout, PlotConfig, R
 RULES = load_rules()
 
 CFG = PlotConfig(
-    plot_length=12.0,
-    plot_width=9.0,
+    plot_y_extent=12.0,
+    plot_x_extent=9.0,
     setback_front=1.5,
     setback_rear=1.0,
     setback_left=0.9,
@@ -95,8 +95,8 @@ class TestAttachedBathCoversAllBedroomsWhenEnabled:
 
     def test_attached_toilets_on_checks_every_bedroom(self):
         cfg = PlotConfig(
-            plot_length=12.0,
-            plot_width=9.0,
+            plot_y_extent=12.0,
+            plot_x_extent=9.0,
             setback_front=1.5,
             setback_rear=1.0,
             setback_left=0.9,
@@ -114,8 +114,8 @@ class TestAttachedBathCoversAllBedroomsWhenEnabled:
 
     def test_attached_toilets_on_with_attached_bath_no_warning(self):
         cfg = PlotConfig(
-            plot_length=12.0,
-            plot_width=9.0,
+            plot_y_extent=12.0,
+            plot_x_extent=9.0,
             setback_front=1.5,
             setback_rear=1.0,
             setback_left=0.9,

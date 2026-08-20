@@ -1560,7 +1560,7 @@ def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> in
     # back to the road side). Passing the raw field would send `None` into the
     # trigonometry.
     north = resolve_north_angle(vastu_cfg)
-    zone = zone_for_point(x, y, vastu_cfg.plot_width, vastu_cfg.plot_length, north)
+    zone = zone_for_point(x, y, vastu_cfg.plot_x_extent, vastu_cfg.plot_y_extent, north)
     return 0 if zone in entrance_auspicious_zones(north) else 1
 
 
@@ -2464,10 +2464,10 @@ def derive_dim_chains(
     # Level 2 — plot chain incl. setbacks. Setback segments are quoted in
     # metres (municipal rules are metric); the building span stays ft-in.
     for side, coord, coords, (blo, bhi) in (
-        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_width], (bx1, bx2)),
-        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_width], (bx1, bx2)),
-        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_length], (by1, by2)),
-        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_length], (by1, by2)),
+        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_x_extent], (bx1, bx2)),
+        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_x_extent], (bx1, bx2)),
+        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_y_extent], (by1, by2)),
+        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_y_extent], (by1, by2)),
     ):
         entries = entries_for(coords)
         for e in entries:
@@ -2477,8 +2477,8 @@ def derive_dim_chains(
 
     # Level 1 — overall plot extent, dual-unit (ft-in + metres), outermost lane
     for side, coord, extent in (
-        ("top", by2 + _OVERALL_LANE, cfg.plot_width),
-        ("right", bx2 + _OVERALL_LANE, cfg.plot_length),
+        ("top", by2 + _OVERALL_LANE, cfg.plot_x_extent),
+        ("right", bx2 + _OVERALL_LANE, cfg.plot_y_extent),
     ):
         chains.append(
             DimChain(
@@ -2513,7 +2513,7 @@ def setback_callouts(
             (
                 f"{cfg.setback_rear:.1f}M REAR SETBACK",
                 mx,
-                (by2 + cfg.plot_length) / 2,
+                (by2 + cfg.plot_y_extent) / 2,
                 False,
             )
         )
@@ -2523,7 +2523,7 @@ def setback_callouts(
         out.append(
             (
                 f"{cfg.setback_right:.1f}M RIGHT SETBACK",
-                (bx2 + cfg.plot_width) / 2,
+                (bx2 + cfg.plot_x_extent) / 2,
                 my,
                 True,
             )

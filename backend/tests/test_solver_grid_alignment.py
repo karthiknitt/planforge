@@ -29,8 +29,8 @@ NEAR_MISS_HI = 0.50
 
 def _cfg(**kwargs) -> PlotConfig:
     defaults = dict(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,
@@ -349,7 +349,7 @@ def test_scorer_has_grid_regularity_component():
     from app.engine.scorer import score_layout
 
     cfg = _cfg(
-        num_bedrooms=2, toilets=2, parking=False, plot_length=12.0, plot_width=9.0
+        num_bedrooms=2, toilets=2, parking=False, plot_y_extent=12.0, plot_x_extent=9.0
     )
     rooms = [
         _room("l", 1.13, 1.73, 3.5, 4.0, "living"),

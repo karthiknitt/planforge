@@ -78,8 +78,8 @@ export function PlanTab({
   editSaveError,
   complianceIssues,
   floorPlan,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide,
   plotShape,
   plotFrontWidth,
@@ -127,8 +127,8 @@ export function PlanTab({
   editSaveError: string;
   complianceIssues: Record<string, string[]>;
   floorPlan: FloorPlanData;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide?: string;
   plotShape?: string;
   plotFrontWidth?: number;
@@ -572,8 +572,8 @@ export function PlanTab({
 
       <FloorPlanSVG
         floorPlan={editMode ? { ...floorPlan, rooms: editedRooms ?? floorPlan.rooms } : floorPlan}
-        plotWidth={plotWidth}
-        plotLength={plotLength}
+        plotXExtent={plotXExtent}
+        plotYExtent={plotYExtent}
         roadSide={roadSide}
         className="w-full md:max-w-xl rounded-xl border"
         plotShape={plotShape}

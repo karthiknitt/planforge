@@ -179,8 +179,8 @@ function PlanCard({ plan }: { plan: GalleryPlan }) {
         <div className="w-full" style={{ maxWidth: 240, margin: "0 auto" }}>
           <FloorPlanSVG
             floorPlan={floorPlanData}
-            plotWidth={plan.plot_width_m}
-            plotLength={plan.plot_length_m}
+            plotXExtent={plan.plot_width_m}
+            plotYExtent={plan.plot_length_m}
             roadSide="S"
             showFurniture={false}
             showVastuZones={false}

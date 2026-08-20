@@ -445,7 +445,7 @@ def vastu_layout_score(floors: list[FloorPlan], cfg: PlotConfig) -> float:
             continue
         area = room.width * room.depth
         weighted += area * vastu_room_score(
-            room, cfg.plot_width, cfg.plot_length, north
+            room, cfg.plot_x_extent, cfg.plot_y_extent, north
         )
         ruled_area += area
     if ruled_area <= 0.0:
@@ -511,8 +511,8 @@ def check_vastu(
     if not cfg.vastu_enabled:
         return violations, warnings
 
-    plot_w = cfg.plot_width
-    plot_l = cfg.plot_length
+    plot_w = cfg.plot_x_extent
+    plot_l = cfg.plot_y_extent
     # One orientation resolved once for the whole check. The explicit
     # `road_side` argument, not `cfg.road_side`, is the fallback — that is what
     # every pre-existing caller passes.

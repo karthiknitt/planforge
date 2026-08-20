@@ -53,8 +53,8 @@ def _layout(gf_rooms: list[Room], ff_rooms: list[Room] | None = None, rid: str =
 
 def _cfg(vastu_enabled: bool = True) -> PlotConfig:
     return PlotConfig(
-        plot_length=PLOT_L,
-        plot_width=PLOT_W,
+        plot_y_extent=PLOT_L,
+        plot_x_extent=PLOT_W,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,
@@ -227,8 +227,8 @@ def test_generate_with_vastu_returns_scored_layouts_with_no_vastu_violations():
 
     layouts = generate(
         PlotConfig(
-            plot_length=15.0,
-            plot_width=9.0,
+            plot_y_extent=15.0,
+            plot_x_extent=9.0,
             setback_front=3.0,
             setback_rear=1.5,
             setback_left=1.2,
@@ -278,8 +278,8 @@ def test_solver_does_not_drop_a_layout_over_a_prohibited_zone_room():
     from app.engine.solver import solve_layouts
 
     cfg = PlotConfig(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,

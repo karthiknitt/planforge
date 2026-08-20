@@ -599,9 +599,9 @@ def _render_dxf(
     else:
         boundary_pts = [
             (0.0, 0.0),
-            (cfg.plot_width, 0.0),
-            (cfg.plot_width, cfg.plot_length),
-            (0.0, cfg.plot_length),
+            (cfg.plot_x_extent, 0.0),
+            (cfg.plot_x_extent, cfg.plot_y_extent),
+            (0.0, cfg.plot_y_extent),
         ]
     msp.add_lwpolyline(
         boundary_pts,
@@ -762,7 +762,7 @@ def _render_dxf(
             plot_poly = (
                 _SPoly([(float(x), float(y)) for x, y in cfg.plot_corners])
                 if cfg.plot_shape == "quadrilateral" and cfg.plot_corners
-                else _sbox(0, 0, cfg.plot_width, cfg.plot_length)
+                else _sbox(0, 0, cfg.plot_x_extent, cfg.plot_y_extent)
             )
             draw_open_terrace(msp, plot_poly, footprint, layer="A-TERRACE", z=z_offset)
 
@@ -802,8 +802,8 @@ def _render_dxf(
             layout_id=layout.id,
             gf_area_sqft=gf_sqft,
             ff_area_sqft=ff_sqft,
-            plot_w=cfg.plot_width,
-            plot_l=cfg.plot_length,
+            plot_w=cfg.plot_x_extent,
+            plot_l=cfg.plot_y_extent,
             insert_x=global_min_x,
             insert_y=global_min_y - 5.5,
         )

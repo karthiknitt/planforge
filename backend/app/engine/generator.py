@@ -54,8 +54,8 @@ def _plate_box(cfg: PlotConfig, ewt: float):
         return plate
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
-    w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    w = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    d = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     return box(ox, oy, ox + w, oy + d)
 
 
@@ -791,7 +791,7 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             archetype_layouts.append(layout)
 
     # Layout F: courtyard — conditional on plot area >= 150 sqm
-    plot_area = cfg.plot_width * cfg.plot_length
+    plot_area = cfg.plot_x_extent * cfg.plot_y_extent
     if plot_area >= 150:
         lf = layout_f(cfg, ewt=ewt, iwt=iwt)
         if lf is not None:
