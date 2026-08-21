@@ -827,7 +827,63 @@ def derive_walls(
                 w, open_v, open_h, covered_v, covered_h, open_slack
             )
         ]
+    _assign_wall_ids(walls, rooms, tol)
     return walls
+
+
+_ID_CONTACT_SLACK = 0.03  # band slack beyond half-thickness for room contact
+_ID_MIN_CONTACT_AREA = 2e-4  # ~7 mm of contact across the slack band
+
+
+def _assign_wall_ids(
+    walls: list[WallSegment], rooms: list[Room], tol: float = 0.01
+) -> None:
+    """Give every wall a deterministic, topology-derived id (Phase 7, Task 26).
+
+    Identity is a pure function of the wall's supporting rooms — the room-id
+    set on each side of its centreline — never of list position. The plain
+    room-pair scheme the plan sketched cannot stand alone: collinear merging
+    can back ONE run with three or more rooms ({a} | {b, c}), and an
+    open-side split leaves two pieces on the same centreline backed by
+    identical room sets. The wall's own centreline coordinate and [lo, hi]
+    span are therefore folded in as a disambiguator — geometry that only the
+    wall itself contributes, so moving an unrelated room (which leaves both
+    the supporting-room sets and this span untouched) preserves the id.
+    """
+    polys = [(r.id, _room_polygon(r)) for r in rooms if r.id]
+    for w in walls:
+        vertical = _is_vertical(w)
+        coord = w.x1 if vertical else w.y1
+        lo, hi = (
+            (min(w.y1, w.y2), max(w.y1, w.y2))
+            if vertical
+            else (min(w.x1, w.x2), max(w.x1, w.x2))
+        )
+        t_half = w.thickness / 2 + _ID_CONTACT_SLACK
+        neg_box = (
+            box(coord - t_half, lo, coord, hi)
+            if vertical
+            else box(lo, coord - t_half, hi, coord)
+        )
+        pos_box = (
+            box(coord, lo, coord + t_half, hi)
+            if vertical
+            else box(lo, coord, hi, coord + t_half)
+        )
+        neg_ids: set[str] = set()
+        pos_ids: set[str] = set()
+        for rid, poly in polys:
+            neg_a = poly.intersection(neg_box).area
+            pos_a = poly.intersection(pos_box).area
+            if max(neg_a, pos_a) <= _ID_MIN_CONTACT_AREA:
+                continue
+            (neg_ids if neg_a >= pos_a else pos_ids).add(rid)
+        lft = "+".join(sorted(neg_ids)) or "-"
+        rgt = "+".join(sorted(pos_ids)) or "-"
+        w.id = (
+            f"w:{'v' if vertical else 'h'}:{w.kind[0]}:{lft}>{rgt}"
+            f"@{coord:.2f}:{lo:.2f}-{hi:.2f}"
+        )
 
 
 def _trim_room_overreach(

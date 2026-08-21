@@ -26,6 +26,9 @@ class WallSegment:
     y2: float
     thickness: float  # metres
     kind: str = "internal"  # "external" | "internal"
+    # Deterministic, topology-derived identity assigned by derive_walls()
+    # (plan_geometry._assign_wall_ids). Empty for legacy hand-built segments.
+    id: str = ""
 
     @property
     def length(self) -> float:
