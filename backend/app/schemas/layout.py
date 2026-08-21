@@ -17,12 +17,24 @@ class ColumnOut(BaseModel):
     y: float
 
 
+class OpeningOverrideOut(BaseModel):
+    """Wire mirror of engine models.OpeningOverride (Phase 7 Task 29)."""
+
+    opening_id: str
+    along: float | None = None
+    width: float | None = None
+    suppressed: bool = False
+
+
 class FloorPlanOut(BaseModel):
     floor: int
     floor_type: str = "ground"
     rooms: list[RoomOut]
     columns: list[ColumnOut]
     needs_mech_ventilation: bool = False
+    # User/AI deltas against derived openings, keyed by Opening.id. Optional
+    # with a default so every stored geometry dict still parses.
+    opening_overrides: list[OpeningOverrideOut] = []
     # Canonical drawing (walls/openings/columns/junctions/dim_chains/labels/
     # stair) — same FloorDrawing.to_dict() the PDF/DXF renderers project.
     # Computed at read time in to_generate_response(), not persisted.
