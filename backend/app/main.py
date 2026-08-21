@@ -19,6 +19,7 @@ from app.api.routes import (
     rooms,
     share,
     structural,
+    style_presets,
     teams,
 )
 from app.config.cors import parse_allowed_origins
@@ -106,6 +107,7 @@ app.include_router(teams.router, prefix="/api")
 app.include_router(render.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(structural.router, prefix="/api")
+app.include_router(style_presets.router, prefix="/api")
 
 import inngest.fast_api  # noqa: E402
 
