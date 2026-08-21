@@ -8,7 +8,7 @@ All coordinates are in metres (plot coordinate system).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dataclass_fields
 
 
 @dataclass
@@ -123,6 +123,25 @@ def _rounded(node):
     return node
 
 
+def _take(cls, payload: dict) -> dict:
+    """Keep only the keys `cls` knows about — tolerant rehydration."""
+    names = {f.name for f in dataclass_fields(cls)}
+    return {k: v for k, v in payload.items() if k in names}
+
+
+def _stair_from_dict(payload: dict | None) -> StairGeometry | None:
+    if not payload:
+        return None
+    return StairGeometry(
+        room_id=payload["room_id"],
+        treads=[tuple(t) for t in payload.get("treads") or []],
+        break_line=tuple(payload["break_line"]),
+        arrow=tuple(payload["arrow"]),
+        up_label_xy=tuple(payload["up_label_xy"]),
+        tread_count=payload["tread_count"],
+    )
+
+
 @dataclass
 class FloorDrawing:
     """Complete canonical drawing for one floor — the single source every
@@ -144,8 +163,55 @@ class FloorDrawing:
         from dataclasses import asdict
 
         payload = _rounded(asdict(self))
-        payload["version"] = 1
+        payload["version"] = 2
         return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> FloorDrawing:
+        """Rehydrate a to_dict() payload of any stored version.
+
+        Follows LayoutScore's optional-with-default pattern (models.py): every
+        field added after v1 — wall/opening ids, opening marks, and later the
+        site-context and fixture entities — has a default, so a stored v1
+        payload (revision snapshots taken before Phase 7) deserialises and
+        renders unchanged. Unknown keys are ignored so future payloads stay
+        loadable here.
+        """
+        return cls(
+            floor=payload["floor"],
+            bounds=tuple(payload.get("bounds") or (0.0, 0.0, 0.0, 0.0)),
+            diagnostics=list(payload.get("diagnostics") or []),
+            entrance_not_on_ground_floor=bool(
+                payload.get("entrance_not_on_ground_floor", False)
+            ),
+            walls=[
+                WallSegment(**_take(WallSegment, w)) for w in payload.get("walls") or []
+            ],
+            openings=[
+                Opening(**_take(Opening, o)) for o in payload.get("openings") or []
+            ],
+            columns=[
+                ColumnMarker(**_take(ColumnMarker, c))
+                for c in payload.get("columns") or []
+            ],
+            junctions=[
+                WallJunction(**_take(WallJunction, j))
+                for j in payload.get("junctions") or []
+            ],
+            dim_chains=[
+                DimChain(
+                    side=d["side"],
+                    level=d["level"],
+                    coord=d["coord"],
+                    entries=[DimChainEntry(**e) for e in d.get("entries") or []],
+                )
+                for d in payload.get("dim_chains") or []
+            ],
+            labels=[
+                LabelBox(**_take(LabelBox, lb)) for lb in payload.get("labels") or []
+            ],
+            stair=_stair_from_dict(payload.get("stair")),
+        )
 
 
 @dataclass
