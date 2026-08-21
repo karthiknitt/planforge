@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from app.schemas.project import GenerateRequest
+
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
 from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; historical import site)
     buildable_polygon,
@@ -900,6 +902,44 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             "navigability gate rejected every layout; keeping unfiltered set"
         )
 
+    # ── Required-programme gate (Task 25) ─────────────────────────────────────
+    # The archetype fallback builds fixed programmes and cannot honour wizard
+    # programme flags, so without this gate an explicitly requested courtyard
+    # could be outranked by an archetype that lacks one. Same never-return-zero
+    # rule as the navigability gate.
+    if cfg.required_types or cfg.open_parking:
+        required = set(cfg.required_types)
+
+        def _satisfies(lay: Layout) -> bool:
+            floors = layout_floors(lay)
+            present = {r.type for fp in floors for r in fp.rooms}
+            if not required <= present:
+                return False
+            if cfg.open_parking:
+                # Archetypes build fully-walled parking; a request for an open
+                # car porch is only honoured by layouts whose ground-floor
+                # porch actually declares its road-facing edge open.
+                porches = [
+                    r
+                    for fp in floors
+                    if fp.floor == 0
+                    for r in fp.rooms
+                    if r.type in ("parking", "parking_4w", "parking_2w")
+                ]
+                if porches and not all(p.open_sides for p in porches):
+                    return False
+            return True
+
+        honoured = [lay for lay in all_layouts if _satisfies(lay)]
+        if honoured:
+            all_layouts = honoured
+        else:
+            logger.warning(
+                "no layout satisfies the requested programme %s; keeping "
+                "unfiltered set",
+                sorted(required),
+            )
+
     # ── Vastu: warnings + graded score on the final geometry ─────────────────
     for layout in all_layouts:
         _attach_vastu(layout, cfg)
@@ -910,3 +950,54 @@ def generate(cfg: PlotConfig) -> list[Layout]:
     for layout, letter in zip(top, ["A", "B", "C"]):
         layout.id = letter
     return top
+
+
+_PROGRAMME_TYPES: dict[str, str] = {
+    "courtyard": "courtyard",
+    "verandah": "verandah",
+    "pooja": "pooja",
+    "terrace": "terrace",
+    "study": "study",
+}
+
+
+def _programme_types(flags: set[str]) -> frozenset[str]:
+    """Wizard programme flags → room types the solver must place.
+
+    `car_porch_open` is deliberately absent: it does not add a room, it opens
+    the existing parking room's road-facing edge (`open_parking`).
+    """
+    return frozenset(_PROGRAMME_TYPES[f] for f in flags if f in _PROGRAMME_TYPES)
+
+
+def generate_from_request(req: GenerateRequest) -> list[Layout]:
+    """Map an API request onto a PlotConfig plus programme requirements.
+
+    Note that `style_preset` is deliberately NOT read here: presets seed the
+    wizard form's checkboxes, and the resulting explicit `programme` set is the
+    only thing the engine honours. A user who unticks every box on a Kerala
+    preset gets no courtyard. See spec section 6 on why style signal is too
+    weak to drive generation directly.
+    """
+    cfg = PlotConfig(
+        plot_x_extent=req.plot_x_extent,
+        plot_y_extent=req.plot_y_extent,
+        setback_front=req.setback_front,
+        setback_rear=req.setback_rear,
+        setback_left=req.setback_left,
+        setback_right=req.setback_right,
+        num_bedrooms=req.num_bedrooms,
+        toilets=req.toilets,
+        parking=req.parking,
+        north_angle_deg=req.north_angle_deg,
+        plot_template=req.plot_template,
+        notch_width=req.notch_width or 0.0,
+        notch_depth=req.notch_depth or 0.0,
+        # NOT coupled to plot_template — see "Task 9 rulings" ruling 2. Forcing
+        # room templates on for an L plot makes layouts strictly worse until a
+        # notch-filling objective term exists.
+        allow_shape_templates=False,
+        required_types=_programme_types(req.programme),
+        open_parking=("car_porch_open" in req.programme),
+    )
+    return generate(cfg)
