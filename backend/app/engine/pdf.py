@@ -421,9 +421,9 @@ def _compute_layout(
     avail_w = page_w - 2 * MARGIN
     avail_h = page_h - TITLE_H - 2 * MARGIN - ROAD_H - ROAD_GAP - TOP_PAD
 
-    scale = min(avail_w / cfg.plot_width, avail_h / cfg.plot_length)
-    plot_px = cfg.plot_width * scale
-    plot_py = cfg.plot_length * scale
+    scale = min(avail_w / cfg.plot_x_extent, avail_h / cfg.plot_y_extent)
+    plot_px = cfg.plot_x_extent * scale
+    plot_py = cfg.plot_y_extent * scale
 
     offset_x = MARGIN + (avail_w - plot_px) / 2
     offset_y = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
@@ -576,8 +576,8 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
             {round(r.y, 3) for r in rooms} | {round(r.y + r.depth, 3) for r in rooms}
         )
     else:
-        raw_x = [0.0, cfg.plot_width]
-        raw_y = [0.0, cfg.plot_length]
+        raw_x = [0.0, cfg.plot_x_extent]
+        raw_y = [0.0, cfg.plot_y_extent]
 
     x_pos = _filter_dim_positions(raw_x)
     y_pos = _filter_dim_positions(raw_y)
@@ -613,7 +613,7 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
         ox + plot_px - 4, outer_y - 4, ox + plot_px + 4, outer_y + 4
     )  # 45° tick at end
     c.setFont("Helvetica-Bold", 6.5)
-    c.drawCentredString(ox + plot_px / 2, outer_y + 8, metres_to_ftin(cfg.plot_width))
+    c.drawCentredString(ox + plot_px / 2, outer_y + 8, metres_to_ftin(cfg.plot_x_extent))
 
     # ── RIGHT VERTICAL CHAIN ──────────────────────────────────────────────────
     right_x = ox + plot_px
@@ -648,7 +648,7 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
     c.translate(outer_x + 8, oy + plot_py / 2)
     c.rotate(90)
     c.setFont("Helvetica-Bold", 6.5)
-    c.drawCentredString(0, 0, metres_to_ftin(cfg.plot_length))
+    c.drawCentredString(0, 0, metres_to_ftin(cfg.plot_y_extent))
     c.restoreState()
 
 
@@ -1178,7 +1178,7 @@ def _draw_structural_floor(
     # Same scale + centring as the architectural pages (incl. the reserved
     # schedule column) so all four sheets read as one set.
     s, denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
-    plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
+    plot_px, plot_py = cfg.plot_x_extent * s, cfg.plot_y_extent * s
     ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
     oy = _centered_plot_oy(
         page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
@@ -1459,7 +1459,7 @@ def _draw_title_block(
         ("PROJECT", project_name),
         ("LAYOUT", f"{layout_id} - {layout_name}"),
         ("FLOOR", floor_label),
-        ("PLOT", f"{cfg.plot_width}x{cfg.plot_length} m"),
+        ("PLOT", f"{cfg.plot_x_extent}x{cfg.plot_y_extent} m"),
         ("CONFIG", f"{num_bedrooms} BHK · {cfg.city.title()}"),
         ("SCALE", f"1:{scale_ratio}"),
         ("TOTAL AREA", f"{sqft_total} SQFT" if floor_plan else "—"),
@@ -1484,7 +1484,7 @@ _PT_PER_PAPER_M = 72 / 0.0254  # points per paper metre
 
 
 def _far_text(layout: Layout, cfg: PlotConfig) -> str:
-    plot_area = cfg.plot_width * cfg.plot_length
+    plot_area = cfg.plot_x_extent * cfg.plot_y_extent
     if not plot_area:
         return "0.00"
     built = sum(r.area for r in layout.ground_floor.rooms) + sum(
@@ -1509,9 +1509,9 @@ def _standard_scale(
     avail_h = page_h - TITLE_H - 2 * MARGIN - ROAD_H - ROAD_GAP - TOP_PAD
     for denom in (50, 100, 200):
         s = _PT_PER_PAPER_M / denom
-        if cfg.plot_width * s <= avail_w and cfg.plot_length * s <= avail_h:
+        if cfg.plot_x_extent * s <= avail_w and cfg.plot_y_extent * s <= avail_h:
             return s, denom
-    fit = min(avail_w / cfg.plot_width, avail_h / cfg.plot_length)
+    fit = min(avail_w / cfg.plot_x_extent, avail_h / cfg.plot_y_extent)
     denom = math.ceil(_PT_PER_PAPER_M / fit / 50) * 50
     return _PT_PER_PAPER_M / denom, denom
 
@@ -1922,7 +1922,7 @@ def _draw_floor_projected(
 
     page_w, page_h = A4
     s, denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
-    plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
+    plot_px, plot_py = cfg.plot_x_extent * s, cfg.plot_y_extent * s
     # Centre the plot in the left region, leaving the reserved schedule column
     # on the right; centre the plot+road group vertically in the page band.
     ox = MARGIN + (page_w - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2

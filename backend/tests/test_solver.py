@@ -28,8 +28,8 @@ def _generous_solve_budget(monkeypatch):
 
 def _basic_cfg(**kwargs) -> PlotConfig:
     defaults = dict(
-        plot_length=12.0,
-        plot_width=9.0,
+        plot_y_extent=12.0,
+        plot_x_extent=9.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,
@@ -85,7 +85,7 @@ def test_room_list_custom_rooms():
 
 
 def test_solve_returns_up_to_3_layouts():
-    cfg = _basic_cfg(plot_length=14.0, plot_width=11.0)
+    cfg = _basic_cfg(plot_y_extent=14.0, plot_x_extent=11.0)
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
     # Solver may return 0-3; we just check it doesn't crash and stays bounded
@@ -93,7 +93,7 @@ def test_solve_returns_up_to_3_layouts():
 
 
 def test_solve_layouts_pass_compliance():
-    cfg = _basic_cfg(plot_length=15.0, plot_width=12.0, num_bedrooms=2, toilets=2)
+    cfg = _basic_cfg(plot_y_extent=15.0, plot_x_extent=12.0, num_bedrooms=2, toilets=2)
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
     for layout in layouts:
@@ -116,7 +116,7 @@ def test_solve_columns_use_wall_junction_pipeline_not_room_corners():
     from app.engine.plan_geometry import derive_columns, derive_junctions, derive_walls
 
     cfg = _basic_cfg(
-        plot_length=15.0, plot_width=12.0, num_bedrooms=3, toilets=2, parking=True
+        plot_y_extent=15.0, plot_x_extent=12.0, num_bedrooms=3, toilets=2, parking=True
     )
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
@@ -182,7 +182,7 @@ def test_solved_parking_touches_road_side():
     # harder archetype, so we require the preference to win for at least one
     # generated layout, not unconditionally for every archetype.
     cfg = _basic_cfg(
-        plot_length=15.0, plot_width=12.0, num_bedrooms=2, toilets=2, parking=True
+        plot_y_extent=15.0, plot_x_extent=12.0, num_bedrooms=2, toilets=2, parking=True
     )
     ewt = 0.23
     front_y = cfg.setback_front + ewt
@@ -215,8 +215,8 @@ def test_solved_parking_touches_road_side():
 
 def test_solve_too_small_plot_returns_empty():
     cfg = _basic_cfg(
-        plot_length=5.0,
-        plot_width=5.0,
+        plot_y_extent=5.0,
+        plot_x_extent=5.0,
         setback_front=2.0,
         setback_rear=2.0,
         setback_left=1.5,
@@ -300,8 +300,8 @@ def test_room_list_bedroomless_floor_gets_common_toilet(attached):
 
 def test_solved_ensuite_shares_wall_with_bedroom():
     cfg = _basic_cfg(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         num_bedrooms=2,
         toilets=1,
         attached_toilets=True,
@@ -329,7 +329,7 @@ def test_solved_ensuite_shares_wall_with_bedroom():
 def test_solved_toilets_do_not_balloon():
     # Regression: size_terms grew toilets to their 6.0 sqm spec max. With wet
     # types excluded from the growth objective they settle near min size.
-    cfg = _basic_cfg(plot_length=15.0, plot_width=9.0, num_bedrooms=2, toilets=2)
+    cfg = _basic_cfg(plot_y_extent=15.0, plot_x_extent=9.0, num_bedrooms=2, toilets=2)
     layouts = solve_layouts(cfg, 0.23)
     assert layouts
     for layout in layouts:
@@ -345,12 +345,12 @@ def test_solved_toilet_placement_common_sense(monkeypatch):
     # Standard 9×15 config: common toilets should avoid the front band
     # (road side, y-min) and should not share a wall with the staircase.
     _generous_solve_budget(monkeypatch)
-    cfg = _basic_cfg(plot_length=15.0, plot_width=9.0, num_bedrooms=2, toilets=2)
+    cfg = _basic_cfg(plot_y_extent=15.0, plot_x_extent=9.0, num_bedrooms=2, toilets=2)
     ewt = 0.23
     layouts = solve_layouts(cfg, ewt)
     assert layouts
     plate_y0 = cfg.setback_front + ewt
-    plate_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    plate_d = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     for layout in layouts:
         for fp in (layout.ground_floor, layout.first_floor):
             stair = next((r for r in fp.rooms if r.type == "staircase"), None)
@@ -374,7 +374,7 @@ def test_wet_cap_tightened():
 
 
 def test_solve_does_not_raise_on_bad_input():
-    cfg = _basic_cfg(plot_length=0.1, plot_width=0.1)
+    cfg = _basic_cfg(plot_y_extent=0.1, plot_x_extent=0.1)
     try:
         result = solve_layouts(cfg, 0.23)
         assert isinstance(result, list)

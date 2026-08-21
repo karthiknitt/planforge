@@ -53,8 +53,8 @@ from app.engine.plan_geometry import build_floor_drawing
 
 def _cfg(road_side: str = "S") -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=1.2,
@@ -319,7 +319,7 @@ def _front_gate_midpoint(segs, cfg: PlotConfig) -> float:
         x
         for s in front
         for x in (s[0], s[2])
-        if abs(x) > 1e-6 and abs(x - cfg.plot_width) > 1e-6
+        if abs(x) > 1e-6 and abs(x - cfg.plot_x_extent) > 1e-6
     )
     assert len(inner) == 2, f"expected two inner gate edges, got {inner}"
     return (inner[0] + inner[1]) / 2.0
@@ -442,13 +442,13 @@ def _trapezoid_cfg() -> PlotConfig:
     `plot_width` is set to 12.0 (matching the front edge) purely because
     PlotConfig requires it — plot_polygon() ignores it for shape="trapezoid"
     and uses plot_front_width/plot_rear_width instead. A naive
-    `box(0, 0, cfg.plot_width, cfg.plot_length)` implementation would use
+    `box(0, 0, cfg.plot_x_extent, cfg.plot_y_extent)` implementation would use
     that same 12.0 for BOTH the front and rear edges, silently drawing a
     rectangle instead of a trapezoid.
     """
     return PlotConfig(
-        plot_length=18.0,
-        plot_width=12.0,
+        plot_y_extent=18.0,
+        plot_x_extent=12.0,
         plot_shape="trapezoid",
         plot_front_width=12.0,
         plot_rear_width=8.0,
@@ -492,9 +492,9 @@ def test_landscape_region_on_trapezoid_matches_polygon_difference_not_naive_rect
     correct_area = plot_polygon(cfg).area - buildable_polygon(cfg).area
     assert abs(region.area - correct_area) < 1e-6
 
-    naive_area = (cfg.plot_width * cfg.plot_length) - (
-        (cfg.plot_width - cfg.setback_left - cfg.setback_right)
-        * (cfg.plot_length - cfg.setback_front - cfg.setback_rear)
+    naive_area = (cfg.plot_x_extent * cfg.plot_y_extent) - (
+        (cfg.plot_x_extent - cfg.setback_left - cfg.setback_right)
+        * (cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear)
     )
     assert abs(region.area - naive_area) > 1.0, (
         "the trapezoid's landscape area must differ materially from the "
@@ -600,8 +600,8 @@ def _zero_side_setback_cfg() -> PlotConfig:
     that actually exercises the branch.
     """
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=3.0,
         setback_rear=1.5,
         setback_left=0.0,

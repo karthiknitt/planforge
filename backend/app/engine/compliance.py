@@ -79,13 +79,13 @@ def check(
     # --- Minimum plot dimensions ---
     min_length = rules["min_plot_length_m"]
     min_width = rules["min_plot_width_m"]
-    if cfg.plot_length < min_length:
+    if cfg.plot_y_extent < min_length:
         violations.append(
-            f"Plot length {cfg.plot_length} m is below minimum {min_length} m"
+            f"Plot length {cfg.plot_y_extent} m is below minimum {min_length} m"
         )
-    if cfg.plot_width < min_width:
+    if cfg.plot_x_extent < min_width:
         violations.append(
-            f"Plot width {cfg.plot_width} m is below minimum {min_width} m"
+            f"Plot width {cfg.plot_x_extent} m is below minimum {min_width} m"
         )
 
     all_floors = [layout.ground_floor, layout.first_floor]
@@ -449,9 +449,9 @@ def check(
     # compliance has no such split — every front-band toilet gets the same
     # single flat "faces the front facade" warning regardless of x-position. ---
     by_min = cfg.setback_front + ewt
-    by_max = cfg.plot_length - cfg.setback_rear - ewt
+    by_max = cfg.plot_y_extent - cfg.setback_rear - ewt
     bx_min = cfg.setback_left + ewt
-    bx_max = cfg.plot_width - cfg.setback_right - ewt
+    bx_max = cfg.plot_x_extent - cfg.setback_right - ewt
     _front_band_y = by_min + 0.25 * max(by_max - by_min, 0.01)
     _adjacency_block_types = {"staircase", "parking_4w", "parking_2w"}
 

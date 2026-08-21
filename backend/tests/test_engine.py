@@ -7,8 +7,8 @@ from app.engine.models import PlotConfig
 
 # Standard test plot: 9 m × 12 m, typical Indian site
 STANDARD_CFG = PlotConfig(
-    plot_width=9.0,
-    plot_length=12.0,
+    plot_x_extent=9.0,
+    plot_y_extent=12.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -19,8 +19,8 @@ STANDARD_CFG = PlotConfig(
 )
 
 STANDARD_CFG_3BHK = PlotConfig(
-    plot_width=9.0,
-    plot_length=12.0,
+    plot_x_extent=9.0,
+    plot_y_extent=12.0,
     setback_front=1.5,
     setback_rear=1.5,
     setback_left=1.0,
@@ -132,8 +132,8 @@ def test_parking_included_when_requested():
 
 def test_1bhk_generates_layouts():
     cfg_1bhk = PlotConfig(
-        plot_width=6.0,
-        plot_length=9.0,
+        plot_x_extent=6.0,
+        plot_y_extent=9.0,
         setback_front=1.0,
         setback_rear=1.0,
         setback_left=0.75,
@@ -150,8 +150,8 @@ def test_4bhk_large_plot():
     """4BHK on a 15 m × 15 m (225 sqm) plot should generate at least one layout
     and at least one layout must contain ≥4 bedrooms."""
     cfg_4bhk = PlotConfig(
-        plot_width=15.0,
-        plot_length=15.0,
+        plot_x_extent=15.0,
+        plot_y_extent=15.0,
         setback_front=1.5,
         setback_rear=1.5,
         setback_left=1.0,

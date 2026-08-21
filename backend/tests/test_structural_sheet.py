@@ -31,8 +31,8 @@ from app.engine.structural_sheet import (
 from tests.helpers.pdf_png import pdf_page_text
 
 CFG = PlotConfig(
-    plot_width=12.192,
-    plot_length=18.288,
+    plot_x_extent=12.192,
+    plot_y_extent=18.288,
     num_bedrooms=2,
     toilets=2,
     setback_front=1.5,
@@ -48,8 +48,8 @@ CFG = PlotConfig(
 # different standard scale denominator than CFG and the registration
 # assertion is not accidentally true for one geometry only.
 NARROW_CFG = PlotConfig(
-    plot_width=6.1,
-    plot_length=9.15,
+    plot_x_extent=6.1,
+    plot_y_extent=9.15,
     num_bedrooms=2,
     toilets=1,
     setback_front=1.5,

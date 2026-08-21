@@ -57,8 +57,8 @@ _ASPECTS = [
 
 def _cfg(width: float, length: float) -> PlotConfig:
     return PlotConfig(
-        plot_length=length,
-        plot_width=width,
+        plot_y_extent=length,
+        plot_x_extent=width,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,
@@ -78,7 +78,7 @@ def test_plot_group_is_vertically_centered(width: float, length: float) -> None:
     bottom-anchored)."""
     cfg = _cfg(width, length)
     s, _ = _standard_scale(cfg, PAGE_W, PAGE_H, reserve_w=SCHED_RESERVE)
-    plot_py = cfg.plot_length * s
+    plot_py = cfg.plot_y_extent * s
     road_below = ROAD_H + ROAD_GAP
     oy = _centered_plot_oy(
         PAGE_H, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=road_below
@@ -110,7 +110,7 @@ def test_centering_accounts_for_road_above() -> None:
 def test_schedule_column_clear_of_plot(width: float, length: float) -> None:
     cfg = _cfg(width, length)
     s, _ = _standard_scale(cfg, PAGE_W, PAGE_H, reserve_w=SCHED_RESERVE)
-    plot_px = cfg.plot_width * s
+    plot_px = cfg.plot_x_extent * s
     ox = MARGIN + (PAGE_W - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
     sched_x = _schedule_column_x(PAGE_W, MARGIN)
 

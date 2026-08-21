@@ -16,8 +16,8 @@ export function ChatTab({
   layout,
   floor,
   liveLayout,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide,
   plotShape,
   plotFrontWidth,
@@ -34,8 +34,8 @@ export function ChatTab({
   layout: LayoutData;
   floor: number;
   liveLayout: LayoutData | null;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide?: string;
   plotShape?: string;
   plotFrontWidth?: number;
@@ -76,8 +76,8 @@ export function ChatTab({
         </div>
         <FloorPlanSVG
           floorPlan={floor === 1 ? layout.first_floor : layout.ground_floor}
-          plotWidth={plotWidth}
-          plotLength={plotLength}
+          plotXExtent={plotXExtent}
+          plotYExtent={plotYExtent}
           roadSide={roadSide}
           className="rounded-xl border"
           plotShape={plotShape}

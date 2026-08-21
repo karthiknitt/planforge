@@ -534,8 +534,8 @@ def test_zone_distribution_sample_count_does_not_change_normalisation():
 
 def _cfg(**kw) -> PlotConfig:
     base = dict(
-        plot_length=NS_L,
-        plot_width=NS_W,
+        plot_y_extent=NS_L,
+        plot_x_extent=NS_W,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,

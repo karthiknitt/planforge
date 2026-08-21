@@ -66,9 +66,9 @@ def _touches_boundary(
 ) -> bool:
     """True if any edge of the room is within tol of the buildable boundary."""
     bx_min = cfg.setback_left + ewt
-    bx_max = cfg.plot_width - cfg.setback_right - ewt
+    bx_max = cfg.plot_x_extent - cfg.setback_right - ewt
     by_min = cfg.setback_front + ewt
-    by_max = cfg.plot_length - cfg.setback_rear - ewt
+    by_max = cfg.plot_y_extent - cfg.setback_rear - ewt
     return (
         abs(room.x - bx_min) < tol
         or abs(room.x + room.width - bx_max) < tol
@@ -127,8 +127,8 @@ def _score_aspect_ratio(layout: Layout) -> float:
 def _score_circulation(layout: Layout, cfg: PlotConfig, ewt: float) -> float:
     all_rooms = layout.ground_floor.rooms + layout.first_floor.rooms
     total_room_area = sum(r.area for r in all_rooms)
-    bw = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    bd = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    bw = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    bd = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     buildable_area = max(bw * bd * 2, 0.01)  # both floors
     fill_ratio = total_room_area / buildable_area
     # Target fill 0.75–0.90; penalty outside this band
@@ -220,9 +220,9 @@ def _score_toilet_placement(layout: Layout, cfg: PlotConfig, ewt: float) -> floa
         return 100.0
 
     by_min = cfg.setback_front + ewt
-    by_max = cfg.plot_length - cfg.setback_rear - ewt
+    by_max = cfg.plot_y_extent - cfg.setback_rear - ewt
     bx_min = cfg.setback_left + ewt
-    bx_max = cfg.plot_width - cfg.setback_right - ewt
+    bx_max = cfg.plot_x_extent - cfg.setback_right - ewt
     depth = max(by_max - by_min, 0.01)
     width = max(bx_max - bx_min, 0.01)
     front_band_y = by_min + 0.25 * depth

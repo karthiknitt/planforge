@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import MISSING, dataclass, field
 from typing import Literal
 
 from app.engine.shapes import Rect, ShapeTemplate, parts_for, validate_shape
@@ -196,10 +196,10 @@ class Layout:
     space_notes: list[str] = field(default_factory=list)  # auto-fill notes for user
 
 
-@dataclass
+@dataclass(init=False)
 class PlotConfig:
-    plot_length: float  # y-extent (front/road -> rear), metres. NOT the longer axis.
-    plot_width: float  # x-extent (left -> right, road frontage), metres.
+    plot_x_extent: float  # x-extent (left -> right, road frontage), metres.
+    plot_y_extent: float  # y-extent (front/road -> rear), metres. NOT the longer axis.
     setback_front: float
     setback_rear: float
     setback_left: float
@@ -243,9 +243,6 @@ class PlotConfig:
     municipality: str | None = None
     # Custom room config (arbitrary rooms, Phase C)
     custom_room_config: list | None = None  # list of dicts from CustomRoomSpec
-    # En-suite toilets: one attached bath per bedroom, additive to `toilets`
-    # (which then counts COMMON toilets only)
-    attached_toilets: bool = False
     # Opt-in: let the solver give eligible rooms a non-RECT shape template, so
     # two rooms can interlock (an L's notch filled by its neighbour). Off by
     # default — every room then comes out `template="RECT"` and the CP-SAT
@@ -262,6 +259,62 @@ class PlotConfig:
     plot_template: ShapeTemplate = "RECT"
     notch_width: float = 0.0  # metres, x-extent of the cutout
     notch_depth: float = 0.0  # metres, y-extent of the cutout
+
+    def __init__(
+        self,
+        *,
+        plot_x_extent: float | None = None,
+        plot_y_extent: float | None = None,
+        plot_width: float | None = None,
+        plot_length: float | None = None,
+        **kwargs,
+    ) -> None:
+        """Construct with the new primary names, accepting the legacy
+        `plot_width`/`plot_length` aliases for one release so persisted configs
+        and in-flight API payloads keep working."""
+        if plot_width is not None:
+            if plot_x_extent is not None and plot_x_extent != plot_width:
+                raise ValueError("plot_x_extent and plot_width disagree")
+            plot_x_extent = plot_width
+        if plot_length is not None:
+            if plot_y_extent is not None and plot_y_extent != plot_length:
+                raise ValueError("plot_y_extent and plot_length disagree")
+            plot_y_extent = plot_length
+        if plot_x_extent is None or plot_y_extent is None:
+            raise TypeError("plot_x_extent and plot_y_extent are required")
+        kwargs["plot_x_extent"] = plot_x_extent
+        kwargs["plot_y_extent"] = plot_y_extent
+        fields = type(self).__dataclass_fields__
+        unknown = set(kwargs) - set(fields)
+        if unknown:
+            raise TypeError(
+                "PlotConfig got unexpected keyword argument(s): "
+                + ", ".join(sorted(unknown))
+            )
+        for name, f in fields.items():
+            if name in kwargs:
+                value = kwargs[name]
+            else:
+                value = f.default if f.default is not MISSING else None
+            object.__setattr__(self, name, value)
+
+    @property
+    def plot_width(self) -> float:
+        """Deprecated alias for plot_x_extent."""
+        return self.plot_x_extent
+
+    @plot_width.setter
+    def plot_width(self, v: float) -> None:
+        self.plot_x_extent = v
+
+    @property
+    def plot_length(self) -> float:
+        """Deprecated alias for plot_y_extent — NOT the longer axis."""
+        return self.plot_y_extent
+
+    @plot_length.setter
+    def plot_length(self, v: float) -> None:
+        self.plot_y_extent = v
 
     @property
     def bhk(self) -> int:

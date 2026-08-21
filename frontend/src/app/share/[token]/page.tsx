@@ -133,8 +133,8 @@ function ReadOnlyLayoutCard({
           </p>
           <FloorPlanSVG
             floorPlan={groundFloor}
-            plotWidth={plotWidth}
-            plotLength={plotLength}
+            plotXExtent={plotWidth}
+            plotYExtent={plotLength}
             roadSide={roadSide}
             className="rounded-xl border w-full"
           />
@@ -145,8 +145,8 @@ function ReadOnlyLayoutCard({
           </p>
           <FloorPlanSVG
             floorPlan={firstFloor}
-            plotWidth={plotWidth}
-            plotLength={plotLength}
+            plotXExtent={plotWidth}
+            plotYExtent={plotLength}
             roadSide={roadSide}
             className="rounded-xl border w-full"
           />

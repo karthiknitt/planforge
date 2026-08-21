@@ -26,8 +26,8 @@ class TestFarFloorSemantics:
         Stilt parking (40) + FF rooms (40) = 40 habitable, under the limit.
         The old code counted the stilt floor too (80 > 75 → false warning)."""
         cfg = PlotConfig(
-            plot_length=10.0,
-            plot_width=5.0,
+            plot_y_extent=10.0,
+            plot_x_extent=5.0,
             setback_front=0.5,
             setback_rear=0.5,
             setback_left=0.5,
@@ -61,8 +61,8 @@ class TestFarFloorSemantics:
 class TestCoverageFromRooms:
     def _cfg(self):
         return PlotConfig(
-            plot_length=10.0,
-            plot_width=10.0,
+            plot_y_extent=10.0,
+            plot_x_extent=10.0,
             setback_front=1.0,
             setback_rear=1.0,
             setback_left=1.0,
@@ -105,8 +105,8 @@ class TestCoverageFromRooms:
 class TestTrapezoidSolvedInsideShape:
     def test_generated_rooms_stay_inside_trapezoid(self):
         cfg = PlotConfig(
-            plot_length=18.0,
-            plot_width=14.0,
+            plot_y_extent=18.0,
+            plot_x_extent=14.0,
             setback_front=1.5,
             setback_rear=1.0,
             setback_left=1.0,
@@ -139,8 +139,8 @@ class TestSolverObjectiveIsAlive:
         from app.engine.solver import solve_layouts
 
         cfg = PlotConfig(
-            plot_length=15.0,
-            plot_width=10.0,
+            plot_y_extent=15.0,
+            plot_x_extent=10.0,
             setback_front=1.5,
             setback_rear=1.0,
             setback_left=1.0,

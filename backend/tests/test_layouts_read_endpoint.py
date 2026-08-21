@@ -12,8 +12,8 @@ HDRS = {"X-Test-User-Id": "layouts-read-owner"}
 
 PROJECT_BODY = {
     "name": "Layouts Read Test",
-    "plot_length": 15.0,
-    "plot_width": 10.0,
+    "plot_y_extent": 15.0,
+    "plot_x_extent": 10.0,
     "setback_front": 1.5,
     "setback_rear": 1.0,
     "setback_left": 1.0,

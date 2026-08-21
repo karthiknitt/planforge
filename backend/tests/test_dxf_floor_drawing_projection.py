@@ -15,8 +15,8 @@ from app.engine.plan_geometry import build_floor_drawing
 @pytest.fixture(scope="module")
 def cfg():
     return PlotConfig(
-        plot_length=11.0,
-        plot_width=12.0,
+        plot_y_extent=11.0,
+        plot_x_extent=12.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,

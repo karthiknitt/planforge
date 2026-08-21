@@ -63,7 +63,7 @@ def test_setback_chains_on_all_sides():
     left2 = next(c for c in chains if c.side == "left" and c.level == 2)
     assert len(left2.entries) == 3  # front setback / building / rear setback
     assert math.isclose(
-        sum(e.end - e.start for e in left2.entries), cfg.plot_length, abs_tol=1e-6
+        sum(e.end - e.start for e in left2.entries), cfg.plot_y_extent, abs_tol=1e-6
     )
 
 
@@ -103,7 +103,7 @@ def test_overall_chain_spans_full_plot_dual_unit():
     top = next(c for c in lvl1 if c.side == "top")
     assert len(top.entries) == 1
     assert math.isclose(
-        top.entries[0].end - top.entries[0].start, cfg.plot_width, abs_tol=1e-6
+        top.entries[0].end - top.entries[0].start, cfg.plot_x_extent, abs_tol=1e-6
     )
 
 

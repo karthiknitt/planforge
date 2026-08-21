@@ -33,8 +33,8 @@ from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 SAMPLE_DIR = os.environ.get("PLANFORGE_SAMPLE_DIR", tempfile.gettempdir())
 
 CFG = PlotConfig(
-    plot_length=9.0,
-    plot_width=8.0,
+    plot_y_extent=9.0,
+    plot_x_extent=8.0,
     setback_front=3.0,
     setback_rear=1.5,
     setback_left=1.0,
@@ -48,8 +48,8 @@ CFG = PlotConfig(
 # module fixture that runs the real generator — CFG above rejects at the
 # navigability gate on this codebase revision.
 GENERATE_CFG = PlotConfig(
-    plot_width=10.0,
-    plot_length=15.2,
+    plot_x_extent=10.0,
+    plot_y_extent=15.2,
     num_bedrooms=3,
     setback_front=1.5,
     setback_rear=1.5,

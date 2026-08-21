@@ -9,8 +9,8 @@ from app.engine.models import PlotConfig
 # buildable area for 3BHK + mandatory rooms after setbacks.
 
 L_SHAPED_CFG = PlotConfig(
-    plot_length=15.0,
-    plot_width=12.0,
+    plot_y_extent=15.0,
+    plot_x_extent=12.0,
     setback_front=1.2,
     setback_rear=1.2,
     setback_left=1.0,
@@ -26,8 +26,8 @@ L_SHAPED_CFG = PlotConfig(
 
 # Original (compact) config for polygon shape tests only
 L_SHAPED_COMPACT_CFG = PlotConfig(
-    plot_length=12.0,
-    plot_width=9.0,
+    plot_y_extent=12.0,
+    plot_x_extent=9.0,
     setback_front=1.2,
     setback_rear=1.2,
     setback_left=1.0,
@@ -69,8 +69,8 @@ def test_l_shaped_polygon_has_six_vertices():
 def test_l_shaped_polygon_all_corners():
     """All four cutout corners (NE/NW/SE/SW) produce valid 6-vertex polygons."""
     base = dict(
-        plot_length=12.0,
-        plot_width=9.0,
+        plot_y_extent=12.0,
+        plot_x_extent=9.0,
         setback_front=1.2,
         setback_rear=1.2,
         setback_left=1.0,

@@ -21,8 +21,8 @@ from app.engine.models import (
 
 def _l_cfg(cutout_corner: str = "NE") -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=1.2,
         setback_rear=1.2,
         setback_left=1.0,
@@ -106,8 +106,8 @@ def test_l_polygon_inset_area_less_than_rectangular_inset():
     inset_l = poly.buffer(-avg_sb, join_style=2).area
 
     # Rectangular bounding box inset
-    rect_w = cfg.plot_width - cfg.setback_left - cfg.setback_right
-    rect_d = cfg.plot_length - cfg.setback_front - cfg.setback_rear
+    rect_w = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right
+    rect_d = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear
     inset_rect = rect_w * rect_d
 
     assert inset_l < inset_rect, (

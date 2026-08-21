@@ -47,8 +47,8 @@ def _make_layout(
 
 def _cfg(**kw):
     d = dict(
-        plot_length=14.0,
-        plot_width=11.0,
+        plot_y_extent=14.0,
+        plot_x_extent=11.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,

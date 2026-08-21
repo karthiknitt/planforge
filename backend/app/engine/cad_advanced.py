@@ -163,7 +163,7 @@ def draw_setback_zones(
     """Draw 4 linear dimension callouts (front / rear / left / right setbacks)."""
     from app.engine.cad_primitives import metres_to_ftin
 
-    pw, pl = cfg.plot_width, cfg.plot_length
+    pw, pl = cfg.plot_x_extent, cfg.plot_y_extent
 
     def _dim(base, p1, p2, angle: int, text: str) -> None:
         try:
