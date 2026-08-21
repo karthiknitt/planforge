@@ -81,12 +81,19 @@ def test_compound_wall_has_a_gate_gap_on_the_road_side():
     )
 
 
-def test_gate_moves_with_road_side():
-    segs = compound_wall_segments(_cfg("W"))
-    left = [s for s in segs if abs(s[0] - 0.0) < 1e-6 and abs(s[2] - 0.0) < 1e-6]
-    assert len(left) == 2, "gate must be on the W run when road_side='W'"
-    covered = sum(abs(s[3] - s[1]) for s in left)
-    assert abs((15.0 - covered) - GATE_WIDTH_M) < 1e-6
+def test_gate_stays_on_the_y_min_edge_for_every_road_side():
+    """The gate is always on the y-min (road/front) edge, matching the main
+    entrance — `road_side` names which compass direction that edge FACES, not
+    which plot-local edge to gate (Task 18A invariant)."""
+    for road_side in ("S", "N", "E", "W"):
+        segs = compound_wall_segments(_cfg(road_side))
+        front = [s for s in segs if abs(s[1] - 0.0) < 1e-6 and abs(s[3] - 0.0) < 1e-6]
+        assert len(front) == 2, (
+            f"road_side='{road_side}': the gate must be on the y-min run, "
+            f"the same edge the main entrance is on"
+        )
+        covered = sum(abs(s[2] - s[0]) for s in front)
+        assert abs((9.0 - covered) - GATE_WIDTH_M) < 1e-6
 
 
 def test_all_four_runs_present():

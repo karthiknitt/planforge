@@ -19,6 +19,7 @@ from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.engine.plan_geometry import build_floor_drawing
 from app.engine.structural_drawing_set import generate_structural_drawing_set
+from app.engine.vastu import resolve_north_angle
 from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
@@ -770,12 +771,11 @@ def _render_dxf(
 
     # ── North arrow (top-right, drawn once outside floor loop) ───────────────
     if global_max_x < float("inf"):
-        north_dir = getattr(cfg, "road_side", "S") or "S"
         draw_north_arrow(
             msp,
             cx=global_max_x + 2.5,
             cy=global_max_y - 1.5,
-            north_dir=north_dir,
+            north_angle_deg=resolve_north_angle(cfg),
             size=0.8,
             layer="TEXT",
         )
