@@ -13,7 +13,7 @@ Falls back gracefully — caller should catch all exceptions.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from math import ceil, cos, gcd, lcm, radians, sin
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -278,6 +278,9 @@ class _RoomVar:
     ye: cp_model.IntVar  # y + d
     template: ShapeTemplate
     shape_ratio: float
+    # Plot-relative wall-less edges carried from the room definition (the open
+    # car porch is the only producer today). Empty for every other room.
+    open_sides: frozenset[str] = field(default_factory=frozenset)
 
 
 class _PartVars(NamedTuple):
@@ -918,8 +921,37 @@ def _build_room_list(cfg: PlotConfig, specs: dict) -> list[dict]:
             {"id": "balcony_0", "type": "balcony", "name": "Balcony", "floor": 1}
         )
     if cfg.parking:
+        parking: dict = {
+            "id": "parking_0",
+            "type": "parking",
+            "name": "Parking",
+            "floor": 0,
+        }
+        if cfg.open_parking:
+            # The road-facing edge is y-min ("S") in plot coordinates whatever
+            # the surveyed north angle is — plot +y always runs front→rear.
+            parking["open_sides"] = ("S",)
+        rooms.append(parking)
+
+    # Programme flags from the wizard (Task 25) — one room per required type.
+    # has_pooja/has_study above already cover those types; skip duplicates so a
+    # caller setting both never gets two poojas. Terrace lands on the top
+    # floor the solver models (floor 1) when there is one, else the ground
+    # floor; verandah's road-side anchoring is deferred — see the Task 25
+    # rulings in the plan.
+    covered = {r["type"] for r in rooms}
+    for rtype in sorted(cfg.required_types):
+        if rtype in covered:
+            continue
+        top_floor = 1 if cfg.num_floors > 1 else 0
+        floor = top_floor if rtype == "terrace" else 0
         rooms.append(
-            {"id": "parking_0", "type": "parking", "name": "Parking", "floor": 0}
+            {
+                "id": f"{rtype}_0",
+                "type": rtype,
+                "name": rtype.replace("_", " ").title(),
+                "floor": floor,
+            }
         )
 
     # Custom rooms from Phase C
@@ -1786,6 +1818,7 @@ def _solve_one(
             ye=ey,
             template=fit.template,
             shape_ratio=fit.ratio,
+            open_sides=frozenset(rd.get("open_sides", ())),
         )
         room_vars.append(rv)
         (gf_vars if floor == 0 else ff_vars).append(rv)
@@ -2193,6 +2226,7 @@ def _solve_one(
             depth=round(rd, 3),
             template=rv.template,
             shape_ratio=rv.shape_ratio,
+            open_sides=rv.open_sides,
         )
         (gf_rooms if rv.floor == 0 else ff_rooms).append(room)
 

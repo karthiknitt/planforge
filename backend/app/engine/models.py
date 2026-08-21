@@ -265,6 +265,14 @@ class PlotConfig:
     plot_template: ShapeTemplate = "RECT"
     notch_width: float = 0.0  # metres, x-extent of the cutout
     notch_depth: float = 0.0  # metres, y-extent of the cutout
+    # Programme flags from the wizard (Task 25): one room per type is appended
+    # to the solved programme. Empty by default, so every existing caller is
+    # unaffected. Types must exist in room_specs.json (courtyard, verandah,
+    # terrace fall back to the utility spec otherwise).
+    required_types: frozenset[str] = frozenset()
+    # When True the parking room's road-facing edge ("S" in plot coordinates,
+    # regardless of the true-north angle) carries no wall.
+    open_parking: bool = False
 
     def __init__(
         self,
