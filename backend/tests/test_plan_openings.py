@@ -3,6 +3,7 @@
 import math
 
 from app.engine.geometry import buildable_polygon
+from app.engine.models import Room
 from app.engine.plan_geometry import (
     _all_exterior_edges,
     _plate_bounds,
@@ -631,6 +632,94 @@ def test_gapped_parking_gets_no_repair_door():
         )
 
 
+def test_gapped_parking_is_not_flagged_unreachable():
+    """A car porch gapped from every neighbour is intentionally door-less
+    (reachable only from the driveway). The reachability gate must agree
+    with `_repair_connectivity`'s parking exemption and not flag it."""
+    for rtype in ("parking", "parking_4w", "parking_2w"):
+        rooms = [
+            _room("living", 1.23, 1.73, 3.5, 5.0),
+            _room("porch", 1.23, 6.93, 3.5, 3.0, rtype=rtype),
+        ]
+        openings, _walls = _openings_for(rooms, _cfg_9x15())
+        problems = validate_floor_connectivity(rooms, openings, 0)
+        flagged = {p.split()[0] for p in problems}
+        assert "porch" not in flagged, (
+            f"{rtype}: gapped car porch wrongly flagged: {problems}"
+        )
+
+
+def test_open_to_sky_void_is_not_flagged_unreachable():
+    """A double-height void has no door and needs none; the gate must not
+    flag it just because it is not on the door graph."""
+    rooms = [
+        _room("st", 1.23, 1.73, 6.54, 1.27, rtype="staircase"),
+        _room("liv", 1.23, 3.115, 6.54, 2.0),
+        Room(
+            id="void",
+            name="void",
+            type="open_to_sky",
+            x=2.5,
+            y=3.5,
+            width=1.5,
+            depth=1.5,
+            void_over="liv",
+        ),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=1)
+    problems = validate_floor_connectivity(rooms, openings, 1)
+    flagged = {p.split()[0] for p in problems}
+    assert "void" not in flagged, f"open_to_sky void wrongly flagged: {problems}"
+
+
+def test_entrance_routes_to_a_habitable_room_behind_a_full_width_car_porch():
+    """A car porch spans the entire frontage, so no habitable room touches the
+    road. The main entrance must be placed DELIBERATELY on the habitable
+    room's side elevation near the road — not left to the repair pass's
+    arbitrary mid-wall side door (the old behaviour: no main door at all plus
+    a repair door punched at mid-height on the side wall)."""
+    rooms = [
+        Room(
+            id="porch",
+            name="Car Porch",
+            type="parking_4w",
+            x=1.23,
+            y=1.73,
+            width=6.54,
+            depth=5.0,
+            open_sides=frozenset({"S"}),
+        ),
+        _room("living", 1.23, 6.73, 6.54, 5.0),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    mains = [o for o in openings if o.is_main]
+    assert len(mains) == 1, f"expected exactly one main door, got {len(mains)}"
+    md = mains[0]
+    assert md.swing_into_room_id == "living", "main door must serve the living room"
+    # door sits on a SIDE (vertical) wall — x=1.115 or x=7.885 (plate external
+    # centrelines), never on the rear elevation
+    assert not md.is_horizontal, f"expected a side-wall door, got {md.cx},{md.cy}"
+    assert abs(md.cx - 1.115) < 0.06 or abs(md.cx - 7.885) < 0.06, md.cx
+    # ...and near the road end of that wall (cy close to the porch's rear 6.73),
+    # not the mid-height 10.28 the repair pass used to pick
+    assert 6.5 < md.cy < 8.5, f"door not near the road end of the side wall: {md.cy}"
+
+
+def test_entrance_prefers_a_habitable_road_facing_room_when_one_exists():
+    """Regression: stage 1 (road-facing habitable room) still wins over the
+    through-porch route when it applies."""
+    rooms = [
+        _room("living", 1.23, 1.73, 3.5, 5.0),
+        _room("bedroom", 4.93, 1.73, 3.0, 5.0),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    mains = [o for o in openings if o.is_main]
+    assert len(mains) == 1
+    assert mains[0].is_horizontal, "main door left the frontage"
+    assert abs(mains[0].cy - 1.615) < 0.06, "main door left the frontage"
+    assert mains[0].swing_into_room_id == "living"
+
+
 def test_no_opening_on_an_open_side():
     """A room with a declared-open N and E side (e.g. an open-air sit-out
     off the living room) gets no door, window, or vent cut into either edge:
@@ -715,13 +804,15 @@ def _drawing_for(rooms):
 
 def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
     # every parking type (2W/4W variants included) is ineligible to host the
-    # main entrance — a frontage of only parking + stair must be diagnosed
+    # main entrance — a frontage of only parking + stair, with no habitable
+    # room directly behind the porch to route through (the living sits behind
+    # the STAIRCASE here), must be diagnosed
     for rtype in ("parking", "parking_4w", "parking_2w"):
         drawing = _drawing_for(
             [
                 _room("porch", 1.23, 1.73, 4.0, 3.0, rtype=rtype),
                 _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
-                _room("living", 1.23, 4.73, 4.0, 3.0),
+                _room("living", 5.23, 8.73, 2.0, 3.0),
             ]
         )
         diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
@@ -742,7 +833,7 @@ def test_main_door_all_parking_frontage_flags_entrance_not_on_ground_floor():  #
         [
             _room("porch", 1.23, 1.73, 4.0, 3.0, rtype="parking"),
             _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
-            _room("living", 1.23, 4.73, 4.0, 3.0),
+            _room("living", 5.23, 8.73, 2.0, 3.0),
         ]
     )
     assert drawing.entrance_not_on_ground_floor is True
