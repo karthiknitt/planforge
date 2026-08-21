@@ -26,7 +26,12 @@ from app.engine.pdf import (
     _schedule_column_x,
 )
 from app.engine.section_render import hatch_polygon
-from app.engine.structural_data import ColumnItem, FootingItem, StructuralModel
+from app.engine.structural_data import (
+    ColumnItem,
+    FootingItem,
+    Stirrup,
+    StructuralModel,
+)
 from app.engine.structural_sheet import (
     SHEET_TITLES,
     LabelPlacer,
@@ -191,15 +196,24 @@ def _footing_schedule_rows(
         counts[f.footing_class] = counts.get(f.footing_class, 0) + 1
     rows: list[tuple] = []
     for cls, f in sorted(model.footings_by_class().items()):
-        bars_x = f.design.get("bars_x") or {}
-        bars_y = f.design.get("bars_y") or {}
+        mesh_x, mesh_y = _footing_mesh(f, "x"), _footing_mesh(f, "y")
+        if mesh_x is not None:
+            bars_x_text = f"{mesh_x.diameter_mm:g}-{mesh_x.spacing_mm:g}"
+        else:
+            raw = f.design.get("bars_x") or {}
+            bars_x_text = f"{raw.get('dia', '-')}-{raw.get('spacing', '-')}"
+        if mesh_y is not None:
+            bars_y_text = f"{mesh_y.diameter_mm:g}-{mesh_y.spacing_mm:g}"
+        else:
+            raw = f.design.get("bars_y") or {}
+            bars_y_text = f"{raw.get('dia', '-')}-{raw.get('spacing', '-')}"
         rows.append(
             (
                 f.mark,
                 f"{f.length_m:.2f}x{f.width_m:.2f}",
                 f"{f.depth_mm:.0f}",
-                f"{bars_x.get('dia', '-')}-{bars_x.get('spacing', '-')}",
-                f"{bars_y.get('dia', '-')}-{bars_y.get('spacing', '-')}",
+                bars_x_text,
+                bars_y_text,
                 str(counts.get(cls, 0)),
             )
         )
@@ -356,11 +370,26 @@ def _draw_footing_detail(
         c.line(bx, stub_y + stub_h, bx, sy + pcc_h + 10)
         c.line(bx, sy + pcc_h + 10, fx0 + 8, sy + pcc_h + 2)  # 90deg bend into the mat
 
-    # bar mat plan view — real count, not a fixed tick count
-    bars_x = f.design.get("bars_x") or {}
-    bars_y = f.design.get("bars_y") or {}
-    n_x = bar_count(l_mm, float(bars_x.get("spacing", 0) or 0))
-    n_y = bar_count(b_mm, float(bars_y.get("spacing", 0) or 0))
+    # bar mat plan view — real count, not a fixed tick count (typed-first:
+    # the values below read the parsed Stirrup when present, :g-normalised
+    # so labels print exactly as the raw payload ints used to)
+    mesh_x, mesh_y = _footing_mesh(f, "x"), _footing_mesh(f, "y")
+    bars_x = (
+        {"dia": f"{mesh_x.diameter_mm:g}", "spacing": f"{mesh_x.spacing_mm:g}"}
+        if mesh_x is not None
+        else f.design.get("bars_x") or {}
+    )
+    bars_y = (
+        {"dia": f"{mesh_y.diameter_mm:g}", "spacing": f"{mesh_y.spacing_mm:g}"}
+        if mesh_y is not None
+        else f.design.get("bars_y") or {}
+    )
+    n_x = bar_count(
+        l_mm, mesh_x.spacing_mm if mesh_x else float(bars_x.get("spacing", 0) or 0)
+    )
+    n_y = bar_count(
+        b_mm, mesh_y.spacing_mm if mesh_y else float(bars_y.get("spacing", 0) or 0)
+    )
 
     plan_scale, _plan_denom = fit_detail_scale(l_mm, b_mm, half_w, avail_h - 60.0)
     px = x + half_w + 20.0
@@ -434,15 +463,34 @@ def _parse_bars(bars: str) -> tuple[int, float]:
     return 4, 12.0
 
 
-def _tie_spec(
-    design: dict, main_dia_mm: float, min_lateral_mm: float
-) -> tuple[float, float]:
-    ties = design.get("ties") or {}
+def _main_bars(col: ColumnItem) -> tuple[int, float]:
+    """Typed-first (Task 31): the parsed BarGroup beats the legacy string."""
+    if col.main_bars is not None:
+        return col.main_bars.quantity, col.main_bars.diameter_mm
+    return _parse_bars(col.bars)
+
+
+def _tie_spec(col: ColumnItem) -> tuple[float, float]:
+    """Typed-first (Task 31): the parsed Stirrup beats the design-dict read;
+    with neither, fall back to the IS 456 Cl 26.5.3.2(c) minimum as before."""
+    if col.ties is not None:
+        return col.ties.diameter_mm, col.ties.spacing_mm
+    ties = col.design.get("ties") or {}
     if ties.get("dia") and ties.get("spacing"):
         return float(ties["dia"]), float(ties["spacing"])
-    tie_dia = max(_MIN_TIE_DIA_MM, main_dia_mm / 4.0)
-    spacing = min(16 * main_dia_mm, 300.0, min_lateral_mm)
+    _n, dia = _main_bars(col)
+    min_lateral_mm = min(col.b_mm, col.D_mm)
+    tie_dia = max(_MIN_TIE_DIA_MM, dia / 4.0)
+    spacing = min(16 * dia, 300.0, min_lateral_mm)
     return tie_dia, spacing
+
+
+def _footing_mesh(f: FootingItem, axis: str) -> Stirrup | None:
+    """Typed-first footing mesh (Task 31); None when the payload lacks it."""
+    typed = f.mesh_x if axis == "x" else f.mesh_y
+    if typed is not None:
+        return typed
+    return Stirrup.from_payload(f.design.get(f"bars_{axis}"))
 
 
 def _perimeter_points(
@@ -528,8 +576,8 @@ def _column_schedule_rows(
         counts[col.col_class] = counts.get(col.col_class, 0) + 1
     rows: list[tuple] = []
     for cls, col in sorted(model.columns_by_class().items()):
-        n_bars, dia = _parse_bars(col.bars)
-        tie_dia, spacing = _tie_spec(col.design, dia, min(col.b_mm, col.D_mm))
+        n_bars, dia = _main_bars(col)
+        tie_dia, spacing = _tie_spec(col)
         rows.append(
             (
                 col.mark,
@@ -554,9 +602,8 @@ def _draw_column_detail(
     """Cross-section (left) + lap-splice elevation (right) for one column
     class, at a real fitted detail scale."""
     half_w = avail_w / 2 - 10.0
-    n_bars, dia = _parse_bars(col.bars)
-    min_lateral = min(col.b_mm, col.D_mm)
-    tie_dia, tie_spacing = _tie_spec(col.design, dia, min_lateral)
+    n_bars, dia = _main_bars(col)
+    tie_dia, tie_spacing = _tie_spec(col)
 
     c.setFont("Helvetica-Bold", 7)
     c.setFillColor(HexColor("#000000"))
