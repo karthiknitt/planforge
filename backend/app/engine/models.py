@@ -187,6 +187,29 @@ class OpeningOverride:
 
 
 @dataclass
+class AddedOpening:
+    """A user/AI request for a NEW opening (Phase 7 Task 30).
+
+    Overrides delta existing derived openings; they cannot create one. An
+    AddedOpening names a wall by the two rooms it separates (or a room and
+    the outside) and is resolved inside build_floor_drawing() BEFORE
+    assign_opening_ids()/assign_opening_marks(), so it receives identity and
+    a schedule mark through the same deterministic passes as derived
+    openings — and an OpeningOverride may target it. A spec whose rooms no
+    longer share a wall degrades to a diagnostic no-op, never an exception.
+    """
+
+    kind: str  # "door" | "window"
+    room_a: str
+    room_b: str  # second room id, or the literal "outside"
+    along: float | None = (
+        None  # offset (m) from the shared span's low end; None = centred
+    )
+    width: float | None = None  # metres; None: 0.9 for doors, 1.2 for windows
+    side: str | None = None  # "N"|"S"|"E"|"W" — only meaningful for room_b=="outside"
+
+
+@dataclass
 class FloorPlan:
     floor: int  # -1=basement, 0=stilt/ground, 1=first, 2=second
     floor_type: str = "ground"  # "basement"|"stilt"|"ground"|"first"|"second"
@@ -196,6 +219,7 @@ class FloorPlan:
     # Optional with a default, per the Global Constraints: every persisted
     # FloorPlan deserialises unchanged when this is absent.
     opening_overrides: list[OpeningOverride] = field(default_factory=list)
+    added_openings: list[AddedOpening] = field(default_factory=list)
 
 
 @dataclass

@@ -11,7 +11,7 @@ import {
 } from "ai";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { callBackendTool, roomIdSchema } from "@/lib/agent-backend-tool";
+import { callBackendTool, openingIdSchema, roomIdSchema } from "@/lib/agent-backend-tool";
 import {
   buildModelChainPlan,
   type ModelChainEntry,
@@ -20,6 +20,7 @@ import {
 } from "@/lib/agent-model-chain";
 import { arcjetEnabled, rateLimitedClient } from "@/lib/arcjet";
 import { auth } from "@/lib/auth";
+import type { FetchBackendInit } from "@/lib/backend-fetch";
 import {
   DEFAULT_MODEL_ID,
   DEFAULT_OPENROUTER_MODEL_ID,
@@ -64,35 +65,43 @@ ${JSON.stringify(layoutState, null, 2)}
 
 BEHAVIOUR
 - Be concise and professional. Use metric units.
-- After EVERY successful room modification (move, resize, add, remove, swap, undo),
-  ALWAYS call refresh_layout immediately — this re-renders the floor plan for the user.
+- After EVERY successful room modification (move, resize, add, remove, swap,
+  undo) or opening modification (add_door, move_window, resize_window,
+  remove_opening), ALWAYS call refresh_layout immediately — this re-renders
+  the floor plan for the user.
+- For opening edits, call list_openings first to discover ids — an opening id
+  names its host wall and offset, never guess one.
 - Always check compliance after making changes using get_compliance_status.
 - If a change creates a violation, undo it and explain why, then call refresh_layout.
 - Acknowledge what you did after each successful tool call.
 - Keep undo available — remind users they can say "undo" after changes.`;
 }
 
-function buildTools(projectId: string, userId: string) {
+type BackendFetch = (userId: string, path: string, init?: FetchBackendInit) => Promise<Response>;
+
+// `fetchImpl` is injectable for tests; the POST handler relies on the
+// default (the real fetchBackend inside callBackendTool).
+export function buildTools(projectId: string, userId: string, fetchImpl?: BackendFetch) {
+  const call = (path: string, init?: RequestInit) => callBackendTool(userId, path, init, fetchImpl);
   return {
     get_room_list: tool({
       description: "List all rooms on a floor or all floors",
       inputSchema: z.object({
         floor: z.enum(["gf", "ff", "sf", "basement", "all"]).describe("Which floor to list"),
       }),
-      execute: ({ floor }) => callBackendTool(userId, `projects/${projectId}/rooms?floor=${floor}`),
+      execute: ({ floor }) => call(`projects/${projectId}/rooms?floor=${floor}`),
     }),
 
     get_room_details: tool({
       description: "Get details for a specific room by ID",
       inputSchema: z.object({ room_id: roomIdSchema }),
-      execute: ({ room_id }) =>
-        callBackendTool(userId, `projects/${projectId}/rooms/${encodeURIComponent(room_id)}`),
+      execute: ({ room_id }) => call(`projects/${projectId}/rooms/${encodeURIComponent(room_id)}`),
     }),
 
     get_compliance_status: tool({
       description: "Check current compliance status of the layout",
       inputSchema: z.object({}),
-      execute: () => callBackendTool(userId, `projects/${projectId}/compliance`),
+      execute: () => call(`projects/${projectId}/compliance`),
     }),
 
     run_structural_design: tool({
@@ -116,7 +125,7 @@ function buildTools(projectId: string, userId: string) {
           .describe("Safe bearing capacity of soil in kPa"),
       }),
       execute: ({ layout_id, sbc_kpa }) =>
-        callBackendTool(userId, `projects/${projectId}/structural`, {
+        call(`projects/${projectId}/structural`, {
           method: "POST",
           // PDF omitted in chat: base64 would blow up the model context.
           body: JSON.stringify({ layout_id, sbc_kpa, include_pdf: false }),
@@ -128,8 +137,7 @@ function buildTools(projectId: string, userId: string) {
       inputSchema: z.object({
         floor: z.enum(["gf", "ff", "sf", "basement"]),
       }),
-      execute: ({ floor }) =>
-        callBackendTool(userId, `projects/${projectId}/available-space?floor=${floor}`),
+      execute: ({ floor }) => call(`projects/${projectId}/available-space?floor=${floor}`),
     }),
 
     move_room: tool({
@@ -140,7 +148,7 @@ function buildTools(projectId: string, userId: string) {
         new_y: z.number().describe("New Y position in metres"),
       }),
       execute: ({ room_id, new_x, new_y }) =>
-        callBackendTool(userId, `projects/${projectId}/rooms/${encodeURIComponent(room_id)}/move`, {
+        call(`projects/${projectId}/rooms/${encodeURIComponent(room_id)}/move`, {
           method: "POST",
           body: JSON.stringify({ x: new_x, y: new_y }),
         }),
@@ -154,14 +162,10 @@ function buildTools(projectId: string, userId: string) {
         new_depth: z.number().optional().describe("New depth in metres"),
       }),
       execute: ({ room_id, new_width, new_depth }) =>
-        callBackendTool(
-          userId,
-          `projects/${projectId}/rooms/${encodeURIComponent(room_id)}/resize`,
-          {
-            method: "POST",
-            body: JSON.stringify({ new_width, new_depth }),
-          }
-        ),
+        call(`projects/${projectId}/rooms/${encodeURIComponent(room_id)}/resize`, {
+          method: "POST",
+          body: JSON.stringify({ new_width, new_depth }),
+        }),
     }),
 
     swap_rooms: tool({
@@ -171,7 +175,7 @@ function buildTools(projectId: string, userId: string) {
         room_id_b: roomIdSchema,
       }),
       execute: ({ room_id_a, room_id_b }) =>
-        callBackendTool(userId, `projects/${projectId}/rooms/swap`, {
+        call(`projects/${projectId}/rooms/swap`, {
           method: "POST",
           body: JSON.stringify({ room_id_a, room_id_b }),
         }),
@@ -189,7 +193,7 @@ function buildTools(projectId: string, userId: string) {
         depth: z.number().optional(),
       }),
       execute: ({ floor, type, name, x, y, width, depth }) =>
-        callBackendTool(userId, `projects/${projectId}/rooms`, {
+        call(`projects/${projectId}/rooms`, {
           method: "POST",
           body: JSON.stringify({ floor, type, name, x, y, width, depth }),
         }),
@@ -199,7 +203,7 @@ function buildTools(projectId: string, userId: string) {
       description: "Remove a room from the layout",
       inputSchema: z.object({ room_id: roomIdSchema }),
       execute: ({ room_id }) =>
-        callBackendTool(userId, `projects/${projectId}/rooms/${encodeURIComponent(room_id)}`, {
+        call(`projects/${projectId}/rooms/${encodeURIComponent(room_id)}`, {
           method: "DELETE",
         }),
     }),
@@ -208,8 +212,96 @@ function buildTools(projectId: string, userId: string) {
       description: "Undo the last room modification",
       inputSchema: z.object({}),
       execute: () =>
-        callBackendTool(userId, `projects/${projectId}/rooms/undo`, {
+        call(`projects/${projectId}/rooms/undo`, {
           method: "POST",
+        }),
+    }),
+
+    list_openings: tool({
+      description:
+        "List every door and window on a floor with its deterministic id, " +
+        "schedule mark, kind, centre coordinates, width, host wall and rooms " +
+        "it connects. ALWAYS call this first to get opening ids before any " +
+        "opening edit — never guess an id.",
+      inputSchema: z.object({
+        floor: z.enum(["gf", "ff", "sf", "basement"]),
+      }),
+      execute: ({ floor }) => call(`projects/${projectId}/openings?floor=${floor}`),
+    }),
+
+    move_window: tool({
+      description:
+        "Move a window or door along its host wall. `along` is the offset in " +
+        "metres from the wall's low end (see list_openings). Rejected with a " +
+        "valid range when it would leave the wall.",
+      inputSchema: z.object({
+        opening_id: openingIdSchema,
+        floor: z.enum(["gf", "ff", "sf", "basement"]),
+        along: z.number().describe("New offset (m) from the host wall's low end"),
+      }),
+      execute: ({ opening_id, floor, along }) =>
+        call(`projects/${projectId}/openings/${encodeURIComponent(opening_id)}/move`, {
+          method: "POST",
+          body: JSON.stringify({ floor, along }),
+        }),
+    }),
+
+    resize_window: tool({
+      description:
+        "Change a window or door's width in metres, keeping its centre on the " +
+        "host wall. Rejected when the new width would not fit the wall.",
+      inputSchema: z.object({
+        opening_id: openingIdSchema,
+        floor: z.enum(["gf", "ff", "sf", "basement"]),
+        width: z.number().min(0.1).max(5).describe("New width in metres"),
+      }),
+      execute: ({ opening_id, floor, width }) =>
+        call(`projects/${projectId}/openings/${encodeURIComponent(opening_id)}/resize`, {
+          method: "POST",
+          body: JSON.stringify({ floor, width }),
+        }),
+    }),
+
+    remove_opening: tool({
+      description:
+        "Remove a door or window. Rejected with a feasible alternative when " +
+        "removal would disconnect a room — in that case propose the " +
+        "alternative to the user instead of retrying blindly.",
+      inputSchema: z.object({
+        opening_id: openingIdSchema,
+        floor: z.enum(["gf", "ff", "sf", "basement"]),
+      }),
+      execute: ({ opening_id, floor }) =>
+        call(`projects/${projectId}/openings/${encodeURIComponent(opening_id)}?floor=${floor}`, {
+          method: "DELETE",
+        }),
+    }),
+
+    add_door: tool({
+      description:
+        "Add a new door between two rooms that share a wall, or from a room " +
+        "to the outside. Use list_openings afterwards to see the created door.",
+      inputSchema: z.object({
+        floor: z.enum(["gf", "ff", "sf", "basement"]),
+        room_id: roomIdSchema.describe("Room the door serves"),
+        to_room_id: z
+          .string()
+          .default("outside")
+          .describe("Adjacent room id, or 'outside' for an exterior door"),
+        width: z.number().min(0.6).max(2.0).optional().describe("Default 0.9 m"),
+        along: z
+          .number()
+          .optional()
+          .describe("Offset (m) along the shared/exterior span; default centred"),
+        side: z
+          .enum(["N", "S", "E", "W"])
+          .optional()
+          .describe("Exterior edge for outside doors when the room has several"),
+      }),
+      execute: ({ floor, room_id, to_room_id, width, along, side }) =>
+        call(`projects/${projectId}/openings/doors`, {
+          method: "POST",
+          body: JSON.stringify({ floor, room_id, to_room_id, width, along, side }),
         }),
     }),
 
@@ -217,7 +309,7 @@ function buildTools(projectId: string, userId: string) {
       description:
         "Fetch the current layout state so the floor plan re-renders. Call this after every successful room modification (move, resize, add, remove, swap, undo).",
       inputSchema: z.object({}),
-      execute: () => callBackendTool(userId, `projects/${projectId}/rooms/layout-state`), // { layout: LayoutData }
+      execute: () => call(`projects/${projectId}/rooms/layout-state`), // { layout: LayoutData }
     }),
   };
 }
