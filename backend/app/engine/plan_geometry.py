@@ -2743,6 +2743,79 @@ def derive_stair(rooms: list[Room], floor_height: float = 3.0) -> StairGeometry 
     )
 
 
+# ---------------------------------------------------------------------------
+# Opening identity + IS 962 schedule marks (Phase 7, Task 27)
+# ---------------------------------------------------------------------------
+
+_OPENING_HEIGHT_MM = {"door": 2100, "window": 1200, "ventilator": 600}
+_OPENING_PREFIX = {"door": "D", "window": "W", "ventilator": "V"}
+
+
+def assign_opening_marks(openings: list[Opening]) -> None:
+    """Assign each opening its IS 962 schedule mark in place.
+
+    Promoted from pdf.py so DXF and the frontend see marks too. A mark is a
+    CLASS label, deliberately shared: same-kind openings whose widths snap to
+    the same 50 mm module share one mark (D1 = every 900 mm door), and the
+    main entrance is held out of the D-series as "MD". Instance identity is
+    `assign_opening_ids`'s job — never conflate the two.
+    """
+    groups: dict[tuple[str, int], list[int]] = {}
+    main_idx: list[int] = []
+    for i, o in enumerate(openings):
+        if getattr(o, "is_main", False):
+            main_idx.append(i)
+            continue
+        # snap to 50 mm modules so near-identical computed widths (1180 vs
+        # 1200) share one mark, as they would on a real drawing
+        groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
+    counters = dict.fromkeys(_OPENING_PREFIX, 0)
+    for (kind, _width_mm), idxs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], -kv[0][1])
+    ):
+        counters[kind] += 1
+        for i in idxs:
+            openings[i].mark = f"{_OPENING_PREFIX[kind]}{counters[kind]}"
+    for i in main_idx:
+        openings[i].mark = "MD"
+
+
+def assign_opening_ids(
+    walls: list[WallSegment], openings: list[Opening], tol: float = 0.01
+) -> None:
+    """Give every opening a deterministic instance id in place.
+
+    The id addresses the opening through its host wall —
+    "<WallSegment.id>#<offset from the wall's low end>" — so it is stable
+    under unrelated edits exactly as far as the host wall's own id is.
+    Openings that match no wall centreline (should not happen in derived
+    drawings) fall back to their own geometry rather than crashing.
+    """
+    for o in openings:
+        best: tuple[float, WallSegment, float, bool] | None = None
+        for w in walls:
+            w_vertical = abs(w.x1 - w.x2) < 1e-9
+            if w_vertical != (not o.is_horizontal):
+                continue
+            coord = w.x1 if w_vertical else w.y1
+            cross = o.cx if w_vertical else o.cy
+            if abs(coord - cross) > w.thickness / 2 + tol:
+                continue
+            lo, hi = sorted((w.y1, w.y2)) if w_vertical else sorted((w.x1, w.x2))
+            along_coord = o.cy if w_vertical else o.cx
+            if not (lo - tol <= along_coord <= hi + tol):
+                continue
+            dist = abs(coord - cross)
+            if best is None or dist < best[0]:
+                best = (dist, w, lo, w_vertical)
+        if best is None:
+            o.id = f"o:{o.kind}:{o.cx:.2f}:{o.cy:.2f}"
+        else:
+            _, w, lo, w_vertical = best
+            along = (o.cy if w_vertical else o.cx) - lo
+            o.id = f"{w.id}#{along:.3f}"
+
+
 def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     from app.engine.geometry import buildable_polygon
     from app.engine.standards import get_opening_standards
@@ -2786,6 +2859,10 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
     columns.sort(key=lambda c: (c.cx, c.cy))
     junctions.sort(key=lambda j: (j.x, j.y))
+    # Identity and marks run AFTER the sorts so both are functions of the
+    # final serialisation order, never of derivation list position.
+    assign_opening_ids(walls, openings)
+    assign_opening_marks(openings)
     return FloorDrawing(
         floor=floorplan.floor,
         walls=walls,
