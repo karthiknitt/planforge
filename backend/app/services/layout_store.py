@@ -20,6 +20,7 @@ from app.engine.models import (
     FloorPlan,
     Layout,
     LayoutScore,
+    OpeningOverride,
     PlotConfig,
     Room,
 )
@@ -33,6 +34,7 @@ from app.schemas.layout import (
     GenerateResponse,
     LayoutOut,
     LayoutScoreOut,
+    OpeningOverrideOut,
     RoomOut,
 )
 from app.services.plot_config import plot_config_from_project
@@ -57,6 +59,15 @@ def floor_plan_out(fp: Any) -> FloorPlanOut:
             for r in fp.rooms
         ],
         columns=[ColumnOut(x=c.x, y=c.y) for c in fp.columns],
+        opening_overrides=[
+            OpeningOverrideOut(
+                opening_id=ov.opening_id,
+                along=ov.along,
+                width=ov.width,
+                suppressed=ov.suppressed,
+            )
+            for ov in getattr(fp, "opening_overrides", [])
+        ],
     )
 
 
@@ -244,6 +255,15 @@ def _floor_from_dict(
         ],
         columns=[Column(x=c["x"], y=c["y"]) for c in fp.get("columns", [])],
         needs_mech_ventilation=fp.get("needs_mech_ventilation", False),
+        opening_overrides=[
+            OpeningOverride(
+                opening_id=o["opening_id"],
+                along=o.get("along"),
+                width=o.get("width"),
+                suppressed=o.get("suppressed", False),
+            )
+            for o in fp.get("opening_overrides", [])
+        ],
     )
 
 

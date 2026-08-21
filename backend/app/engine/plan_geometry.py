@@ -43,7 +43,7 @@ from app.engine.cad_primitives import metres_to_ftin
 from app.engine.standards import OpeningStandards
 
 if TYPE_CHECKING:
-    from app.engine.models import FloorPlan, PlotConfig, Room
+    from app.engine.models import FloorPlan, OpeningOverride, PlotConfig, Room
 
 logger = logging.getLogger(__name__)
 
@@ -2820,6 +2820,106 @@ def assign_opening_ids(
             o.id = f"{w.id}#{along:.3f}"
 
 
+def apply_opening_overrides(
+    openings: list[Opening],
+    walls: list[WallSegment],
+    overrides: list[OpeningOverride] | None,
+    diagnostics: list[str],
+) -> None:
+    """Apply FloorPlan.opening_overrides as an in-place post-pass (T29).
+
+    derive_openings() stays pure; this pass runs after ids are assigned, so
+    overrides key on the same deterministic ids the frontend sees. Failure
+    semantics follow Task 9's tolerance principle: an override against a
+    vanished id degrades to a no-op recorded in diagnostics — it must never
+    raise. An override that would place the opening outside its host wall is
+    likewise rejected with a diagnostic rather than clamped into a wrong
+    drawing.
+
+    The GCS baseline cannot verify these positions (no positional-accuracy
+    metric), so tests assert coordinates directly.
+    """
+    if not overrides:
+        return
+    by_id = {o.id: o for o in openings}
+    removed: list[Opening] = []
+    for ov in overrides:
+        o = by_id.get(ov.opening_id)
+        if o is None:
+            diagnostics.append(
+                f"opening_override: opening {ov.opening_id!r} no longer exists; "
+                "override dropped"
+            )
+            continue
+        vertical = not o.is_horizontal
+        host = _host_wall(walls, o)
+        if host is None:
+            diagnostics.append(
+                f"opening_override: no host wall found for {ov.opening_id!r}; "
+                "override dropped"
+            )
+            continue
+        lo, hi = sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
+        length = hi - lo
+
+        if ov.suppressed:
+            removed.append(o)
+            continue
+
+        new_width = o.width if ov.width is None else ov.width
+        along = ((o.cx if vertical else o.cy) - lo) if ov.along is None else ov.along
+        if not (
+            -1e-6 <= along - new_width / 2 and along + new_width / 2 <= length + 1e-6
+        ):
+            diagnostics.append(
+                f"opening_override: {ov.opening_id!r} rejected — position "
+                f"{along:.3f} width {new_width:.3f} falls outside its host wall "
+                f"(span {length:.3f})"
+            )
+            continue
+        centre = lo + along
+        # Keep the hinge on the same jamb side it derived on.
+        old_centre = o.cx if vertical else o.cy
+        side = (
+            1.0 if ((o.hinge_x if vertical else o.hinge_y) - old_centre) >= 0 else -1.0
+        )
+        if vertical:
+            o.cy = centre
+            o.cx = host.x1 if abs(host.x1 - host.x2) < 1e-9 else o.cx
+            o.hinge_y = centre + side * new_width / 2
+        else:
+            o.cx = centre
+            o.cy = host.y1 if abs(host.y1 - host.y2) < 1e-9 else o.cy
+            o.hinge_x = centre + side * new_width / 2
+        o.width = new_width
+        by_id[o.id] = o
+    if removed:
+        gone = {id(o) for o in removed}
+        openings[:] = [o for o in openings if id(o) not in gone]
+
+
+def _host_wall(
+    walls: list[WallSegment], o: Opening, tol: float = 0.01
+) -> WallSegment | None:
+    best: tuple[float, WallSegment] | None = None
+    for w in walls:
+        w_vertical = abs(w.x1 - w.x2) < 1e-9
+        if w_vertical != (not o.is_horizontal):
+            continue
+        coord = w.x1 if w_vertical else w.y1
+        cross = o.cx if w_vertical else o.cy
+        dist = abs(coord - cross)
+        if dist > w.thickness / 2 + tol:
+            continue
+        lo, hi = sorted((w.y1, w.y2)) if w_vertical else sorted((w.x1, w.x2))
+        along = o.cy if w_vertical else o.cx
+        if not (lo - tol <= along <= hi + tol):
+            continue
+        if best is None or dist < best[0]:
+            best = (dist, w)
+    return best[1] if best else None
+
+
 def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     from app.engine.geometry import buildable_polygon
     from app.engine.standards import get_opening_standards
@@ -2867,6 +2967,8 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     # final serialisation order, never of derivation list position.
     assign_opening_ids(walls, openings)
     assign_opening_marks(openings)
+    # Overrides key on those ids and run last, before the drawing freezes.
+    apply_opening_overrides(openings, walls, floorplan.opening_overrides, diagnostics)
     return FloorDrawing(
         floor=floorplan.floor,
         walls=walls,

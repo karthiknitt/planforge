@@ -169,12 +169,33 @@ class Column:
 
 
 @dataclass
+class OpeningOverride:
+    """A user/AI delta against ONE derived opening, keyed by its deterministic
+    `Opening.id` (Phase 7 Task 29).
+
+    Overrides live on FloorPlan and are applied as a post-pass inside
+    build_floor_drawing(), so derivation stays pure: same rooms + same
+    overrides = same drawing. Any field left None keeps the derived value.
+    An override whose id no longer exists (the room changed) degrades to a
+    no-op recorded in FloorDrawing.diagnostics — never an exception.
+    """
+
+    opening_id: str
+    along: float | None = None  # offset (m) from the host wall's low end
+    width: float | None = None  # metres
+    suppressed: bool = False  # remove the opening entirely
+
+
+@dataclass
 class FloorPlan:
     floor: int  # -1=basement, 0=stilt/ground, 1=first, 2=second
     floor_type: str = "ground"  # "basement"|"stilt"|"ground"|"first"|"second"
     rooms: list[Room] = field(default_factory=list)
     columns: list[Column] = field(default_factory=list)
     needs_mech_ventilation: bool = False
+    # Optional with a default, per the Global Constraints: every persisted
+    # FloorPlan deserialises unchanged when this is absent.
+    opening_overrides: list[OpeningOverride] = field(default_factory=list)
 
 
 @dataclass
