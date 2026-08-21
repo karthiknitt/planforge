@@ -43,7 +43,13 @@ from app.engine.cad_primitives import metres_to_ftin
 from app.engine.standards import OpeningStandards
 
 if TYPE_CHECKING:
-    from app.engine.models import FloorPlan, OpeningOverride, PlotConfig, Room
+    from app.engine.models import (
+        AddedOpening,
+        FloorPlan,
+        OpeningOverride,
+        PlotConfig,
+        Room,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -2794,6 +2800,267 @@ def assign_opening_ids(
             o.id = f"{w.id}#{along:.3f}"
 
 
+def shared_wall_span(
+    a: Room, b: Room, iwt: float = IWT, tol: float = 0.03
+) -> tuple[bool, float, float, float] | None:
+    """Shared wall between two rooms as (vertical, centreline, lo, hi).
+
+    Rooms are specified to INNER faces, so two rooms separated by one wall
+    thickness — or directly abutting — share one wall; the span is the
+    overlap of their touching edges. Returns None when there is no usable
+    shared span (< 0.3 m of overlap). Public: used by the openings API to
+    pre-validate `add_door` requests (Task 30).
+    """
+    a_y2, b_y2 = a.y + a.depth, b.y + b.depth
+    a_x2, b_x2 = a.x + a.width, b.x + b.width
+    pairs: list[tuple[bool, float, float, float, float, float, float]] = [
+        # (vertical, edge_a, edge_b, a_lo, a_hi, b_lo, b_hi)
+        (True, a_x2, b.x, a.y, a_y2, b.y, b_y2),  # a left of b
+        (True, b_x2, a.x, a.y, a_y2, b.y, b_y2),  # b left of a
+        (False, a_y2, b.y, a.x, a_x2, b.x, b_x2),  # a below b
+        (False, b_y2, a.y, a.x, a_x2, b.x, b_x2),  # b below a
+    ]
+    best: tuple[bool, float, float, float] | None = None
+    for vertical, ea, eb, alo, ahi, blo, bhi in pairs:
+        gap = eb - ea
+        if gap < -tol or gap > iwt + tol:
+            continue  # edges must touch within one wall thickness
+        lo, hi = max(alo, blo), min(ahi, bhi)
+        if hi - lo < 0.3:
+            continue
+        if best is None or (hi - lo) > (best[3] - best[2]):
+            best = (vertical, (ea + eb) / 2, lo, hi)
+    return best
+
+
+# Deterministic preference order for `exterior_wall_spans` when the caller
+# does not name a side: road-side first, then W, N, E.
+_SIDE_ORDER = ("S", "W", "N", "E")
+
+
+def exterior_wall_spans(
+    room: Room,
+    rooms: list[Room],
+    buildable: BaseGeometry,
+    tol: float = 0.01,
+) -> list[tuple[str, bool, float, float, float]]:
+    """(side, vertical, centreline, lo, hi) for each of the room's edges
+    that face OUTSIDE the buildable polygon — a real exterior face.
+
+    An edge is exterior when no other room abuts it AND a probe point just
+    beyond one external wall thickness leaves the buildable polygon (a
+    polygon probe, not a bbox test, so rectilinear L-notch edges classify
+    correctly). Public: backs the openings API's `add_door` to the outside
+    (Task 30).
+    """
+    edges: list[tuple[str, bool, float, float, float, float, float]] = [
+        # (side, vertical, edge_coord, along_lo, along_hi, out_dx, out_dy)
+        ("S", False, room.y, room.x, room.x + room.width, 0.0, -1.0),
+        ("N", False, room.y + room.depth, room.x, room.x + room.width, 0.0, 1.0),
+        ("W", True, room.x, room.y, room.y + room.depth, -1.0, 0.0),
+        ("E", True, room.x + room.width, room.y, room.y + room.depth, 1.0, 0.0),
+    ]
+    out: list[tuple[str, bool, float, float, float]] = []
+    for side, vertical, coord, lo, hi, dx, dy in edges:
+        shared = False
+        for b in rooms:
+            if b.id == room.id:
+                continue
+            if vertical:
+                facing = min(abs(b.x - coord), abs(b.x + b.width - coord))
+                overlap = min(hi, b.y + b.depth) - max(lo, b.y)
+            else:
+                facing = min(abs(b.y - coord), abs(b.y + b.depth - coord))
+                overlap = min(hi, b.x + b.width) - max(lo, b.x)
+            if facing <= IWT + 0.03 and overlap > 0.3:
+                shared = True
+                break
+        if shared:
+            continue
+        mid = (lo + hi) / 2
+        if vertical:
+            probe = Point(coord + dx * (EWT + tol), mid)
+        else:
+            probe = Point(mid, coord + dy * (EWT + tol))
+        if buildable.covers(probe):
+            continue
+        # inner face is `coord`; the wall centreline lies half a wall outward
+        centre = coord + (dx + dy) * EWT / 2
+        out.append((side, vertical, centre, lo, hi))
+    return out
+
+
+def apply_added_openings(
+    rooms: list[Room],
+    walls: list[WallSegment],
+    openings: list[Opening],
+    added: list[AddedOpening] | None,
+    buildable: BaseGeometry,
+    diagnostics: list[str],
+) -> None:
+    """Resolve FloorPlan.added_openings into real Openings, in place (T30).
+
+    Runs AFTER the drawing list sorts (derived order untouched) but BEFORE
+    assign_opening_ids/assign_opening_marks, so added openings receive
+    identity and schedule marks through the same deterministic passes, and
+    OpeningOverrides may target them. Failure follows the Task 9 tolerance
+    principle: an unbuildable spec degrades to a diagnostic no-op — it must
+    never raise. A candidate that would overlap an existing opening on its
+    host wall is likewise rejected rather than drawn doubled.
+    """
+    if not added:
+        return
+    by_id = {r.id: r for r in rooms}
+    for spec in added:
+        a = by_id.get(spec.room_a)
+        if a is None:
+            diagnostics.append(
+                f"added_opening: unknown room {spec.room_a!r}; spec dropped"
+            )
+            continue
+        if spec.room_b == "outside":
+            cands = exterior_wall_spans(a, rooms, buildable)
+            if spec.side is not None:
+                cands = [c for c in cands if c[0] == spec.side]
+            if not cands:
+                diagnostics.append(
+                    f"added_opening: room {spec.room_a!r} has no exterior edge "
+                    f"matching side={spec.side!r}; spec dropped"
+                )
+                continue
+            _side, vertical, cross, lo, hi = sorted(
+                cands, key=lambda c: _SIDE_ORDER.index(c[0])
+            )[0]
+            swing_into = spec.room_a
+        else:
+            b = by_id.get(spec.room_b)
+            if b is None:
+                diagnostics.append(
+                    f"added_opening: unknown room {spec.room_b!r}; spec dropped"
+                )
+                continue
+            span = shared_wall_span(a, b)
+            if span is None:
+                diagnostics.append(
+                    f"added_opening: rooms {spec.room_a!r} and {spec.room_b!r} "
+                    "share no wall; spec dropped"
+                )
+                continue
+            vertical, cross, lo, hi = span
+            swing_into = spec.room_b
+
+        kind = spec.kind
+        width = (
+            spec.width if spec.width is not None else (0.9 if kind == "door" else 1.2)
+        )
+        span_len = hi - lo
+        along = span_len / 2 if spec.along is None else spec.along
+        if not (-1e-6 <= along - width / 2 and along + width / 2 <= span_len + 1e-6):
+            diagnostics.append(
+                f"added_opening: {kind} {spec.room_a!r}->{spec.room_b!r} rejected "
+                f"— position {along:.3f} width {width:.3f} falls outside the "
+                f"shared/exterior span ({span_len:.3f})"
+            )
+            continue
+        pos = lo + along
+        cx, cy = (cross, pos) if vertical else (pos, cross)
+
+        seg: WallSegment | None = None
+        for w in walls:
+            w_vertical = abs(w.x1 - w.x2) < 1e-9
+            if w_vertical != vertical:
+                continue
+            wcoord = w.x1 if w_vertical else w.y1
+            if abs(wcoord - (cx if w_vertical else cy)) > w.thickness / 2 + 0.03:
+                continue
+            wlo, whi = sorted((w.y1, w.y2)) if w_vertical else sorted((w.x1, w.x2))
+            if not (wlo - 1e-6 <= pos <= whi + 1e-6):
+                continue
+            seg = w
+            break
+        if seg is None:
+            diagnostics.append(
+                f"added_opening: no derived wall hosts {kind} "
+                f"{spec.room_a!r}->{spec.room_b!r} at ({cx:.3f}, {cy:.3f}); spec dropped"
+            )
+            continue
+        if vertical:
+            cx = seg.x1
+        else:
+            cy = seg.y1
+
+        clash = any(
+            (not o.is_horizontal) == vertical
+            and abs((o.cx if vertical else o.cy) - (cx if vertical else cy))
+            <= seg.thickness / 2 + 0.01
+            and abs((o.cy if vertical else o.cx) - pos) < (o.width + width) / 2
+            for o in openings
+        )
+        if clash:
+            diagnostics.append(
+                f"added_opening: {kind} {spec.room_a!r}->{spec.room_b!r} at "
+                f"({cx:.3f}, {cy:.3f}) overlaps an existing opening; spec dropped"
+            )
+            continue
+
+        openings.append(
+            Opening(
+                kind=kind,
+                cx=cx,
+                cy=cy,
+                width=width,
+                is_horizontal=not vertical,
+                wall_thickness=seg.thickness,
+                # hinge on the low jamb, leaf into the "entered" room
+                hinge_x=cx if vertical else cx - width / 2,
+                hinge_y=cy - width / 2 if vertical else cy,
+                swing_into_room_id=swing_into if kind == "door" else "",
+            )
+        )
+
+
+def door_graph_reachable(
+    rooms: list[Room],
+    openings: list[Opening],
+    floor: int,
+    iwt: float = IWT,
+    tol: float = 0.01,
+) -> set[int]:
+    """Indices of rooms reachable from the entrance (floor 0) or staircase
+    (other floors) through doors — validate_floor_connectivity's graph as a
+    public, reusable query. Raw reachability: type exemptions (parking,
+    passage, voids) are the gate's business, not the graph's."""
+    adjs = _adjacencies(rooms, iwt, tol)
+    graph = _door_graph(rooms, openings, adjs, tol)
+    return _reachable_rooms(rooms, graph, floor, openings)
+
+
+def opening_room_ids(
+    o: Opening,
+    rooms: list[Room],
+    tol: float = 0.03,
+) -> list[str]:
+    """Sorted ids of the rooms whose edge hosts this opening — for the
+    openings listing API. An opening sits on a room edge when its centre is
+    within half a wall of that edge's line and its along-coordinate falls
+    inside the edge span."""
+    max_half = EWT / 2 + tol
+    pos = o.cx if o.is_horizontal else o.cy
+    cross = o.cy if o.is_horizontal else o.cx
+    ids: list[str] = []
+    for r in rooms:
+        x2, y2 = r.x + r.width, r.y + r.depth
+        if o.is_horizontal:
+            on_edge = abs(r.y - cross) <= max_half or abs(y2 - cross) <= max_half
+            in_span = r.x - tol <= pos <= x2 + tol
+        else:
+            on_edge = abs(r.x - cross) <= max_half or abs(x2 - cross) <= max_half
+            in_span = r.y - tol <= pos <= y2 + tol
+        if on_edge and in_span:
+            ids.append(r.id)
+    return sorted(ids)
+
+
 def apply_opening_overrides(
     openings: list[Opening],
     walls: list[WallSegment],
@@ -2841,7 +3108,10 @@ def apply_opening_overrides(
             continue
 
         new_width = o.width if ov.width is None else ov.width
-        along = ((o.cx if vertical else o.cy) - lo) if ov.along is None else ov.along
+        # Along-axis of a vertical-walled opening is y; of a horizontal one, x.
+        # (A width-only override used to read the CROSS axis here and get
+        # wrongly rejected — caught by Task 30's resize endpoint.)
+        along = ((o.cy if vertical else o.cx) - lo) if ov.along is None else ov.along
         if not (
             -1e-6 <= along - new_width / 2 and along + new_width / 2 <= length + 1e-6
         ):
@@ -2853,9 +3123,9 @@ def apply_opening_overrides(
             continue
         centre = lo + along
         # Keep the hinge on the same jamb side it derived on.
-        old_centre = o.cx if vertical else o.cy
+        old_centre = o.cy if vertical else o.cx
         side = (
-            1.0 if ((o.hinge_x if vertical else o.hinge_y) - old_centre) >= 0 else -1.0
+            1.0 if ((o.hinge_y if vertical else o.hinge_x) - old_centre) >= 0 else -1.0
         )
         if vertical:
             o.cy = centre
@@ -2870,6 +3140,15 @@ def apply_opening_overrides(
     if removed:
         gone = {id(o) for o in removed}
         openings[:] = [o for o in openings if id(o) not in gone]
+
+
+def host_wall(
+    walls: list[WallSegment], o: Opening, tol: float = 0.01
+) -> WallSegment | None:
+    """Public wrapper for the host-wall lookup used by id assignment and the
+    override post-pass; the openings API needs the same match to report an
+    opening's wall and along-offset (Task 30)."""
+    return _host_wall(walls, o, tol)
 
 
 def _host_wall(
@@ -2937,6 +3216,11 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
     columns.sort(key=lambda c: (c.cx, c.cy))
     junctions.sort(key=lambda j: (j.x, j.y))
+    # Added openings resolve onto the derived (sorted) walls BEFORE identity
+    # and marks run, so they receive both through the same passes.
+    apply_added_openings(
+        rooms, walls, openings, floorplan.added_openings, buildable, diagnostics
+    )
     # Identity and marks run AFTER the sorts so both are functions of the
     # final serialisation order, never of derivation list position.
     assign_opening_ids(walls, openings)

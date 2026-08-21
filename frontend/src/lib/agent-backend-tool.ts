@@ -14,6 +14,13 @@ export const NO_LAYOUTS_TOOL_RESULT =
 // block path traversal at the schema layer. Executors also encodeURIComponent.
 export const roomIdSchema = z.string().regex(/^[A-Za-z0-9_-]+$/, "invalid room id");
 
+// Deterministic opening ids (plan_geometry.assign_opening_ids) look like
+// "w:v:i:a>b@4.44:7.67-13.88#0.622" — they legitimately contain ':' '#' '.'
+// '>' and '@', so the schema is wider than roomIdSchema's. Slashes are still
+// banned, and executors still encodeURIComponent before the id hits the URL
+// (a raw '#' would otherwise terminate the path as a fragment).
+export const openingIdSchema = z.string().regex(/^[A-Za-z0-9_:.,#>@+-]+$/, "invalid opening id");
+
 type FetchBackendFn = (userId: string, path: string, init?: FetchBackendInit) => Promise<Response>;
 
 // Shared wrapper for every agent tool: applies the 45s timeout and turns the
