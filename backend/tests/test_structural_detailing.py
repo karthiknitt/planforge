@@ -234,6 +234,29 @@ def test_slab_panels_parse_two_way_strip_steel():
     assert p.dist_steel == Stirrup(diameter_mm=10.0, spacing_mm=180.0)
 
 
+def test_slab_panels_parse_flat_keyed_steel():
+    # the third encoding: {"main_bar_dia_mm": 8, "main_bar_spacing_mm": 150}
+    slabs_data = {
+        "ow-9": {
+            "type": "one-way",
+            "lx_m": 3.0,
+            "ly_m": 3.0,
+            "D_mm": 100,
+            "panel_indices": [[0, 0]],
+            "main_bar_dia_mm": 8,
+            "main_bar_spacing_mm": 150,
+            "dist_bar_dia_mm": 8,
+            "dist_bar_spacing_mm": 250,
+            "top_bar_dia_mm": 8,
+            "top_bar_spacing_mm": 150,
+        }
+    }
+    (p,) = _build_slab_panels(_grid(), slabs_data)
+    assert p.main_steel == Stirrup(diameter_mm=8.0, spacing_mm=150.0)
+    assert p.dist_steel == Stirrup(diameter_mm=8.0, spacing_mm=250.0)
+    assert p.top_steel == Stirrup(diameter_mm=8.0, spacing_mm=150.0)
+
+
 def test_slab_panel_without_steel_keys_stays_untyped():
     # mirrors test_sheet_slab_stair's "ow-2-nominal" fixture: the renderer's
     # nominal fallback must keep firing after the typed migration

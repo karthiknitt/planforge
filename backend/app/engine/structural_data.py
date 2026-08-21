@@ -467,14 +467,19 @@ def _beam_bargroup(d: dict, n_key: str, dia_key: str) -> BarGroup | None:
 
 def _slab_steel(d: dict, *payload_keys: str) -> Stirrup | None:
     """First parseable steel group among the named payload keys. structapi
-    writes slab steel as bar strings ({"main": {"bar": "10 φ @ 150 c/c"}}),
-    strips for two-way panels."""
+    has written slab steel three ways: bar strings
+    ({"main": {"bar": "10 φ @ 150 c/c"}}), a strips dict for two-way panels,
+    and flat keyed pairs ({"main_bar_dia_mm": 8, "main_bar_spacing_mm": 150})."""
     for k in payload_keys:
         group = d.get(k)
         if isinstance(group, dict):
             s = Stirrup.from_payload(group)
             if s is not None:
                 return s
+        flat_dia = d.get(f"{k}_bar_dia_mm")
+        flat_sp = d.get(f"{k}_bar_spacing_mm")
+        if isinstance(flat_dia, (int, float)) and isinstance(flat_sp, (int, float)):
+            return Stirrup(diameter_mm=float(flat_dia), spacing_mm=float(flat_sp))
     return None
 
 
