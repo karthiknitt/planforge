@@ -613,7 +613,9 @@ def _draw_dimension_lines(c, cfg, scale, ox, oy, plot_px, plot_py, floor_plan=No
         ox + plot_px - 4, outer_y - 4, ox + plot_px + 4, outer_y + 4
     )  # 45° tick at end
     c.setFont("Helvetica-Bold", 6.5)
-    c.drawCentredString(ox + plot_px / 2, outer_y + 8, metres_to_ftin(cfg.plot_x_extent))
+    c.drawCentredString(
+        ox + plot_px / 2, outer_y + 8, metres_to_ftin(cfg.plot_x_extent)
+    )
 
     # ── RIGHT VERTICAL CHAIN ──────────────────────────────────────────────────
     right_x = ox + plot_px
@@ -745,46 +747,48 @@ def _draw_area_schedule_table(
 
 
 _OPENING_HEIGHT_MM = {"door": 2100, "window": 1200, "ventilator": 600}
-_OPENING_PREFIX = {"door": "D", "window": "W", "ventilator": "V"}
 
 
-def _opening_marks(drawing) -> tuple[dict[int, str], list[tuple]]:
-    """IS 962 practice: same-kind, same-width openings share one mark
-    (D1 = all 900 mm doors, D2 = 750 mm wet-room doors, W1, V1 …).
-    The main entrance door is tagged "MD" and kept out of the D-series.
-    Returns ({opening index: mark}, schedule rows (mark, type, w_mm, h_mm, nos))."""
-    groups: dict[tuple[str, int], list[int]] = {}
-    main_idx: list[int] = []
-    for i, o in enumerate(drawing.openings):
+def _openings_schedule_rows(drawing) -> list[tuple]:
+    """SCHEDULE OF OPENINGS rows, grouped by the canonical `Opening.mark`
+    assigned in plan_geometry.assign_opening_marks(). MD leads, then D/W/V
+    series in numeric order — byte-identical to the pre-promotion
+    index-keyed computation."""
+    groups: dict[tuple[str, str, int, int], int] = {}
+    mains = [o for o in drawing.openings if getattr(o, "is_main", False)]
+    for o in drawing.openings:
         if getattr(o, "is_main", False):
-            main_idx.append(i)
             continue
-        # snap to 50 mm modules so near-identical computed widths (1180 vs
-        # 1200) share one mark, as they would on a real drawing
-        groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
-    counters = dict.fromkeys(_OPENING_PREFIX, 0)
-    marks: dict[int, str] = {}
-    rows: list[tuple] = []
-    for (kind, width_mm), idxs in sorted(
-        groups.items(), key=lambda kv: (kv[0][0], -kv[0][1])
-    ):
-        counters[kind] += 1
-        mark = f"{_OPENING_PREFIX[kind]}{counters[kind]}"
-        for i in idxs:
-            marks[i] = mark
-        rows.append((mark, kind.upper(), width_mm, _OPENING_HEIGHT_MM[kind], len(idxs)))
-    if main_idx:
-        width_mm = round(drawing.openings[main_idx[0]].width * 1000 / 50) * 50
-        for i in main_idx:
-            marks[i] = "MD"
-        rows.insert(
-            0, ("MD", "MAIN DOOR", width_mm, _OPENING_HEIGHT_MM["door"], len(main_idx))
+        width_mm = round(o.width * 1000 / 50) * 50
+        key = (
+            o.mark,
+            o.kind.upper(),
+            width_mm,
+            _OPENING_HEIGHT_MM[o.kind],
         )
-    return marks, rows
+        groups[key] = groups.get(key, 0) + 1
+
+    def _mark_order(mark: str) -> tuple[int, int]:
+        if mark == "MD":
+            return (0, 0)
+        return (1, int(mark[1:]))
+
+    rows: list[tuple] = [
+        (mark, kind, width_mm, height, n)
+        for (mark, kind, width_mm, height), n in sorted(
+            groups.items(), key=lambda kv: _mark_order(kv[0][0])
+        )
+    ]
+    if mains:
+        width_mm = round(mains[0].width * 1000 / 50) * 50
+        rows.insert(
+            0, ("MD", "MAIN DOOR", width_mm, _OPENING_HEIGHT_MM["door"], len(mains))
+        )
+    return rows
 
 
 def _draw_opening_tags(
-    c: canvas.Canvas, drawing, marks: dict[int, str], s: float, ox: float, oy: float
+    c: canvas.Canvas, drawing, s: float, ox: float, oy: float
 ) -> None:
     """Tiny D1/W1/V1 tags beside each opening, offset away from the building
     centre so window/ventilator tags land in the (empty) setback strip."""
@@ -792,17 +796,17 @@ def _draw_opening_tags(
     ccx, ccy = (bx1 + bx2) / 2, (by1 + by2) / 2
     c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica", 4.5)
-    for i, o in enumerate(drawing.openings):
+    for o in drawing.openings:
         off = o.wall_thickness * s / 2 + 3.5
         if o.is_horizontal:
             yp = oy + o.cy * s + (off if o.cy >= ccy else -off - 4)
-            c.drawCentredString(ox + o.cx * s, yp, marks[i])
+            c.drawCentredString(ox + o.cx * s, yp, o.mark)
         else:
             xp = ox + o.cx * s + (off + 1.5 if o.cx >= ccx else -off - 1.5)
             c.saveState()
             c.translate(xp, oy + o.cy * s)
             c.rotate(90)
-            c.drawCentredString(0, -1.5, marks[i])
+            c.drawCentredString(0, -1.5, o.mark)
             c.restoreState()
 
 
@@ -2013,8 +2017,8 @@ def _draw_floor_projected(
     _draw_compound_wall(c, cfg, ox, oy, s, gate_cx=gf_main_door_x)
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
-    marks, opening_rows = _opening_marks(drawing)
-    _draw_opening_tags(c, drawing, marks, s, ox, oy)
+    opening_rows = _openings_schedule_rows(drawing)
+    _draw_opening_tags(c, drawing, s, ox, oy)
     if annotations:
         _draw_annotations(c, floor_plan.rooms, annotations, s, ox, oy)
 
