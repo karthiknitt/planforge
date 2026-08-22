@@ -91,6 +91,43 @@ export interface ColumnMarker {
   size: number;
 }
 
+/** Room-relative drawn primitive of a furniture fixture (payload v2, T33). */
+export interface FixtureShape {
+  kind: "rect" | "circle" | "arc" | "line";
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  radius: number;
+  start_deg: number;
+  end_deg: number;
+  x2: number;
+  y2: number;
+  dashed: boolean;
+}
+
+/** One furniture item in a room — room-relative shapes (payload v2, T33). */
+export interface Fixture {
+  kind: string;
+  room_id: string;
+  shapes: FixtureShape[];
+}
+
+/** Closed, possibly holed polygon of site ground (payload v2, T32). */
+export interface SitePolygon {
+  exterior: [number, number][];
+  holes: [number, number][][];
+}
+
+/** Compound wall/gate/ground hatches shared by every renderer (payload v2, T32). */
+export interface SiteContext {
+  compound_wall_segments: [number, number, number, number][];
+  gate_posts: [number, number][];
+  gate_cx: number | null;
+  setback_margin: SitePolygon[];
+  open_terrace: SitePolygon[];
+}
+
 export interface FloorDrawing {
   floor: number;
   walls: WallSegment[];
@@ -102,6 +139,10 @@ export interface FloorDrawing {
   stair: StairGeometry | null;
   bounds: [number, number, number, number];
   version: number;
+  /** Site entities — absent in payloads from before Task 32. */
+  site?: SiteContext | null;
+  /** Canonical furniture fixtures — absent in payloads from before Task 33. */
+  fixtures?: Fixture[];
 }
 
 export interface FloorPlanData {

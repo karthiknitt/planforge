@@ -42,6 +42,7 @@ from app.engine.cad_elements import (
     WallSegment,
 )
 from app.engine.cad_primitives import metres_to_ftin
+from app.engine.furniture import derive_fixtures
 from app.engine.standards import OpeningStandards
 
 if TYPE_CHECKING:
@@ -3305,4 +3306,5 @@ def build_floor_drawing(
         diagnostics=diagnostics,
         entrance_not_on_ground_floor=status.get("entrance_not_on_ground_floor", False),
         site=derive_site_context(floorplan, cfg, openings, site_main_door_cx),
+        fixtures=derive_fixtures(rooms),
     )
