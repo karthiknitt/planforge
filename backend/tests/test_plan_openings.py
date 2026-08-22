@@ -1170,3 +1170,139 @@ def test_no_opening_is_placed_across_an_l_notch():
                 f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on a bbox edge "
                 "that is not part of the room"
             )
+
+
+# ── Deterministic opening ids + canonical schedule marks (Phase 7 / T27) ─────
+
+
+def _opening_key(o) -> tuple:
+    return (o.kind, round(o.cx, 4), round(o.cy, 4))
+
+
+def test_opening_ids_stable_unique_and_local():
+    """Stability + uniqueness on re-derivation, and locality: shrinking room
+    d (which moves only walls that back onto d) leaves every other opening's
+    id untouched."""
+
+    def quad(d_width: float):
+        return [
+            _room("a", 1.23, 7.73, 3.155, 6.04),
+            _room("b", 4.5, 7.73, 3.27, 6.04),
+            _room("c", 1.23, 1.73, 3.155, 5.885),
+            _room("d", 4.5, 1.73, d_width, 5.885),
+        ]
+
+    da = _drawing_for(quad(3.27))
+    db = _drawing_for(quad(2.97))
+    ids_a = [o.id for o in da.openings]
+    assert ids_a and all(ids_a), "every opening carries a non-empty id"
+    assert len(set(ids_a)) == len(ids_a), f"duplicate opening ids: {sorted(ids_a)}"
+    # Locality, at the same strength as the wall-level property: an opening
+    # whose HOST WALL is unchanged (same id in both drawings) keeps its own
+    # id. Openings on a merged run that d's shrink shortened legitimately
+    # re-address — the wall they are addressed through changed.
+    wall_ids_a = {w.id for w in da.walls}
+    wall_ids_b = {w.id for w in db.walls}
+    survivors = [
+        o for o in db.openings if o.id.split("#")[0] in wall_ids_a & wall_ids_b
+    ]
+    assert survivors, "sanity: some openings sit on walls untouched by d's shrink"
+    by_wall = {(o.kind, round(o.cx, 4), round(o.cy, 4)): o.id for o in da.openings}
+    for o in survivors:
+        k = (o.kind, round(o.cx, 4), round(o.cy, 4))
+        assert k in by_wall and by_wall[k] == o.id, (
+            f"opening {k} on an untouched wall changed id: {by_wall.get(k)} -> {o.id}"
+        )
+
+
+def test_opening_id_names_its_host_wall():
+    """An opening id is derived from its host wall's id plus the position
+    along that wall — so it reads as an address, not a list index."""
+    drawing = _drawing_for(_two_bedrooms())
+    wall_by_id = {w.id: w for w in drawing.walls}
+    for o in drawing.openings:
+        host = o.id.split("#")[0]
+        w = wall_by_id.get(host)
+        assert w is not None, f"{o.id}: host wall not found"
+        if o.is_horizontal:
+            assert abs(w.y1 - o.cy) < 0.2 and abs(w.y1 - w.y2) < 1e-6
+        else:
+            assert abs(w.x1 - o.cx) < 0.2 and abs(w.x1 - w.x2) < 1e-6
+
+
+def test_same_size_doors_share_mark_but_differ_in_id():
+    """The mark/class vs id/instance distinction: two 900 mm doors in
+    different rooms share one schedule mark and must still be individually
+    addressable."""
+    rooms = [
+        _room("a", 1.23, 1.73, 2.77, 5.0),
+        _room("b", 4.115, 1.73, 3.655, 5.0),
+        _room("c", 1.23, 6.845, 6.54, 6.925),
+    ]
+    drawing = _drawing_for(rooms)
+    doors = [o for o in drawing.openings if o.kind == "door"]
+    assert len(doors) >= 2
+    by_mark: dict[str, list] = {}
+    for d in doors:
+        assert d.mark, "every door carries a mark"
+        by_mark.setdefault(d.mark, []).append(d)
+    shared = [g for g in by_mark.values() if len(g) >= 2]
+    assert shared, f"expected at least one shared door mark, got {by_mark.keys()}"
+    for group in shared:
+        instance_ids = {d.id for d in group}
+        assert len(instance_ids) == len(group), "shared mark must not mean shared id"
+        widths = {round(d.width * 1000 / 50) * 50 for d in group}
+        assert len(widths) == 1, "a mark groups equal snapped widths only"
+
+
+def test_main_door_keeps_md_mark():
+    from app.engine.models import FloorPlan
+    from app.engine.plan_geometry import build_floor_drawing
+
+    fp = FloorPlan(
+        floor=0, floor_type="ground", rooms=golden_layout().ground_floor.rooms
+    )
+    drawing = build_floor_drawing(fp, _cfg_9x15())
+    mains = [o for o in drawing.openings if o.is_main]
+    assert mains, "golden layout has a main entrance"
+    assert all(o.mark == "MD" for o in mains)
+
+
+def test_schedule_rows_survive_mark_promotion():
+    """The PDF openings-schedule rows built from promoted `Opening.mark`
+    fields are identical to the legacy index-keyed computation."""
+    from app.engine.pdf import _openings_schedule_rows
+
+    drawing = _drawing_for(_two_bedrooms())
+    rows = _openings_schedule_rows(drawing)
+    # legacy algorithm, verbatim from pre-promotion pdf.py
+    height_mm = {"door": 2100, "window": 1200, "ventilator": 600}
+    prefix = {"door": "D", "window": "W", "ventilator": "V"}
+    groups: dict[tuple[str, int], list[int]] = {}
+    main_idx: list[int] = []
+    for i, o in enumerate(drawing.openings):
+        if getattr(o, "is_main", False):
+            main_idx.append(i)
+            continue
+        groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
+    counters = dict.fromkeys(prefix, 0)
+    legacy: list[tuple] = []
+    for (kind, width_mm), idxs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], -kv[0][1])
+    ):
+        counters[kind] += 1
+        legacy.append(
+            (
+                f"{prefix[kind]}{counters[kind]}",
+                kind.upper(),
+                width_mm,
+                height_mm[kind],
+                len(idxs),
+            )
+        )
+    if main_idx:
+        width_mm = round(drawing.openings[main_idx[0]].width * 1000 / 50) * 50
+        legacy.insert(
+            0, ("MD", "MAIN DOOR", width_mm, height_mm["door"], len(main_idx))
+        )
+    assert rows == legacy

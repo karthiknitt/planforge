@@ -26,6 +26,9 @@ class WallSegment:
     y2: float
     thickness: float  # metres
     kind: str = "internal"  # "external" | "internal"
+    # Deterministic, topology-derived identity assigned by derive_walls()
+    # (plan_geometry._assign_wall_ids). Empty for legacy hand-built segments.
+    id: str = ""
 
     @property
     def length(self) -> float:
@@ -60,6 +63,15 @@ class Opening:
     swing_into_room_id: str = ""
     swing_cw: bool = True
     is_main: bool = False  # main entrance door (MD) on the road-facing wall
+    # Deterministic instance identity: "<host WallSegment.id>#<offset along
+    # that wall>", assigned by plan_geometry.assign_opening_ids(). Empty for
+    # legacy hand-built openings.
+    id: str = ""
+    # IS 962 schedule MARK — a CLASS label shared by every same-kind,
+    # same-snapped-width opening (D1 = all 900 mm doors), with the main
+    # entrance held out as "MD". Assigned by plan_geometry.assign_opening_marks().
+    # A mark deliberately groups; an id deliberately does not.
+    mark: str = ""
 
 
 @dataclass

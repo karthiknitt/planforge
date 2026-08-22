@@ -538,7 +538,7 @@ def _draw_approval_floor_plan(
         _draw_setback_callouts,
         _draw_stair_geometry,
         _openings_schedule_height,
-        _opening_marks,
+        _openings_schedule_rows,
         _schedule_column_x,
         _shape_path,
         _standard_scale,
@@ -636,8 +636,8 @@ def _draw_approval_floor_plan(
         bottom_lane_y=oy - ROAD_GAP - ROAD_H - 10,
     )
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
-    marks, opening_rows = _opening_marks(drawing)
-    _draw_opening_tags(c, drawing, marks, s, ox, oy)
+    opening_rows = _openings_schedule_rows(drawing)
+    _draw_opening_tags(c, drawing, s, ox, oy)
     # Schedule tables stacked bottom-right, above the FAR strip + title block.
     sched_x = _schedule_column_x(page_w, MARGIN)
     sched_base = TITLE_H + 18  # clear the full-width FAR strip band

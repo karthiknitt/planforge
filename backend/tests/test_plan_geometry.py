@@ -1093,3 +1093,143 @@ def test_adjacency_of_an_l_room_covers_only_the_parts_that_touch():
             f"adjacency spans y=[{a.lo}, {a.hi}] — past the base band's top at "
             "3.0, i.e. across the notch where the L is not present"
         )
+
+
+# --- Deterministic wall IDs (Phase 7 / Task 26) -----------------------------
+
+
+def _wall_key(w) -> tuple:
+    """Geometry key identifying a wall independent of list position."""
+    return (w.kind, round(w.x1, 4), round(w.y1, 4), round(w.x2, 4), round(w.y2, 4))
+
+
+def _id_by_key(walls) -> dict[tuple, str]:
+    return {_wall_key(w): w.id for w in walls}
+
+
+def test_wall_ids_stable_and_unique_on_rederivation():
+    """Property 1 — stability: deriving the same floor twice yields identical
+    per-wall IDs (and no duplicates)."""
+    walls_a = derive_walls(_two_full_height_rooms(), buildable_polygon(_cfg_9x15()))
+    walls_b = derive_walls(_two_full_height_rooms(), buildable_polygon(_cfg_9x15()))
+    ids = [w.id for w in walls_a]
+    assert ids and all(ids), "every wall carries a non-empty id"
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+    assert _id_by_key(walls_a) == _id_by_key(walls_b)
+
+
+def _grid_room(rid: str, x: float, y: float, rtype: str = "bedroom") -> Room:
+    return Room(id=rid, name=rid, type=rtype, x=x, y=y, width=5.9425, depth=5.9425)
+
+
+def _grid_rooms(shrink_d: bool) -> list[Room]:
+    d_w = 5.6425 if shrink_d else 5.9425
+    return [
+        _grid_room("a", 0.0, 6.0575),
+        _grid_room("b", 6.0575, 6.0575),
+        _grid_room("c", 0.0, 0.0),
+        Room(
+            id="d", name="d", type="bedroom", x=6.0575, y=0.0, width=d_w, depth=5.9425
+        ),
+    ]
+
+
+def test_wall_ids_local_to_their_own_rooms():
+    """Property 2 — locality: shrinking room d must not change the ID of any
+    wall whose geometry is unchanged (an index-based scheme fails this the
+    moment d's edit removes or adds a wall earlier in the output list)."""
+    before = derive_walls(_grid_rooms(False), box(0, 0, 12, 12))
+    after = derive_walls(_grid_rooms(True), box(0, 0, 12, 12))
+    ids_before = _id_by_key(before)
+    ids_after = _id_by_key(after)
+    shared = set(ids_before) & set(ids_after)
+    assert shared, "sanity: the two layouts share walls"
+    drifted = {
+        k: (ids_before[k], ids_after[k])
+        for k in shared
+        if ids_before[k] != ids_after[k]
+    }
+    assert not drifted, f"untouched walls changed id: {drifted}"
+    # The a|b partition is topologically untouched by d's shrink — pin it.
+    ab = [k for k in shared if k[0] == "internal" and abs(k[1] - 6.0) < 0.01]
+    assert ab, "expected the a|b internal wall to survive unchanged"
+
+
+def test_wall_ids_unique_with_three_room_party_wall():
+    """Property 3 — uniqueness: rooms b and c stacked against one face of
+    `a` give the x=6 centreline THREE derived walls (two party stretches and
+    the b|c return) plus ring runs backed by multiple rooms; every id stays
+    distinct (the afb3794 multi-neighbour case)."""
+    rooms = [
+        _room("a", 0.0, 0.0, 5.9425, 12.0),
+        _room("b", 6.0575, 0.0, 5.9425, 5.9425),
+        _room("c", 6.0575, 6.0575, 5.9425, 5.9425),
+    ]
+    walls = derive_walls(rooms, box(0, 0, 12, 12))
+    ids = [w.id for w in walls]
+    assert all(ids)
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+    # The two party stretches share BOTH flanking-room sets ({a}|{b} vs
+    # {a}|{c}) only in the room dimension — the b|c junction splits the run,
+    # and the span disambiguator keeps their ids apart.
+    party = [
+        w.id
+        for w in walls
+        if w.kind == "internal" and abs(w.x1 - 6.0) < 0.01 and abs(w.x2 - 6.0) < 0.01
+    ]
+    assert len(party) >= 2 and len(set(party)) == len(party)
+    # A ring run backed by more than one room proves set-based attribution.
+    assert any(
+        "+" in w.id.split(":")[3].split(">")[1]
+        or "+" in w.id.split(":")[3].split(">")[0]
+        for w in walls
+        if w.kind == "external"
+    )
+
+
+def test_wall_ids_unique_on_l_shaped_parts_union():
+    """Property 3 — uniqueness on an L-shaped `Room.parts` union."""
+    l_room = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=0.0,
+        y=0.0,
+        width=10.0,
+        depth=10.0,
+        template="L",
+        shape_ratio=0.5,
+    )
+    walls = derive_walls([l_room], box(0, 0, 12, 12))
+    ids = [w.id for w in walls]
+    assert ids and all(ids)
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+
+
+def test_wall_ids_unique_after_open_side_split():
+    """An open-sided porch splits the centreline it shares with its neighbour;
+    both pieces keep IDs of their own — no collision, and the surviving party
+    stretch keeps a stable id."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=1.0,
+        y=5.115,
+        width=3.0,
+        depth=4.0,
+    )
+    walls = derive_walls([porch, living], box(0, 0, 12, 12))
+    ids = [w.id for w in walls]
+    assert all(ids)
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
