@@ -31,11 +31,19 @@ light, adjacency, aspect ratio, circulation, Vastu at 10% weight).
 
 ## Drawing pipeline
 
-`plan_geometry.py` → walls, doors, windows, main-entrance pass (GF only).
+`plan_geometry.py` → walls, doors, windows, main-entrance pass (GF only), plus the
+canonical `FloorDrawing.site` (compound wall/gate/ground hatches, Task 32) and
+`FloorDrawing.fixtures` (canonical furniture, derived in `furniture.py`, Task 33).
+PDF, DXF and the SVG frontend all PROJECT these — never re-derive site or
+furniture geometry in a renderer. Opening edits are `OpeningOverride`/`AddedOpening`
+deltas on the floor plan, applied as a post-pass before ids/marks (Tasks 29–30).
 `section_geometry.py` → SECTION A-A + FRONT ELEVATION, consumed by `section_render.py`
 (IS 962 hatching) and both PDF generators.
 `structural_grid.py` / `footing_placement.py` / `structural_drawing_set.py` feed the
-structural sheets; member design itself happens in structapi, not here.
+structural sheets; member design itself happens in structapi, not here. The sheets
+read typed detailing entities (`BarGroup`/`Stirrup`/`Lap`/`Cover` on the structural
+model items) typed-first, with the raw `design` dict kept as the migration fallback
+(Task 31) — never add a fresh `.get()` chain into `design` when a typed field exists.
 
 ## Gotcha
 

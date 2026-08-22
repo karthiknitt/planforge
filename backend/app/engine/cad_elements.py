@@ -143,6 +143,74 @@ def _stair_from_dict(payload: dict | None) -> StairGeometry | None:
 
 
 @dataclass
+class SitePolygon:
+    """One closed, possibly holed polygon of site ground, in plot metres."""
+
+    exterior: list[tuple[float, float]]
+    holes: list[list[tuple[float, float]]] = field(default_factory=list)
+
+
+@dataclass
+class SiteContext:
+    """Ground/site-level entities shared by every renderer (Phase 7 / T32).
+
+    Until this landed, the compound wall + gate were derived twice (PDF
+    wrapper + DXF caller over geometry.compound_wall_segments) and the two
+    ground-region hatches DISAGREED: the PDF hatched the legal setback
+    margin (plot − buildable) while the DXF hatched the open terrace
+    (plot − footprint). Both regions live here, named, so each renderer
+    projects instead of deriving. `gate_cx` aligns the road-side gate to
+    the ground floor's main entrance; None means "centre it"
+    (compound_wall_segments' own default) for self-contained single-floor
+    builds with no layout context.
+    """
+
+    compound_wall_segments: list[tuple[float, float, float, float]] = field(
+        default_factory=list
+    )
+    gate_posts: list[tuple[float, float]] = field(default_factory=list)  # 0 or 2
+    gate_cx: float | None = None
+    setback_margin: list[SitePolygon] = field(default_factory=list)
+    open_terrace: list[SitePolygon] = field(default_factory=list)
+
+
+@dataclass
+class FixtureShape:
+    """One drawn primitive of a furniture fixture, in ROOM-RELATIVE metres
+    (origin = the room's (x, y) corner, axes along the room — Task 33).
+
+    kind: "rect" | "circle" | "arc" | "line". Rects are closed outlines
+    (dashed=True for stall/mat markers); arcs follow the DXF convention
+    (centre + radius + start/end degrees ccw). Field discipline by kind
+    keeps asdict round-trips simple and tolerant: unused fields sit at 0.0.
+    """
+
+    kind: str
+    x: float = 0.0  # rect: left; circle/arc: centre-x; line: p1.x
+    y: float = 0.0  # rect: bottom; circle/arc: centre-y; line: p1.y
+    width: float = 0.0  # rect only
+    depth: float = 0.0  # rect only
+    radius: float = 0.0  # circle/arc
+    start_deg: float = 0.0  # arc
+    end_deg: float = 0.0  # arc
+    x2: float = 0.0  # line p2.x
+    y2: float = 0.0  # line p2.y
+    dashed: bool = False  # rect only (parking stall, exercise mat)
+
+
+@dataclass
+class Fixture:
+    """One furniture item in a room ("bed", "sofa", "stove"…) — the canonical
+    entity PDF, DXF and the SVG frontend all project (Task 33). Placement is
+    room-relative, so a moved room takes its furniture with it without
+    touching the fixtures."""
+
+    kind: str
+    room_id: str
+    shapes: list[FixtureShape] = field(default_factory=list)
+
+
+@dataclass
 class FloorDrawing:
     """Complete canonical drawing for one floor — the single source every
     renderer (PDF/DXF/SVG) projects."""
@@ -158,6 +226,12 @@ class FloorDrawing:
     bounds: tuple[float, float, float, float]  # buildable bbox
     diagnostics: list[str] = field(default_factory=list)  # placement problems
     entrance_not_on_ground_floor: bool = False
+    # Site entities, shared by every renderer (Task 32). Optional per the
+    # Global Constraints: v1 payloads and hand-built drawings carry None.
+    site: SiteContext | None = None
+    # Canonical furniture fixtures (Task 33) — room-relative, so renderers
+    # project via the room map. Optional: v1 payloads carry none.
+    fixtures: list[Fixture] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         from dataclasses import asdict
@@ -177,6 +251,45 @@ class FloorDrawing:
         renders unchanged. Unknown keys are ignored so future payloads stay
         loadable here.
         """
+        site_payload = payload.get("site")
+        site = (
+            SiteContext(
+                compound_wall_segments=[
+                    tuple(seg)
+                    for seg in site_payload.get("compound_wall_segments") or []
+                ],
+                gate_posts=[tuple(p) for p in site_payload.get("gate_posts") or []],
+                gate_cx=site_payload.get("gate_cx"),
+                setback_margin=[
+                    SitePolygon(
+                        exterior=[tuple(pt) for pt in p.get("exterior") or []],
+                        holes=[
+                            [tuple(pt) for pt in ring] for ring in p.get("holes") or []
+                        ],
+                    )
+                    for p in site_payload.get("setback_margin") or []
+                ],
+                open_terrace=[
+                    SitePolygon(
+                        exterior=[tuple(pt) for pt in p.get("exterior") or []],
+                        holes=[
+                            [tuple(pt) for pt in ring] for ring in p.get("holes") or []
+                        ],
+                    )
+                    for p in site_payload.get("open_terrace") or []
+                ],
+            )
+            if site_payload is not None
+            else None
+        )
+        fixtures = [
+            Fixture(
+                kind=f["kind"],
+                room_id=f["room_id"],
+                shapes=[FixtureShape(**_take(FixtureShape, sh)) for sh in f.get("shapes") or []],
+            )
+            for f in payload.get("fixtures") or []
+        ]
         return cls(
             floor=payload["floor"],
             bounds=tuple(payload.get("bounds") or (0.0, 0.0, 0.0, 0.0)),
@@ -184,6 +297,8 @@ class FloorDrawing:
             entrance_not_on_ground_floor=bool(
                 payload.get("entrance_not_on_ground_floor", False)
             ),
+            site=site,
+            fixtures=fixtures,
             walls=[
                 WallSegment(**_take(WallSegment, w)) for w in payload.get("walls") or []
             ],

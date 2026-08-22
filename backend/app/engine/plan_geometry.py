@@ -35,11 +35,14 @@ from app.engine.cad_elements import (
     FloorDrawing,
     LabelBox,
     Opening,
+    SiteContext,
+    SitePolygon,
     StairGeometry,
     WallJunction,
     WallSegment,
 )
 from app.engine.cad_primitives import metres_to_ftin
+from app.engine.furniture import derive_fixtures
 from app.engine.standards import OpeningStandards
 
 if TYPE_CHECKING:
@@ -3173,7 +3176,70 @@ def _host_wall(
     return best[1] if best else None
 
 
-def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
+def _site_polygons(geom: BaseGeometry) -> list[SitePolygon]:
+    """Canonical rings for a Polygon/MultiPolygon of site ground."""
+    polys = getattr(geom, "geoms", None) or ([geom] if not geom.is_empty else [])
+    return [
+        SitePolygon(
+            exterior=[(float(x), float(y)) for x, y in p.exterior.coords],
+            holes=[[(float(x), float(y)) for x, y in ring.coords] for ring in p.interiors],
+        )
+        for p in polys
+    ]
+
+
+def derive_site_context(
+    floorplan: FloorPlan,
+    cfg: PlotConfig,
+    openings: list[Opening],
+    main_door_cx: float | None = None,
+) -> SiteContext:
+    """The canonical site entities every renderer projects (Task 32).
+
+    - `compound_wall_segments`/`gate_posts`: the boundary ring with the
+      road-side gate at `main_door_cx`. Callers with layout context (the
+      PDF/DXF exporters) pass the GROUND floor's main-entrance x so every
+      floor's payload agrees; a self-contained ground-floor build derives it
+      from its own `is_main` opening; anything else leaves it None, which
+      centres the gate — `compound_wall_segments`' own default.
+    - `setback_margin`: plot − buildable (the *legal* landscaped margin the
+      PDF hatches).
+    - `open_terrace`: plot_polygon − this floor's footprint (the open ground
+      the DXF hatches on the ground-floor sheet). Room-level L/T/U shapes
+      (Room.rects) are honoured, so the region stays exact when the shape
+      templates are enabled.
+    """
+    from app.engine.geometry import (
+        compound_wall_gate_posts,
+        compound_wall_segments,
+        landscape_region,
+        plot_polygon,
+    )
+
+    gate_cx = main_door_cx
+    if gate_cx is None and floorplan.floor == 0:
+        gate_cx = next((o.cx for o in openings if o.is_main), None)
+
+    footprint = None
+    if floorplan.rooms:
+        footprint = unary_union(
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for room in floorplan.rooms for r in room.rects]
+        )
+    plot = plot_polygon(cfg)
+    terrace = plot.difference(footprint) if footprint is not None else plot
+    posts = compound_wall_gate_posts(cfg, gate_cx=gate_cx)
+    return SiteContext(
+        compound_wall_segments=compound_wall_segments(cfg, gate_cx=gate_cx),
+        gate_posts=[tuple(p) for p in posts] if posts else [],
+        gate_cx=gate_cx,
+        setback_margin=_site_polygons(landscape_region(cfg)),
+        open_terrace=_site_polygons(terrace),
+    )
+
+
+def build_floor_drawing(
+    floorplan: FloorPlan, cfg: PlotConfig, *, site_main_door_cx: float | None = None
+) -> FloorDrawing:
     from app.engine.geometry import buildable_polygon
     from app.engine.standards import get_opening_standards
 
@@ -3239,4 +3305,6 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         bounds=buildable.bounds,
         diagnostics=diagnostics,
         entrance_not_on_ground_floor=status.get("entrance_not_on_ground_floor", False),
+        site=derive_site_context(floorplan, cfg, openings, site_main_door_cx),
+        fixtures=derive_fixtures(rooms),
     )
