@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas
 from shapely.geometry import LineString
 
 from app.engine.cad_primitives import metres_to_ftin
-from app.engine.geometry import arc_points, buildable_polygon, landscape_region
+from app.engine.geometry import arc_points, buildable_polygon
 from app.engine.models import FloorPlan, Layout, PlotConfig, Room
 from app.engine.section_geometry import (
     derive_elevation,
@@ -871,14 +871,15 @@ def _ground_floor_main_door_x(layout: Layout, cfg: PlotConfig) -> float | None:
     ground = next((fp for fp in ordered_floors(layout) if fp.floor == 0), None)
     if ground is None:
         return None
-    drawing = build_floor_drawing(ground, cfg)
-    return next((o.cx for o in drawing.openings if o.is_main), None)
+    site = build_floor_drawing(ground, cfg).site
+    return site.gate_cx if site else None
 
 
 def _draw_landscape(
-    c: canvas.Canvas, cfg: PlotConfig, ox: float, oy: float, s: float
+    c: canvas.Canvas, margin: list, ox: float, oy: float, s: float
 ) -> None:
-    """Hatch the setback margin (`landscape_region`) as open/planted ground.
+    """Hatch the canonical setback margin (`FloorDrawing.site.setback_margin`
+    — plot minus buildable, Task 32) as open/planted ground.
 
     Diagonal line hatch, NOT a solid fill: CCQS's monochrome component scores
     mean pixel saturation (`app/quality/ccqs.py:compute_monochromaticity`) —
@@ -903,9 +904,13 @@ def _draw_landscape(
     plot, and therefore `s`, shrinks). This keeps the ink density constant
     across plot sizes.
     """
-    from shapely.geometry import LineString
+    from shapely.geometry import LineString, Polygon
+    from shapely.ops import unary_union
 
-    region = landscape_region(cfg)
+    pieces = [Polygon(p.exterior, p.holes) for p in margin]
+    if not pieces:
+        return
+    region = unary_union(pieces) if len(pieces) > 1 else pieces[0]
     if region.is_empty:
         return
     minx, miny, maxx, maxy = region.bounds
@@ -936,27 +941,24 @@ def _draw_landscape(
 
 def _draw_compound_wall(
     c: canvas.Canvas,
-    cfg: PlotConfig,
+    segments: list[tuple[float, float, float, float]],
     ox: float,
     oy: float,
     s: float,
-    gate_cx: float | None = None,
 ) -> None:
     """Boundary wall ring with a road-side gate gap.
 
-    Strokes the same centrelines the DXF path buffers into a poché polygon
-    (`app.engine.geometry.compound_wall_segments`) — this is a thin ReportLab
-    wrapper, not a second derivation of the wall/gate geometry. `gate_cx`
-    (the ground floor's main-entrance x, or None) is threaded through so the
-    gate lines up with the same door DXF aligns it to (see `render_pdf`,
-    which derives it once from the ground floor and passes it to every floor
-    page — upper floors have no compound-wall gate of their own).
+    Projects the canonical `FloorDrawing.site.compound_wall_segments` (Task
+    32) — this is a thin ReportLab stroke loop, not a derivation. The gate's
+    alignment to the ground floor's main entrance is decided when the
+    drawing is BUILT (`build_floor_drawing`'s `site_main_door_cx`), not
+    here.
     """
-    from app.engine.geometry import COMPOUND_WALL_THICKNESS_M, compound_wall_segments
+    from app.engine.geometry import COMPOUND_WALL_THICKNESS_M
 
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(COMPOUND_WALL_THICKNESS_M * s)
-    for x1, y1, x2, y2 in compound_wall_segments(cfg, gate_cx=gate_cx):
+    for x1, y1, x2, y2 in segments:
         c.line(ox + x1 * s, oy + y1 * s, ox + x2 * s, oy + y2 * s)
 
 
@@ -1934,7 +1936,7 @@ def _draw_floor_projected(
         page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
     )
 
-    drawing = build_floor_drawing(floor_plan, cfg)
+    drawing = build_floor_drawing(floor_plan, cfg, site_main_door_cx=gf_main_door_x)
 
     # Road strip + floor label (drawn directly below the plot)
     road_y = oy - ROAD_GAP - ROAD_H
@@ -1967,7 +1969,7 @@ def _draw_floor_projected(
     # everything drawn on top of it — the building poché, the compound wall
     # (drawn later, at line ~1788, deliberately above the dim chains — see
     # the comment there), and the dim chains themselves.
-    _draw_landscape(c, cfg, ox, oy, s)
+    _draw_landscape(c, drawing.site.setback_margin if drawing.site else [], ox, oy, s)
 
     # Walls: poché (solid fill) from the unioned polygons with openings cut
     opening_polys = opening_boxes(drawing.openings)
@@ -2014,7 +2016,9 @@ def _draw_floor_projected(
     # Before the dim chains, not after: the wall strokes at 0.23 m * scale
     # along the plot edges, exactly where dimension extension lines and ticks
     # land, so drawing it later paints over them.
-    _draw_compound_wall(c, cfg, ox, oy, s, gate_cx=gf_main_door_x)
+    _draw_compound_wall(
+        c, drawing.site.compound_wall_segments if drawing.site else [], ox, oy, s
+    )
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     opening_rows = _openings_schedule_rows(drawing)

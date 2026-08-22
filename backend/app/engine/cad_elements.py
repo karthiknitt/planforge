@@ -143,6 +143,38 @@ def _stair_from_dict(payload: dict | None) -> StairGeometry | None:
 
 
 @dataclass
+class SitePolygon:
+    """One closed, possibly holed polygon of site ground, in plot metres."""
+
+    exterior: list[tuple[float, float]]
+    holes: list[list[tuple[float, float]]] = field(default_factory=list)
+
+
+@dataclass
+class SiteContext:
+    """Ground/site-level entities shared by every renderer (Phase 7 / T32).
+
+    Until this landed, the compound wall + gate were derived twice (PDF
+    wrapper + DXF caller over geometry.compound_wall_segments) and the two
+    ground-region hatches DISAGREED: the PDF hatched the legal setback
+    margin (plot − buildable) while the DXF hatched the open terrace
+    (plot − footprint). Both regions live here, named, so each renderer
+    projects instead of deriving. `gate_cx` aligns the road-side gate to
+    the ground floor's main entrance; None means "centre it"
+    (compound_wall_segments' own default) for self-contained single-floor
+    builds with no layout context.
+    """
+
+    compound_wall_segments: list[tuple[float, float, float, float]] = field(
+        default_factory=list
+    )
+    gate_posts: list[tuple[float, float]] = field(default_factory=list)  # 0 or 2
+    gate_cx: float | None = None
+    setback_margin: list[SitePolygon] = field(default_factory=list)
+    open_terrace: list[SitePolygon] = field(default_factory=list)
+
+
+@dataclass
 class FloorDrawing:
     """Complete canonical drawing for one floor — the single source every
     renderer (PDF/DXF/SVG) projects."""
@@ -158,6 +190,9 @@ class FloorDrawing:
     bounds: tuple[float, float, float, float]  # buildable bbox
     diagnostics: list[str] = field(default_factory=list)  # placement problems
     entrance_not_on_ground_floor: bool = False
+    # Site entities, shared by every renderer (Task 32). Optional per the
+    # Global Constraints: v1 payloads and hand-built drawings carry None.
+    site: SiteContext | None = None
 
     def to_dict(self) -> dict:
         from dataclasses import asdict
@@ -177,6 +212,37 @@ class FloorDrawing:
         renders unchanged. Unknown keys are ignored so future payloads stay
         loadable here.
         """
+        site_payload = payload.get("site")
+        site = (
+            SiteContext(
+                compound_wall_segments=[
+                    tuple(seg)
+                    for seg in site_payload.get("compound_wall_segments") or []
+                ],
+                gate_posts=[tuple(p) for p in site_payload.get("gate_posts") or []],
+                gate_cx=site_payload.get("gate_cx"),
+                setback_margin=[
+                    SitePolygon(
+                        exterior=[tuple(pt) for pt in p.get("exterior") or []],
+                        holes=[
+                            [tuple(pt) for pt in ring] for ring in p.get("holes") or []
+                        ],
+                    )
+                    for p in site_payload.get("setback_margin") or []
+                ],
+                open_terrace=[
+                    SitePolygon(
+                        exterior=[tuple(pt) for pt in p.get("exterior") or []],
+                        holes=[
+                            [tuple(pt) for pt in ring] for ring in p.get("holes") or []
+                        ],
+                    )
+                    for p in site_payload.get("open_terrace") or []
+                ],
+            )
+            if site_payload is not None
+            else None
+        )
         return cls(
             floor=payload["floor"],
             bounds=tuple(payload.get("bounds") or (0.0, 0.0, 0.0, 0.0)),
@@ -184,6 +250,7 @@ class FloorDrawing:
             entrance_not_on_ground_floor=bool(
                 payload.get("entrance_not_on_ground_floor", False)
             ),
+            site=site,
             walls=[
                 WallSegment(**_take(WallSegment, w)) for w in payload.get("walls") or []
             ],
