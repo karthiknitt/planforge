@@ -25,6 +25,8 @@ export interface WallSegment {
   y2: number;
   thickness: number;
   kind: "external" | "internal";
+  /** Deterministic topology-derived id (payload v2; absent in stored v1). */
+  id?: string;
 }
 
 export interface WallJunction {
@@ -45,6 +47,10 @@ export interface Opening {
   swing_into_room_id: string;
   swing_cw: boolean;
   is_main?: boolean;
+  /** Instance identity: "<host wall id>#<offset along it>" (payload v2). */
+  id?: string;
+  /** IS 962 schedule mark — class label shared by same-size openings (payload v2). */
+  mark?: string;
 }
 
 export interface LabelBox {

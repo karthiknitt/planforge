@@ -174,7 +174,7 @@ def test_build_floor_drawing_serializes_stably():
         d2 = build_floor_drawing(floor, cfg).to_dict()
         s1 = json.dumps(d1, sort_keys=True)
         assert s1 == json.dumps(d2, sort_keys=True)
-        assert d1["version"] == 1
+        assert d1["version"] == 2
         for key in ("walls", "openings", "columns", "dim_chains", "labels", "bounds"):
             assert key in d1, key
         assert d1["walls"] and d1["openings"] and d1["columns"]
@@ -196,3 +196,45 @@ def test_to_dict_floats_rounded():
                 check(v)
 
     check(d)
+
+
+# ── Payload v2: version bump, v1 rehydration, lossless round-trip (T28) ──────
+
+
+def test_v2_payload_round_trips_losslessly():
+    from app.engine.cad_elements import FloorDrawing
+
+    d = build_floor_drawing(golden_layout().ground_floor, golden_config())
+    payload = d.to_dict()
+    assert payload["version"] == 2
+    rehydrated = FloorDrawing.from_dict(payload)
+    assert rehydrated.to_dict() == payload
+
+
+def test_stored_v1_payload_rehydrates_and_renders():
+    """Revision snapshots taken before Phase 7 froze version-1 drawings with
+    no wall/opening ids and no opening marks. Such a payload must still
+    deserialise (defaults for the new fields) and render."""
+    from app.engine.cad_elements import FloorDrawing
+
+    d = build_floor_drawing(golden_layout().ground_floor, golden_config())
+    v1 = d.to_dict()
+    v1["version"] = 1
+    for w in v1["walls"]:
+        w.pop("id", None)
+    for o in v1["openings"]:
+        o.pop("id", None)
+        o.pop("mark", None)
+
+    old = FloorDrawing.from_dict(v1)
+    assert len(old.walls) == len(v1["walls"])
+    assert len(old.openings) == len(v1["openings"])
+    assert all(w.id == "" for w in old.walls)
+    assert all(o.id == "" and o.mark == "" for o in old.openings)
+    # renders: a rehydrated drawing serialises again as a current v2 payload
+    again = old.to_dict()
+    assert again["version"] == 2
+    assert len(again["walls"]) == len(v1["walls"])
+    # unknown future keys are ignored rather than rejected
+    v1["something_new"] = {"nested": True}
+    assert FloorDrawing.from_dict(v1).to_dict()["version"] == 2

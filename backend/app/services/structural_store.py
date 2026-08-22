@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,14 +29,18 @@ def _canonical_room(room: dict) -> dict:
 
 
 def _canonical_geometry(geometry: dict) -> dict:
-    """Rooms-only canonical structure for hashing.
+    """Rooms + opening-override canonical structure for hashing.
 
     Deliberately excludes everything except (id, type, x, y, width, depth)
-    per room, keyed by floor number. Derived fields (compliance, score,
-    space_notes) and columns (derived from rooms) are excluded on purpose:
-    including them re-breaks approvals whenever the scorer, compliance
-    engine, or column-derivation logic changes without the rooms actually
-    moving.
+    per room and each floor's opening_overrides, keyed by floor number.
+    Derived fields (compliance, score, space_notes) and columns (derived
+    from rooms) are excluded on purpose: including them re-breaks approvals
+    whenever the scorer, compliance engine, or column-derivation logic
+    changes without the rooms actually moving. Opening overrides ARE
+    included (Phase 7 Task 29): a moved window is a real drawing change, so
+    an override-only edit must not hash identical to the approved revision
+    it departs from. Rows hashed before overrides existed are rehashed by
+    the boot migration (`rehash_architectural_revisions`).
     """
     floors = []
     for key in _FLOOR_KEYS:
@@ -47,9 +52,35 @@ def _canonical_geometry(geometry: dict) -> dict:
             (_canonical_room(r) for r in rooms if isinstance(r, dict)),
             key=lambda r: str(r.get("id")),
         )
-        floors.append({"floor": floor_data.get("floor"), "rooms": canonical_rooms})
+        overrides = [
+            o
+            for o in (floor_data.get("opening_overrides") or [])
+            if isinstance(o, dict)
+        ]
+        floors.append(
+            {
+                "floor": floor_data.get("floor"),
+                "rooms": canonical_rooms,
+                "opening_overrides": sorted(
+                    (
+                        str(o.get("opening_id")),
+                        _num_or_none(o.get("along")),
+                        _num_or_none(o.get("width")),
+                        bool(o.get("suppressed", False)),
+                    )
+                    for o in overrides
+                ),
+            }
+        )
     floors.sort(key=lambda f: (f["floor"] is None, f["floor"]))
     return {"floors": floors}
+
+
+def _num_or_none(v: Any) -> float | None:
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def geometry_hash(geometry: dict) -> str:
