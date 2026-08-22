@@ -10,6 +10,9 @@ from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+
 from app.config.settings import settings
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
@@ -622,6 +625,7 @@ def _render_dxf(
     # Ground-floor building extents needed for post-loop setback callouts
     gf_bld_x = gf_bld_y = gf_bld_w = gf_bld_d = 0.0
     gf_main_door_x: float | None = None
+    gf_site = None  # the ground-floor drawing's canonical site context (T32)
 
     for floor_plan in floor_plans:
         z_offset = float(floor_plan.floor) * 3.0
@@ -643,13 +647,15 @@ def _render_dxf(
         global_max_y = max(global_max_y, bld_y + bld_d)
 
         # Canonical drawing for this floor — single source of truth for
-        # walls/openings/columns/dims/labels/stair (Sprint 4/5).
-        drawing = build_floor_drawing(floor_plan, cfg)
+        # walls/openings/columns/dims/labels/stair (Sprint 4/5) AND the site
+        # context (compound wall, gate, ground hatches — Task 32). The gate
+        # aligns to the GROUND floor's main entrance on every floor's payload,
+        # so non-GF builds get the captured value threaded through.
+        drawing = build_floor_drawing(floor_plan, cfg, site_main_door_cx=gf_main_door_x)
 
-        if floor_plan.floor == 0:
-            gf_main_door_x = next(
-                (o.cx for o in drawing.openings if getattr(o, "is_main", False)), None
-            )
+        if floor_plan.floor == 0 and drawing.site is not None:
+            gf_main_door_x = drawing.site.gate_cx
+            gf_site = drawing.site
 
         # 1-2. Walls: poché fill from the union of wall footprints with
         # opening boxes already subtracted (IS:962/AIA convention).
@@ -754,17 +760,22 @@ def _render_dxf(
         for room in rooms:
             draw_furniture(msp, room, layer="A-FURNITURE", z=z_offset)
 
-        # 6d. Open terrace hatching (ground floor only)
-        if floor_plan.floor == 0 and footprint is not None:
-            from shapely.geometry import Polygon as _SPoly
-            from shapely.geometry import box as _sbox
-
-            plot_poly = (
-                _SPoly([(float(x), float(y)) for x, y in cfg.plot_corners])
-                if cfg.plot_shape == "quadrilateral" and cfg.plot_corners
-                else _sbox(0, 0, cfg.plot_x_extent, cfg.plot_y_extent)
-            )
-            draw_open_terrace(msp, plot_poly, footprint, layer="A-TERRACE", z=z_offset)
+        # 6d. Open terrace hatching (ground floor only) — the canonical
+        # region, identical to the old per-renderer plot−footprint
+        # difference but derived once, in build_floor_drawing (Task 32)
+        if floor_plan.floor == 0 and footprint is not None and drawing.site is not None:
+            terrace_geoms = [
+                Polygon(p.exterior, p.holes) for p in drawing.site.open_terrace
+            ]
+            if terrace_geoms:
+                draw_open_terrace(
+                    msp,
+                    unary_union(terrace_geoms)
+                    if len(terrace_geoms) > 1
+                    else terrace_geoms[0],
+                    layer="A-TERRACE",
+                    z=z_offset,
+                )
 
         # 7. Dimension chains (room + plot/setback levels, all 4 sides)
         _draw_dim_chains_dxf(msp, drawing, layer="DIM-LINE")
@@ -789,9 +800,10 @@ def _render_dxf(
         )
 
         # ── Compound boundary wall with gate ─────────────────────────────────
-        draw_compound_wall(
-            msp, cfg, layer="A-COMPOUND-WALL", z=0.0, gate_cx=gf_main_door_x
-        )
+        # Project the ground-floor drawing's canonical site (Task 32); the
+        # gate alignment was decided when that drawing was built.
+        if gf_site is not None:
+            draw_compound_wall(msp, gf_site, layer="A-COMPOUND-WALL", z=0.0)
 
         # ── Title block (below the drawing) ───────────────────────────────────
         gf_sqft = sum(r.area for r in layout.ground_floor.rooms) * 10.764

@@ -251,31 +251,24 @@ def _draw_wall_segment_poly(msp, pts_2d: list[tuple], layer: str, z: float) -> N
         pass
 
 
-def draw_compound_wall(
-    msp, cfg, layer: str, z: float, gate_cx: float | None = None
-) -> None:
+def draw_compound_wall(msp, site, layer: str, z: float) -> None:
     """
     Draw compound (boundary) wall around the plot perimeter.
 
-    Buffers each centreline from ``app.engine.geometry.compound_wall_segments``
-    (``LineString.buffer(0.115)`` with mitered corners) into a poché polygon.
-    A 3.6 m gate gap sits at the centre of the road-facing side by default, or
-    centred on ``gate_cx`` (the main entrance door's x position, clamped to
-    keep the gap within the wall) when given — see
-    ``app.engine.geometry.GATE_WIDTH_M`` / ``compound_wall_gate_posts``.
+    Projects ``FloorDrawing.site`` (Task 32): buffers each canonical
+    centreline (``site.compound_wall_segments``, gate gap already cut and
+    aligned to the main entrance at DRAWING build time) into a poché polygon,
+    and strokes the canonical gate posts (``site.gate_posts``) around it.
+    This is a projection, not a second derivation of wall/gate geometry.
     """
     from shapely.geometry import LineString
 
-    from app.engine.geometry import (
-        COMPOUND_WALL_HALF_THICKNESS_M,
-        compound_wall_gate_posts,
-        compound_wall_segments,
-    )
+    from app.engine.geometry import COMPOUND_WALL_HALF_THICKNESS_M
 
     wall_t = COMPOUND_WALL_HALF_THICKNESS_M
     post_size = 0.3
 
-    for x1, y1, x2, y2 in compound_wall_segments(cfg, gate_cx=gate_cx):
+    for x1, y1, x2, y2 in site.compound_wall_segments:
         buf = LineString([(x1, y1), (x2, y2)]).buffer(
             wall_t, cap_style="flat", join_style="mitre"
         )
@@ -283,10 +276,8 @@ def draw_compound_wall(
             pts = [(x, y) for x, y in buf.exterior.coords[:-1]]
             _draw_wall_segment_poly(msp, pts, layer, z)
 
-    posts = compound_wall_gate_posts(cfg, gate_cx=gate_cx)
-    if posts is not None:
-        for gx, gy in posts:
-            _draw_gate_post(msp, gx, gy, post_size, layer, z)
+    for gx, gy in site.gate_posts:
+        _draw_gate_post(msp, gx, gy, post_size, layer, z)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -294,13 +285,9 @@ def draw_compound_wall(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def draw_open_terrace(msp, plot_poly, building_poly, layer: str, z: float) -> None:
-    """Hatch the area between plot boundary and building footprint (terrace/setbacks)."""
-    try:
-        terrace = plot_poly.difference(building_poly)
-    except Exception:
-        return
-
+def draw_open_terrace(msp, terrace, layer: str, z: float) -> None:
+    """Hatch the canonical open terrace (FloorDrawing.site.open_terrace —
+    plot minus the ground-floor footprint, Task 32) as open ground."""
     if terrace is None or terrace.is_empty:
         return
 

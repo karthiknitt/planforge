@@ -28,6 +28,7 @@ import pytest
 from reportlab.pdfgen import canvas
 
 from app.engine.cad_advanced import draw_compound_wall
+from app.engine.cad_elements import SiteContext
 from app.engine.geometry import (
     GATE_WIDTH_M,
     buildable_polygon,
@@ -175,11 +176,22 @@ def _polys_on_layer(msp, layer: str) -> list:
     return [e for e in msp if e.dxftype() == "LWPOLYLINE" and e.dxf.layer == layer]
 
 
+def _site_for(cfg: PlotConfig, gate_cx: float | None = None) -> SiteContext:
+    """The canonical site for a cfg-only test, exactly as derive_site_context
+    assembles it (segments + gate posts, gate at gate_cx) — Task 32."""
+    posts = compound_wall_gate_posts(cfg, gate_cx=gate_cx)
+    return SiteContext(
+        compound_wall_segments=compound_wall_segments(cfg, gate_cx=gate_cx),
+        gate_posts=[tuple(pt) for pt in posts] if posts else [],
+        gate_cx=gate_cx,
+    )
+
+
 def test_dxf_compound_wall_still_produces_five_walls_plus_two_posts(msp):
     """Regression pin for the extraction: with the S-road fixture the old
     inline implementation drew 3 solid-side polys + 2 gate-split polys + 2
-    gate-post squares = 7 LWPOLYLINEs. The shared-helper version must match."""
-    draw_compound_wall(msp, _cfg("S"), "A-COMPOUND-WALL", 0.0)
+    gate-post squares = 7 LWPOLYLINEs. The projection must match."""
+    draw_compound_wall(msp, _site_for(_cfg("S")), "A-COMPOUND-WALL", 0.0)
     polys = _polys_on_layer(msp, "A-COMPOUND-WALL")
     assert len(polys) == 7
 
@@ -215,7 +227,7 @@ def _drawn_post_centres(
 
 def test_dxf_gate_posts_sit_at_the_shared_gate_positions(msp):
     cfg = _cfg("S")
-    draw_compound_wall(msp, cfg, "A-COMPOUND-WALL", 0.0)
+    draw_compound_wall(msp, _site_for(cfg), "A-COMPOUND-WALL", 0.0)
     expected_posts = compound_wall_gate_posts(cfg)
     assert expected_posts is not None
 
@@ -229,14 +241,13 @@ def test_dxf_gate_posts_sit_at_the_shared_gate_positions(msp):
 
 
 def test_dxf_gate_still_tracks_gate_cx(msp):
-    """Behaviour preserved: passing gate_cx still shifts the DRAWN gate.
+    """Behaviour preserved: a main-door-aligned gate still lands shifted.
 
     Asserts against the entities `draw_compound_wall` emitted, not against the
-    shared helper — otherwise this passes even if the DXF renderer ignored
-    `gate_cx`, which is live shipping behaviour (`export.py` passes it on every
-    export).
+    shared helper — the projection must honour the canonical segments it is
+    handed (pre-Task-32 the renderer derived them from the gate_cx kwarg).
     """
-    draw_compound_wall(msp, _cfg("S"), "A-COMPOUND-WALL", 0.0, gate_cx=6.0)
+    draw_compound_wall(msp, _site_for(_cfg("S"), gate_cx=6.0), "A-COMPOUND-WALL", 0.0)
 
     drawn = _drawn_post_centres(msp)
     assert len(drawn) == 2, f"expected 2 drawn gate posts, got {drawn}"
@@ -259,7 +270,7 @@ def test_pdf_compound_wall_draws_a_stroke_per_segment():
     calls: list[tuple[float, float, float, float]] = []
     c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
 
-    _draw_compound_wall(c, cfg, ox=10.0, oy=20.0, s=2.0)
+    _draw_compound_wall(c, compound_wall_segments(cfg), ox=10.0, oy=20.0, s=2.0)
 
     expected = compound_wall_segments(cfg)
     assert len(calls) == len(expected) == 5
@@ -551,6 +562,14 @@ def test_landscape_region_is_whole_plot_when_setbacks_consume_it():
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _margin_of(cfg: PlotConfig):
+    """landscape_region() as SitePolygon rings — the exact conversion
+    plan_geometry._site_polygons performs at draw time (Task 32)."""
+    from app.engine.plan_geometry import _site_polygons
+
+    return _site_polygons(landscape_region(cfg))
+
+
 def test_draw_landscape_hatches_only_inside_the_setback_margin():
     """Renders the fill/hatch and inspects the actual drawn geometry, not
     just that some call happened.
@@ -578,7 +597,7 @@ def test_draw_landscape_hatches_only_inside_the_setback_margin():
     c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
 
     ox, oy, s = 10.0, 20.0, 2.0
-    _draw_landscape(c, cfg, ox, oy, s)
+    _draw_landscape(c, _margin_of(cfg), ox, oy, s)
 
     assert len(calls) > 0, "must draw at least one hatch line into the margin"
     region = landscape_region(cfg)
@@ -652,7 +671,7 @@ def test_draw_landscape_hatches_both_pieces_of_a_multipolygon_margin():
     c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
 
     ox, oy, s = 0.0, 0.0, 2.0
-    _draw_landscape(c, cfg, ox, oy, s)
+    _draw_landscape(c, _margin_of(cfg), ox, oy, s)
 
     assert len(calls) > 0
     front_hit = any((y1 / s) < 3.0 or (y2 / s) < 3.0 for _, y1, _, y2 in calls)
@@ -661,23 +680,146 @@ def test_draw_landscape_hatches_both_pieces_of_a_multipolygon_margin():
     assert rear_hit, "no hatch line landed in the rear strip"
 
 
-def test_draw_landscape_is_a_noop_on_empty_region(monkeypatch):
-    """Degenerate case: an empty landscape_region() (defensive — no fixture
-    in this codebase produces one; see the whole-plot fallback tested above)
-    must not raise and must draw nothing. Forced via monkeypatch on the
-    `landscape_region` name `_draw_landscape` calls, rather than hunting for
-    a real config that triggers it, so the test's premise is exactly what it
-    claims to be.
-    """
-    from shapely.geometry import Polygon
-
-    from app.engine import pdf as pdf_mod
-
-    monkeypatch.setattr(pdf_mod, "landscape_region", lambda cfg: Polygon())
-
+def test_draw_landscape_is_a_noop_on_empty_region():
+    """Degenerate case: an empty canonical margin (defensive — no fixture in
+    this codebase produces one) must not raise and must draw nothing."""
     buf = BytesIO()
     c = canvas.Canvas(buf)
     calls: list[tuple[float, float, float, float]] = []
     c.line = lambda x1, y1, x2, y2: calls.append((x1, y1, x2, y2))  # type: ignore[method-assign]
-    _draw_landscape(c, _cfg("S"), ox=0.0, oy=0.0, s=1.0)
+    _draw_landscape(c, [], ox=0.0, oy=0.0, s=1.0)
     assert calls == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FloorDrawing.site — Task 32: compound wall, gate and the two ground-region
+# hatches moved into the canonical drawing so PDF and DXF PROJECT them instead
+# of deriving them separately. The acceptance criterion is projection
+# identity: what the renderers used to derive must equal site.* exactly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+from shapely.geometry import Polygon as _Polygon  # noqa: E402
+from shapely.ops import unary_union as _uu  # noqa: E402
+
+
+def _site_ring_set(polys) -> set[tuple[tuple[float, float], ...]]:
+    return {
+        tuple((round(x, 4), round(y, 4)) for x, y in p.exterior.coords)
+        for p in getattr(polys, "geoms", [polys])
+    }
+
+
+def _sitepoly_ring_set(pols) -> set[tuple[tuple[float, float], ...]]:
+    return {tuple((round(x, 4), round(y, 4)) for x, y in p.exterior) for p in pols}
+
+
+def test_drawing_site_carries_projectable_compound_wall_and_gate():
+    """site.compound_wall_segments must EQUAL the per-renderer derivation it
+    replaces — compound_wall_segments(cfg, gate_cx=aligned) — so deleting
+    that derivation cannot change either output."""
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    drawing = build_floor_drawing(layout.ground_floor, cfg)
+    site = drawing.site
+    assert site is not None
+    aligned = _ground_floor_main_door_x(layout, cfg)
+    assert aligned is not None
+    assert site.gate_cx == aligned
+    assert site.compound_wall_segments == compound_wall_segments(cfg, gate_cx=aligned)
+    assert len(site.gate_posts) == 2
+
+
+def test_site_gate_cx_threads_through_build_floor_drawing():
+    """Layout pipelines align the gate to the GF main door on EVERY floor
+    page; the floor build takes the aligned x as an explicit input."""
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    gf = build_floor_drawing(layout.ground_floor, cfg)
+    ff = build_floor_drawing(layout.first_floor, cfg, site_main_door_cx=gf.site.gate_cx)
+    assert ff.site is not None
+    assert ff.site.gate_cx == gf.site.gate_cx
+    assert ff.site.compound_wall_segments == gf.site.compound_wall_segments
+
+
+def test_self_contained_upper_floor_gets_no_gate_alignment():
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    ff = build_floor_drawing(layout.first_floor, cfg)
+    assert ff.site is not None
+    assert ff.site.gate_cx is None
+    # …and the wall falls back to a centred gate, as compound_wall_segments
+    # does without a gate_cx
+    assert ff.site.compound_wall_segments == compound_wall_segments(cfg)
+
+
+def test_site_setback_margin_projects_landscape_region():
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    site = build_floor_drawing(layout.ground_floor, cfg).site
+    assert site is not None
+    assert _sitepoly_ring_set(site.setback_margin) == _site_ring_set(
+        landscape_region(cfg)
+    )
+    # and for a multi-piece margin the pieces all survive
+    cfg2 = _cfg()
+    cfg2.setback_left = 0.0
+    cfg2.setback_right = 0.0
+    site2 = build_floor_drawing(layout.ground_floor, cfg2).site
+    assert site2 is not None
+    assert _sitepoly_ring_set(site2.setback_margin) == _site_ring_set(
+        landscape_region(cfg2)
+    )
+
+
+def test_site_open_terrace_is_plot_minus_footprint():
+    """The DXF's A-TERRACE region, derived canonically: plot_polygon minus
+    the union of the floor's room rects — identical regions, one derivation."""
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    gf = layout.ground_floor
+    site = build_floor_drawing(gf, cfg).site
+    assert site is not None
+    expected = plot_polygon(cfg).difference(
+        _uu(
+            [
+                _Polygon(
+                    [
+                        (r.x, r.y),
+                        (r.x + r.width, r.y),
+                        (r.x + r.width, r.y + r.depth),
+                        (r.x, r.y + r.depth),
+                    ]
+                )
+                for r in gf.rooms
+            ]
+        )
+    )
+    got = _uu([_Polygon(p.exterior, p.holes) for p in site.open_terrace])
+    assert got.symmetric_difference(expected).area < 1e-6
+
+
+def test_site_round_trips_through_the_v2_payload():
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    drawing = build_floor_drawing(layout.ground_floor, cfg)
+    restored = type(drawing).from_dict(drawing.to_dict())
+    assert restored.site is not None
+    # in-memory rings hold raw floats; the payload is rounded to 4dp (as with
+    # every other entity) — compare at the payload level, not the float level
+    assert restored.to_dict() == drawing.to_dict()
+    assert restored.site == type(drawing).from_dict(drawing.to_dict()).site
+
+
+def test_v1_payload_without_site_still_rehydrates():
+    """Task 28's rehydration contract extended: a payload taken before the
+    site entities existed (v1, no `site` key) deserialises with site=None
+    and renders unchanged."""
+    cfg = _cfg()
+    layout = _layout_with_main_door_at(6.5)
+    payload = build_floor_drawing(layout.ground_floor, cfg).to_dict()
+    site = payload.pop("site", None)
+    assert site is not None  # the v2 producer DID write it
+    payload["version"] = 1
+    restored = type(build_floor_drawing(layout.ground_floor, cfg)).from_dict(payload)
+    assert restored.site is None
+    assert restored.walls  # the rest of the payload survives untouched
