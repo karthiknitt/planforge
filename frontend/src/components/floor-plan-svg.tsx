@@ -1975,10 +1975,13 @@ export function FloorPlanSVG({
         {/* ── Scale bar ─────────────────────────────────────────────────── */}
         <ScaleBar x={originX + 4} y={originY + drawH - 10} scale={scale} />
 
-        {/* ── Furniture overlay (presentation mode) ─────────────────────── */}
+        {/* ── Furniture overlay (presentation mode) — the canonical payload
+            fixtures; nothing derived client-side (Task 33). Rooms are still
+            passed for the room-origin translation. ──────────────────────── */}
         {showFurniture && (
           <FurnitureOverlay
             rooms={rooms}
+            fixtures={drawing?.fixtures ?? []}
             scale={scale}
             offsetX={originX}
             offsetY={originY}

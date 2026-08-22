@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from shapely.geometry import LineString
 
+from app.engine.cad_elements import FloorDrawing
 from app.engine.cad_primitives import metres_to_ftin
 from app.engine.geometry import arc_points, buildable_polygon
 from app.engine.models import FloorPlan, Layout, PlotConfig, Room
@@ -989,6 +990,59 @@ def _draw_compound_wall(
     c.setLineWidth(COMPOUND_WALL_THICKNESS_M * s)
     for x1, y1, x2, y2 in segments:
         c.line(ox + x1 * s, oy + y1 * s, ox + x2 * s, oy + y2 * s)
+
+
+def _draw_fixtures(
+    c: canvas.Canvas,
+    drawing: FloorDrawing,
+    rooms_by_id: dict,
+    s: float,
+    ox: float,
+    oy: float,
+) -> None:
+    """Project the canonical room-relative fixtures (Task 33) — the same
+    entities the DXF exporter draws on A-FURNITURE, closing the PDF's
+    furniture gap. Strokes only (no fill), thin grey, consistent with every
+    other ``_draw_*`` helper here; nothing read from `rooms` directly.
+    """
+    if not drawing.fixtures:
+        return
+    c.setStrokeColor(HexColor("#666666"))
+    c.setLineWidth(0.3)
+    for fixture in drawing.fixtures:
+        room = rooms_by_id.get(fixture.room_id)
+        if room is None:
+            continue
+        for sh in fixture.shapes:
+            x, y = room.x + sh.x, room.y + sh.y
+            if sh.kind == "rect":
+                c.setDash(3, 2) if sh.dashed else c.setDash()
+                c.rect(
+                    ox + x * s, oy + y * s, sh.width * s, sh.depth * s, fill=0, stroke=1
+                )
+            elif sh.kind == "circle":
+                c.setDash()
+                c.circle(ox + x * s, oy + y * s, sh.radius * s, fill=0, stroke=1)
+            elif sh.kind == "arc":
+                c.setDash()
+                r = sh.radius * s
+                c.arc(
+                    ox + x * s - r,
+                    oy + y * s - r,
+                    ox + x * s + r,
+                    oy + y * s + r,
+                    startAng=sh.start_deg,
+                    extent=(sh.end_deg - sh.start_deg) % 360 or 360,
+                )
+            elif sh.kind == "line":
+                c.setDash()
+                c.line(
+                    ox + x * s,
+                    oy + y * s,
+                    ox + (room.x + sh.x2) * s,
+                    oy + (room.y + sh.y2) * s,
+                )
+    c.setDash()
 
 
 def _draw_setback_callouts(
@@ -2059,6 +2113,8 @@ def _draw_floor_projected(
         oy,
         stair_label="UP" if _has_floor_above(layout, floor_plan) else "DN",
     )
+    # Furniture over the poché and openings, under the room labels (T33)
+    _draw_fixtures(c, drawing, {r.id: r for r in floor_plan.rooms}, s, ox, oy)
     _draw_labels(c, drawing, s, ox, oy, denom)
     _draw_voids(c, floor_plan.rooms, s, ox, oy)
     # Before the dim chains, not after: the wall strokes at 0.23 m * scale

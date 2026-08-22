@@ -175,6 +175,42 @@ class SiteContext:
 
 
 @dataclass
+class FixtureShape:
+    """One drawn primitive of a furniture fixture, in ROOM-RELATIVE metres
+    (origin = the room's (x, y) corner, axes along the room — Task 33).
+
+    kind: "rect" | "circle" | "arc" | "line". Rects are closed outlines
+    (dashed=True for stall/mat markers); arcs follow the DXF convention
+    (centre + radius + start/end degrees ccw). Field discipline by kind
+    keeps asdict round-trips simple and tolerant: unused fields sit at 0.0.
+    """
+
+    kind: str
+    x: float = 0.0  # rect: left; circle/arc: centre-x; line: p1.x
+    y: float = 0.0  # rect: bottom; circle/arc: centre-y; line: p1.y
+    width: float = 0.0  # rect only
+    depth: float = 0.0  # rect only
+    radius: float = 0.0  # circle/arc
+    start_deg: float = 0.0  # arc
+    end_deg: float = 0.0  # arc
+    x2: float = 0.0  # line p2.x
+    y2: float = 0.0  # line p2.y
+    dashed: bool = False  # rect only (parking stall, exercise mat)
+
+
+@dataclass
+class Fixture:
+    """One furniture item in a room ("bed", "sofa", "stove"…) — the canonical
+    entity PDF, DXF and the SVG frontend all project (Task 33). Placement is
+    room-relative, so a moved room takes its furniture with it without
+    touching the fixtures."""
+
+    kind: str
+    room_id: str
+    shapes: list[FixtureShape] = field(default_factory=list)
+
+
+@dataclass
 class FloorDrawing:
     """Complete canonical drawing for one floor — the single source every
     renderer (PDF/DXF/SVG) projects."""
@@ -193,6 +229,9 @@ class FloorDrawing:
     # Site entities, shared by every renderer (Task 32). Optional per the
     # Global Constraints: v1 payloads and hand-built drawings carry None.
     site: SiteContext | None = None
+    # Canonical furniture fixtures (Task 33) — room-relative, so renderers
+    # project via the room map. Optional: v1 payloads carry none.
+    fixtures: list[Fixture] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         from dataclasses import asdict
@@ -243,6 +282,14 @@ class FloorDrawing:
             if site_payload is not None
             else None
         )
+        fixtures = [
+            Fixture(
+                kind=f["kind"],
+                room_id=f["room_id"],
+                shapes=[FixtureShape(**_take(FixtureShape, sh)) for sh in f.get("shapes") or []],
+            )
+            for f in payload.get("fixtures") or []
+        ]
         return cls(
             floor=payload["floor"],
             bounds=tuple(payload.get("bounds") or (0.0, 0.0, 0.0, 0.0)),
@@ -251,6 +298,7 @@ class FloorDrawing:
                 payload.get("entrance_not_on_ground_floor", False)
             ),
             site=site,
+            fixtures=fixtures,
             walls=[
                 WallSegment(**_take(WallSegment, w)) for w in payload.get("walls") or []
             ],

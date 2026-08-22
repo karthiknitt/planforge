@@ -213,8 +213,9 @@ def test_v2_payload_round_trips_losslessly():
 
 def test_stored_v1_payload_rehydrates_and_renders():
     """Revision snapshots taken before Phase 7 froze version-1 drawings with
-    no wall/opening ids and no opening marks. Such a payload must still
-    deserialise (defaults for the new fields) and render."""
+    no wall/opening ids, no opening marks (T27/28), no site context (T32)
+    and no fixtures (T33). Such a payload must still deserialise (defaults
+    for the new fields) and render."""
     from app.engine.cad_elements import FloorDrawing
 
     d = build_floor_drawing(golden_layout().ground_floor, golden_config())
@@ -225,12 +226,16 @@ def test_stored_v1_payload_rehydrates_and_renders():
     for o in v1["openings"]:
         o.pop("id", None)
         o.pop("mark", None)
+    v1.pop("site", None)
+    v1.pop("fixtures", None)
 
     old = FloorDrawing.from_dict(v1)
     assert len(old.walls) == len(v1["walls"])
     assert len(old.openings) == len(v1["openings"])
     assert all(w.id == "" for w in old.walls)
     assert all(o.id == "" and o.mark == "" for o in old.openings)
+    assert old.site is None
+    assert old.fixtures == []
     # renders: a rehydrated drawing serialises again as a current v2 payload
     again = old.to_dict()
     assert again["version"] == 2
