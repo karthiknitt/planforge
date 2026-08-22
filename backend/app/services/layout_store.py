@@ -15,6 +15,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.engine.generator import generate
 from app.engine.models import (
+    AddedOpening,
     Column,
     ComplianceResult,
     FloorPlan,
@@ -28,6 +29,7 @@ from app.engine.plan_geometry import build_floor_drawing
 from app.models.layout import StoredLayout
 from app.models.project import Project
 from app.schemas.layout import (
+    AddedOpeningOut,
     ColumnOut,
     ComplianceOut,
     FloorPlanOut,
@@ -67,6 +69,17 @@ def floor_plan_out(fp: Any) -> FloorPlanOut:
                 suppressed=ov.suppressed,
             )
             for ov in getattr(fp, "opening_overrides", [])
+        ],
+        added_openings=[
+            AddedOpeningOut(
+                kind=a.kind,
+                room_a=a.room_a,
+                room_b=a.room_b,
+                along=a.along,
+                width=a.width,
+                side=a.side,
+            )
+            for a in getattr(fp, "added_openings", [])
         ],
     )
 
@@ -263,6 +276,17 @@ def _floor_from_dict(
                 suppressed=o.get("suppressed", False),
             )
             for o in fp.get("opening_overrides", [])
+        ],
+        added_openings=[
+            AddedOpening(
+                kind=a["kind"],
+                room_a=a["room_a"],
+                room_b=a["room_b"],
+                along=a.get("along"),
+                width=a.get("width"),
+                side=a.get("side"),
+            )
+            for a in fp.get("added_openings", [])
         ],
     )
 
