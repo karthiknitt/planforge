@@ -45,6 +45,7 @@ COMPOUND_WALL_THICKNESS_M = (
     COMPOUND_WALL_HALF_THICKNESS_M * 2
 )  # 0.23 m, PDF stroke width
 
+
 def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
     """Return a Shapely Polygon for the L-shaped plot boundary.
 

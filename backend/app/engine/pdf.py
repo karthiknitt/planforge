@@ -902,9 +902,21 @@ def _draw_landscape(
     plot, and therefore `s`, shrinks). This keeps the ink density constant
     across plot sizes.
     """
+    region = landscape_region(cfg)
+    if region.is_empty:
+        return
+    _hatch_region(c, region, ox, oy, s)
+
+
+def _hatch_region(c: canvas.Canvas, region, ox: float, oy: float, s: float) -> None:
+    """Diagonal 45-degree line hatch clipped to `region`. Factored out of
+    `_draw_landscape` so `_draw_edge_arcs` can re-hatch just the sliver of
+    landscape margin its white erase band uncovers on an external arced
+    edge, without duplicating the sweep/clip logic or re-hatching the whole
+    plot (which would double the ink density anywhere the two calls
+    overlap)."""
     from shapely.geometry import LineString
 
-    region = landscape_region(cfg)
     if region.is_empty:
         return
     minx, miny, maxx, maxy = region.bounds
@@ -1656,6 +1668,17 @@ def _draw_edge_arcs(
     poché (true today — no page tint or room-fill colour exists yet); it
     would need revisiting if either is ever added.
 
+    An external edge's straight erase band sits at the plate boundary and
+    extends outward by half the wall thickness — into `landscape_region`,
+    not just over the poché. `_draw_landscape` already ran by this point (it
+    draws before the poché fill), so that erase silently wipes a sliver of
+    setback hatch the black curve band doesn't fully re-cover (the curve
+    only matches the straight band's footprint where the bulge is ~0, i.e.
+    near the edge's endpoints). Each external erase is followed by a
+    landscape re-hatch clipped to `erased_band ∩ landscape_region`, before
+    the curve is filled on top, so the curve — not stray hatch lines — wins
+    in the region it actually covers.
+
     Draw order: this MUST run immediately after the wall poché fill
     (`_shape_path` for `polys["external"]`/`["internal"]`) and before every
     later pass in `_draw_floor_projected` — anything drawn between the
@@ -1671,6 +1694,7 @@ def _draw_edge_arcs(
     from app.engine.plan_geometry import EWT, IWT, _plate_bounds
 
     plate_bounds = _plate_bounds(rooms, buildable, EWT)
+    landscape = landscape_region(cfg)
 
     c.saveState()
     try:
@@ -1695,6 +1719,10 @@ def _draw_edge_arcs(
                 c.setFillColor(white)
                 c.setStrokeColor(white)
                 _shape_path(c, straight_band, s, ox, oy)
+                if not landscape.is_empty:
+                    hatch_gap = landscape.intersection(straight_band)
+                    if not hatch_gap.is_empty:
+                        _hatch_region(c, hatch_gap, ox, oy, s)
                 if not curve_band.is_empty:
                     c.setFillColor(HexColor("#000000"))
                     c.setStrokeColor(HexColor("#000000"))

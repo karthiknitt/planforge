@@ -111,6 +111,12 @@ class Room:
                 f"edge_arcs contains unknown side(s) {sorted(bad_arc_sides)}; "
                 f"expected a subset of {sorted(_VALID_SIDES)}"
             )
+        arc_open_sides = set(self.edge_arcs) & set(self.open_sides)
+        if arc_open_sides:
+            raise ValueError(
+                f"edge_arcs cannot target open side(s) {sorted(arc_open_sides)}; "
+                "an arc requires a wall edge, and open_sides has no wall there"
+            )
         for side, bulge in self.edge_arcs.items():
             if not -1.0 <= bulge <= 1.0:
                 raise ValueError(
