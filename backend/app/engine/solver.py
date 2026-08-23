@@ -526,12 +526,23 @@ def notch_rect_m(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
     if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
         cw, ch = cfg.cutout_width, cfg.cutout_height
         pw, pl = cfg.plot_width, cfg.plot_length
-        return {
+        corner = (cfg.cutout_corner or "NE").upper()
+        notches = {
             "NE": (pw - cw, pl - ch, pw, pl),
             "NW": (0.0, pl - ch, cw, pl),
             "SE": (pw - cw, 0.0, pw, ch),
             "SW": (0.0, 0.0, cw, ch),
-        }.get((cfg.cutout_corner or "NE").upper(), (pw - cw, pl - ch, pw, pl))
+        }
+        if corner not in notches:
+            # Do not silently default to NE here: geometry.compute_l_shaped_polygon
+            # rejects the same unrecognised value instead of guessing SW, and a
+            # mismatched guess would forbid one corner in the solver while the
+            # drawn/compliance boundary cuts out a different one.
+            raise ValueError(
+                f"unknown cutout_corner {cfg.cutout_corner!r}; expected one of "
+                "'NE', 'NW', 'SE', 'SW'"
+            )
+        return notches[corner]
     return None
 
 

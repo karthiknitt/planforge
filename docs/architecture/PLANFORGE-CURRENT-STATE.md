@@ -172,37 +172,24 @@ implementation in `frontend/src/components/floor-plan-svg.tsx` plus `furniture-o
 for the frontend SVG. A later phase of the current plan is scoped to close this gap; it has
 not run as of this document.
 
-## Verified dead code in `cad_elements.py` (Task 9C target — not yet removed)
+## Dead code removed from `cad_elements.py` (Task 9C — done)
 
-Eight symbols in `backend/app/engine/cad_elements.py` have zero references anywhere in
-`backend/` or `frontend/` outside their own declarations in that file — confirmed by grepping
-the whole backend tree (including tests) and the whole frontend tree for each name
-individually:
+The eight pre-`FloorDrawing` symbols previously verified as dead (`DoorSymbol`,
+`WindowSymbol`, `GridLine`, `DimensionLine`, `CADDrawing`, `build_dimensions()`,
+`build_columns()`, `build_windows()`) have been removed from
+`backend/app/engine/cad_elements.py`. `LabelBox` (`cad_elements.py:68`) was never
+part of that list — it stays, live, consumed by `plan_geometry.py`,
+`quality/ccqs.py`, and `api/routes/export.py`.
 
-- `DoorSymbol` (line 142), `WindowSymbol` (153), `GridLine` (174), `DimensionLine` (185),
-  `CADDrawing` (198) — dataclasses
-- `build_dimensions()` (214), `build_columns()` (266), `build_windows()` (273) — functions
+## Test suite runtime and Task 9A (done)
 
-These are used only by each other inside the same file (e.g. `CADDrawing` fields typed as
-`list[DimensionLine]`) and by nothing else in the codebase. One near-miss worth recording:
-`frontend/src/components/floor-plan-svg.tsx` independently defines its own `WindowSymbol`
-(a React component, line 232) and a `DrawingDoorSymbol` whose own comment calls out "unlike
-the legacy DoorSymbol" (line 826) — these are unrelated, differently-implemented frontend
-symbols that happen to share a name, not consumers of the backend dead code. None of the eight
-backend symbols is actually live. Task 9C, which has not yet run as of this document, is
-scoped to remove them.
-
-`LabelBox` (`cad_elements.py:68`) is explicitly **not** part of this list — it is live,
-consumed by `plan_geometry.py`, `quality/ccqs.py`, and `api/routes/export.py`, and stays.
-
-## Test suite runtime and Task 9A
-
-The full backend test suite takes **~68 minutes** to run end to end — the measured status quo
-on this branch as of the plan's mid-execution checkpoint (`.superpowers/sdd/
-2026-08-15-solver-capability-uplift/progress.md`), which already invalidated running the full
-suite per task. Task 9A ("cut the test-suite runtime") is running concurrently with this
-document's own writing, dispatched to establish that measurement and a fast-path
-classification for future tasks. Its outcome is not yet known and is not asserted here.
+Task 9A ("cut the test-suite runtime") has landed: tests are classified with a
+`slow` pytest marker (`pyproject.toml` — full-pipeline tests that run a real
+CP-SAT solve, or DXF/PDF/BOQ/structural rendering downstream of one, ≥24s each
+in isolation; excluded by the dev fast path `pytest -m 'not slow'`) and a global
+`pytest-timeout` of 300s guards against hangs. The **~68 minute** full-suite
+figure recorded above was the pre-Task-9A measurement; it is now the ceiling a
+hung run is caught against, not the expected per-task runtime.
 
 ## Accepted limitations
 

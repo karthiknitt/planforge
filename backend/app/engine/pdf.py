@@ -682,11 +682,15 @@ def _draw_area_schedule_table(
 ) -> float:
     """Bordered ROOM | AREA (SQFT) table with a TOTAL row (reference-drawing
     convention, replaces the old inline pipe-separated text). Returns height."""
+    # Voids (`Room.is_void`) are a hole in the slab, not floor area — they get
+    # their own "OPEN TO BELOW" annotation via `_draw_voids`, so they must not
+    # double up as an area-schedule row or add their footprint to TOTAL.
     rows = [
         (r.name.upper(), f"{round(r.area * 10.764)}")
         for r in sorted(floor_plan.rooms, key=lambda r: r.id)
+        if not r.is_void
     ]
-    total = round(sum(r.area for r in floor_plan.rooms) * 10.764)
+    total = round(sum(r.area for r in floor_plan.rooms if not r.is_void) * 10.764)
     w_room, w_area = 96, 52
     w = w_room + w_area
     row_h, band_h = SCHED_ROW_H, SCHED_BAND_H
@@ -1312,8 +1316,11 @@ def _draw_title_block(
 ) -> None:
     scale_ratio = scale_denom if scale_denom else round(1000 / (scale * (25.4 / 72)))
 
-    # Compute area total in sqft when floor plan is available
-    sqm_total = sum(r.area for r in floor_plan.rooms) if floor_plan else 0.0
+    # Compute area total in sqft when floor plan is available. Voids
+    # (`Room.is_void`) have no slab and must not count toward built-up area.
+    sqm_total = (
+        sum(r.area for r in floor_plan.rooms if not r.is_void) if floor_plan else 0.0
+    )
     sqft_total = round(sqm_total * 10.764)
 
     fields = [
@@ -1348,8 +1355,8 @@ def _far_text(layout: Layout, cfg: PlotConfig) -> str:
     plot_area = cfg.plot_width * cfg.plot_length
     if not plot_area:
         return "0.00"
-    built = sum(r.area for r in layout.ground_floor.rooms) + sum(
-        r.area for r in layout.first_floor.rooms
+    built = sum(r.area for r in layout.ground_floor.rooms if not r.is_void) + sum(
+        r.area for r in layout.first_floor.rooms if not r.is_void
     )
     return f"{built / plot_area:.2f}"
 

@@ -21,8 +21,18 @@ from shapely.geometry import Polygon, box
 from shapely.geometry.polygon import orient
 
 from app.engine.models import PlotConfig
+from app.engine.shapes import SHAPE_TEMPLATES
 
 _BIG = 1e5
+
+# Mirrors solver._UNIMPLEMENTED_PLOT_TEMPLATES — kept local (not imported from
+# solver.py) because geometry.py is the lower-level module solver.py itself
+# depends on. A "T" plot has a notch in each rear corner and a "U" plot a
+# central one; representing either as the single rectangle below would
+# silently under-constrain the boundary and hand back land the user does not
+# own. `notch_rect` must reject them itself rather than relying on every
+# caller to have already gone through solver.validate_plot_envelope first.
+_UNIMPLEMENTED_PLOT_TEMPLATES: frozenset[str] = frozenset({"T", "U"})
 
 
 def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
@@ -63,7 +73,7 @@ def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
             (W, H),
             (0, H),
         ]
-    else:  # SW
+    elif cfg.cutout_corner == "SW":
         vertices = [
             (cw, 0),
             (W, 0),
@@ -72,6 +82,15 @@ def compute_l_shaped_polygon(cfg: PlotConfig) -> Polygon:
             (0, ch),
             (cw, ch),
         ]
+    else:
+        # Reject rather than guess: solver._notch_rect_mm's own fallback for
+        # an unrecognised cutout_corner defaults to a DIFFERENT corner (NE)
+        # than a silent default here would, which would forbid one corner in
+        # the solver while the drawn/compliance boundary cuts out another.
+        raise ValueError(
+            f"unknown cutout_corner {cfg.cutout_corner!r}; expected one of "
+            "'NE', 'NW', 'SE', 'SW'"
+        )
 
     return Polygon(vertices)
 
@@ -96,6 +115,19 @@ def notch_rect(cfg: PlotConfig) -> tuple[float, float, float, float] | None:
     """
     if cfg.plot_template == "RECT" or cfg.notch_width <= 0 or cfg.notch_depth <= 0:
         return None
+    if cfg.plot_template not in SHAPE_TEMPLATES:
+        raise ValueError(
+            f"unknown plot_template {cfg.plot_template!r}; expected one of "
+            f"{sorted(SHAPE_TEMPLATES)}"
+        )
+    if cfg.plot_template in _UNIMPLEMENTED_PLOT_TEMPLATES:
+        raise ValueError(
+            f"plot_template={cfg.plot_template!r} is not implemented: a T plot "
+            "has a notch in each rear corner and a U plot a central one, so "
+            "the single-rectangle notch this function returns would "
+            "under-constrain the boundary and hand back land the user does "
+            "not own."
+        )
     if cfg.plot_shape != "rectangular":
         raise ValueError(
             f"plot_template={cfg.plot_template!r} (a notch) cannot be combined with "
@@ -244,12 +276,17 @@ def buildable_polygon(cfg: PlotConfig, wall_clearance: float = 0.0) -> Polygon:
     """
     keepout = notch_keepout(cfg, wall_clearance)
     if keepout is not None:
-        outer = box(
-            cfg.setback_left + wall_clearance,
-            cfg.setback_front + wall_clearance,
-            cfg.plot_width - cfg.setback_right - wall_clearance,
-            cfg.plot_length - cfg.setback_rear - wall_clearance,
-        )
+        x0 = cfg.setback_left + wall_clearance
+        y0 = cfg.setback_front + wall_clearance
+        x1 = cfg.plot_width - cfg.setback_right - wall_clearance
+        y1 = cfg.plot_length - cfg.setback_rear - wall_clearance
+        # shapely.box() does not validate its bounds — reversed corners
+        # (x1 <= x0 or y1 <= y0, i.e. setbacks consuming the whole plot)
+        # still produce a positive-area polygon instead of an empty one, so
+        # the inversion must be caught here before box() is called.
+        if x1 <= x0 or y1 <= y0:
+            return Polygon()
+        outer = box(x0, y0, x1, y1)
         if outer.is_empty or outer.area <= 0:
             return Polygon()
         result = outer.difference(keepout)

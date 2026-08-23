@@ -258,7 +258,11 @@ async def get_gallery_plan(preset_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Unknown gallery preset")
 
     if preset_id not in _cache:
-        result = _build_plan(preset)
+        try:
+            result = _build_plan(preset)
+        except Exception as exc:
+            logger.warning("Gallery: failed to build plan %s: %s", preset_id, exc)
+            result = {}
         if result:
             _cache[preset_id] = result
 

@@ -82,6 +82,7 @@ def test_l_plot_still_houses_the_full_programme():
     must survive."""
     cfg = _l_cfg()
     layout = solve_layout(cfg)
+    assert layout is not None, "solve_layout returned None (infeasible or non-OPTIMAL/FEASIBLE)"
     beds = [
         r
         for fp in (layout.ground_floor, layout.first_floor)

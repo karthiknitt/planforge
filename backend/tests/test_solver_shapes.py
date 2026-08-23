@@ -434,16 +434,23 @@ def test_templates_off_by_default_produces_only_rect_rooms():
             assert r.template == "RECT"
 
 
-def test_vastu_disabled_leaves_the_model_unchanged():
-    """Opt-in means opt-in: with the flag off the model is the pre-Task-8 one.
+def test_vastu_disabled_produces_only_single_rect_rooms():
+    """Opt-in means opt-in: with the flag off the model is the pre-Task-8 one —
+    one interval pair per ROOM (equivalently: exactly one part per room).
 
-    One interval pair per ROOM (equivalently: exactly one part per room), and
-    the same geometry as any other templates-off solve of the same config.
+    Renamed from `test_vastu_disabled_leaves_the_model_unchanged`, which also
+    asserted `_geometry(baseline) == _geometry(_cfg())` — vacuous, since
+    `_cfg()` already defaults to `vastu_enabled=False`, so that was two solves
+    of an identical config. A cross-solve geometry-equality assertion isn't a
+    fix for that: `tests/CLAUDE.md` notes CP-SAT is not deterministic across
+    separate solves, even of structurally-identical models (confirmed by
+    hand: swapping in `vastu_enabled=True`, which no model-building code path
+    reads — only the post-solve `check_vastu()` gate does — still changed the
+    solved room dimensions). This test is scoped to the one property a single
+    solve can assert.
     """
     baseline = solve_layout(_cfg(vastu_enabled=False))
-    again = solve_layout(_cfg())
-    assert baseline is not None and again is not None
+    assert baseline is not None
     for rooms in _floors(baseline):
         for r in rooms:
             assert len(r.rects) == 1, f"{r.id} contributed {len(r.rects)} intervals"
-    assert _geometry(baseline) == _geometry(again)

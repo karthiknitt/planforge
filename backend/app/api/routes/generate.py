@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.revisions import save_auto_revision
@@ -35,9 +35,15 @@ async def generate_layouts(
             )
         except Exception:
             pass
-        stored = await layout_store.regenerate_and_store(project, db)
+        try:
+            stored = await layout_store.regenerate_and_store(project, db)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     else:
-        stored = await layout_store.get_or_generate_layouts(project, db)
+        try:
+            stored = await layout_store.get_or_generate_layouts(project, db)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return layout_store.to_generate_response(project, stored)
 
