@@ -2867,7 +2867,19 @@ def apply_opening_overrides(
             continue
 
         new_width = o.width if ov.width is None else ov.width
-        along = ((o.cx if vertical else o.cy) - lo) if ov.along is None else ov.along
+        if new_width <= 0:
+            diagnostics.append(
+                f"opening_override: {ov.opening_id!r} rejected — width must be "
+                "positive"
+            )
+            continue
+        # `along` runs along the WALL's own axis: y for a vertical wall (its
+        # x1==x2), x for a horizontal one — the opposite of vertical/is_horizontal,
+        # which describes the OPENING's swing orientation, not the wall it sits
+        # on. Reading o.cx for a vertical wall (and vice versa) silently applied
+        # the wrong axis and either moved the opening off-wall or rejected a
+        # valid override.
+        along = ((o.cy if vertical else o.cx) - lo) if ov.along is None else ov.along
         if not (
             -1e-6 <= along - new_width / 2 and along + new_width / 2 <= length + 1e-6
         ):
@@ -2879,10 +2891,9 @@ def apply_opening_overrides(
             continue
         centre = lo + along
         # Keep the hinge on the same jamb side it derived on.
-        old_centre = o.cx if vertical else o.cy
-        side = (
-            1.0 if ((o.hinge_x if vertical else o.hinge_y) - old_centre) >= 0 else -1.0
-        )
+        old_centre = o.cy if vertical else o.cx
+        hinge = o.hinge_y if vertical else o.hinge_x
+        side = 1.0 if hinge - old_centre >= 0 else -1.0
         if vertical:
             o.cy = centre
             o.cx = host.x1 if abs(host.x1 - host.x2) < 1e-9 else o.cx

@@ -238,3 +238,22 @@ def test_stored_v1_payload_rehydrates_and_renders():
     # unknown future keys are ignored rather than rejected
     v1["something_new"] = {"nested": True}
     assert FloorDrawing.from_dict(v1).to_dict()["version"] == 2
+
+
+def test_unknown_dim_chain_keys_are_ignored_not_rejected():
+    """CodeRabbit finding on PR #97: dim_chains construction indexed straight
+    into the payload dict (`d["side"]`, `DimChainEntry(**e)`) instead of going
+    through `_take()` like every sibling list here, so a future/unknown key on
+    a dim-chain or its entries raised TypeError instead of degrading
+    gracefully — breaking from_dict's own documented "unknown keys are
+    ignored" contract."""
+    from app.engine.cad_elements import FloorDrawing
+
+    d = build_floor_drawing(golden_layout().ground_floor, golden_config())
+    payload = d.to_dict()
+    assert payload["dim_chains"], "fixture must have at least one dim chain"
+    payload["dim_chains"][0]["future_chain_field"] = "ignore me"
+    if payload["dim_chains"][0]["entries"]:
+        payload["dim_chains"][0]["entries"][0]["future_entry_field"] = "ignore me too"
+    rehydrated = FloorDrawing.from_dict(payload)
+    assert len(rehydrated.dim_chains) == len(payload["dim_chains"])

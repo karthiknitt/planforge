@@ -2,11 +2,13 @@
 
 import math
 
+from app.engine.cad_elements import Opening, WallSegment
 from app.engine.geometry import buildable_polygon
-from app.engine.models import Room
+from app.engine.models import OpeningOverride, Room
 from app.engine.plan_geometry import (
     _all_exterior_edges,
     _plate_bounds,
+    apply_opening_overrides,
     derive_columns,
     derive_openings,
     derive_walls,
@@ -1306,3 +1308,59 @@ def test_schedule_rows_survive_mark_promotion():
             0, ("MD", "MAIN DOOR", width_mm, height_mm["door"], len(main_idx))
         )
     assert rows == legacy
+
+
+# ── apply_opening_overrides (T29) — CodeRabbit review on PR #97 ─────────────
+
+
+def _vertical_wall_with_door(along=4.0, width=0.9):
+    """A vertical host wall (x1==x2) at x=5, y∈[0,10], with a door cut into
+    it at along-position `along` (y) and cross position 5.0 (x)."""
+    wall = WallSegment(x1=5.0, y1=0.0, x2=5.0, y2=10.0, thickness=0.23, kind="external")
+    hinge_y = along - width / 2  # hinge on the lower jamb (side=-1)
+    door = Opening(
+        kind="door",
+        cx=5.0,
+        cy=along,
+        width=width,
+        is_horizontal=False,
+        wall_thickness=0.23,
+        hinge_x=5.0,
+        hinge_y=hinge_y,
+        id="w1#0",
+    )
+    return [wall], door
+
+
+def test_width_only_override_keeps_the_along_wall_position():
+    """CodeRabbit finding on PR #97: `apply_opening_overrides` read o.cx as the
+    along-wall coordinate for a VERTICAL wall instead of o.cy (and vice versa
+    for horizontal), so a width-only override silently relocated the opening
+    along the wall it never asked to move."""
+    walls, door = _vertical_wall_with_door(along=4.0, width=0.9)
+    ov = OpeningOverride(opening_id="w1#0", width=1.2)
+    diagnostics: list[str] = []
+    apply_opening_overrides([door], walls, [ov], diagnostics)
+    assert not diagnostics, diagnostics
+    assert door.cy == 4.0, f"width-only override moved the door along the wall: {door}"
+    assert door.cx == 5.0
+    assert door.width == 1.2
+
+
+def test_override_keeps_the_door_on_its_derived_jamb_side():
+    """The axis-swap bug also picked the wrong hinge/old-centre pair, which
+    could flip a lower-hinged door to the upper jamb on any override."""
+    walls, door = _vertical_wall_with_door(along=4.0, width=0.9)
+    assert door.hinge_y < door.cy, "fixture must start lower-hinged"
+    ov = OpeningOverride(opening_id="w1#0", width=1.2)
+    apply_opening_overrides([door], walls, [ov], [])
+    assert door.hinge_y < door.cy, "override flipped the door to the upper jamb"
+
+
+def test_non_positive_override_width_is_rejected():
+    walls, door = _vertical_wall_with_door(along=4.0, width=0.9)
+    ov = OpeningOverride(opening_id="w1#0", width=0.0)
+    diagnostics: list[str] = []
+    apply_opening_overrides([door], walls, [ov], diagnostics)
+    assert any("must be positive" in d for d in diagnostics)
+    assert door.width == 0.9, "rejected override must not mutate the opening"

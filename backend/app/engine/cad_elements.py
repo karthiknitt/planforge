@@ -200,10 +200,13 @@ class FloorDrawing:
             ],
             dim_chains=[
                 DimChain(
-                    side=d["side"],
-                    level=d["level"],
-                    coord=d["coord"],
-                    entries=[DimChainEntry(**e) for e in d.get("entries") or []],
+                    **{
+                        **_take(DimChain, d),
+                        "entries": [
+                            DimChainEntry(**_take(DimChainEntry, e))
+                            for e in d.get("entries") or []
+                        ],
+                    }
                 )
                 for d in payload.get("dim_chains") or []
             ],
