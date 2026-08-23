@@ -116,15 +116,15 @@ Statuses cross-checked against `solver_limitations.md` and the merged PRs
 | 3 | Parking gets no spurious interior door | ✅ Fixed (#2, PR #81) |
 | 4 | Wall ring follows room footprint incl. notches/voids | ✅ Fixed (#6c, `53cd29b`, `c4d6928`) |
 | 5 | `foyer` / `courtyard` / `wardrobe` RoomTypes | ✅ Fixed (C) |
-| **6** | **Open-sided rooms** (carport, verandah, balcony) | ❌ **K — `open_sides` absent from `models.py`** |
-| **7** | **Carved / nested rooms** (toilet inside bedroom) | ❌ **22 % of floors need it** |
-| **8** | **Richer RoomType vocabulary** + label aliasing | ❌ **231 labels → 25 types** |
+| **6** | **Open-sided rooms** (carport, verandah, balcony) | ✅ **Fixed (PR #82) — `Room.open_sides: frozenset[str]` supports multiple edges** |
+| **7** | **Carved / nested rooms** (toilet inside bedroom) | ✅ **Fixed (PR #82) — `Room.parent_id` + cycle rejection** |
+| **8** | **Richer RoomType vocabulary** + label aliasing | ✅ **Fixed (PR #82) — 7 open-programme `RoomType`s + `normalize_room_label()`; still 32 of 231 corpus labels vs the wider tail** |
 | **9** | **Compound wall, gate, landscaped setback fill** | ❌ **M** |
 | **10** | **Rotation-general, area-weighted Vastu zones** | ❌ 4-way discrete, centroid-only |
 | **11** | **Graded (3-tier) Vastu rules** | ❌ binary prohibit/avoid |
 | **12** | **Vastu as a CP-SAT objective term, not a reject filter** | ❌ post-hoc only |
 | **13** | **Vastu on all floors** | ❌ ground floor only |
-| 14 | Formal connectivity gate | ❌ #4, deferred to critique-loop design |
+| 14 | Formal connectivity gate | ✅ Already fixed pre-uplift — `plan_geometry.validate_floor_connectivity()`, wired into `generator.py`'s navigability gate (see `solver_navigability_series` work, 2026-07-20) |
 | 15 | Entrance placement for all-frontage-is-parking | ❌ #6d, diagnosed only |
 | 16 | `plot_width`/`plot_length` naming footgun | ❌ F, mitigated by diagnostic |
 | 17 | Furniture + material-texture rendering | ❌ Not previously tracked |
@@ -236,12 +236,34 @@ Six new inputs are required by the capabilities above:
 
 | Input | Feeds | Why the form can carry it |
 |---|---|---|
-| Plot shape: rect / L / T / trapezoid + notch dims | rectilinear envelope | A picker + 2 numbers, not free drawing |
+| Plot shape: rect / L / T + notch dims | rectilinear envelope | A picker + 2 numbers, not free drawing |
 | North angle (0–359°, continuous) | Vastu zone engine | Dial or number input; `road_side` becomes derived |
 | Style preset (18) | seeds programme defaults | Single select |
 | Programme toggles: courtyard, verandah, pooja, terrace, study, open car porch | room programme | Checkboxes, pre-ticked by style preset |
-| Open-sided rooms | `open_sides` | One toggle: "car porch open to driveway" (default on) |
+| Open-sided rooms | `open_sides` | One toggle: "car porch open to driveway" (default on), mapping to a fixed edge per room type — see note below |
 | Compound wall + gate side | site rendering | Checkbox + side select, defaults from `road_side` |
+
+**Trapezoid removed from the plot-shape picker (2026-08-23):** §5 decided the solver
+only accepts an axis-aligned rectilinear rect-union; a trapezoid has non-axis-aligned
+edges the solver cannot represent, and capability 19 (non-rectangular footprint) is
+still an open go/no-go. Re-add trapezoid to the picker only alongside a solver/
+compliance/render decision for it, not before.
+
+**Open-sided toggle is a simplified default, not per-edge input (2026-08-23):**
+`Room.open_sides` is a `frozenset[str]` and already supports multiple open edges
+(PR #82). The single wizard toggle deliberately narrows that to one deterministic
+mapping — e.g. "car porch open to driveway" → the edge facing `road_side` — for the
+common case; it does not expose the full per-edge set. Multi-edge verandah/balcony
+configuration stays an editor-only capability until (if ever) the wizard grows a
+per-edge control.
+
+**Gate-side selector needs new plumbing, not just UI (2026-08-23):**
+`draw_compound_wall()` currently keys the gated wall off `cfg.road_side`; only the
+gate's position along that side (`gate_cx`) is configurable today. Shipping the
+"Gate on [side]" selector in the wireframe requires adding an independent
+`gate_side` field through persistence, the API schema, and `draw_compound_wall()`
+before the selector can affect rendered output — track this alongside the Phase 6
+input-model work rather than assuming the wireframe's selector is already wired.
 
 ### Wireframe — new wizard step, inserted after "Plot & Setbacks"
 
@@ -249,7 +271,7 @@ Six new inputs are required by the capabilities above:
 ┌─ Step 2 of 5 · Site & Style ────────────────────────────────┐
 │                                                              │
 │  PLOT SHAPE                                                  │
-│   (o) Rectangle   ( ) L-shaped   ( ) T-shaped   ( ) Trapezoid│
+│   (o) Rectangle   ( ) L-shaped   ( ) T-shaped               │
 │                                                              │
 │      ┌──────────┐   ┌─────┐        Notch width  [ 3.0 ] m    │
 │      │          │   │     └───┐    Notch depth  [ 2.5 ] m    │
@@ -286,6 +308,15 @@ helper percentages, but never locks them — a user who unticks "Central courtya
 on Kerala keeps that choice. Selecting **Rectangle** disables the notch fields.
 **North angle** replaces `road_side` as the source of truth; `road_side` is
 computed from it and shown read-only so existing users still recognise it.
+
+**`north_angle` plumbing (2026-08-23):** as of this document's original writing, no
+`north_angle` field exists anywhere in the persisted config, API schema, or
+`check_vastu()` — only the derived cardinal `road_side` is consumed. Wiring the
+dial above end-to-end requires: persisting `north_angle` through the project
+config and API, deriving/rounding `road_side` from it for existing cardinal-only
+consumers, and updating `vastu.py`, CAD/PDF rendering, and export paths to use the
+continuous angle wherever direction actually matters (not just the derived
+cardinal). This is Phase 4/6 scope, not something Phase 1 needs to deliver.
 
 ## 8. Scope decisions
 
