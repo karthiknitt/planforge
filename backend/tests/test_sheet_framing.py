@@ -14,7 +14,14 @@ from reportlab.pdfgen import canvas
 from app.engine.generator import generate
 from app.engine.models import PlotConfig
 from app.engine.plan_geometry import build_floor_drawing
-from app.engine.structural_data import BeamRun, FloorFraming, build_structural_model
+from app.engine.structural_data import (
+    BarGroup,
+    BeamRun,
+    Cover,
+    FloorFraming,
+    Stirrup,
+    build_structural_model,
+)
 from app.engine.structural_sheets_framing import (
     _draw_beam_detail,
     _read_steel,
@@ -387,4 +394,33 @@ def test_designed_values_are_not_flagged_as_assumed(model):
     st = _read_steel(run.design)
     assert st.assumed == ()
     assert st.n_bot == 3
-    assert st.dia_bot == 16
+
+
+def test_non_positive_typed_steel_falls_back_to_assumed():
+    """A typed BarGroup/Stirrup/Cover with a zero/negative field must not be
+    trusted as designed data — it degrades to the labelled-assumption path
+    the same as a genuinely missing value, instead of printing a bogus
+    "0ø@0" callout as if it were real."""
+    run = BeamRun(
+        mark="B1",
+        axis="x",
+        ordinate_m=0.0,
+        start_m=0.0,
+        end_m=4.0,
+        b_mm=230,
+        D_mm=380,
+        span_m=3.6,
+        design={"design": {"stirrups": {}}},
+        bottom_bars=BarGroup(quantity=0, diameter_mm=16.0),
+        top_bars=BarGroup(quantity=2, diameter_mm=0.0),
+        stirrups=Stirrup(diameter_mm=8.0, spacing_mm=0.0),
+        cover=Cover(mm=0.0),
+    )
+    st = _read_steel(run)
+    assert "BOT NOS" in st.assumed
+    assert "BAR DIA" in st.assumed
+    assert "STIRRUP SPACING" in st.assumed
+    assert st.n_bot > 0
+    assert st.dia_bot > 0
+    assert st.sv > 0
+    assert st.cover > 0

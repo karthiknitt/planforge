@@ -91,6 +91,11 @@ _NO_DOOR_TYPES = _PARKING_TYPES | {"passage", "foyer", "courtyard"}
 _SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
 _NO_TRANSIT_TYPES = _SINGLE_DOOR_TYPES | _PARKING_TYPES
+# Public aliases: consumers outside this module (the openings API's
+# alternative-door suggester) need the same classification the navigability
+# graph itself uses, not a hand-rolled local copy that can drift from it.
+NO_TRANSIT_TYPES = _NO_TRANSIT_TYPES
+PARKING_TYPES = _PARKING_TYPES
 # rooms the staircase may legitimately take its door from
 _CIRCULATION_TYPES = {"passage", "foyer", "courtyard", "living", "dining"}
 # shared-wall run the staircase needs with one of those to fit a door leaf
@@ -2888,6 +2893,8 @@ def exterior_wall_spans(
     ]
     out: list[tuple[str, bool, float, float, float]] = []
     for side, vertical, coord, lo, hi, dx, dy in edges:
+        if _is_declared_open_edge(room, not vertical, coord, EWT, tol, lo, hi):
+            continue  # no wall was ever drawn there (see derive_walls)
         shared = False
         for b in rooms:
             if b.id == room.id:
@@ -2923,6 +2930,7 @@ def apply_added_openings(
     added: list[AddedOpening] | None,
     buildable: BaseGeometry,
     diagnostics: list[str],
+    std: OpeningStandards | None = None,
 ) -> None:
     """Resolve FloorPlan.added_openings into real Openings, in place (T30).
 
@@ -2936,8 +2944,18 @@ def apply_added_openings(
     """
     if not added:
         return
+    if std is None:
+        from app.engine.standards import get_opening_standards
+
+        std = get_opening_standards()
     by_id = {r.id: r for r in rooms}
     for spec in added:
+        if spec.kind not in _OPENING_PREFIX:
+            diagnostics.append(
+                f"added_opening: unsupported kind {spec.kind!r} "
+                f"{spec.room_a!r}->{spec.room_b!r}; spec dropped"
+            )
+            continue
         a = by_id.get(spec.room_a)
         if a is None:
             diagnostics.append(
@@ -2976,9 +2994,12 @@ def apply_added_openings(
             swing_into = spec.room_b
 
         kind = spec.kind
-        width = (
-            spec.width if spec.width is not None else (0.9 if kind == "door" else 1.2)
-        )
+        default_widths = {
+            "door": std.door_width_m,
+            "window": std.window_width_m,
+            "ventilator": std.ventilator_width_m,
+        }
+        width = spec.width if spec.width is not None else default_widths[kind]
         span_len = hi - lo
         along = span_len / 2 if spec.along is None else spec.along
         if not (-1e-6 <= along - width / 2 and along + width / 2 <= span_len + 1e-6):
@@ -3233,11 +3254,12 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
             + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?)"
         )
     status: dict = {}
+    std = get_opening_standards()
     openings = derive_openings(
         rooms,
         walls,
         columns,
-        get_opening_standards(),
+        std,
         buildable,
         floor=floorplan.floor,
         reasons=diagnostics,
@@ -3253,7 +3275,7 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     # Added openings resolve onto the derived (sorted) walls BEFORE identity
     # and marks run, so they receive both through the same passes.
     apply_added_openings(
-        rooms, walls, openings, floorplan.added_openings, buildable, diagnostics
+        rooms, walls, openings, floorplan.added_openings, buildable, diagnostics, std
     )
     # Identity and marks run AFTER the sorts so both are functions of the
     # final serialisation order, never of derivation list position.

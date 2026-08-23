@@ -852,11 +852,15 @@ def _suggest_alternative_door(
     """A concrete, buildable `add_door` that would reconnect the room — the
     feasible alternative a rejection must carry (Task 30). `exclude_pair`
     skips the very wall the rejected edit targeted."""
-    from app.engine.plan_geometry import door_graph_reachable, shared_wall_span
+    from app.engine.plan_geometry import (
+        NO_TRANSIT_TYPES,
+        PARKING_TYPES,
+        door_graph_reachable,
+        shared_wall_span,
+    )
 
     reachable_idx = door_graph_reachable(fp.rooms, drawing.openings, fp.floor)
     reachable = {fp.rooms[i].id for i in reachable_idx}
-    no_transit = {"toilet", "wc_only", "bathroom_master", "bathroom", "kitchen"}
     for room in fp.rooms:
         if room.id not in unreachable_room_ids:
             continue
@@ -865,12 +869,9 @@ def _suggest_alternative_door(
                 continue
             if exclude_pair is not None and {room.id, other.id} == set(exclude_pair):
                 continue
-            if other.type in no_transit and room.type not in no_transit:
+            if other.type in NO_TRANSIT_TYPES and room.type not in NO_TRANSIT_TYPES:
                 continue
-            if room.type in {"parking", "car_porch"} or other.type in {
-                "parking",
-                "car_porch",
-            }:
+            if room.type in PARKING_TYPES or other.type in PARKING_TYPES:
                 continue
             span = shared_wall_span(room, other)
             if span is None:
@@ -894,8 +895,9 @@ async def _mutate_opening(
 ):
     """Shared load → simulate → validate → commit flow for opening edits.
 
-    `mutate(fp_state_dict, fp_engine)` applies the requested delta to the
-    (already deep-copied) state dict and returns partial response content;
+    `mutate(floor_state_dict, fp_engine, drawing_before)` applies the requested
+    delta to the (already deep-copied) state dict and returns partial response
+    content;
     raising HTTPException or returning an {"ok": False, ...} dict rejects
     without writing anything.
     """
@@ -918,6 +920,15 @@ async def _mutate_opening(
     if isinstance(result, dict) and result.get("ok") is False:
         return result["response"]
 
+    # `mutate` learns the opening's real kind (door/window/ventilator) only
+    # once it resolves the target, which happens inside itself — so it can
+    # report a kind-accurate operation label back here via "operation",
+    # overriding the generic literal the route handler passed in. Falls back
+    # to that literal so a `mutate` that doesn't set it still works.
+    op_label = (
+        result.get("operation") if isinstance(result, dict) else None
+    ) or operation
+
     fp_after = _floor_plan_for(state_after, body_floor, project_id)
     drawing_after = _drawing_for(fp_after, project)
 
@@ -935,7 +946,7 @@ async def _mutate_opening(
         exclude = result.get("_exclude_pair") if isinstance(result, dict) else None
         return {
             "success": False,
-            "operation": operation,
+            "operation": op_label,
             "reason": "would break connectivity: " + "; ".join(new_problems),
             "alternative": _suggest_alternative_door(
                 fp_after, drawing_after, cut, exclude_pair=exclude
@@ -947,10 +958,11 @@ async def _mutate_opening(
     response = result if isinstance(result, dict) else {}
     response.pop("ok", None)
     response.pop("_exclude_pair", None)
+    response.pop("operation", None)
     response.update(
         {
             "success": True,
-            "operation": operation,
+            "operation": op_label,
             "validation": {
                 "status": "passed" if not after else "failed",
                 "connectivity_violations": after,
@@ -996,13 +1008,14 @@ async def move_opening(
         target = _find_opening(drawing_before.openings, opening_id)
         if target is None:
             raise _opening_not_found(opening_id)
+        op = f"move_{target.kind}"
         host = host_wall(drawing_before.walls, target)
         if host is None:
             return {
                 "ok": False,
                 "response": {
                     "success": False,
-                    "operation": "move_window",
+                    "operation": op,
                     "reason": f"opening {opening_id!r} has no host wall in the derived drawing",
                     "alternative": None,
                 },
@@ -1016,7 +1029,7 @@ async def move_opening(
                 "ok": False,
                 "response": {
                     "success": False,
-                    "operation": "move_window",
+                    "operation": op,
                     "reason": (
                         f"along {body.along:.3f} would place the {target.kind} "
                         f"outside its host wall (length {length:.3f})"
@@ -1037,6 +1050,7 @@ async def move_opening(
         new_c = lo + body.along
         return {
             "ok": True,
+            "operation": op,
             "changes": {
                 "opening_id": opening_id,
                 "along": body.along,
@@ -1074,33 +1088,40 @@ async def resize_opening(
         target = _find_opening(drawing_before.openings, opening_id)
         if target is None:
             raise _opening_not_found(opening_id)
+        op = f"resize_{target.kind}"
         host = host_wall(drawing_before.walls, target)
-        vertical = abs(host.x1 - host.x2) < 1e-9 if host is not None else False
-        length = 0.0
-        if host is not None:
-            lo, hi = (
-                sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
-            )
-            length = hi - lo
-            along = (target.cy if vertical else target.cx) - lo
-            half = body.width / 2
-            if not (along - half >= -1e-6 and along + half <= length + 1e-6):
-                return {
-                    "ok": False,
-                    "response": {
-                        "success": False,
-                        "operation": "resize_window",
-                        "reason": (
-                            f"width {body.width:.3f} does not fit the host wall at "
-                            f"the current position (along {along:.3f}, wall {length:.3f})"
-                        ),
-                        "alternative": {
-                            "max_width_at_position": round(
-                                2 * min(along, length - along), 6
-                            )
-                        },
+        if host is None:
+            return {
+                "ok": False,
+                "response": {
+                    "success": False,
+                    "operation": op,
+                    "reason": f"opening {opening_id!r} has no host wall in the derived drawing",
+                    "alternative": None,
+                },
+            }
+        vertical = abs(host.x1 - host.x2) < 1e-9
+        lo, hi = sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
+        length = hi - lo
+        along = (target.cy if vertical else target.cx) - lo
+        half = body.width / 2
+        if not (along - half >= -1e-6 and along + half <= length + 1e-6):
+            return {
+                "ok": False,
+                "response": {
+                    "success": False,
+                    "operation": op,
+                    "reason": (
+                        f"width {body.width:.3f} does not fit the host wall at "
+                        f"the current position (along {along:.3f}, wall {length:.3f})"
+                    ),
+                    "alternative": {
+                        "max_width_at_position": round(
+                            2 * min(along, length - along), 6
+                        )
                     },
-                }
+                },
+            }
         ovs = floor_state.setdefault("opening_overrides", [])
         for ov in ovs:
             if ov["opening_id"] == opening_id:
@@ -1110,6 +1131,7 @@ async def resize_opening(
             ovs.append({"opening_id": opening_id, "width": body.width})
         return {
             "ok": True,
+            "operation": op,
             "changes": {
                 "opening_id": opening_id,
                 "cx": target.cx,

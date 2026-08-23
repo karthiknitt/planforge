@@ -9,6 +9,8 @@ where one exists, a feasible alternative; never silently applied.
 
 from urllib.parse import quote
 
+import pytest
+
 from app.engine.models import (
     ComplianceResult,
     FloorPlan,
@@ -160,8 +162,10 @@ async def test_move_off_span_is_rejected_with_alternative(client_db):
     assert body["success"] is False
     assert body["operation"] == "move_window"
     assert "outside its host wall" in body["reason"]
-    assert body["alternative"]["min_along"] == win["width"] / 2
-    assert body["alternative"]["max_along"] == win["wall_length"] - win["width"] / 2
+    assert body["alternative"]["min_along"] == pytest.approx(win["width"] / 2)
+    assert body["alternative"]["max_along"] == pytest.approx(
+        win["wall_length"] - win["width"] / 2
+    )
 
     # nothing was written
     relisted = (
@@ -200,6 +204,35 @@ async def test_resize_window_persists_new_width(client_db):
         )
     ).json()["openings"]
     assert next(o for o in relisted if o["id"] == win["id"])["width"] == 0.75
+
+
+async def test_move_and_resize_door_report_a_door_operation_label(client_db):
+    """`operation` must reflect the target opening's own kind, not a literal
+    inherited from the window-only code path — a door move/resize mislabelled
+    "move_window"/"resize_window" would mislead any client acting on it."""
+    client, project_id = await _seed(client_db)
+    listed = (
+        await client.get(
+            f"/api/projects/{project_id}/openings?floor=gf", headers=_hdrs()
+        )
+    ).json()["openings"]
+    door = next(o for o in listed if o["kind"] == "door")
+
+    move_res = await client.post(
+        f"/api/projects/{project_id}/openings/{quote(door['id'], safe='')}/move",
+        json={"floor": "gf", "along": door["along"]},
+        headers=_hdrs(),
+    )
+    assert move_res.status_code == 200, move_res.text
+    assert move_res.json()["operation"] == "move_door"
+
+    resize_res = await client.post(
+        f"/api/projects/{project_id}/openings/{quote(door['id'], safe='')}/resize",
+        json={"floor": "gf", "width": door["width"]},
+        headers=_hdrs(),
+    )
+    assert resize_res.status_code == 200, resize_res.text
+    assert resize_res.json()["operation"] == "resize_door"
 
 
 async def test_unknown_opening_id_is_a_structured_error_not_a_500(client_db):

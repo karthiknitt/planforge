@@ -101,7 +101,10 @@ class BarGroup:
         m = _BARGROUP_RE.match(text or "")
         if not m:
             return None
-        return cls(quantity=int(m.group(1)), diameter_mm=float(m.group(2)))
+        qty = float(m.group(1))
+        if qty != int(qty):
+            return None
+        return cls(quantity=int(qty), diameter_mm=float(m.group(2)))
 
     @property
     def callout(self) -> str:
@@ -133,15 +136,20 @@ class Stirrup:
         if "bar" in d:
             return cls.parse(str(d.get("bar")))
         dia = d.get("dia")
-        spacing = d.get("spacing", d.get("sv_provided"))
+        spacing = d.get("spacing")
+        if spacing is None:
+            spacing = d.get("sv_provided")
         if dia is None or spacing is None:
             return None
         legs = d.get("legs")
-        return cls(
-            diameter_mm=float(dia),
-            spacing_mm=float(spacing),
-            legs=int(legs) if legs is not None else None,
-        )
+        try:
+            return cls(
+                diameter_mm=float(dia),
+                spacing_mm=float(spacing),
+                legs=int(legs) if legs is not None else None,
+            )
+        except (TypeError, ValueError):
+            return None
 
     @property
     def callout(self) -> str:

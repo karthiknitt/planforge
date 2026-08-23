@@ -4,14 +4,16 @@ import math
 
 from app.engine.cad_elements import Opening, WallSegment
 from app.engine.geometry import buildable_polygon
-from app.engine.models import OpeningOverride, Room
+from app.engine.models import AddedOpening, OpeningOverride, Room
 from app.engine.plan_geometry import (
     _all_exterior_edges,
     _plate_bounds,
+    apply_added_openings,
     apply_opening_overrides,
     derive_columns,
     derive_openings,
     derive_walls,
+    exterior_wall_spans,
     opening_boxes,
     validate_floor_connectivity,
     wall_polygons,
@@ -1364,3 +1366,52 @@ def test_non_positive_override_width_is_rejected():
     apply_opening_overrides([door], walls, [ov], diagnostics)
     assert any("must be positive" in d for d in diagnostics)
     assert door.width == 0.9, "rejected override must not mutate the opening"
+
+
+def test_exterior_wall_spans_skips_a_declared_open_edge():
+    """A room edge marked `open_sides` never had a wall drawn there (see
+    derive_walls) — offering it as a candidate exterior span for a new
+    door/window would place the opening on a wall that doesn't exist."""
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    open_room = Room(
+        id="a",
+        name="a",
+        type="bedroom",
+        x=1.23,
+        y=1.73,
+        width=2.77,
+        depth=12.04,
+        open_sides=frozenset({"S"}),
+    )
+    rooms = [open_room, _room("b", 4.115, 1.73, 3.655, 12.04)]
+    spans = exterior_wall_spans(open_room, rooms, buildable)
+    assert all(side != "S" for side, *_ in spans)
+
+
+def test_apply_added_openings_rejects_an_unsupported_kind():
+    rooms = _two_bedrooms()
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls(rooms, buildable)
+    added = [AddedOpening(kind="skylight", room_a="a", room_b="outside")]
+    diagnostics: list[str] = []
+    openings: list[Opening] = []
+    apply_added_openings(rooms, walls, openings, added, buildable, diagnostics, STD)
+    assert not openings
+    assert any("unsupported kind" in d for d in diagnostics)
+
+
+def test_apply_added_openings_uses_configured_standard_widths():
+    rooms = _two_bedrooms()
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls(rooms, buildable)
+    custom_std = OpeningStandards(door_width_m=1.1)
+    added = [AddedOpening(kind="door", room_a="a", room_b="b")]
+    diagnostics: list[str] = []
+    openings: list[Opening] = []
+    apply_added_openings(
+        rooms, walls, openings, added, buildable, diagnostics, custom_std
+    )
+    assert diagnostics == []
+    assert len(openings) == 1
+    assert openings[0].width == custom_std.door_width_m

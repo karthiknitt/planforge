@@ -176,7 +176,11 @@ def _read_steel(source: BeamRun | dict) -> _BeamSteel:
 
     doubly = bool(d.get("doubly_reinforced"))
 
-    if bottom_bars is not None:
+    if (
+        bottom_bars is not None
+        and bottom_bars.quantity > 0
+        and bottom_bars.diameter_mm > 0
+    ):
         n_bot_f, dia_bot = float(bottom_bars.quantity), bottom_bars.diameter_mm
     else:
         n_bot_f, ok = _num(d.get("n_bars"), 2.0)
@@ -185,14 +189,14 @@ def _read_steel(source: BeamRun | dict) -> _BeamSteel:
         dia_bot, ok = _num(d.get("bar_dia"), 12.0)
         if not ok:
             assumed.append("BAR DIA")
-    if top_bars is not None:
+    if top_bars is not None and top_bars.quantity > 0 and top_bars.diameter_mm > 0:
         n_top_f, dia_top = float(top_bars.quantity), top_bars.diameter_mm
     else:
         n_top_f, ok = _num(d.get("n_bars_comp"), 2.0)
         if doubly and not ok:
             assumed.append("TOP NOS")
         dia_top, _ = _num(d.get("bar_dia_comp"), dia_bot)
-    if stirrups is not None:
+    if stirrups is not None and stirrups.spacing_mm > 0 and stirrups.diameter_mm > 0:
         sv, dia_st = stirrups.spacing_mm, stirrups.diameter_mm
         legs_f = float(stirrups.legs) if stirrups.legs is not None else 2.0
     else:
@@ -203,7 +207,7 @@ def _read_steel(source: BeamRun | dict) -> _BeamSteel:
         if not ok:
             assumed.append("STIRRUP DIA")
         legs_f, _ = _num(st.get("legs"), 2.0)
-    if cover_t is not None:
+    if cover_t is not None and cover_t.mm > 0:
         cover = cover_t.mm
     else:
         cover, _ = _num(d.get("cover_mm") or inputs.get("cover_mm"), 25.0)

@@ -100,7 +100,7 @@ def _steel_pair(
         design = panel_or_design.design or {}
         attr = _TYPED_STEEL_ATTR.get(tag[0]) if tag else None
         typed = getattr(panel_or_design, attr, None) if attr else None
-    if typed is not None:
+    if typed is not None and typed.diameter_mm > 0 and typed.spacing_mm > 0:
         return int(round(typed.diameter_mm)), int(round(typed.spacing_mm)), False
     dia = _find_numeric(design, (*tag, "dia"))
     spacing = _find_numeric(design, (*tag, "spac"))

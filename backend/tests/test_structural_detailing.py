@@ -59,6 +59,12 @@ def test_bargroup_callout_round_trips_canonical_format():
         assert g is not None and g.callout == s
 
 
+def test_bargroup_rejects_a_non_integral_bar_count():
+    # A fractional "quantity" (e.g. an averaged/interpolated upstream value)
+    # is not a real bar count — must not silently round-trip as one.
+    assert BarGroup.parse("6.5-16") is None
+
+
 # ── Stirrup parsing / round-trip ─────────────────────────────────────────
 
 
@@ -80,6 +86,20 @@ def test_stirrup_rejects_unparseable_strings():
 def test_stirrup_callout_matches_the_sheet_render_format():
     # structural_sheets_foundation renders ties as f"{dia:.0f}@{spacing:.0f}"
     assert Stirrup(diameter_mm=8.0, spacing_mm=150.0).callout == "8@150"
+
+
+def test_stirrup_from_payload_accepts_sv_provided_keying():
+    assert Stirrup.from_payload({"dia": 8, "sv_provided": 150}) == Stirrup(
+        diameter_mm=8.0, spacing_mm=150.0
+    )
+
+
+def test_stirrup_from_payload_rejects_when_dia_is_missing():
+    assert Stirrup.from_payload({"spacing": 150}) is None
+
+
+def test_stirrup_from_payload_rejects_malformed_types():
+    assert Stirrup.from_payload({"dia": "not-a-number", "spacing": 150}) is None
 
 
 def test_lap_is_is456_tension_lap_from_main_bars():
