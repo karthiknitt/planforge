@@ -96,6 +96,22 @@ def test_gate_stays_on_the_y_min_edge_for_every_road_side():
         assert abs((9.0 - covered) - GATE_WIDTH_M) < 1e-6
 
 
+def test_gate_survives_an_unrecognized_road_side():
+    """An unrecognised `road_side` must still get a gate, not 4 solid walls.
+
+    `_compound_wall_sides` tolerates an unknown value by falling back to "S"
+    labelling internally (see its own docstring), but `compound_wall_segments`
+    used to compare each run's label against the RAW unrecognised string
+    instead of that same fallback — no run's label could ever match, so the
+    gate silently vanished and `compound_wall_gate_posts` returned None.
+    """
+    segs = compound_wall_segments(_cfg("SE"))
+    front = [s for s in segs if abs(s[1] - 0.0) < 1e-6 and abs(s[3] - 0.0) < 1e-6]
+    assert len(front) == 2, "an unrecognised road_side must still gate the y-min edge"
+    posts = compound_wall_gate_posts(_cfg("SE"))
+    assert posts is not None
+
+
 def test_all_four_runs_present():
     segs = compound_wall_segments(_cfg("S"))
     assert len(segs) == 5, "3 solid runs + 2 gate-split front pieces"

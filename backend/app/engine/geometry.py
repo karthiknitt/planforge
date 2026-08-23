@@ -453,6 +453,12 @@ def compound_wall_segments(
     """
     pw, pl = cfg.plot_width, cfg.plot_length
     road = (cfg.road_side or "S").upper()
+    if road not in _ROAD_SIDE_ROTATION:
+        # Match `_compound_wall_sides`'s own unrecognised-value fallback (it
+        # silently rotates by 0, i.e. labels the y-min run "S") — comparing
+        # against the raw unrecognised string below would never match any
+        # `side_id`, dropping the gate entirely and drawing 4 solid walls.
+        road = "S"
     out: list[tuple[float, float, float, float]] = []
     for p1, p2, side_id in _compound_wall_sides(pw, pl, road):
         if side_id != road:
@@ -479,6 +485,8 @@ def compound_wall_gate_posts(
     `compound_wall_segments` so post positions always agree with the gap."""
     pw, pl = cfg.plot_width, cfg.plot_length
     road = (cfg.road_side or "S").upper()
+    if road not in _ROAD_SIDE_ROTATION:
+        road = "S"  # same fallback as compound_wall_segments — see its comment
     for p1, p2, side_id in _compound_wall_sides(pw, pl, road):
         if side_id != road:
             continue
