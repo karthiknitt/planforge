@@ -30,7 +30,7 @@ from app.engine.plan_geometry import (
     derive_openings,
     derive_walls,
 )
-from app.engine.standards import OpeningStandards
+from app.engine.standards import OpeningStandards, get_opening_standards
 
 # Rooms abut across one internal wall (115 mm) plus post-solve snap jitter.
 _ABUT_TOL = 0.2
@@ -334,9 +334,14 @@ def test_archetype_no_door_in_a_wet_room_staircase_wall_direct(
     for fp, cfg in _archetype_floors(archetype_name, cfg_name):
         buildable = buildable_polygon(cfg)
         walls = derive_walls(fp.rooms, buildable)
-        columns = derive_columns(walls)
+        columns = derive_columns(walls, rooms=fp.rooms)
         openings = derive_openings(
-            fp.rooms, walls, columns, OpeningStandards(), buildable, floor=fp.floor
+            fp.rooms,
+            walls,
+            columns,
+            get_opening_standards(),
+            buildable,
+            floor=fp.floor,
         )
         doors = [o for o in openings if o.kind == "door"]
         wets = [r for r in fp.rooms if r.type in _WET_TYPES]
