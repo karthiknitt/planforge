@@ -104,9 +104,7 @@ def test_t_plot_is_rejected_at_the_wire_not_deep_in_the_solver():
     # Task 9 raises on plot_template T/U. Rejecting here turns what would be an
     # uncaught 500 into a 422 the wizard can render.
     with pytest.raises(ValidationError):
-        GenerateRequest(
-            **_payload(plot_template="T", notch_width=3.0, notch_depth=4.0)
-        )
+        GenerateRequest(**_payload(plot_template="T", notch_width=3.0, notch_depth=4.0))
 
 
 def test_l_plot_sets_back_its_notch_edges():

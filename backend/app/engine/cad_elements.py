@@ -286,7 +286,10 @@ class FloorDrawing:
             Fixture(
                 kind=f["kind"],
                 room_id=f["room_id"],
-                shapes=[FixtureShape(**_take(FixtureShape, sh)) for sh in f.get("shapes") or []],
+                shapes=[
+                    FixtureShape(**_take(FixtureShape, sh))
+                    for sh in f.get("shapes") or []
+                ],
             )
             for f in payload.get("fixtures") or []
         ]

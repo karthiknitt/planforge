@@ -90,7 +90,9 @@ def test_gate_gap_is_always_on_the_y_min_edge(road_side):
     cfg = _cfg(road_side)
     segs = compound_wall_segments(cfg)
     expected = EXPECTED_GATE_EDGE_BY_ROAD_SIDE[road_side]
-    assert _gate_edge_local_id(segs, cfg.plot_x_extent, cfg.plot_y_extent) == expected, (
+    assert (
+        _gate_edge_local_id(segs, cfg.plot_x_extent, cfg.plot_y_extent) == expected
+    ), (
         f"road_side='{road_side}': the gate gap must be on the y-min edge "
         f"(plot-local '{expected}'), the same edge the main entrance is on"
     )
