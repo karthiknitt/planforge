@@ -710,6 +710,8 @@ _FIXTURE_DISPATCH = {
     "kitchen": _kitchen,
     "toilet": _toilet,
     "bathroom": _toilet,
+    "wc_only": _toilet,
+    "bathroom_master": _toilet,
     "study": _study,
     "home_office": _study,
     "pooja": _pooja,

@@ -104,6 +104,8 @@ def test_dispatch_covers_the_twelve_dxf_room_types():
         "kitchen",
         "toilet",
         "bathroom",
+        "wc_only",
+        "bathroom_master",
         "study",
         "home_office",
         "pooja",

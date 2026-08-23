@@ -12,7 +12,7 @@ from shapely.geometry import LineString
 
 from app.engine.cad_elements import FloorDrawing
 from app.engine.cad_primitives import metres_to_ftin
-from app.engine.geometry import arc_points, buildable_polygon
+from app.engine.geometry import arc_points, buildable_polygon, landscape_region
 from app.engine.models import FloorPlan, Layout, PlotConfig, Room
 from app.engine.section_geometry import (
     derive_elevation,
@@ -2124,7 +2124,6 @@ def _draw_floor_projected(
         c, drawing.site.compound_wall_segments if drawing.site else [], ox, oy, s
     )
     _draw_dim_chains(c, drawing, s, ox, oy, plot_px, plot_py)
-    _draw_compound_wall(c, cfg, ox, oy, s)
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
     opening_rows = _openings_schedule_rows(drawing)
     _draw_opening_tags(c, drawing, s, ox, oy)
