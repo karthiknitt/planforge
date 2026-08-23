@@ -9,10 +9,13 @@ diffing) plus a smoke render of both PDFs from the frozen golden fixture.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from reportlab.lib.pagesizes import A4
 
 from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
+from app.engine.cad_elements import Opening
 from app.engine.models import PlotConfig
 from app.engine.pdf import (
     MARGIN,
@@ -25,6 +28,7 @@ from app.engine.pdf import (
     _area_schedule_height,
     _centered_plot_oy,
     _openings_schedule_height,
+    _openings_schedule_rows,
     _schedule_column_x,
     _standard_scale,
     render_pdf,
@@ -130,6 +134,23 @@ def test_schedule_tables_sit_above_title_block_not_top_corner() -> None:
     assert area_top < PAGE_H / 2
     # Its bottom edge clears the title block.
     assert area_top - area_h >= TITLE_H
+
+
+def test_schedule_rows_survive_legacy_openings_with_empty_marks() -> None:
+    """Hand-built openings default `mark` to "" and never went through
+    `assign_opening_marks`. `_mark_order` used to call `int(mark[1:])` on that
+    empty string and crash — CodeRabbit finding on PR #96. Schedule generation
+    must instead assign canonical marks on the fly, not crash."""
+    door = Opening(
+        kind="door", cx=1.0, cy=0.0, width=0.9, is_horizontal=True, wall_thickness=0.115
+    )
+    window = Opening(
+        kind="window", cx=3.0, cy=0.0, width=1.2, is_horizontal=True, wall_thickness=0.23
+    )
+    drawing = SimpleNamespace(openings=[door, window])
+    rows = _openings_schedule_rows(drawing)
+    assert {row[1] for row in rows} == {"DOOR", "WINDOW"}
+    assert door.mark and window.mark, "legacy openings must get real marks assigned"
 
 
 def test_schedule_height_helpers_match_row_math() -> None:

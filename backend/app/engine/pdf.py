@@ -757,7 +757,20 @@ def _openings_schedule_rows(drawing) -> list[tuple]:
     """SCHEDULE OF OPENINGS rows, grouped by the canonical `Opening.mark`
     assigned in plan_geometry.assign_opening_marks(). MD leads, then D/W/V
     series in numeric order — byte-identical to the pre-promotion
-    index-keyed computation."""
+    index-keyed computation.
+
+    Legacy hand-built openings (tests, older callers) default `mark` to ""
+    and never went through `assign_opening_marks`. Assign it here rather than
+    letting `_mark_order` crash on `int("")`, so schedule generation keeps
+    working for drawings this function doesn't fully control the origin of.
+    """
+    from app.engine.plan_geometry import assign_opening_marks
+
+    if any(
+        not o.mark and not getattr(o, "is_main", False) for o in drawing.openings
+    ):
+        assign_opening_marks(drawing.openings)
+
     groups: dict[tuple[str, str, int, int], int] = {}
     mains = [o for o in drawing.openings if getattr(o, "is_main", False)]
     for o in drawing.openings:

@@ -13,12 +13,13 @@ import math
 import pytest
 from shapely.geometry import box
 
-from app.engine.cad_elements import WallJunction
+from app.engine.cad_elements import WallJunction, WallSegment
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig, Room
 from app.engine.plan_geometry import (
     _SNAP,
     _adjacencies,
+    _assign_wall_ids,
     _merge_adjacent_columns,
     _near_staircase,
     _plate_bounds,
@@ -1233,3 +1234,18 @@ def test_wall_ids_unique_after_open_side_split():
     ids = [w.id for w in walls]
     assert all(ids)
     assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+
+
+def test_wall_ids_unique_across_a_sub_centimetre_span_difference():
+    """Two same-kind, same-(empty)-support walls whose span differs by only
+    3mm must not collide: the id's disambiguator rounds coordinates to 6
+    decimals (micron precision), not 2 (cm precision) — a CodeRabbit-flagged
+    regression risk on PR #96 (plan_geometry.py `_assign_wall_ids`)."""
+    walls = [
+        WallSegment(x1=0.0, y1=0.0, x2=1.000, y2=0.0, thickness=0.115, kind="internal"),
+        WallSegment(x1=0.0, y1=0.0, x2=1.003, y2=0.0, thickness=0.115, kind="internal"),
+    ]
+    _assign_wall_ids(walls, rooms=[])
+    ids = [w.id for w in walls]
+    assert all(ids)
+    assert len(set(ids)) == 2, f"sub-cm span difference collided into one id: {ids}"

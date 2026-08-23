@@ -880,9 +880,13 @@ def _assign_wall_ids(
             (neg_ids if neg_a >= pos_a else pos_ids).add(rid)
         lft = "+".join(sorted(neg_ids)) or "-"
         rgt = "+".join(sorted(pos_ids)) or "-"
+        # 6 decimals (micron precision) rather than 2 (cm precision): two
+        # walls sharing kind and supporting rooms but differing by <5mm in
+        # this coordinate would otherwise collide on the same id, silently
+        # breaking the id-uniqueness contract this string exists to provide.
         w.id = (
             f"w:{'v' if vertical else 'h'}:{w.kind[0]}:{lft}>{rgt}"
-            f"@{coord:.2f}:{lo:.2f}-{hi:.2f}"
+            f"@{coord:.6f}:{lo:.6f}-{hi:.6f}"
         )
 
 
