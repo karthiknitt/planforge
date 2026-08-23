@@ -1678,7 +1678,6 @@ def _place_main_entrance(
             gate_x,
             ewt,
             tol,
-            reasons,
         )
         if door is not None:
             return door
@@ -1707,7 +1706,6 @@ def _through_porch_entrance(
     gate_x: float,
     ewt: float,
     tol: float,
-    reasons: list[str] | None,
 ) -> Opening | None:
     """Main entrance through a road-facing porch into the habitable room
     directly behind it (see `_place_main_entrance` stage 2)."""
@@ -1731,11 +1729,16 @@ def _through_porch_entrance(
             target, rooms, obstacles, std, buildable, gate_x, ewt, tol
         )
         if door is not None:
-            if reasons is not None:
-                reasons.append(
-                    "main_entrance: no road-facing habitable room; routed "
-                    f"through the {t.type} porch to {target.id}'s exterior"
-                )
+            # Debug-only: `reasons` is the ENTRANCE-FAILURE diagnostics channel
+            # (every "main_entrance:"-prefixed entry in it is read as a failure
+            # by tests/test_plan_openings.py and by callers), so a successful
+            # placement — this is one — must not add to it.
+            logger.debug(
+                "main entrance routed through the %s porch to %s's exterior "
+                "(no road-facing habitable room)",
+                t.type,
+                target.id,
+            )
             return door
     return None
 
@@ -1784,6 +1787,8 @@ def _main_door_on_nearest_exterior(
         centre = _fit_along(
             desired, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
         )
+        if centre is None:
+            return None
         door = _make_door(
             room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
         )
@@ -1793,11 +1798,11 @@ def _main_door_on_nearest_exterior(
         centre = _fit_along(
             desired, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(False, coord)
         )
+        if centre is None:
+            return None
         door = _make_door(
             room, True, coord, centre, width, ewt, centre <= (lo + hi) / 2
         )
-    if centre is None:
-        return None
     door.is_main = True
     return door
 
@@ -2258,14 +2263,21 @@ def _repair_connectivity(
     of type, so a deliberately door-less, gapped parking room always came
     back "unreachable" and got a forced door anyway — undoing the very
     exclusion `_NO_DOOR_TYPES` was there to enforce, and drawing a
-    pedestrian door into a car porch no real design has one in."""
+    pedestrian door into a car porch no real design has one in.
+
+    Void rooms are exempt too, matching `validate_floor_connectivity`'s own
+    `r.is_void` skip: a void has no floor slab to walk on, so a "reachable"
+    door into it is meaningless, and disagreeing with the validator would let
+    this pass force a door the validator then ignores anyway."""
     for _ in range(len(rooms) + 1):
         graph = _door_graph(rooms, openings, adjs, tol)
         reachable = _reachable_rooms(rooms, graph, floor, openings)
         unreachable = [
             i
             for i, r in enumerate(rooms)
-            if r.type not in ({"passage"} | _PARKING_TYPES) and i not in reachable
+            if r.type not in ({"passage"} | _PARKING_TYPES)
+            and not r.is_void
+            and i not in reachable
         ]
         if not unreachable:
             return
