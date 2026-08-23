@@ -1494,6 +1494,16 @@ ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
 # override to every road side undetectable, because every road side would keep
 # the cells it already had. Replacement makes such a mistake fail the north/east
 # firing tests immediately.
+#
+# NOT moved to compliance_rules.json's `vastu_zones`/`vastu_room_rules` (the
+# CodeRabbit review on this PR flagged the hardcoding): those two config tables
+# are round-trip-derived transposes of each other pinned by
+# test_vastu_score.py, and encode per-ROOM-TYPE zone preference tiers
+# (preferred/avoid/prohibit), a different concept from this per-ROAD-SIDE
+# override of which zone wins an ENTRANCE-candidate tie-break. Folding this in
+# would mean inventing a third schema shape in that file for a single
+# product-owner literal, not "reading an existing threshold from config" —
+# real schema/loader/round-trip-test work, not a quick win.
 ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE: dict[str, tuple[str, ...]] = {
     "S": ("SE",),
 }
