@@ -46,6 +46,7 @@ from app.engine.pdf import (
     SCHED_RESERVE as SCHED_RESERVE,
 )
 from app.engine.title_block import draw_title_block
+from app.engine.vastu import resolve_north_angle
 
 #: Drawing register for the set. Ordered; the orchestrator emits them in this
 #: order and every renderer takes its number from here rather than hardcoding
@@ -157,7 +158,7 @@ def plan_sheet_frame(
     """
     page_w, page_h = A4
     s, denom = _standard_scale(cfg, page_w, page_h)
-    plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
+    plot_px, plot_py = cfg.plot_x_extent * s, cfg.plot_y_extent * s
     ox = MARGIN + (page_w - 2 * MARGIN - plot_px) / 2
     oy = _centered_plot_oy(
         page_h, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=ROAD_H + ROAD_GAP
@@ -182,7 +183,9 @@ def plan_sheet_frame(
     c.rect(ox, oy, plot_px, plot_py, fill=0, stroke=1)
     c.setDash()
 
-    _draw_north_arrow(c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16)
+    _draw_north_arrow(
+        c, page_w - MARGIN - 14, page_h - MARGIN - 16, 16, resolve_north_angle(cfg)
+    )
     _drg_stamp(c, page_w, page_h, drg_no)
 
     return PlanFrame(ox, oy, s, denom, page_w, page_h, plot_px, plot_py)
@@ -259,7 +262,7 @@ def structural_title_block(
         fields.append(("LAYOUT", layout_label))
     fields.extend(
         [
-            ("PLOT", f"{cfg.plot_width}x{cfg.plot_length} m"),
+            ("PLOT", f"{cfg.plot_x_extent}x{cfg.plot_y_extent} m"),
             ("SCALE", scale_text or (f"1:{scale_denom}" if scale_denom else "NTS")),
             ("REV", revision),
             ("DATE", date.today().strftime("%d %b %Y")),

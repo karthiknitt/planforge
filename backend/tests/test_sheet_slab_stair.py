@@ -13,8 +13,15 @@ from reportlab.pdfgen import canvas
 
 from app.engine import generator
 from app.engine.models import PlotConfig
-from app.engine.structural_data import GridRef, StructuralModel, build_structural_model
+from app.engine.structural_data import (
+    GridRef,
+    SlabPanel,
+    Stirrup,
+    StructuralModel,
+    build_structural_model,
+)
 from app.engine.structural_sheets_slab_stair import (
+    _steel_pair,
     render_slab_reinforcement_details,
     render_staircase_details,
 )
@@ -23,8 +30,8 @@ from tests.helpers.pdf_png import pdf_page_text, pdf_pages
 SAMPLE_DIR = os.environ.get("PLANFORGE_SAMPLE_DIR", tempfile.gettempdir())
 
 CFG = PlotConfig(
-    plot_width=12.192,
-    plot_length=18.288,
+    plot_x_extent=12.192,
+    plot_y_extent=18.288,
     num_bedrooms=2,
     toilets=2,
     setback_front=1.5,
@@ -241,6 +248,31 @@ def test_slab_details_nominal_steel_is_labelled_not_fabricated(
         pdf_page_text(pdf_bytes, p) for p in range(pdf_pages(pdf_bytes))
     )
     assert "NOMINAL" in full_text
+
+
+def test_non_positive_typed_slab_steel_falls_back_to_nominal():
+    """A typed Stirrup with a zero diameter/spacing must not be trusted as
+    designed steel — it degrades to the fuzzy-key/nominal fallback the same
+    as a genuinely missing value, instead of printing a bogus "0mm @ 0mm"
+    callout as if it were real."""
+    panel = SlabPanel(
+        mark="S1",
+        x1=0.0,
+        y1=0.0,
+        x2=3.0,
+        y2=3.0,
+        lx_m=3.0,
+        ly_m=3.0,
+        kind="one-way",
+        case="interior",
+        D_mm=125.0,
+        design={},
+        main_steel=Stirrup(diameter_mm=0.0, spacing_mm=150.0),
+    )
+    dia, spacing, is_nominal = _steel_pair(panel, ("main",), panel.D_mm, fy=415.0)
+    assert is_nominal
+    assert dia > 0
+    assert spacing > 0
 
 
 def test_slab_details_paginates_with_contd_and_drops_nothing(

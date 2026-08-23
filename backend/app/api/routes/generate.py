@@ -1,14 +1,31 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.revisions import save_auto_revision
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
-from app.schemas.layout import GenerateResponse
+from app.engine.generator import generate_from_request
+from app.schemas.layout import GenerateResponse, LayoutOut
+from app.schemas.project import GenerateRequest
 from app.services import layout_store
 from app.services.access import get_accessible_project
 
 router = APIRouter()
+
+
+@router.post("/generate", response_model=list[LayoutOut])
+async def generate_preview(
+    req: GenerateRequest,
+    user_id: str = Depends(get_current_user_id),
+) -> list[LayoutOut]:
+    """Stateless wizard preview: solve straight from a GenerateRequest.
+
+    Nothing is persisted — no project row, no stored layout. The wizard's
+    "Site & Style" step (Task 24) posts here once the flow is wired; until
+    then the endpoint is the contract Task 25 produces.
+    """
+    layouts = generate_from_request(req)
+    return [layout_store.layout_out_from_engine(lay) for lay in layouts]
 
 
 @router.get("/projects/{project_id}/generate", response_model=GenerateResponse)
@@ -35,9 +52,15 @@ async def generate_layouts(
             )
         except Exception:
             pass
-        stored = await layout_store.regenerate_and_store(project, db)
+        try:
+            stored = await layout_store.regenerate_and_store(project, db)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     else:
-        stored = await layout_store.get_or_generate_layouts(project, db)
+        try:
+            stored = await layout_store.get_or_generate_layouts(project, db)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return layout_store.to_generate_response(project, stored)
 

@@ -80,11 +80,28 @@ def _nominal_steel(D_mm: float, fy: float | None) -> tuple[int, int]:
     return dia, int(spacing)
 
 
+_TYPED_STEEL_ATTR = {"main": "main_steel", "dist": "dist_steel", "top": "top_steel"}
+
+
 def _steel_pair(
-    design: dict, tag: tuple[str, ...], D_mm: float, fy: float | None
+    panel_or_design: SlabPanel | dict,
+    tag: tuple[str, ...],
+    D_mm: float,
+    fy: float | None,
 ) -> tuple[int, int, bool]:
     """Return (dia_mm, spacing_mm, is_nominal) for a steel group identified
-    by ``tag`` (e.g. ``("main",)``, ``("dist",)``, ``("top",)``)."""
+    by ``tag`` (e.g. ``("main",)``, ``("dist",)``, ``("top",)``).
+
+    Typed-first (Task 31): a panel's parsed Stirrup beats the fuzzy-key
+    design-dict read; the dict path stays as the migration fallback."""
+    typed = None
+    design = panel_or_design
+    if isinstance(panel_or_design, SlabPanel):
+        design = panel_or_design.design or {}
+        attr = _TYPED_STEEL_ATTR.get(tag[0]) if tag else None
+        typed = getattr(panel_or_design, attr, None) if attr else None
+    if typed is not None and typed.diameter_mm > 0 and typed.spacing_mm > 0:
+        return int(round(typed.diameter_mm)), int(round(typed.spacing_mm)), False
     dia = _find_numeric(design, (*tag, "dia"))
     spacing = _find_numeric(design, (*tag, "spac"))
     if dia is not None and spacing is not None:
@@ -164,9 +181,9 @@ def _draw_slab_schedule(
     col_ws = (32.0, 62.0, 42.0, 30.0, 92.0, 92.0, 92.0)
     rows = []
     for p in panels:
-        main_dia, main_sp, main_nom = _steel_pair(p.design, ("main",), p.D_mm, fy)
-        dist_dia, dist_sp, dist_nom = _steel_pair(p.design, ("dist",), p.D_mm, fy)
-        top_dia, top_sp, top_nom = _steel_pair(p.design, ("top",), p.D_mm, fy)
+        main_dia, main_sp, main_nom = _steel_pair(p, ("main",), p.D_mm, fy)
+        dist_dia, dist_sp, dist_nom = _steel_pair(p, ("dist",), p.D_mm, fy)
+        top_dia, top_sp, top_nom = _steel_pair(p, ("top",), p.D_mm, fy)
         rows.append(
             (
                 p.mark,
@@ -214,9 +231,9 @@ def _draw_panel_detail(
     pw = panel.lx_m * 1000 * px_s
     ph = panel.ly_m * 1000 * px_s
 
-    main_dia, main_sp, main_nom = _steel_pair(panel.design, ("main",), panel.D_mm, fy)
-    dist_dia, dist_sp, dist_nom = _steel_pair(panel.design, ("dist",), panel.D_mm, fy)
-    top_dia, top_sp, top_nom = _steel_pair(panel.design, ("top",), panel.D_mm, fy)
+    main_dia, main_sp, main_nom = _steel_pair(panel, ("main",), panel.D_mm, fy)
+    dist_dia, dist_sp, dist_nom = _steel_pair(panel, ("dist",), panel.D_mm, fy)
+    top_dia, top_sp, top_nom = _steel_pair(panel, ("top",), panel.D_mm, fy)
 
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(0.8)

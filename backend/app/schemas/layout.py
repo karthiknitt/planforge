@@ -17,12 +17,38 @@ class ColumnOut(BaseModel):
     y: float
 
 
+class OpeningOverrideOut(BaseModel):
+    """Wire mirror of engine models.OpeningOverride (Phase 7 Task 29)."""
+
+    opening_id: str
+    along: float | None = None
+    width: float | None = None
+    suppressed: bool = False
+
+
+class AddedOpeningOut(BaseModel):
+    """Wire mirror of engine models.AddedOpening (Phase 7 Task 30)."""
+
+    kind: str  # "door" | "window"
+    room_a: str
+    room_b: str  # second room id, or the literal "outside"
+    along: float | None = None
+    width: float | None = None
+    side: str | None = None
+
+
 class FloorPlanOut(BaseModel):
     floor: int
     floor_type: str = "ground"
     rooms: list[RoomOut]
     columns: list[ColumnOut]
     needs_mech_ventilation: bool = False
+    # User/AI deltas against derived openings, keyed by Opening.id. Optional
+    # with a default so every stored geometry dict still parses.
+    opening_overrides: list[OpeningOverrideOut] = []
+    # User/AI-added openings (overrides cannot create, only delta). Same
+    # optional-with-default guarantee.
+    added_openings: list[AddedOpeningOut] = []
     # Canonical drawing (walls/openings/columns/junctions/dim_chains/labels/
     # stair) — same FloorDrawing.to_dict() the PDF/DXF renderers project.
     # Computed at read time in to_generate_response(), not persisted.
@@ -54,6 +80,7 @@ class LayoutOut(BaseModel):
     second_floor: FloorPlanOut | None = None
     basement_floor: FloorPlanOut | None = None
     score: LayoutScoreOut | None = None
+    vastu_score: float | None = None  # None when the project has Vastu disabled
     space_notes: list[str] = []
     auto_added_rooms: list[str] = []
 

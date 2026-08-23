@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from shapely.geometry import Polygon
+from app.schemas.project import GenerateRequest
 
 from .archetypes import layout_a, layout_b, layout_c, layout_d, layout_e, layout_f
 from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; historical import site)
@@ -11,42 +11,24 @@ from .geometry import (  # noqa: F401  (compute_l_shaped_polygon re-export; hist
 )
 from .compliance import check, load_rules
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
-from .scorer import rank_and_select
-from .solver import solve_layouts
-from .vastu import check_vastu
+from .scorer import layout_floors, rank_and_select
+from .solver import solve_layouts, validate_plot_envelope
+from .vastu import check_vastu, vastu_layout_score
 
 logger = logging.getLogger(__name__)
 
 
-def _remove_cutout_overlap(
-    rooms: list[Room],
-    cutout_polygon: Polygon,
-    space_notes: list[str],
-    floor: int,
-) -> list[Room]:
-    """Remove rooms whose centre lies within the cutout zone.
-
-    Rooms that are mostly outside the cutout are kept as-is (minor overlaps are
-    accepted — the plot boundary is dashed in SVG and real-world construction will
-    handle the edge).  Rooms that are completely inside the cutout are removed.
-    Rooms where more than 60 % of their area overlaps the cutout are also removed.
-    """
-    from shapely.geometry import box as _box
-
-    kept: list[Room] = []
-    for room in rooms:
-        room_box = _box(room.x, room.y, room.x + room.width, room.y + room.depth)
-        intersection = room_box.intersection(cutout_polygon)
-        overlap_ratio = intersection.area / room_box.area if room_box.area > 0 else 0
-
-        if overlap_ratio > 0.6:
-            space_notes.append(
-                f"{room.name} removed from floor {floor}: "
-                f"{overlap_ratio * 100:.0f}% falls in the L-shaped cutout zone."
-            )
-        else:
-            kept.append(room)
-    return kept
+# NOTE: `_remove_cutout_overlap` used to live here and was called below on every
+# generated layout for an L-shaped plot, deleting any room that fell >60% inside
+# the cutout. That silently lost programme — a 3-bedroom request could come back
+# with 2 — and it could not touch the 40%-and-under intrusions at all. The solver
+# now forbids room parts from entering the cutout as a hard CP-SAT constraint
+# (`solver._forbid_notch`, which resolves BOTH the new `plot_template`/`notch_*`
+# fields and the legacy `plot_shape="l_shaped"` cutout corner), so there is
+# nothing left to delete. The archetype fallback path never needed it either:
+# `archetypes._l_shaped_floor_plate` shrinks the plate away from the cutout, and
+# `compliance.check` bounds every room by `buildable_polygon`, which for an
+# l_shaped plot is the notched polygon itself.
 
 
 # ── Blank area detection & filling ────────────────────────────────────────────
@@ -74,8 +56,8 @@ def _plate_box(cfg: PlotConfig, ewt: float):
         return plate
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
-    w = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    d = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    w = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    d = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     return box(ox, oy, ox + w, oy + d)
 
 
@@ -694,6 +676,34 @@ def _absorb_into_adjacent(
     return absorbed_any
 
 
+def _attach_vastu(layout: Layout, cfg: PlotConfig) -> None:
+    """Record Vastu on a layout as a *warning* and a graded score — never as a
+    compliance violation.
+
+    Vastu is a cultural preference, not a building bye-law, but it used to be
+    appended to `compliance.violations` and then flip `compliance.passed`, so a
+    single prohibited-zone room deleted an otherwise legal layout from the
+    candidate set — on some configs, every candidate. The graded score feeds
+    ranking through `scorer._score_vastu` (10% of the layout score) instead, so
+    a Vastu-poor layout is now out-ranked rather than dropped.
+
+    Applied once per layout on the final post-fill geometry, so `vastu_score`
+    is the same number `score_layout` sees. Both the solver and archetype paths
+    flow through here; the archetype loop used to be the only path that ran
+    `check_vastu` at all, so solver layouts silently carried no Vastu warnings.
+    """
+    if not cfg.vastu_enabled:
+        return
+    v_violations, v_warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
+    # Both lists land in `warnings`, never `violations` — per this function's
+    # own docstring, a prohibited-zone room must never flip `compliance.passed`.
+    # Dropping `v_violations` entirely (the pre-fix behaviour) went further
+    # than that: it left prohibited placements with no finding at all.
+    layout.compliance.warnings.extend(v_violations)
+    layout.compliance.warnings.extend(v_warnings)
+    layout.vastu_score = vastu_layout_score(layout_floors(layout), cfg)
+
+
 def generate(cfg: PlotConfig) -> list[Layout]:
     """Generate layouts using the CP-SAT solver (primary) with archetype fallback.
 
@@ -702,6 +712,11 @@ def generate(cfg: PlotConfig) -> list[Layout]:
     rules = load_rules()
     ewt = rules["external_wall_thickness_mm"] / 1000
     iwt = rules["internal_wall_thickness_mm"] / 1000
+
+    # A plot notch that cannot house the requested programme is a user-input
+    # problem, so it is raised BEFORE the blanket try/except below — falling
+    # through to archetypes would hand the user a plan that ignores the notch.
+    validate_plot_envelope(cfg, ewt)
 
     # ── Solver path (Phase A) ─────────────────────────────────────────────────
     solver_layouts: list[Layout] = []
@@ -771,65 +786,23 @@ def generate(cfg: PlotConfig) -> list[Layout]:
         _snap_layout_floors(layout)
         layout.compliance = check(layout, cfg, rules)
 
-        if cfg.vastu_enabled:
-            v_violations, v_warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
-            layout.compliance.violations.extend(v_violations)
-            layout.compliance.warnings.extend(v_warnings)
-            layout.compliance.passed = len(layout.compliance.violations) == 0
-
+        # Vastu is deliberately absent here: it neither adds violations nor
+        # gates admission any more. Both were applied once per layout, on the
+        # final post-fill geometry, just before ranking (see _attach_vastu).
         if layout.compliance.passed and layout.id not in solver_ids:
             archetype_layouts.append(layout)
 
     # Layout F: courtyard — conditional on plot area >= 150 sqm
-    plot_area = cfg.plot_width * cfg.plot_length
+    plot_area = cfg.plot_x_extent * cfg.plot_y_extent
     if plot_area >= 150:
         lf = layout_f(cfg, ewt=ewt, iwt=iwt)
         if lf is not None:
             _snap_layout_floors(lf)
             lf.compliance = check(lf, cfg, rules)
-            if cfg.vastu_enabled:
-                v_violations, v_warnings = check_vastu(lf, cfg, road_side=cfg.road_side)
-                lf.compliance.violations.extend(v_violations)
-                lf.compliance.warnings.extend(v_warnings)
-                lf.compliance.passed = len(lf.compliance.violations) == 0
             if lf.compliance.passed and lf.id not in solver_ids:
                 archetype_layouts.append(lf)
 
     all_layouts = solver_layouts + archetype_layouts
-
-    # ── L-shaped plot: remove rooms in the cutout zone ────────────────────────
-    if cfg.plot_shape == "l_shaped" and cfg.cutout_width > 0 and cfg.cutout_height > 0:
-        # Build the actual cutout rectangle (the removed corner)
-        W = cfg.plot_width
-        H = cfg.plot_length
-        cw = cfg.cutout_width
-        ch = cfg.cutout_height
-        from shapely.geometry import box as _sbox
-
-        if cfg.cutout_corner == "NE":
-            cutout_zone = _sbox(W - cw, H - ch, W, H)
-        elif cfg.cutout_corner == "NW":
-            cutout_zone = _sbox(0, H - ch, cw, H)
-        elif cfg.cutout_corner == "SE":
-            cutout_zone = _sbox(W - cw, 0, W, ch)
-        else:  # SW
-            cutout_zone = _sbox(0, 0, cw, ch)
-
-        for layout in all_layouts:
-            cutout_notes: list[str] = []
-            for fp in [
-                layout.ground_floor,
-                layout.first_floor,
-                layout.second_floor,
-                layout.basement_floor,
-            ]:
-                if fp is None or not fp.rooms:
-                    continue
-                fp.rooms = _remove_cutout_overlap(
-                    fp.rooms, cutout_zone, cutout_notes, fp.floor
-                )
-            # prepend cutout notes so they appear first in space_notes
-            layout.space_notes = cutout_notes + layout.space_notes
 
     # ── Fill blank areas in every passing layout ──────────────────────────────
     ewt = rules["external_wall_thickness_mm"] / 1000
@@ -910,7 +883,16 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             walls = derive_walls(fp.rooms, buildable)
             columns = derive_columns(walls, rooms=fp.rooms)
             openings = derive_openings(
-                fp.rooms, walls, columns, std, buildable, floor=fp.floor
+                fp.rooms,
+                walls,
+                columns,
+                std,
+                buildable,
+                floor=fp.floor,
+                # Same cfg the drawing path passes. Without it the layout
+                # validated for connectivity would have its entrance somewhere
+                # other than the layout actually drawn.
+                vastu_cfg=cfg,
             )
             if validate_floor_connectivity(fp.rooms, openings, fp.floor):
                 ok = False
@@ -925,9 +907,102 @@ def generate(cfg: PlotConfig) -> list[Layout]:
             "navigability gate rejected every layout; keeping unfiltered set"
         )
 
+    # ── Required-programme gate (Task 25) ─────────────────────────────────────
+    # The archetype fallback builds fixed programmes and cannot honour wizard
+    # programme flags, so without this gate an explicitly requested courtyard
+    # could be outranked by an archetype that lacks one. Same never-return-zero
+    # rule as the navigability gate.
+    if cfg.required_types or cfg.open_parking:
+        required = set(cfg.required_types)
+
+        def _satisfies(lay: Layout) -> bool:
+            floors = layout_floors(lay)
+            present = {r.type for fp in floors for r in fp.rooms}
+            if not required <= present:
+                return False
+            if cfg.open_parking:
+                # Archetypes build fully-walled parking; a request for an open
+                # car porch is only honoured by layouts whose ground-floor
+                # porch actually declares its road-facing edge open.
+                porches = [
+                    r
+                    for fp in floors
+                    if fp.floor == 0
+                    for r in fp.rooms
+                    if r.type in ("parking", "parking_4w", "parking_2w")
+                ]
+                if porches and not all(p.open_sides for p in porches):
+                    return False
+            return True
+
+        honoured = [lay for lay in all_layouts if _satisfies(lay)]
+        if honoured:
+            all_layouts = honoured
+        else:
+            logger.warning(
+                "no layout satisfies the requested programme %s; keeping "
+                "unfiltered set",
+                sorted(required),
+            )
+
+    # ── Vastu: warnings + graded score on the final geometry ─────────────────
+    for layout in all_layouts:
+        _attach_vastu(layout, cfg)
+
     # ── Score and select top 3 ────────────────────────────────────────────────
     top = rank_and_select(all_layouts, cfg, top_n=3)
     # Remap IDs to stable "A", "B", "C" so the export route default works
     for layout, letter in zip(top, ["A", "B", "C"]):
         layout.id = letter
     return top
+
+
+_PROGRAMME_TYPES: dict[str, str] = {
+    "courtyard": "courtyard",
+    "verandah": "verandah",
+    "pooja": "pooja",
+    "terrace": "terrace",
+    "study": "study",
+}
+
+
+def _programme_types(flags: set[str]) -> frozenset[str]:
+    """Wizard programme flags → room types the solver must place.
+
+    `car_porch_open` is deliberately absent: it does not add a room, it opens
+    the existing parking room's road-facing edge (`open_parking`).
+    """
+    return frozenset(_PROGRAMME_TYPES[f] for f in flags if f in _PROGRAMME_TYPES)
+
+
+def generate_from_request(req: GenerateRequest) -> list[Layout]:
+    """Map an API request onto a PlotConfig plus programme requirements.
+
+    Note that `style_preset` is deliberately NOT read here: presets seed the
+    wizard form's checkboxes, and the resulting explicit `programme` set is the
+    only thing the engine honours. A user who unticks every box on a Kerala
+    preset gets no courtyard. See spec section 6 on why style signal is too
+    weak to drive generation directly.
+    """
+    cfg = PlotConfig(
+        plot_x_extent=req.plot_x_extent,
+        plot_y_extent=req.plot_y_extent,
+        setback_front=req.setback_front,
+        setback_rear=req.setback_rear,
+        setback_left=req.setback_left,
+        setback_right=req.setback_right,
+        num_bedrooms=req.num_bedrooms,
+        toilets=req.toilets,
+        parking=req.parking,
+        north_angle_deg=req.north_angle_deg,
+        plot_template=req.plot_template,
+        notch_width=req.notch_width or 0.0,
+        notch_depth=req.notch_depth or 0.0,
+        # NOT coupled to plot_template — see "Task 9 rulings" ruling 2. Forcing
+        # room templates on for an L plot makes layouts strictly worse until a
+        # notch-filling objective term exists.
+        allow_shape_templates=False,
+        required_types=_programme_types(req.programme),
+        open_parking=("car_porch_open" in req.programme),
+    )
+    return generate(cfg)

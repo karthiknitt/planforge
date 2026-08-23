@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
+import math
 
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
@@ -28,6 +29,7 @@ from app.engine.section_geometry import (
     derive_section,
     section_cut_line,
 )
+from app.engine.vastu import resolve_north_angle
 from app.engine.section_render import (
     draw_section_marker,
     render_elevation_view,
@@ -152,12 +154,12 @@ def _draw_site_location_plan(
     draw_w = page_w - 2 * MARGIN - 2 * SIDE_PAD
 
     # Scale to fit plot with setbacks
-    total_w = cfg.plot_width + cfg.setback_left + cfg.setback_right + 4
-    total_l = cfg.plot_length + cfg.setback_front + cfg.setback_rear + 4
+    total_w = cfg.plot_x_extent + cfg.setback_left + cfg.setback_right + 4
+    total_l = cfg.plot_y_extent + cfg.setback_front + cfg.setback_rear + 4
 
     scale = min(draw_w / total_w, draw_h / total_l) * 0.94  # near-full fill
-    plot_px = cfg.plot_width * scale
-    plot_py = cfg.plot_length * scale
+    plot_px = cfg.plot_x_extent * scale
+    plot_py = cfg.plot_y_extent * scale
 
     # Centre the compound in the drawing area
     compound_px = total_w * scale
@@ -168,8 +170,8 @@ def _draw_site_location_plan(
     # Compound boundary (site limit) — dashed
     comp_x = ox - cfg.setback_left * scale
     comp_y = oy - cfg.setback_front * scale
-    comp_w = (cfg.plot_width + cfg.setback_left + cfg.setback_right) * scale
-    comp_h = (cfg.plot_length + cfg.setback_front + cfg.setback_rear) * scale
+    comp_w = (cfg.plot_x_extent + cfg.setback_left + cfg.setback_right) * scale
+    comp_h = (cfg.plot_y_extent + cfg.setback_front + cfg.setback_rear) * scale
 
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(0.75)
@@ -191,8 +193,8 @@ def _draw_site_location_plan(
     # the floor-plan pages' strict-B/W convention (no solid colour fills)
     bldg_x = ox + cfg.setback_left * scale
     bldg_y = oy + cfg.setback_front * scale
-    bldg_w = (cfg.plot_width - cfg.setback_left - cfg.setback_right) * scale
-    bldg_h = (cfg.plot_length - cfg.setback_front - cfg.setback_rear) * scale
+    bldg_w = (cfg.plot_x_extent - cfg.setback_left - cfg.setback_right) * scale
+    bldg_h = (cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear) * scale
 
     if bldg_w > 4 and bldg_h > 4:
         c.setFillColor(HexColor("#FFFFFF"))
@@ -202,8 +204,8 @@ def _draw_site_location_plan(
         model_box = shapely_box(
             cfg.setback_left,
             cfg.setback_front,
-            cfg.plot_width - cfg.setback_right,
-            cfg.plot_length - cfg.setback_rear,
+            cfg.plot_x_extent - cfg.setback_right,
+            cfg.plot_y_extent - cfg.setback_rear,
         )
         _hatch_polygons(c, model_box, scale, ox, oy, spacing=4.0)
         c.setFillColor(HexColor("#000000"))
@@ -270,7 +272,7 @@ def _draw_site_location_plan(
 
     # North arrow — prominent, upper-right, fully inside the page margin
     _draw_large_north_arrow(
-        c, page_w - MARGIN - 24, page_h - 56 - 24, 20, cfg.road_side
+        c, page_w - MARGIN - 24, page_h - 56 - 24, 20, resolve_north_angle(cfg)
     )
 
     # Plot dimensions \u2014 dual-unit (ft-in prominent, metric beneath)
@@ -281,13 +283,13 @@ def _draw_site_location_plan(
     c.drawCentredString(
         ox + plot_px / 2,
         oy + plot_py + 19,
-        f"{metres_to_ftin(cfg.plot_width)} \u00d7 {metres_to_ftin(cfg.plot_length)}",
+        f"{metres_to_ftin(cfg.plot_x_extent)} \u00d7 {metres_to_ftin(cfg.plot_y_extent)}",
     )
     c.setFont("Helvetica", 7)
     c.drawCentredString(
         ox + plot_px / 2,
         oy + plot_py + 9,
-        f"({cfg.plot_width:.2f} m \u00d7 {cfg.plot_length:.2f} m)",
+        f"({cfg.plot_x_extent:.2f} m \u00d7 {cfg.plot_y_extent:.2f} m)",
     )
 
     # Caption line below the compound (+ road strip, if on the south side):
@@ -320,7 +322,7 @@ def _draw_site_location_plan(
         ("LOCALITY", owner.locality),
         ("CITY / ULB", owner.municipality),
         ("AUTHORITY", authority),
-        ("PLOT AREA", f"{cfg.plot_width * cfg.plot_length:.1f} sqm"),
+        ("PLOT AREA", f"{cfg.plot_x_extent * cfg.plot_y_extent:.1f} sqm"),
         ("DATE", date.today().strftime("%d/%m/%Y")),
     ]
     col_w = page_w / len(info_fields)
@@ -374,20 +376,37 @@ def _draw_setback_dim(
 
 
 def _draw_large_north_arrow(
-    c: canvas.Canvas, cx: float, cy: float, r: float, road_side: str
+    c: canvas.Canvas, cx: float, cy: float, r: float, north_angle_deg: float
 ) -> None:
-    """Prominent north arrow for approval plans."""
+    """Prominent north arrow for approval plans.
+
+    `north_angle_deg` is the clockwise angle from the plot's +y axis to true
+    north (see `app.engine.vastu.resolve_north_angle`). The spike is drawn as
+    an up-pointing triangle and rotated by that angle so its tip points at true
+    north on the sheet; the circle and the "NORTH" label stay horizontal.
+    """
     c.setFillColor(white)
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(1.5)
     c.circle(cx, cy, r, fill=1, stroke=1)
 
-    # Arrow always points geographic N — road_side tells which edge faces road
+    # Rotate the up-pointing triangle (tip on +y, sheet bearing 90°) clockwise
+    # by `north_angle_deg`, placing the tip at sheet bearing 90 - north_angle_deg.
+    theta = math.radians(-north_angle_deg)
+    cth, sth = math.cos(theta), math.sin(theta)
+    rel_pts = [
+        (0.0, r * 0.85),
+        (-r * 0.35, -r * 0.35),
+        (0.0, -r * 0.1),
+        (r * 0.35, -r * 0.35),
+    ]
+    pts = [(cx + x * cth - y * sth, cy + x * sth + y * cth) for x, y in rel_pts]
+
     p = c.beginPath()
-    p.moveTo(cx, cy + r * 0.85)
-    p.lineTo(cx - r * 0.35, cy - r * 0.35)
-    p.lineTo(cx, cy - r * 0.1)
-    p.lineTo(cx + r * 0.35, cy - r * 0.35)
+    p.moveTo(*pts[0])
+    p.lineTo(*pts[1])
+    p.lineTo(*pts[2])
+    p.lineTo(*pts[3])
     p.close()
     c.setFillColor(HexColor("#000000"))
     c.drawPath(p, fill=1, stroke=0)
@@ -433,7 +452,7 @@ def _draw_far_strip(
     c: canvas.Canvas, layout: Layout, cfg: PlotConfig, authority: str, page_w: float
 ) -> None:
     """Single-line FAR summary in a reserved band above the title block."""
-    plot_area = cfg.plot_width * cfg.plot_length
+    plot_area = cfg.plot_x_extent * cfg.plot_y_extent
     gf = sum(r.area for r in layout.ground_floor.rooms)
     ff = sum(r.area for r in layout.first_floor.rooms)
     total = gf + ff
@@ -519,7 +538,7 @@ def _draw_approval_floor_plan(
         _draw_setback_callouts,
         _draw_stair_geometry,
         _openings_schedule_height,
-        _opening_marks,
+        _openings_schedule_rows,
         _schedule_column_x,
         _shape_path,
         _standard_scale,
@@ -534,7 +553,7 @@ def _draw_approval_floor_plan(
     authority = _MUNICIPALITY_LABELS.get(owner.municipality, owner.municipality.upper())
 
     s, _denom = _standard_scale(cfg, page_w, page_h, reserve_w=SCHED_RESERVE)
-    plot_px, plot_py = cfg.plot_width * s, cfg.plot_length * s
+    plot_px, plot_py = cfg.plot_x_extent * s, cfg.plot_y_extent * s
     # Centre the plot in the left region (reserved schedule column on the
     # right) and centre the plot+road group vertically as a unit — the road
     # sits below (S) or above (N) the plot on the actual road side.
@@ -617,8 +636,8 @@ def _draw_approval_floor_plan(
         bottom_lane_y=oy - ROAD_GAP - ROAD_H - 10,
     )
     _draw_setback_callouts(c, cfg, drawing.bounds, s, ox, oy)
-    marks, opening_rows = _opening_marks(drawing)
-    _draw_opening_tags(c, drawing, marks, s, ox, oy)
+    opening_rows = _openings_schedule_rows(drawing)
+    _draw_opening_tags(c, drawing, s, ox, oy)
     # Schedule tables stacked bottom-right, above the FAR strip + title block.
     sched_x = _schedule_column_x(page_w, MARGIN)
     sched_base = TITLE_H + 18  # clear the full-width FAR strip band
@@ -630,7 +649,7 @@ def _draw_approval_floor_plan(
     _draw_scale_bar(c, MARGIN, TITLE_H + 22, s, _denom)
 
     _draw_large_north_arrow(
-        c, page_w - MARGIN - 20, page_h - MARGIN - 20, 18, cfg.road_side
+        c, page_w - MARGIN - 20, page_h - MARGIN - 20, 18, resolve_north_angle(cfg)
     )
     _draw_far_strip(c, layout, cfg, authority, page_w)
     _draw_approval_title_block(c, layout, cfg, owner, floor_label, authority, page_w)
@@ -846,7 +865,7 @@ def _draw_professional_title_block(
         ("OWNER", owner.owner_name),
         ("SURVEY NO.", owner.survey_number),
         ("ULB", f"{owner.municipality} ({authority})"),
-        ("SITE AREA", f"{cfg.plot_width * cfg.plot_length:.1f} SQM"),
+        ("SITE AREA", f"{cfg.plot_x_extent * cfg.plot_y_extent:.1f} SQM"),
         ("BUILT-UP GF", f"{gf:.1f} SQM"),
         ("BUILT-UP FF", f"{ff:.1f} SQM"),
         ("ENGINEER", owner.engineer_name),
@@ -892,7 +911,7 @@ def _draw_approval_title_block(
     ff_sqft = round(sum(r.area for r in layout.first_floor.rooms) * 10.764)
     total_sqft = gf_sqft + ff_sqft
     far_allowed = _FAR_LIMITS.get(authority, 2.0)
-    plot_area = cfg.plot_width * cfg.plot_length
+    plot_area = cfg.plot_x_extent * cfg.plot_y_extent
     if far <= 0.0 and plot_area:
         far = (
             sum(r.area for r in layout.ground_floor.rooms)
@@ -903,7 +922,7 @@ def _draw_approval_title_block(
         ("PROJECT", owner.locality),
         ("LAYOUT", f"{layout.id} - {layout.name}"),
         ("FLOOR", floor_label),
-        ("PLOT", f"{cfg.plot_width}x{cfg.plot_length}m"),
+        ("PLOT", f"{cfg.plot_x_extent}x{cfg.plot_y_extent}m"),
         ("SURVEY NO.", owner.survey_number),
         ("SCALE", f"1:{scale_ratio}"),
         ("AUTHORITY", authority),

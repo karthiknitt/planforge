@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 
 
 Direction = Literal["N", "S", "E", "W"]
@@ -37,14 +37,21 @@ class CustomRoomSpec(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    plot_length: float = Field(
+    plot_x_extent: float = Field(
         ge=5.0,
         le=100.0,
         allow_inf_nan=False,
-        description="Plot length in metres (5–100 m, residential)",
+        validation_alias=AliasChoices("plot_x_extent", "plot_width"),
+        serialization_alias="plot_x_extent",
+        description="Plot x-extent in metres (5–100 m, residential)",
     )
-    plot_width: float = Field(
-        ge=5.0, le=100.0, allow_inf_nan=False, description="Plot width in metres"
+    plot_y_extent: float = Field(
+        ge=5.0,
+        le=100.0,
+        allow_inf_nan=False,
+        validation_alias=AliasChoices("plot_y_extent", "plot_length"),
+        serialization_alias="plot_y_extent",
+        description="Plot y-extent in metres (5–100 m, residential)",
     )
     setback_front: float = Field(ge=0, le=20.0, allow_inf_nan=False)
     setback_rear: float = Field(ge=0, le=20.0, allow_inf_nan=False)
@@ -98,13 +105,13 @@ class ProjectCreate(BaseModel):
 
     @model_validator(mode="after")
     def _geometry_consistency(self) -> "ProjectCreate":
-        if self.setback_left + self.setback_right >= self.plot_width:
+        if self.setback_left + self.setback_right >= self.plot_x_extent:
             raise ValueError("Left + right setbacks consume the entire plot width")
-        if self.setback_front + self.setback_rear >= self.plot_length:
+        if self.setback_front + self.setback_rear >= self.plot_y_extent:
             raise ValueError("Front + rear setbacks consume the entire plot length")
         if self.plot_shape == "l_shaped":
-            if not (0 < self.cutout_width < self.plot_width) or not (
-                0 < self.cutout_height < self.plot_length
+            if not (0 < self.cutout_width < self.plot_x_extent) or not (
+                0 < self.cutout_height < self.plot_y_extent
             ):
                 raise ValueError(
                     "L-shaped plot needs a cutout larger than 0 and smaller than the plot"
@@ -125,11 +132,21 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    plot_length: float | None = Field(
-        default=None, ge=5.0, le=100.0, allow_inf_nan=False
+    plot_x_extent: float | None = Field(
+        default=None,
+        ge=5.0,
+        le=100.0,
+        allow_inf_nan=False,
+        validation_alias=AliasChoices("plot_x_extent", "plot_width"),
+        serialization_alias="plot_x_extent",
     )
-    plot_width: float | None = Field(
-        default=None, ge=5.0, le=100.0, allow_inf_nan=False
+    plot_y_extent: float | None = Field(
+        default=None,
+        ge=5.0,
+        le=100.0,
+        allow_inf_nan=False,
+        validation_alias=AliasChoices("plot_y_extent", "plot_length"),
+        serialization_alias="plot_y_extent",
     )
     setback_front: float | None = Field(
         default=None, ge=0, le=20.0, allow_inf_nan=False
@@ -183,8 +200,14 @@ class ProjectRead(BaseModel):
     id: str
     user_id: str
     name: str
-    plot_length: float
-    plot_width: float
+    plot_x_extent: float = Field(
+        validation_alias=AliasChoices("plot_x_extent", "plot_width"),
+        serialization_alias="plot_x_extent",
+    )
+    plot_y_extent: float = Field(
+        validation_alias=AliasChoices("plot_y_extent", "plot_length"),
+        serialization_alias="plot_y_extent",
+    )
     setback_front: float
     setback_rear: float
     setback_left: float
@@ -224,3 +247,73 @@ class ProjectRead(BaseModel):
     has_layouts: bool = False
 
     model_config = {"from_attributes": True}
+
+
+ProgrammeFlag = Literal[
+    "courtyard", "verandah", "car_porch_open", "pooja", "terrace", "study"
+]
+
+
+class SiteOptions(BaseModel):
+    compound_wall: bool = True
+    landscaped_setbacks: bool = True
+    gate_side: Literal["N", "S", "E", "W"] | None = None
+
+
+class GenerateRequest(BaseModel):
+    """Wizard "Site & Style" request — the wire contract the frontend Zod
+    schema (`frontend/src/lib/schemas.ts`) must mirror byte-for-byte.
+
+    Distinct from `ProjectCreate`: it carries the fields that decide HOW a plot
+    is generated (orientation, plot template, style, programme, site options)
+    on top of the dimensions a project already persists.
+    """
+
+    # Bounds mirror ProjectCreate's geometry contract above — this request
+    # skipped it entirely (CodeRabbit review on PR #95), so a plot with a
+    # zero/negative extent or setbacks that consume the whole plot passed
+    # here while ProjectCreate would have rejected it outright.
+    plot_x_extent: float = Field(ge=5.0, le=100.0, allow_inf_nan=False)
+    plot_y_extent: float = Field(ge=5.0, le=100.0, allow_inf_nan=False)
+    setback_front: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    setback_rear: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    setback_left: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    setback_right: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    num_bedrooms: int = Field(ge=1, le=6)
+    toilets: int = Field(ge=1, le=6)
+    parking: bool
+    north_angle_deg: float = 0.0
+    # RECT and L only — Task 9 raises on T and U at the engine. See "Task 9
+    # rulings" in the solver-capability-uplift plan.
+    plot_template: Literal["RECT", "L"] = "RECT"
+    notch_width: float | None = None
+    notch_depth: float | None = None
+    style_preset: str | None = None
+    programme: set[ProgrammeFlag] = set()
+    site: SiteOptions = SiteOptions()
+
+    @model_validator(mode="after")
+    def _check(self) -> "GenerateRequest":
+        self.north_angle_deg %= 360.0
+        if (
+            self.setback_front + self.setback_rear >= self.plot_y_extent
+            or self.setback_left + self.setback_right >= self.plot_x_extent
+        ):
+            raise ValueError("setbacks consume the entire plot")
+        if self.plot_template != "RECT":
+            if not self.notch_width or not self.notch_depth:
+                raise ValueError(
+                    "notch_width and notch_depth are required and must be "
+                    "positive for a non-rectangular plot"
+                )
+            if (
+                self.notch_width >= self.plot_x_extent
+                or self.notch_depth >= self.plot_y_extent
+            ):
+                raise ValueError("notch is larger than the plot")
+        if self.site.gate_side is None:
+            # road side is the plot edge nearest true south after rotation
+            self.site.gate_side = ("S", "W", "N", "E")[
+                int(((self.north_angle_deg + 45) % 360) // 90)
+            ]
+        return self

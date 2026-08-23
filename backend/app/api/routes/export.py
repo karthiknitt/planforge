@@ -10,6 +10,9 @@ from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+
 from app.config.settings import settings
 from app.db import get_db
 from app.dependencies.auth import get_current_user_id
@@ -19,6 +22,7 @@ from app.engine.models import PlotConfig
 from app.engine.pdf import render_pdf
 from app.engine.plan_geometry import build_floor_drawing
 from app.engine.structural_drawing_set import generate_structural_drawing_set
+from app.engine.vastu import resolve_north_angle
 from app.models.project import Project
 from app.quality.ccqs import compute_ccqs_deterministic
 from app.services.access import get_accessible_project
@@ -598,9 +602,9 @@ def _render_dxf(
     else:
         boundary_pts = [
             (0.0, 0.0),
-            (cfg.plot_width, 0.0),
-            (cfg.plot_width, cfg.plot_length),
-            (0.0, cfg.plot_length),
+            (cfg.plot_x_extent, 0.0),
+            (cfg.plot_x_extent, cfg.plot_y_extent),
+            (0.0, cfg.plot_y_extent),
         ]
     msp.add_lwpolyline(
         boundary_pts,
@@ -621,6 +625,7 @@ def _render_dxf(
     # Ground-floor building extents needed for post-loop setback callouts
     gf_bld_x = gf_bld_y = gf_bld_w = gf_bld_d = 0.0
     gf_main_door_x: float | None = None
+    gf_site = None  # the ground-floor drawing's canonical site context (T32)
 
     for floor_plan in floor_plans:
         z_offset = float(floor_plan.floor) * 3.0
@@ -642,13 +647,15 @@ def _render_dxf(
         global_max_y = max(global_max_y, bld_y + bld_d)
 
         # Canonical drawing for this floor — single source of truth for
-        # walls/openings/columns/dims/labels/stair (Sprint 4/5).
-        drawing = build_floor_drawing(floor_plan, cfg)
+        # walls/openings/columns/dims/labels/stair (Sprint 4/5) AND the site
+        # context (compound wall, gate, ground hatches — Task 32). The gate
+        # aligns to the GROUND floor's main entrance on every floor's payload,
+        # so non-GF builds get the captured value threaded through.
+        drawing = build_floor_drawing(floor_plan, cfg, site_main_door_cx=gf_main_door_x)
 
-        if floor_plan.floor == 0:
-            gf_main_door_x = next(
-                (o.cx for o in drawing.openings if getattr(o, "is_main", False)), None
-            )
+        if floor_plan.floor == 0 and drawing.site is not None:
+            gf_main_door_x = drawing.site.gate_cx
+            gf_site = drawing.site
 
         # 1-2. Walls: poché fill from the union of wall footprints with
         # opening boxes already subtracted (IS:962/AIA convention).
@@ -749,33 +756,39 @@ def _render_dxf(
                     z=z_offset,
                 )
 
-        # 6c. Furniture per room
+        # 6c. Furniture per room — projected from the canonical drawing (T33)
         for room in rooms:
-            draw_furniture(msp, room, layer="A-FURNITURE", z=z_offset)
-
-        # 6d. Open terrace hatching (ground floor only)
-        if floor_plan.floor == 0 and footprint is not None:
-            from shapely.geometry import Polygon as _SPoly
-            from shapely.geometry import box as _sbox
-
-            plot_poly = (
-                _SPoly([(float(x), float(y)) for x, y in cfg.plot_corners])
-                if cfg.plot_shape == "quadrilateral" and cfg.plot_corners
-                else _sbox(0, 0, cfg.plot_width, cfg.plot_length)
+            draw_furniture(
+                msp, room, drawing.fixtures, layer="A-FURNITURE", z=z_offset
             )
-            draw_open_terrace(msp, plot_poly, footprint, layer="A-TERRACE", z=z_offset)
+
+        # 6d. Open terrace hatching (ground floor only) — the canonical
+        # region, identical to the old per-renderer plot−footprint
+        # difference but derived once, in build_floor_drawing (Task 32)
+        if floor_plan.floor == 0 and footprint is not None and drawing.site is not None:
+            terrace_geoms = [
+                Polygon(p.exterior, p.holes) for p in drawing.site.open_terrace
+            ]
+            if terrace_geoms:
+                draw_open_terrace(
+                    msp,
+                    unary_union(terrace_geoms)
+                    if len(terrace_geoms) > 1
+                    else terrace_geoms[0],
+                    layer="A-TERRACE",
+                    z=z_offset,
+                )
 
         # 7. Dimension chains (room + plot/setback levels, all 4 sides)
         _draw_dim_chains_dxf(msp, drawing, layer="DIM-LINE")
 
     # ── North arrow (top-right, drawn once outside floor loop) ───────────────
     if global_max_x < float("inf"):
-        north_dir = getattr(cfg, "road_side", "S") or "S"
         draw_north_arrow(
             msp,
             cx=global_max_x + 2.5,
             cy=global_max_y - 1.5,
-            north_dir=north_dir,
+            north_angle_deg=resolve_north_angle(cfg),
             size=0.8,
             layer="TEXT",
         )
@@ -789,9 +802,10 @@ def _render_dxf(
         )
 
         # ── Compound boundary wall with gate ─────────────────────────────────
-        draw_compound_wall(
-            msp, cfg, layer="A-COMPOUND-WALL", z=0.0, gate_cx=gf_main_door_x
-        )
+        # Project the ground-floor drawing's canonical site (Task 32); the
+        # gate alignment was decided when that drawing was built.
+        if gf_site is not None:
+            draw_compound_wall(msp, gf_site, layer="A-COMPOUND-WALL", z=0.0)
 
         # ── Title block (below the drawing) ───────────────────────────────────
         gf_sqft = sum(r.area for r in layout.ground_floor.rooms) * 10.764
@@ -802,8 +816,8 @@ def _render_dxf(
             layout_id=layout.id,
             gf_area_sqft=gf_sqft,
             ff_area_sqft=ff_sqft,
-            plot_w=cfg.plot_width,
-            plot_l=cfg.plot_length,
+            plot_w=cfg.plot_x_extent,
+            plot_l=cfg.plot_y_extent,
             insert_x=global_min_x,
             insert_y=global_min_y - 5.5,
         )

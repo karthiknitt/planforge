@@ -25,6 +25,7 @@ import math
 from typing import TYPE_CHECKING
 
 from shapely.geometry import Point, Polygon, box
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
 from app.engine.cad_elements import (
@@ -34,15 +35,24 @@ from app.engine.cad_elements import (
     FloorDrawing,
     LabelBox,
     Opening,
+    SiteContext,
+    SitePolygon,
     StairGeometry,
     WallJunction,
     WallSegment,
 )
 from app.engine.cad_primitives import metres_to_ftin
+from app.engine.furniture import derive_fixtures
 from app.engine.standards import OpeningStandards
 
 if TYPE_CHECKING:
-    from app.engine.models import FloorPlan, PlotConfig, Room
+    from app.engine.models import (
+        AddedOpening,
+        FloorPlan,
+        OpeningOverride,
+        PlotConfig,
+        Room,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +94,11 @@ _NO_DOOR_TYPES = _PARKING_TYPES | {"passage", "foyer", "courtyard"}
 _SINGLE_DOOR_TYPES = _WET_TYPES | {"kitchen"}
 # rooms a navigability path may terminate in but never transit through
 _NO_TRANSIT_TYPES = _SINGLE_DOOR_TYPES | _PARKING_TYPES
+# Public aliases: consumers outside this module (the openings API's
+# alternative-door suggester) need the same classification the navigability
+# graph itself uses, not a hand-rolled local copy that can drift from it.
+NO_TRANSIT_TYPES = _NO_TRANSIT_TYPES
+PARKING_TYPES = _PARKING_TYPES
 # rooms the staircase may legitimately take its door from
 _CIRCULATION_TYPES = {"passage", "foyer", "courtyard", "living", "dining"}
 # shared-wall run the staircase needs with one of those to fit a door leaf
@@ -163,15 +178,152 @@ class _Edge:
         self.covered: list[tuple[float, float]] = []
 
 
+def _part_boxes(rooms: list[Room]) -> list[Polygon]:
+    """One Shapely box per occupied rectangle across `rooms`.
+
+    Shape templates (Task 6) make a room the UNION of 1-3 rectangles, so any
+    footprint/mass computation must union parts, not room bounding boxes —
+    an L room's notch is empty space, not room mass.
+    """
+    return [box(p.x, p.y, p.x + p.width, p.y + p.depth) for r in rooms for p in r.rects]
+
+
+def _room_polygon(room: Room) -> BaseGeometry:
+    """The room's occupied area — the union of its shape-template parts.
+
+    For a "RECT" room this is exactly `box(x, y, x + width, y + depth)`:
+    `Room.rects` is then a 1-tuple and `unary_union` of a single box returns
+    it with its coordinates untouched. That identity is what keeps the
+    union-boundary walk below behaviour-preserving for every existing layout.
+    """
+    return unary_union(_part_boxes([room]))
+
+
+def _rooms_polygon(rooms: list[Room]) -> BaseGeometry:
+    boxes = _part_boxes(rooms)
+    return unary_union(boxes) if boxes else Polygon()
+
+
+def _merge_collinear(edges: list[_Edge]) -> list[_Edge]:
+    """Merge touching runs that share a coordinate and an outward normal.
+
+    Shapely's union emits a vertex wherever two input rectangles met, so an
+    L's west side arrives as two collinear segments; without this the wall
+    passes would treat them as two separate runs and merge them back with a
+    different (and lossy) gap tolerance.
+
+    Output order is (normal, coord, lo) — for a RECT room that is exactly the
+    order the pre-template `_room_edges` emitted (W then E, S then N), which
+    matters because `_snap_ends` mutates walls in list order.
+    """
+    out: list[_Edge] = []
+    for e in sorted(edges, key=lambda z: (z.normal, z.coord, z.lo)):
+        prev = out[-1] if out else None
+        if (
+            prev is not None
+            and prev.normal == e.normal
+            and abs(prev.coord - e.coord) < 1e-9
+            and prev.hi >= e.lo - 1e-9
+        ):
+            prev.hi = max(prev.hi, e.hi)
+        else:
+            out.append(e)
+    return out
+
+
+def _boundary_edges(geom: BaseGeometry) -> tuple[list[_Edge], list[_Edge]]:
+    """Axis-aligned boundary runs of a rectilinear polygon, split into
+    (vertical, horizontal).
+
+    The outward normal is read off the ring's WINDING, not from a
+    representative interior point: a representative point of an L-shaped
+    polygon sits on the wrong side of at least one of its own edges, which
+    would flip that edge's normal and turn a re-entrant corner into a
+    phantom exterior surface. For a counter-clockwise ring the interior lies
+    to the LEFT of travel, so the outward normal is the right-hand normal
+    (dy, -dx); a clockwise ring (what `unary_union` returns for a merged
+    footprint) is the mirror image. Interior rings of a valid polygon are
+    wound opposite to the exterior, so the same rule points their normals
+    into the hole, which is correct — a hole's surface faces open space.
+    """
+    verts: list[_Edge] = []
+    horiz: list[_Edge] = []
+    polys = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+    for poly in polys:
+        if poly.is_empty or poly.geom_type != "Polygon":
+            continue
+        for ring in [poly.exterior, *poly.interiors]:
+            ccw = ring.is_ccw
+            coords = list(ring.coords)
+            for (x0, y0), (x1, y1) in zip(coords, coords[1:], strict=False):
+                dx, dy = x1 - x0, y1 - y0
+                if abs(dx) < 1e-9 and abs(dy) > 1e-9:
+                    verts.append(
+                        _Edge(
+                            x0,
+                            min(y0, y1),
+                            max(y0, y1),
+                            1 if (dy > 0) == ccw else -1,
+                        )
+                    )
+                elif abs(dy) < 1e-9 and abs(dx) > 1e-9:
+                    horiz.append(
+                        _Edge(
+                            y0,
+                            min(x0, x1),
+                            max(x0, x1),
+                            -1 if (dx > 0) == ccw else 1,
+                        )
+                    )
+    return _merge_collinear(verts), _merge_collinear(horiz)
+
+
 def _room_edges(rooms: list[Room]) -> tuple[list[_Edge], list[_Edge]]:
+    """Union-boundary runs of every room, as (vertical, horizontal).
+
+    A RECT room yields its four bbox edges — identical to the pre-template
+    behaviour. An L/T/U room yields the runs of its part union, so its notch
+    is a real re-entrant corner and no wall is drawn across it.
+    """
     vert: list[_Edge] = []
     hor: list[_Edge] = []
     for r in rooms:
-        vert.append(_Edge(r.x, r.y, r.y + r.depth, -1))
-        vert.append(_Edge(r.x + r.width, r.y, r.y + r.depth, +1))
-        hor.append(_Edge(r.y, r.x, r.x + r.width, -1))
-        hor.append(_Edge(r.y + r.depth, r.x, r.x + r.width, +1))
+        v, h = _boundary_edges(_room_polygon(r))
+        vert.extend(v)
+        hor.extend(h)
     return vert, hor
+
+
+_SIDE_OF_EDGE: dict[tuple[bool, int], str] = {
+    (True, -1): "W",
+    (True, +1): "E",
+    (False, -1): "S",
+    (False, +1): "N",
+}
+_SIDE_IS_HORIZONTAL: dict[str, bool] = {"N": True, "S": True, "E": False, "W": False}
+_SIDE_SIGN: dict[str, int] = {"N": +1, "E": +1, "S": -1, "W": -1}
+
+
+def _edges_by_side(room: Room) -> dict[str, list[tuple[float, float, float]]]:
+    """Union-boundary runs of `room` as (coord, lo, hi), keyed by the
+    plot-relative side letter `Room.open_sides` uses.
+
+    A RECT room has exactly one run per side; an L room can have two runs on
+    the same side (e.g. its base band's east face and its leg's east face),
+    which is precisely why `Room.open_sides` cannot be resolved from the
+    bounding box.
+    """
+    vert, hor = _boundary_edges(_room_polygon(room))
+    out: dict[str, list[tuple[float, float, float]]] = {
+        "N": [],
+        "S": [],
+        "E": [],
+        "W": [],
+    }
+    for is_vertical, edges in ((True, vert), (False, hor)):
+        for e in edges:
+            out[_SIDE_OF_EDGE[(is_vertical, e.normal)]].append((e.coord, e.lo, e.hi))
+    return out
 
 
 def _pair_edges(
@@ -239,6 +391,205 @@ def _edge_faces_open_space(
     return footprint.intersection(strip).area < 1e-9
 
 
+def _open_edge_intervals(
+    rooms: list[Room], tol: float
+) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+    """Centreline intervals declared wall-less by `Room.open_sides`.
+
+    Returns (vertical, horizontal); each entry is (coord, lo, hi). Vertical
+    entries are x-coords spanning [y_lo, y_hi]; horizontal are y-coords
+    spanning [x_lo, x_hi]. `tol` is unused for the interval itself but kept
+    in the signature so callers pass the same slack used to match walls to
+    these intervals.
+
+    Runs come from the room's part UNION boundary, not its bounding box: an
+    L-shaped car porch declared open on "E" has two east-facing runs at two
+    different x-coords, and its bbox's east line covers stretches where the
+    room isn't even present.
+    """
+    _ = tol
+    vertical: list[tuple[float, float, float]] = []
+    horizontal: list[tuple[float, float, float]] = []
+    for r in rooms:
+        if not r.open_sides:
+            continue
+        sides = _edges_by_side(r)
+        for side in r.open_sides:
+            sink = horizontal if _SIDE_IS_HORIZONTAL[side] else vertical
+            sink.extend(sides[side])
+    return vertical, horizontal
+
+
+def _closed_edge_intervals(
+    rooms: list[Room], iwt: float, tol: float
+) -> tuple[set[tuple[float, float, float]], set[tuple[float, float, float]]]:
+    """Union-boundary runs that some room did NOT declare open, merged per
+    centreline. Returns (vertical, horizontal).
+
+    A shared wall where only one side declared itself open stays built, so
+    these are the intervals that rescue a wall from the open-side filter.
+    They are kept split by orientation so a vertical covered edge cannot
+    rescue a horizontal wall that merely shares its coordinate value.
+
+    Merging per centreline (rather than matching raw per-room runs) is
+    load-bearing: by the time the filter runs, a party wall passing several
+    neighbours is ONE merged segment. The `iwt + tol` gap joins neighbours
+    separated by a normal partition slit — that slit is filled by the
+    partition itself, so the covered run is continuous.
+    """
+    raw_v: dict[float, list[tuple[float, float]]] = {}
+    raw_h: dict[float, list[tuple[float, float]]] = {}
+    for r in rooms:
+        sides = _edges_by_side(r)
+        for side, runs in sides.items():
+            if side in r.open_sides:
+                continue
+            sink = raw_h if _SIDE_IS_HORIZONTAL[side] else raw_v
+            for coord, lo, hi in runs:
+                sink.setdefault(round(coord, 6), []).append((lo, hi))
+    return (
+        {
+            (coord, lo, hi)
+            for coord, spans in raw_v.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        },
+        {
+            (coord, lo, hi)
+            for coord, spans in raw_h.items()
+            for lo, hi in _merge_intervals(spans, iwt + tol)
+        },
+    )
+
+
+def _apply_open_sides(
+    w: WallSegment,
+    open_v: list[tuple[float, float, float]],
+    open_h: list[tuple[float, float, float]],
+    covered_v: set[tuple[float, float, float]],
+    covered_h: set[tuple[float, float, float]],
+    tol: float,
+) -> list[WallSegment]:
+    """`w` with its declared-open stretches SUBTRACTED — 0, 1 or 2 segments.
+
+    Subtraction, not all-or-nothing containment: `_merge_intervals` happily
+    joins an open porch's ring run with a normal neighbour's into a single
+    segment, and a containment test then keeps the whole thing (the merged
+    wall is not *wholly* inside the porch's open interval), leaving a wall
+    across the porch opening. Splitting removes only the open share.
+
+    `tol` must absorb the offset between a room edge and the centreline of
+    the wall serving it: an external ring wall sits ewt/2 *outside* the edge
+    and is snapped out to the ring corners, a paired internal wall sits at
+    the half-gap midpoint. Callers pass `ewt / 2 + tol`, the worst case.
+    Both the open runs AND the rescuing covered runs are widened by that
+    slack — widening the covered runs is what keeps the filter conservative,
+    so a wall shared with a non-open neighbour survives intact rather than
+    being nibbled at its ends.
+    """
+    is_v = abs(w.x1 - w.x2) < 1e-6
+    coord = w.x1 if is_v else w.y1
+    lo, hi = (
+        (min(w.y1, w.y2), max(w.y1, w.y2))
+        if is_v
+        else (min(w.x1, w.x2), max(w.x1, w.x2))
+    )
+    opens = [
+        (ilo - tol, ihi + tol)
+        for c, ilo, ihi in (open_v if is_v else open_h)
+        if abs(c - coord) <= tol
+    ]
+    if not opens:
+        return [w]
+    covered = [
+        (clo - tol, chi + tol)
+        for cc, clo, chi in (covered_v if is_v else covered_h)
+        if abs(cc - coord) <= tol
+    ]
+    truly_open: list[tuple[float, float]] = []
+    for span in _merge_intervals(opens, 0.0):
+        truly_open.extend(_subtract_intervals(span, covered))
+    if not truly_open:
+        return [w]
+
+    out: list[WallSegment] = []
+    for rlo, rhi in _subtract_intervals((lo, hi), truly_open):
+        if rhi - rlo < _MIN_WALL_LEN:
+            continue
+        if abs(rlo - lo) < 1e-9 and abs(rhi - hi) < 1e-9:
+            out.append(w)
+        elif is_v:
+            out.append(WallSegment(coord, rlo, coord, rhi, w.thickness, kind=w.kind))
+        else:
+            out.append(WallSegment(rlo, coord, rhi, coord, w.thickness, kind=w.kind))
+    return out
+
+
+def _validate_carves(rooms: list[Room], tol: float = 0.01) -> None:
+    """Every room with a `parent_id` must resolve, be acyclic, and lie inside
+    that parent's rectangle.
+
+    A carve that escapes its parent would add mass to the floor footprint
+    that `_structural_rooms` has already filtered out, silently shrinking the
+    plate and the void-classification footprint. Fail loudly instead.
+
+    Cycles are rejected for a nastier reason: every room in a cycle has a
+    `parent_id`, so `_structural_rooms` returns an EMPTY list and the plate
+    silently degrades from the room union to the whole buildable plate inset
+    by ewt — a 4-sided ring drawn around metres of empty plot, with no error
+    anywhere. Containment alone cannot catch this (`r.parent_id == r.id` is
+    trivially "contained"), so it is a separate pass.
+    """
+    by_id = {r.id: r for r in rooms}
+
+    # Pass 1: every parent_id resolves.
+    for r in rooms:
+        if r.parent_id is not None and r.parent_id not in by_id:
+            raise ValueError(f"room {r.id!r} has unknown parent_id {r.parent_id!r}")
+
+    # Pass 2: no cycles (self-parent is the length-1 case).
+    for r in rooms:
+        if r.parent_id is None:
+            continue
+        chain = [r.id]
+        seen = {r.id}
+        node = r
+        while node.parent_id is not None:
+            node = by_id[node.parent_id]
+            chain.append(node.id)
+            if node.id in seen:
+                raise ValueError(
+                    "parent_id cycle among carved rooms: " + " -> ".join(chain)
+                )
+            seen.add(node.id)
+
+    # Pass 3: containment.
+    for r in rooms:
+        if r.parent_id is None:
+            continue
+        p = by_id[r.parent_id]
+        if not (
+            r.x >= p.x - tol
+            and r.y >= p.y - tol
+            and r.x + r.width <= p.x + p.width + tol
+            and r.y + r.depth <= p.y + p.depth + tol
+        ):
+            raise ValueError(
+                f"carved room {r.id!r} is not contained in parent {p.id!r}"
+            )
+
+
+def _structural_rooms(rooms: list[Room]) -> list[Room]:
+    """Rooms that contribute mass to the floor footprint.
+
+    Carved children (`parent_id` set) do NOT: they sit inside a parent that
+    already contributes the same area, so unioning them in again would
+    double-count that mass. Only the FOOTPRINT UNION is filtered — edge
+    pairing still runs over the full room list, so a carve's own edges
+    become real interior partitions.
+    """
+    return [r for r in rooms if r.parent_id is None]
+
+
 def _plate_bounds(
     rooms: list[Room], buildable: Polygon, ewt: float
 ) -> tuple[float, float, float, float]:
@@ -246,11 +597,15 @@ def _plate_bounds(
 
     Room-union bbox when rooms exist (matches the derive_walls ring);
     buildable inset by ewt otherwise. THE single source of truth for both
-    wall rings and opening placement."""
-    if rooms:
-        footprint = unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
-        )
+    wall rings and opening placement — hence the carve filter lives here,
+    not at the call sites, so `derive_walls` and `derive_openings` can never
+    disagree about what the plate is."""
+    # Bound to a distinct name (not a rebind of `rooms`) so it stays obvious
+    # that the plate is built from STRUCTURAL mass only, while callers still
+    # hand in the full room list.
+    structural = _structural_rooms(rooms)
+    if structural:
+        footprint = _rooms_polygon(structural)
         px1, py1, px2, py2 = footprint.bounds
         # Clear-rect rooms always leave iwt slits between neighbours, so an
         # area-vs-bbox check false-alarms on every full-plate layout. This is
@@ -307,6 +662,7 @@ def derive_walls(
     Only `_place_main_entrance`'s `gate_x` (compound-wall gate/road
     alignment) still keys off the buildable plate.
     """
+    _validate_carves(rooms, tol)
     px1, py1, px2, py2 = _plate_bounds(rooms, buildable, ewt)
 
     cxl, cxr = px1 - ewt / 2, px2 + ewt / 2
@@ -415,12 +771,25 @@ def derive_walls(
     # ring + paired-internal walls already placed above (real built
     # structure) closes that sliver correctly, while a genuine void (roof
     # void, light well) — far wider than any wall — still reads as open.
+    # Carved children are excluded from the union (`_structural_rooms`): their
+    # mass is already contributed by the parent they sit inside, and counting
+    # it twice would let a stray carve inflate the footprint. Their EDGES are
+    # still present in `vert_edges`/`hor_edges` below, so a carve's own sides
+    # are classified against the parent's mass and become internal partitions.
+    #
+    # NOT DEAD CODE, but currently unobservable HERE: a validated carve is a
+    # subset of its parent, so the union polygon is identical either way, and
+    # `_validate_carves`'s 0.01 m slack cannot reach `_edge_faces_open_space`
+    # either — that probe starts its strip at eps = 0.02 outward. The filter
+    # is what keeps that true: raise the carve tolerance above 0.02, or let a
+    # carve be anything other than a strict sub-rectangle (Task 6's shape
+    # templates), and removing it starts corrupting void classification.
+    # `_plate_bounds` applies the same filter and IS observable today (a carve
+    # exploiting the 0.01 m slack would otherwise inflate the plate bbox).
+    structural = _structural_rooms(rooms)
     footprint = (
-        unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
-            + [_raw_wall_box(w) for w in walls]
-        )
-        if rooms
+        unary_union(_part_boxes(structural) + [_raw_wall_box(w) for w in walls])
+        if structural
         else None
     )
     orphan_groups: dict[tuple[str, float, str], list[tuple[float, float]]] = {}
@@ -449,7 +818,90 @@ def derive_walls(
 
     _snap_ends(walls)
     _trim_room_overreach(walls, rooms, ewt, iwt)
+
+    # Drop walls on edges the room declared open (`Room.open_sides`) — a car
+    # porch open to the driveway, a balcony open to the front. Applied last,
+    # after snapping/trimming, so the comparison sees final centrelines.
+    # Slack is ewt/2 + tol: the wall serving a room edge does NOT sit on that
+    # edge — an external ring wall is ewt/2 outside it and snapped out to the
+    # ring corners; a paired internal wall sits at the inter-room gap's
+    # midpoint. A ring wall that `_merge_intervals` joined across an open
+    # room AND a normal neighbour is SPLIT (interval subtraction), so only
+    # the open room's share disappears.
+    open_slack = ewt / 2 + tol
+    open_v, open_h = _open_edge_intervals(rooms, open_slack)
+    if open_v or open_h:
+        # A room edge that is NOT declared open, sitting on the same
+        # centreline, keeps that stretch of wall alive (party wall).
+        covered_v, covered_h = _closed_edge_intervals(rooms, iwt, tol)
+        walls = [
+            piece
+            for w in walls
+            for piece in _apply_open_sides(
+                w, open_v, open_h, covered_v, covered_h, open_slack
+            )
+        ]
+    _assign_wall_ids(walls, rooms, tol)
     return walls
+
+
+_ID_CONTACT_SLACK = 0.03  # band slack beyond half-thickness for room contact
+_ID_MIN_CONTACT_AREA = 2e-4  # ~7 mm of contact across the slack band
+
+
+def _assign_wall_ids(
+    walls: list[WallSegment], rooms: list[Room], tol: float = 0.01
+) -> None:
+    """Give every wall a deterministic, topology-derived id (Phase 7, Task 26).
+
+    Identity is a pure function of the wall's supporting rooms — the room-id
+    set on each side of its centreline — never of list position. The plain
+    room-pair scheme the plan sketched cannot stand alone: collinear merging
+    can back ONE run with three or more rooms ({a} | {b, c}), and an
+    open-side split leaves two pieces on the same centreline backed by
+    identical room sets. The wall's own centreline coordinate and [lo, hi]
+    span are therefore folded in as a disambiguator — geometry that only the
+    wall itself contributes, so moving an unrelated room (which leaves both
+    the supporting-room sets and this span untouched) preserves the id.
+    """
+    polys = [(r.id, _room_polygon(r)) for r in rooms if r.id]
+    for w in walls:
+        vertical = _is_vertical(w)
+        coord = w.x1 if vertical else w.y1
+        lo, hi = (
+            (min(w.y1, w.y2), max(w.y1, w.y2))
+            if vertical
+            else (min(w.x1, w.x2), max(w.x1, w.x2))
+        )
+        t_half = w.thickness / 2 + _ID_CONTACT_SLACK
+        neg_box = (
+            box(coord - t_half, lo, coord, hi)
+            if vertical
+            else box(lo, coord - t_half, hi, coord)
+        )
+        pos_box = (
+            box(coord, lo, coord + t_half, hi)
+            if vertical
+            else box(lo, coord, hi, coord + t_half)
+        )
+        neg_ids: set[str] = set()
+        pos_ids: set[str] = set()
+        for rid, poly in polys:
+            neg_a = poly.intersection(neg_box).area
+            pos_a = poly.intersection(pos_box).area
+            if max(neg_a, pos_a) <= _ID_MIN_CONTACT_AREA:
+                continue
+            (neg_ids if neg_a >= pos_a else pos_ids).add(rid)
+        lft = "+".join(sorted(neg_ids)) or "-"
+        rgt = "+".join(sorted(pos_ids)) or "-"
+        # 6 decimals (micron precision) rather than 2 (cm precision): two
+        # walls sharing kind and supporting rooms but differing by <5mm in
+        # this coordinate would otherwise collide on the same id, silently
+        # breaking the id-uniqueness contract this string exists to provide.
+        w.id = (
+            f"w:{'v' if vertical else 'h'}:{w.kind[0]}:{lft}>{rgt}"
+            f"@{coord:.6f}:{lo:.6f}-{hi:.6f}"
+        )
 
 
 def _trim_room_overreach(
@@ -463,12 +915,15 @@ def _trim_room_overreach(
     with no wall there to close against and bite into its clear interior.
     Trims such ends back so the effective reach past a bare room corner
     matches what iwt gave before (#75 promoted some orphans to ewt).
+
+    Operates on the FULL room list on purpose — a carved child is clear
+    interior that a wall must not bite into just as much as its parent is —
+    but on each room's part UNION, not its bounding box: an L room's notch is
+    open space, and a wall is allowed to reach into it.
     """
     if not rooms:
         return
-    rooms_union = unary_union(
-        [box(r.x, r.y, r.x + r.width, r.y + r.depth) for r in rooms]
-    )
+    rooms_union = _rooms_polygon(rooms)
     if rooms_union.is_empty:
         return
     margin = (ewt - iwt) / 2
@@ -799,29 +1254,49 @@ class _Adjacency:
 
 
 def _adjacencies(rooms: list[Room], iwt: float, tol: float) -> list[_Adjacency]:
+    """Facing wall runs between every ordered room pair.
+
+    Runs over PART pairs, not room bounding boxes: an L-shaped room touches
+    its neighbour only along the parts that actually reach it, and its bbox
+    would claim a shared wall across its own notch — a door hung there would
+    open onto nothing. Runs on the same centreline are merged back so a
+    multi-part contact still reads as one door-able wall.
+
+    For a "RECT" room `Room.rects` is a 1-tuple, so this reduces exactly to
+    the pre-template bbox pairing, in the same order.
+    """
     out: list[_Adjacency] = []
-    for i, ra in enumerate(rooms):
-        for j, rb in enumerate(rooms):
+    parts = [r.rects for r in rooms]
+    for i, parts_a in enumerate(parts):
+        for j, parts_b in enumerate(parts):
             if i == j:
                 continue
-            # ra's right edge facing rb's left edge
-            gap = rb.x - (ra.x + ra.width)
-            if -tol <= gap <= iwt + tol:
-                lo = max(ra.y, rb.y)
-                hi = min(ra.y + ra.depth, rb.y + rb.depth)
-                if hi - lo >= 0.05:
-                    out.append(
-                        _Adjacency(i, j, True, (ra.x + ra.width + rb.x) / 2, lo, hi)
-                    )
-            # ra's top edge facing rb's bottom edge
-            gap = rb.y - (ra.y + ra.depth)
-            if -tol <= gap <= iwt + tol:
-                lo = max(ra.x, rb.x)
-                hi = min(ra.x + ra.width, rb.x + rb.width)
-                if hi - lo >= 0.05:
-                    out.append(
-                        _Adjacency(i, j, False, (ra.y + ra.depth + rb.y) / 2, lo, hi)
-                    )
+            for vertical in (True, False):
+                grouped: dict[float, list[tuple[float, float]]] = {}
+                for pa in parts_a:
+                    for pb in parts_b:
+                        if vertical:
+                            # pa's right edge facing pb's left edge
+                            gap = pb.x - (pa.x + pa.width)
+                            lo, hi = (
+                                max(pa.y, pb.y),
+                                min(pa.y + pa.depth, pb.y + pb.depth),
+                            )
+                            mid = (pa.x + pa.width + pb.x) / 2
+                        else:
+                            # pa's top edge facing pb's bottom edge
+                            gap = pb.y - (pa.y + pa.depth)
+                            lo, hi = (
+                                max(pa.x, pb.x),
+                                min(pa.x + pa.width, pb.x + pb.width),
+                            )
+                            mid = (pa.y + pa.depth + pb.y) / 2
+                        if not (-tol <= gap <= iwt + tol) or hi - lo < 0.05:
+                            continue
+                        grouped.setdefault(round(mid, 6), []).append((lo, hi))
+                for mid in sorted(grouped):
+                    for lo, hi in _merge_intervals(grouped[mid], tol):
+                        out.append(_Adjacency(i, j, vertical, mid, lo, hi))
     return out
 
 
@@ -865,16 +1340,25 @@ def _exterior_edges(
     room, plate: tuple[float, float, float, float], ewt: float, tol: float
 ):
     """Yield (is_horizontal, ring_coord, lo, hi) for room edges on the floor's
-    exterior surface (the room-union plate, see `_plate_bounds`)."""
+    exterior surface (the room-union plate, see `_plate_bounds`).
+
+    Spans come from the room's union-boundary runs, so an L room whose bbox
+    reaches the plate boundary contributes only the stretch its parts
+    actually occupy — the rest of that bbox line is open air over the notch,
+    with no wall for an opening to cut into.
+    """
     px1, py1, px2, py2 = plate
-    if abs(room.x - px1) <= 2 * tol:
-        yield (False, px1 - ewt / 2, room.y, room.y + room.depth)
-    if abs(room.x + room.width - px2) <= 2 * tol:
-        yield (False, px2 + ewt / 2, room.y, room.y + room.depth)
-    if abs(room.y - py1) <= 2 * tol:
-        yield (True, py1 - ewt / 2, room.x, room.x + room.width)
-    if abs(room.y + room.depth - py2) <= 2 * tol:
-        yield (True, py2 + ewt / 2, room.x, room.x + room.width)
+    vert, hor = _boundary_edges(_room_polygon(room))
+    for e in vert:
+        if e.normal == -1 and abs(e.coord - px1) <= 2 * tol:
+            yield (False, px1 - ewt / 2, e.lo, e.hi)
+        elif e.normal == +1 and abs(e.coord - px2) <= 2 * tol:
+            yield (False, px2 + ewt / 2, e.lo, e.hi)
+    for e in hor:
+        if e.normal == -1 and abs(e.coord - py1) <= 2 * tol:
+            yield (True, py1 - ewt / 2, e.lo, e.hi)
+        elif e.normal == +1 and abs(e.coord - py2) <= 2 * tol:
+            yield (True, py2 + ewt / 2, e.lo, e.hi)
 
 
 def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
@@ -887,9 +1371,13 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
     walls live outside them) — matching against the raw room edge with only
     `tol` slack misses every real wall, since that offset (ewt/2 = 0.115 m)
     dwarfs `tol` (typically 0.01 m).
+
+    Matching is against the room's union-boundary runs rather than its four
+    bbox edges: a non-RECT room's notch faces are real exterior surfaces
+    that no bbox edge describes, and its bbox lines run past where the room
+    stops.
     """
-    rx1, ry1 = room.x, room.y
-    rx2, ry2 = room.x + room.width, room.y + room.depth
+    vert, hor = _boundary_edges(_room_polygon(room))
     for w in walls:
         if w.kind != "external":
             continue
@@ -897,19 +1385,61 @@ def _exterior_wall_edges(room, walls: list[WallSegment], tol: float):
         if abs(w.x1 - w.x2) < 1e-9:  # vertical wall
             wall_x = w.x1
             wy1, wy2 = min(w.y1, w.y2), max(w.y1, w.y2)
-            if abs(wall_x - (rx1 - t)) <= tol or abs(wall_x - (rx2 + t)) <= tol:
-                overlap_lo = max(wy1, ry1)
-                overlap_hi = min(wy2, ry2)
+            for e in vert:
+                if abs(wall_x - (e.coord + e.normal * t)) > tol:
+                    continue
+                overlap_lo = max(wy1, e.lo)
+                overlap_hi = min(wy2, e.hi)
                 if overlap_hi - overlap_lo > tol:
                     yield (False, wall_x, overlap_lo, overlap_hi)
         else:  # horizontal wall
             wall_y = w.y1
             wx1, wx2 = min(w.x1, w.x2), max(w.x1, w.x2)
-            if abs(wall_y - (ry1 - t)) <= tol or abs(wall_y - (ry2 + t)) <= tol:
-                overlap_lo = max(wx1, rx1)
-                overlap_hi = min(wx2, rx2)
+            for e in hor:
+                if abs(wall_y - (e.coord + e.normal * t)) > tol:
+                    continue
+                overlap_lo = max(wx1, e.lo)
+                overlap_hi = min(wx2, e.hi)
                 if overlap_hi - overlap_lo > tol:
                     yield (True, wall_y, overlap_lo, overlap_hi)
+
+
+def _is_declared_open_edge(
+    room: Room,
+    is_horizontal: bool,
+    coord: float,
+    ewt: float,
+    tol: float,
+    lo: float | None = None,
+    hi: float | None = None,
+) -> bool:
+    """True if (`coord`, [`lo`, `hi`]) sits on a room edge the room declared
+    open via `Room.open_sides` — no wall was ever drawn there (see
+    `derive_walls`'s own open-edge subtraction), so no opening may be cut
+    into it either.
+
+    A wall centreline serving a room edge sits `ewt / 2` outside the raw
+    room edge (external ring convention), so the match slack must absorb
+    that offset — `ewt / 2 + tol`, matching `derive_walls`'s `open_slack`.
+
+    Matched against the room's union-boundary runs, and against the
+    candidate's own span when given: a non-RECT room can have two runs on
+    the same declared-open side at different coordinates, and one run of a
+    side can be open while the bbox line it lies on is not the room at all.
+    """
+    if not room.open_sides:
+        return False
+    slack = ewt / 2 + tol
+    sides = _edges_by_side(room)
+    for side in room.open_sides:
+        if _SIDE_IS_HORIZONTAL[side] != is_horizontal:
+            continue
+        for c, elo, ehi in sides[side]:
+            if abs(coord - (c + _SIDE_SIGN[side] * ewt / 2)) > slack:
+                continue
+            if lo is None or hi is None or (lo < ehi - tol and hi > elo + tol):
+                return True
+    return False
 
 
 def _all_exterior_edges(
@@ -921,16 +1451,24 @@ def _all_exterior_edges(
 ):
     """Yield all (is_horizontal, coord, lo, hi) exterior edges for a room,
     combining both plate-boundary edges and void-facing orphan walls marked
-    kind="external". Deduplicates edges that appear in both sources."""
+    kind="external". Deduplicates edges that appear in both sources.
+
+    Edges lying on a side the room declared open (`Room.open_sides`) are
+    skipped entirely — there is no wall there for an opening to cut into.
+    """
     seen = set()
     # First collect from plate bounds
     for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol, lo, hi):
+            continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
             seen.add(key)
             yield (is_h, coord, lo, hi)
     # Then add any external walls not on plate boundary (void-facing orphans)
     for is_h, coord, lo, hi in _exterior_wall_edges(room, walls, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol, lo, hi):
+            continue
         key = (is_h, round(coord, 6), round(lo, 6), round(hi, 6))
         if key not in seen:
             seen.add(key)
@@ -1006,6 +1544,100 @@ def _make_door(
     )
 
 
+# The sourced main-entrance rule: an entrance in the north, north-east or east
+# zone is auspicious. Module-level so tests can import it instead of keeping a
+# second copy — two independent copies drifted apart once already (three
+# mutations to this tuple survived the suite because the test that "documented"
+# the rule asserted against its own literal).
+ENTRANCE_AUSPICIOUS_ZONES: tuple[str, ...] = ("N", "NE", "E")
+
+# Per-road-side override, REPLACING the default set for that orientation.
+#
+# The entrance always sits on the y-min (road-facing) wall, so every candidate
+# shares one row of the 3x3 grid. On a south road that row is [SW, S, SE], which
+# holds no N/NE/E cell, so the sourced rule is provably inert on `PlotConfig`'s
+# DEFAULT configuration. Karthik ruled explicitly that a south-facing entrance
+# should prefer the SE end of the frontage; that is a product-owner decision, not
+# something derivable from the rules data. The same applies to the west override
+# below.
+#
+# Extended to west on the same principle (front row [NW, W, SW], equally inert
+# under the sourced rule): Karthik ruled the west-facing entrance should prefer
+# the NW end of the frontage, mirroring the sanctioned south rule — prefer the
+# auspicious end of the facing wall. That decision is recorded in the
+# solver-capability-uplift plan and the firing/pinning tests below.
+#
+# Replacement, not union with the default: a union would make widening the
+# override to every road side undetectable, because every road side would keep
+# the cells it already had. Replacement makes such a mistake fail the north/east
+# firing tests immediately.
+#
+# NOT moved to compliance_rules.json's `vastu_zones`/`vastu_room_rules` (the
+# CodeRabbit review on this PR flagged the hardcoding): those two config tables
+# are round-trip-derived transposes of each other pinned by
+# test_vastu_score.py, and encode per-ROOM-TYPE zone preference tiers
+# (preferred/avoid/prohibit), a different concept from this per-ROAD-SIDE
+# override of which zone wins an ENTRANCE-candidate tie-break. Folding this in
+# would mean inventing a third schema shape in that file for a single
+# product-owner literal, not "reading an existing threshold from config" —
+# real schema/loader/round-trip-test work, not a quick win.
+ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE: dict[str, tuple[str, ...]] = {
+    "S": ("SE",),
+    "W": ("NW",),
+}
+
+
+def entrance_auspicious_zones(north_angle_deg: float) -> tuple[str, ...]:
+    """Auspicious main-entrance zones for a plot at `north_angle_deg`.
+
+    Keyed off the RESOLVED orientation rather than `cfg.road_side`, because
+    `north_angle_deg` — when set — is what decides which zones the frontage
+    actually spans. Keying off the raw road side would let the two disagree:
+    `road_side="S"` with a surveyed `north_angle_deg=180.0` faces north, its
+    front row is [NE, N, NW], and the south override would strip its genuine NE
+    preference while offering an SE cell that no candidate can occupy. Going
+    through the resolved angle keeps the rule and the zones on the same
+    orientation in every case, including the reverse pairing (`road_side="N"`
+    with an explicit `0.0`, which really does face south and really should
+    prefer SE).
+
+    A non-cardinal surveyed bearing (say 37°) belongs to no road side, so it gets
+    the default sourced rule.
+    """
+    from app.engine.vastu import road_side_for_north_angle
+
+    side = road_side_for_north_angle(north_angle_deg)
+    if side is None:
+        return ENTRANCE_AUSPICIOUS_ZONES
+    return ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE.get(side, ENTRANCE_AUSPICIOUS_ZONES)
+
+
+def _entrance_auspicious(vastu_cfg: PlotConfig | None, x: float, y: float) -> int:
+    """0 when a main-entrance candidate centred at (x, y) sits in an auspicious
+    Vastu zone for the plot's orientation, else 1. Always 1 when Vastu is off, so
+    the key is a constant and the ordering is untouched.
+
+    The auspicious set is N/NE/E by default, SE on a south-facing plot and NW
+    on a west-facing plot; see `entrance_auspicious_zones`.
+
+    The point scored is the midpoint of the candidate's usable frontage span —
+    the same quantity the distance-to-gate key uses — rather than the door
+    centre `_fit_along` will later pick, which is not known until after the
+    ordering is decided.
+    """
+    if vastu_cfg is None or not vastu_cfg.vastu_enabled:
+        return 1
+    from app.engine.vastu import resolve_north_angle, zone_for_point
+
+    # `cfg.north_angle_deg` is `float | None`; `resolve_north_angle` is the one
+    # place that turns it into a real angle (an explicit 0.0 wins, `None` falls
+    # back to the road side). Passing the raw field would send `None` into the
+    # trigonometry.
+    north = resolve_north_angle(vastu_cfg)
+    zone = zone_for_point(x, y, vastu_cfg.plot_x_extent, vastu_cfg.plot_y_extent, north)
+    return 0 if zone in entrance_auspicious_zones(north) else 1
+
+
 def _place_main_entrance(
     rooms: list[Room],
     obstacles: _ObstacleIndex,
@@ -1015,6 +1647,7 @@ def _place_main_entrance(
     tol: float,
     reasons: list[str] | None = None,
     status: dict | None = None,
+    vastu_cfg: PlotConfig | None = None,
 ) -> Opening | None:
     """Main entrance door (MD) in the road-facing external wall.
 
@@ -1024,6 +1657,12 @@ def _place_main_entrance(
     door sits on the floor's front exterior surface (room-union plate); its
     desired position is the facade midpoint so the door lines up with the
     compound-wall gate (cad_advanced centres the gate on the road side).
+
+    When no road-facing habitable room exists, the entrance is routed through
+    a road-facing porch/parking room into the habitable room directly behind
+    it — the door lands on that room's own exterior elevation nearest the road
+    (the porch itself never hosts a door). Only if even that finds nothing is
+    the floor treated as the "upside-down duplex" typology.
 
     ``status``, if given, is set with ``entrance_not_on_ground_floor=True``
     when the ENTIRE road frontage is occupied by no-entry room types
@@ -1035,6 +1674,19 @@ def _place_main_entrance(
     columns-blocked), so a caller can surface it deliberately (e.g. a
     landing-door design, or an explicit "entrance not on ground floor"
     label) rather than reading it out of the free-text diagnostic string.
+
+    ``vastu_cfg``, when given with ``vastu_enabled``, adds an auspicious-zone
+    key to the candidate ordering. Because every candidate sits on the same
+    (y-min) frontage, they can only differ across ONE row of the 3x3 Vastu
+    grid: ``['NE', 'N', 'NW']`` on a north road, ``['SE', 'E', 'NE']`` on an
+    east road, ``['SW', 'S', 'SE']`` on a south road (the PlotConfig default)
+    and ``['NW', 'W', 'SW']`` on a west road. The default N/NE/E rule can fire
+    on north and east roads; the south road gets the product-owner SE override
+    and the west road the matching NW override
+    (``ENTRANCE_AUSPICIOUS_ZONES_BY_ROAD_SIDE``), so every road side can move
+    the door toward the auspicious end of its facing wall.
+    ``tests/test_vastu_floors.py`` pins both the firing and the still-inert
+    middle cells ("S" on south, "W" on west).
     """
     bx1, _by1, bx2, _by2 = buildable.bounds
     _px1, py1, _px2, _py2 = _plate_bounds(rooms, buildable, ewt)
@@ -1056,8 +1708,23 @@ def _place_main_entrance(
             )
             continue
         prio = _ENTRY_PRIORITY.get(room.type, 4)
-        cands.append((prio, abs((lo + hi) / 2 - gate_x), room.id, room, lo, hi))
-    for _prio, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:3]):
+        # Ranked immediately after `prio` and ABOVE distance-to-gate: Vastu
+        # outranks gate alignment, never room-type suitability (an auspicious
+        # dining room must not beat an inauspicious living room). Below `dist`
+        # it would be inert a second way — `dist` is a float, so ties in it
+        # essentially never occur. 0 sorts first, so 0 == auspicious.
+        cands.append(
+            (
+                prio,
+                _entrance_auspicious(vastu_cfg, (lo + hi) / 2, coord),
+                abs((lo + hi) / 2 - gate_x),
+                room.id,
+                room,
+                lo,
+                hi,
+            )
+        )
+    for _prio, _ausp, _dist, rid, room, lo, hi in sorted(cands, key=lambda t: t[:4]):
         centre = _fit_along(
             gate_x, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
         )
@@ -1069,13 +1736,31 @@ def _place_main_entrance(
         )
         door.is_main = True
         return door
-    if (
-        status is not None
-        and not cands
-        and frontage_rooms
-        and all(r.type in _NO_ENTRY_TYPES for r in frontage_rooms)
-    ):
-        status["entrance_not_on_ground_floor"] = True
+    if not cands:
+        # Stage 2 — through-porch route: no road-facing habitable room, but a
+        # road-facing porch/parking room may have a habitable room directly
+        # behind it (the porch spans the frontage). Route the entrance onto
+        # that room's own exterior elevation nearest the road; the porch
+        # itself never hosts the door. The "upside-down duplex" flag is only
+        # for the case where even this finds nothing.
+        door = _through_porch_entrance(
+            frontage_rooms,
+            rooms,
+            obstacles,
+            std,
+            buildable,
+            gate_x,
+            ewt,
+            tol,
+        )
+        if door is not None:
+            return door
+        if (
+            status is not None
+            and frontage_rooms
+            and all(r.type in _NO_ENTRY_TYPES for r in frontage_rooms)
+        ):
+            status["entrance_not_on_ground_floor"] = True
     detail = "; ".join(rejected) if rejected else "no road-facing room at front plate"
     if reasons is not None:
         reasons.append(f"main_entrance: {detail}")
@@ -1084,6 +1769,116 @@ def _place_main_entrance(
             "no suitable road-facing room for a main entrance door: %s", detail
         )
     return None
+
+
+def _through_porch_entrance(
+    frontage_rooms: list[Room],
+    rooms: list[Room],
+    obstacles: _ObstacleIndex,
+    std: OpeningStandards,
+    buildable: Polygon,
+    gate_x: float,
+    ewt: float,
+    tol: float,
+) -> Opening | None:
+    """Main entrance through a road-facing porch into the habitable room
+    directly behind it (see `_place_main_entrance` stage 2)."""
+    for t in frontage_rooms:
+        if t.type not in _PARKING_TYPES:
+            continue
+        behind = [
+            r
+            for r in rooms
+            if r.type not in _NO_ENTRY_TYPES
+            and abs(r.y - (t.y + t.depth)) <= 2 * tol
+            and not (r.x + r.width <= t.x or r.x >= t.x + t.width)
+        ]
+        if not behind:
+            continue
+        target = max(
+            behind,
+            key=lambda r: min(r.x + r.width, t.x + t.width) - max(r.x, t.x),
+        )
+        door = _main_door_on_nearest_exterior(
+            target, rooms, obstacles, std, buildable, gate_x, ewt, tol
+        )
+        if door is not None:
+            # Debug-only: `reasons` is the ENTRANCE-FAILURE diagnostics channel
+            # (every "main_entrance:"-prefixed entry in it is read as a failure
+            # by tests/test_plan_openings.py and by callers), so a successful
+            # placement — this is one — must not add to it.
+            logger.debug(
+                "main entrance routed through the %s porch to %s's exterior "
+                "(no road-facing habitable room)",
+                t.type,
+                target.id,
+            )
+            return door
+    return None
+
+
+def _main_door_on_nearest_exterior(
+    room: Room,
+    rooms: list[Room],
+    obstacles: _ObstacleIndex,
+    std: OpeningStandards,
+    buildable: Polygon,
+    gate_x: float,
+    ewt: float,
+    tol: float,
+) -> Opening | None:
+    """Place a main door on `room`'s exterior edge nearest the road (y-min).
+
+    Used only by the through-porch route in `_place_main_entrance`, when no
+    road-facing habitable room exists but a habitable room sits directly
+    behind a road-facing porch. The porch itself never hosts a door (parking
+    is reachable only from the driveway), so the entrance lands on the room's
+    own elevation closest to the frontage — its side wall near the road end,
+    or its rear wall, whichever is nearer — instead of leaving the repair
+    pass to punch an arbitrary mid-wall exterior door.
+
+    ``gate_x`` keeps the door centred on the compound-wall gate when the
+    nearest edge is horizontal (a rear wall, where the whole span is
+    equidistant from the road).
+    """
+    plate = _plate_bounds(rooms, buildable, ewt)
+    _px1, py1, _px2, _py2 = plate
+    width = std.main_door_width_m
+    best: tuple[float, tuple] | None = None
+    for is_h, coord, lo, hi in _exterior_edges(room, plate, ewt, tol):
+        if _is_declared_open_edge(room, is_h, coord, ewt, tol, lo, hi):
+            continue
+        # distance from the road (y-min): a horizontal edge is at `coord`;
+        # a vertical edge's nearest point is its lo (front) end.
+        dist = (coord - py1) if is_h else (lo - py1)
+        if best is None or dist < best[0]:
+            best = (dist, (is_h, coord, lo, hi))
+    if best is None:
+        return None
+    is_h, coord, lo, hi = best[1]
+    if is_h:
+        desired = gate_x
+        centre = _fit_along(
+            desired, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(True, coord)
+        )
+        if centre is None:
+            return None
+        door = _make_door(
+            room, False, coord, centre, width, ewt, centre <= (lo + hi) / 2
+        )
+    else:
+        # nearest the road end of the side wall
+        desired = lo + width / 2 + _JAMB
+        centre = _fit_along(
+            desired, lo + _JAMB, hi - _JAMB, width, obstacles.for_wall(False, coord)
+        )
+        if centre is None:
+            return None
+        door = _make_door(
+            room, True, coord, centre, width, ewt, centre <= (lo + hi) / 2
+        )
+    door.is_main = True
+    return door
 
 
 def derive_openings(
@@ -1098,6 +1893,7 @@ def derive_openings(
     floor: int = 0,
     reasons: list[str] | None = None,
     status: dict | None = None,
+    vastu_cfg: PlotConfig | None = None,
 ) -> list[Opening]:
     adjs = _adjacencies(rooms, iwt, tol)
     obstacles = _ObstacleIndex(columns)
@@ -1116,7 +1912,7 @@ def derive_openings(
     if floor == 0:
         place(
             _place_main_entrance(
-                rooms, obstacles, std, buildable, ewt, tol, reasons, status
+                rooms, obstacles, std, buildable, ewt, tol, reasons, status, vastu_cfg
             )
         )
 
@@ -1442,13 +2238,16 @@ def validate_floor_connectivity(
     """Human-readable navigability violations for a single floor (empty ⇒ OK).
 
     Read-only: drawing callers keep working; the generator gate calls this
-    after `derive_openings` (which already ran the repair pass)."""
+    after `derive_openings` (which already ran the repair pass). Exempts the
+    same types `_repair_connectivity` refuses to door — parking (reachable
+    from the driveway), passage (transit), and double-height voids — so the
+    gate cannot reject a deliberately door-less car porch as a defect."""
     adjs = _adjacencies(rooms, iwt, tol)
     graph = _door_graph(rooms, openings, adjs, tol)
     reachable = _reachable_rooms(rooms, graph, floor, openings)
     problems: list[str] = []
     for i, r in enumerate(rooms):
-        if r.type == "passage":
+        if r.type in ({"passage"} | _PARKING_TYPES) or r.is_void:
             continue
         if i not in reachable:
             problems.append(
@@ -1538,14 +2337,21 @@ def _repair_connectivity(
     of type, so a deliberately door-less, gapped parking room always came
     back "unreachable" and got a forced door anyway — undoing the very
     exclusion `_NO_DOOR_TYPES` was there to enforce, and drawing a
-    pedestrian door into a car porch no real design has one in."""
+    pedestrian door into a car porch no real design has one in.
+
+    Void rooms are exempt too, matching `validate_floor_connectivity`'s own
+    `r.is_void` skip: a void has no floor slab to walk on, so a "reachable"
+    door into it is meaningless, and disagreeing with the validator would let
+    this pass force a door the validator then ignores anyway."""
     for _ in range(len(rooms) + 1):
         graph = _door_graph(rooms, openings, adjs, tol)
         reachable = _reachable_rooms(rooms, graph, floor, openings)
         unreachable = [
             i
             for i, r in enumerate(rooms)
-            if r.type not in ({"passage"} | _PARKING_TYPES) and i not in reachable
+            if r.type not in ({"passage"} | _PARKING_TYPES)
+            and not r.is_void
+            and i not in reachable
         ]
         if not unreachable:
             return
@@ -1732,10 +2538,10 @@ def derive_dim_chains(
     # Level 2 — plot chain incl. setbacks. Setback segments are quoted in
     # metres (municipal rules are metric); the building span stays ft-in.
     for side, coord, coords, (blo, bhi) in (
-        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_width], (bx1, bx2)),
-        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_width], (bx1, bx2)),
-        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_length], (by1, by2)),
-        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_length], (by1, by2)),
+        ("bottom", by1 - _LANES[2], [0.0, bx1, bx2, cfg.plot_x_extent], (bx1, bx2)),
+        ("top", by2 + _LANES[2], [0.0, bx1, bx2, cfg.plot_x_extent], (bx1, bx2)),
+        ("left", bx1 - _LANES[2], [0.0, by1, by2, cfg.plot_y_extent], (by1, by2)),
+        ("right", bx2 + _LANES[2], [0.0, by1, by2, cfg.plot_y_extent], (by1, by2)),
     ):
         entries = entries_for(coords)
         for e in entries:
@@ -1745,8 +2551,8 @@ def derive_dim_chains(
 
     # Level 1 — overall plot extent, dual-unit (ft-in + metres), outermost lane
     for side, coord, extent in (
-        ("top", by2 + _OVERALL_LANE, cfg.plot_width),
-        ("right", bx2 + _OVERALL_LANE, cfg.plot_length),
+        ("top", by2 + _OVERALL_LANE, cfg.plot_x_extent),
+        ("right", bx2 + _OVERALL_LANE, cfg.plot_y_extent),
     ):
         chains.append(
             DimChain(
@@ -1781,7 +2587,7 @@ def setback_callouts(
             (
                 f"{cfg.setback_rear:.1f}M REAR SETBACK",
                 mx,
-                (by2 + cfg.plot_length) / 2,
+                (by2 + cfg.plot_y_extent) / 2,
                 False,
             )
         )
@@ -1791,7 +2597,7 @@ def setback_callouts(
         out.append(
             (
                 f"{cfg.setback_right:.1f}M RIGHT SETBACK",
-                (bx2 + cfg.plot_width) / 2,
+                (bx2 + cfg.plot_x_extent) / 2,
                 my,
                 True,
             )
@@ -1816,7 +2622,10 @@ def _lines_fit(
 def _room_label_lines(room) -> list[str]:
     """Dual-unit label (ft-in + metric), matching Indian working-drawing
     convention: NAME / 11'-10" × 25'-4" / (3.6 m × 7.7 m) / 299 SQFT."""
-    area_sqft = round(room.width * room.depth * 10.7639)
+    # Occupied area (the part union), not the bounding box: an L/T/U room
+    # would otherwise print the SQFT of a rectangle it does not fill.
+    # Identical to width * depth for a RECT room.
+    area_sqft = round(sum(p.area for p in room.rects) * 10.7639)
     return [
         room.name.upper(),
         f"{metres_to_ftin(room.width)} × {metres_to_ftin(room.depth)}",
@@ -1952,7 +2761,540 @@ def derive_stair(rooms: list[Room], floor_height: float = 3.0) -> StairGeometry 
     )
 
 
-def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
+# ---------------------------------------------------------------------------
+# Opening identity + IS 962 schedule marks (Phase 7, Task 27)
+# ---------------------------------------------------------------------------
+
+_OPENING_HEIGHT_MM = {"door": 2100, "window": 1200, "ventilator": 600}
+_OPENING_PREFIX = {"door": "D", "window": "W", "ventilator": "V"}
+
+
+def assign_opening_marks(openings: list[Opening]) -> None:
+    """Assign each opening its IS 962 schedule mark in place.
+
+    Promoted from pdf.py so DXF and the frontend see marks too. A mark is a
+    CLASS label, deliberately shared: same-kind openings whose widths snap to
+    the same 50 mm module share one mark (D1 = every 900 mm door), and the
+    main entrance is held out of the D-series as "MD". Instance identity is
+    `assign_opening_ids`'s job — never conflate the two.
+    """
+    groups: dict[tuple[str, int], list[int]] = {}
+    main_idx: list[int] = []
+    for i, o in enumerate(openings):
+        if getattr(o, "is_main", False):
+            main_idx.append(i)
+            continue
+        # snap to 50 mm modules so near-identical computed widths (1180 vs
+        # 1200) share one mark, as they would on a real drawing
+        groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
+    counters = dict.fromkeys(_OPENING_PREFIX, 0)
+    for (kind, _width_mm), idxs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], -kv[0][1])
+    ):
+        counters[kind] += 1
+        for i in idxs:
+            openings[i].mark = f"{_OPENING_PREFIX[kind]}{counters[kind]}"
+    for i in main_idx:
+        openings[i].mark = "MD"
+
+
+def assign_opening_ids(
+    walls: list[WallSegment], openings: list[Opening], tol: float = 0.01
+) -> None:
+    """Give every opening a deterministic instance id in place.
+
+    The id addresses the opening through its host wall —
+    "<WallSegment.id>#<offset from the wall's low end>" — so it is stable
+    under unrelated edits exactly as far as the host wall's own id is.
+    Openings that match no wall centreline (should not happen in derived
+    drawings) fall back to their own geometry rather than crashing.
+    """
+    for o in openings:
+        best: tuple[float, WallSegment, float, bool] | None = None
+        for w in walls:
+            w_vertical = abs(w.x1 - w.x2) < 1e-9
+            if w_vertical != (not o.is_horizontal):
+                continue
+            coord = w.x1 if w_vertical else w.y1
+            cross = o.cx if w_vertical else o.cy
+            if abs(coord - cross) > w.thickness / 2 + tol:
+                continue
+            lo, hi = sorted((w.y1, w.y2)) if w_vertical else sorted((w.x1, w.x2))
+            along_coord = o.cy if w_vertical else o.cx
+            if not (lo - tol <= along_coord <= hi + tol):
+                continue
+            dist = abs(coord - cross)
+            if best is None or dist < best[0]:
+                best = (dist, w, lo, w_vertical)
+        if best is None:
+            o.id = f"o:{o.kind}:{o.cx:.2f}:{o.cy:.2f}"
+        else:
+            _, w, lo, w_vertical = best
+            along = (o.cy if w_vertical else o.cx) - lo
+            o.id = f"{w.id}#{along:.3f}"
+
+
+def shared_wall_span(
+    a: Room, b: Room, iwt: float = IWT, tol: float = 0.03
+) -> tuple[bool, float, float, float] | None:
+    """Shared wall between two rooms as (vertical, centreline, lo, hi).
+
+    Rooms are specified to INNER faces, so two rooms separated by one wall
+    thickness — or directly abutting — share one wall; the span is the
+    overlap of their touching edges. Returns None when there is no usable
+    shared span (< 0.3 m of overlap). Public: used by the openings API to
+    pre-validate `add_door` requests (Task 30).
+    """
+    a_y2, b_y2 = a.y + a.depth, b.y + b.depth
+    a_x2, b_x2 = a.x + a.width, b.x + b.width
+    pairs: list[tuple[bool, float, float, float, float, float, float]] = [
+        # (vertical, edge_a, edge_b, a_lo, a_hi, b_lo, b_hi)
+        (True, a_x2, b.x, a.y, a_y2, b.y, b_y2),  # a left of b
+        (True, b_x2, a.x, a.y, a_y2, b.y, b_y2),  # b left of a
+        (False, a_y2, b.y, a.x, a_x2, b.x, b_x2),  # a below b
+        (False, b_y2, a.y, a.x, a_x2, b.x, b_x2),  # b below a
+    ]
+    best: tuple[bool, float, float, float] | None = None
+    for vertical, ea, eb, alo, ahi, blo, bhi in pairs:
+        gap = eb - ea
+        if gap < -tol or gap > iwt + tol:
+            continue  # edges must touch within one wall thickness
+        lo, hi = max(alo, blo), min(ahi, bhi)
+        if hi - lo < 0.3:
+            continue
+        if best is None or (hi - lo) > (best[3] - best[2]):
+            best = (vertical, (ea + eb) / 2, lo, hi)
+    return best
+
+
+# Deterministic preference order for `exterior_wall_spans` when the caller
+# does not name a side: road-side first, then W, N, E.
+_SIDE_ORDER = ("S", "W", "N", "E")
+
+
+def exterior_wall_spans(
+    room: Room,
+    rooms: list[Room],
+    buildable: BaseGeometry,
+    tol: float = 0.01,
+) -> list[tuple[str, bool, float, float, float]]:
+    """(side, vertical, centreline, lo, hi) for each of the room's edges
+    that face OUTSIDE the buildable polygon — a real exterior face.
+
+    An edge is exterior when no other room abuts it AND a probe point just
+    beyond one external wall thickness leaves the buildable polygon (a
+    polygon probe, not a bbox test, so rectilinear L-notch edges classify
+    correctly). Public: backs the openings API's `add_door` to the outside
+    (Task 30).
+    """
+    edges: list[tuple[str, bool, float, float, float, float, float]] = [
+        # (side, vertical, edge_coord, along_lo, along_hi, out_dx, out_dy)
+        ("S", False, room.y, room.x, room.x + room.width, 0.0, -1.0),
+        ("N", False, room.y + room.depth, room.x, room.x + room.width, 0.0, 1.0),
+        ("W", True, room.x, room.y, room.y + room.depth, -1.0, 0.0),
+        ("E", True, room.x + room.width, room.y, room.y + room.depth, 1.0, 0.0),
+    ]
+    out: list[tuple[str, bool, float, float, float]] = []
+    for side, vertical, coord, lo, hi, dx, dy in edges:
+        if _is_declared_open_edge(room, not vertical, coord, EWT, tol, lo, hi):
+            continue  # no wall was ever drawn there (see derive_walls)
+        shared = False
+        for b in rooms:
+            if b.id == room.id:
+                continue
+            if vertical:
+                facing = min(abs(b.x - coord), abs(b.x + b.width - coord))
+                overlap = min(hi, b.y + b.depth) - max(lo, b.y)
+            else:
+                facing = min(abs(b.y - coord), abs(b.y + b.depth - coord))
+                overlap = min(hi, b.x + b.width) - max(lo, b.x)
+            if facing <= IWT + 0.03 and overlap > 0.3:
+                shared = True
+                break
+        if shared:
+            continue
+        mid = (lo + hi) / 2
+        if vertical:
+            probe = Point(coord + dx * (EWT + tol), mid)
+        else:
+            probe = Point(mid, coord + dy * (EWT + tol))
+        if buildable.covers(probe):
+            continue
+        # inner face is `coord`; the wall centreline lies half a wall outward
+        centre = coord + (dx + dy) * EWT / 2
+        out.append((side, vertical, centre, lo, hi))
+    return out
+
+
+def apply_added_openings(
+    rooms: list[Room],
+    walls: list[WallSegment],
+    openings: list[Opening],
+    added: list[AddedOpening] | None,
+    buildable: BaseGeometry,
+    diagnostics: list[str],
+    std: OpeningStandards | None = None,
+) -> None:
+    """Resolve FloorPlan.added_openings into real Openings, in place (T30).
+
+    Runs AFTER the drawing list sorts (derived order untouched) but BEFORE
+    assign_opening_ids/assign_opening_marks, so added openings receive
+    identity and schedule marks through the same deterministic passes, and
+    OpeningOverrides may target them. Failure follows the Task 9 tolerance
+    principle: an unbuildable spec degrades to a diagnostic no-op — it must
+    never raise. A candidate that would overlap an existing opening on its
+    host wall is likewise rejected rather than drawn doubled.
+    """
+    if not added:
+        return
+    if std is None:
+        from app.engine.standards import get_opening_standards
+
+        std = get_opening_standards()
+    by_id = {r.id: r for r in rooms}
+    for spec in added:
+        if spec.kind not in _OPENING_PREFIX:
+            diagnostics.append(
+                f"added_opening: unsupported kind {spec.kind!r} "
+                f"{spec.room_a!r}->{spec.room_b!r}; spec dropped"
+            )
+            continue
+        a = by_id.get(spec.room_a)
+        if a is None:
+            diagnostics.append(
+                f"added_opening: unknown room {spec.room_a!r}; spec dropped"
+            )
+            continue
+        if spec.room_b == "outside":
+            cands = exterior_wall_spans(a, rooms, buildable)
+            if spec.side is not None:
+                cands = [c for c in cands if c[0] == spec.side]
+            if not cands:
+                diagnostics.append(
+                    f"added_opening: room {spec.room_a!r} has no exterior edge "
+                    f"matching side={spec.side!r}; spec dropped"
+                )
+                continue
+            _side, vertical, cross, lo, hi = sorted(
+                cands, key=lambda c: _SIDE_ORDER.index(c[0])
+            )[0]
+            swing_into = spec.room_a
+        else:
+            b = by_id.get(spec.room_b)
+            if b is None:
+                diagnostics.append(
+                    f"added_opening: unknown room {spec.room_b!r}; spec dropped"
+                )
+                continue
+            span = shared_wall_span(a, b)
+            if span is None:
+                diagnostics.append(
+                    f"added_opening: rooms {spec.room_a!r} and {spec.room_b!r} "
+                    "share no wall; spec dropped"
+                )
+                continue
+            vertical, cross, lo, hi = span
+            swing_into = spec.room_b
+
+        kind = spec.kind
+        default_widths = {
+            "door": std.door_width_m,
+            "window": std.window_width_m,
+            "ventilator": std.ventilator_width_m,
+        }
+        width = spec.width if spec.width is not None else default_widths[kind]
+        span_len = hi - lo
+        along = span_len / 2 if spec.along is None else spec.along
+        if not (-1e-6 <= along - width / 2 and along + width / 2 <= span_len + 1e-6):
+            diagnostics.append(
+                f"added_opening: {kind} {spec.room_a!r}->{spec.room_b!r} rejected "
+                f"— position {along:.3f} width {width:.3f} falls outside the "
+                f"shared/exterior span ({span_len:.3f})"
+            )
+            continue
+        pos = lo + along
+        cx, cy = (cross, pos) if vertical else (pos, cross)
+
+        seg: WallSegment | None = None
+        for w in walls:
+            w_vertical = abs(w.x1 - w.x2) < 1e-9
+            if w_vertical != vertical:
+                continue
+            wcoord = w.x1 if w_vertical else w.y1
+            if abs(wcoord - (cx if w_vertical else cy)) > w.thickness / 2 + 0.03:
+                continue
+            wlo, whi = sorted((w.y1, w.y2)) if w_vertical else sorted((w.x1, w.x2))
+            if not (wlo - 1e-6 <= pos <= whi + 1e-6):
+                continue
+            seg = w
+            break
+        if seg is None:
+            diagnostics.append(
+                f"added_opening: no derived wall hosts {kind} "
+                f"{spec.room_a!r}->{spec.room_b!r} at ({cx:.3f}, {cy:.3f}); spec dropped"
+            )
+            continue
+        if vertical:
+            cx = seg.x1
+        else:
+            cy = seg.y1
+
+        clash = any(
+            (not o.is_horizontal) == vertical
+            and abs((o.cx if vertical else o.cy) - (cx if vertical else cy))
+            <= seg.thickness / 2 + 0.01
+            and abs((o.cy if vertical else o.cx) - pos) < (o.width + width) / 2
+            for o in openings
+        )
+        if clash:
+            diagnostics.append(
+                f"added_opening: {kind} {spec.room_a!r}->{spec.room_b!r} at "
+                f"({cx:.3f}, {cy:.3f}) overlaps an existing opening; spec dropped"
+            )
+            continue
+
+        openings.append(
+            Opening(
+                kind=kind,
+                cx=cx,
+                cy=cy,
+                width=width,
+                is_horizontal=not vertical,
+                wall_thickness=seg.thickness,
+                # hinge on the low jamb, leaf into the "entered" room
+                hinge_x=cx if vertical else cx - width / 2,
+                hinge_y=cy - width / 2 if vertical else cy,
+                swing_into_room_id=swing_into if kind == "door" else "",
+            )
+        )
+
+
+def door_graph_reachable(
+    rooms: list[Room],
+    openings: list[Opening],
+    floor: int,
+    iwt: float = IWT,
+    tol: float = 0.01,
+) -> set[int]:
+    """Indices of rooms reachable from the entrance (floor 0) or staircase
+    (other floors) through doors — validate_floor_connectivity's graph as a
+    public, reusable query. Raw reachability: type exemptions (parking,
+    passage, voids) are the gate's business, not the graph's."""
+    adjs = _adjacencies(rooms, iwt, tol)
+    graph = _door_graph(rooms, openings, adjs, tol)
+    return _reachable_rooms(rooms, graph, floor, openings)
+
+
+def opening_room_ids(
+    o: Opening,
+    rooms: list[Room],
+    tol: float = 0.03,
+) -> list[str]:
+    """Sorted ids of the rooms whose edge hosts this opening — for the
+    openings listing API. An opening sits on a room edge when its centre is
+    within half a wall of that edge's line and its along-coordinate falls
+    inside the edge span."""
+    max_half = EWT / 2 + tol
+    pos = o.cx if o.is_horizontal else o.cy
+    cross = o.cy if o.is_horizontal else o.cx
+    ids: list[str] = []
+    for r in rooms:
+        x2, y2 = r.x + r.width, r.y + r.depth
+        if o.is_horizontal:
+            on_edge = abs(r.y - cross) <= max_half or abs(y2 - cross) <= max_half
+            in_span = r.x - tol <= pos <= x2 + tol
+        else:
+            on_edge = abs(r.x - cross) <= max_half or abs(x2 - cross) <= max_half
+            in_span = r.y - tol <= pos <= y2 + tol
+        if on_edge and in_span:
+            ids.append(r.id)
+    return sorted(ids)
+
+
+def apply_opening_overrides(
+    openings: list[Opening],
+    walls: list[WallSegment],
+    overrides: list[OpeningOverride] | None,
+    diagnostics: list[str],
+) -> None:
+    """Apply FloorPlan.opening_overrides as an in-place post-pass (T29).
+
+    derive_openings() stays pure; this pass runs after ids are assigned, so
+    overrides key on the same deterministic ids the frontend sees. Failure
+    semantics follow Task 9's tolerance principle: an override against a
+    vanished id degrades to a no-op recorded in diagnostics — it must never
+    raise. An override that would place the opening outside its host wall is
+    likewise rejected with a diagnostic rather than clamped into a wrong
+    drawing.
+
+    The GCS baseline cannot verify these positions (no positional-accuracy
+    metric), so tests assert coordinates directly.
+    """
+    if not overrides:
+        return
+    by_id = {o.id: o for o in openings}
+    removed: list[Opening] = []
+    for ov in overrides:
+        o = by_id.get(ov.opening_id)
+        if o is None:
+            diagnostics.append(
+                f"opening_override: opening {ov.opening_id!r} no longer exists; "
+                "override dropped"
+            )
+            continue
+        vertical = not o.is_horizontal
+        host = _host_wall(walls, o)
+        if host is None:
+            diagnostics.append(
+                f"opening_override: no host wall found for {ov.opening_id!r}; "
+                "override dropped"
+            )
+            continue
+        lo, hi = sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
+        length = hi - lo
+
+        if ov.suppressed:
+            removed.append(o)
+            continue
+
+        new_width = o.width if ov.width is None else ov.width
+        if new_width <= 0:
+            diagnostics.append(
+                f"opening_override: {ov.opening_id!r} rejected — width must be "
+                "positive"
+            )
+            continue
+        # `along` runs along the WALL's own axis: y for a vertical wall (its
+        # x1==x2), x for a horizontal one — the opposite of vertical/is_horizontal,
+        # which describes the OPENING's swing orientation, not the wall it sits
+        # on. Reading o.cx for a vertical wall (and vice versa) silently applied
+        # the wrong axis and either moved the opening off-wall or rejected a
+        # valid override.
+        along = ((o.cy if vertical else o.cx) - lo) if ov.along is None else ov.along
+        if not (
+            -1e-6 <= along - new_width / 2 and along + new_width / 2 <= length + 1e-6
+        ):
+            diagnostics.append(
+                f"opening_override: {ov.opening_id!r} rejected — position "
+                f"{along:.3f} width {new_width:.3f} falls outside its host wall "
+                f"(span {length:.3f})"
+            )
+            continue
+        centre = lo + along
+        # Keep the hinge on the same jamb side it derived on.
+        old_centre = o.cy if vertical else o.cx
+        hinge = o.hinge_y if vertical else o.hinge_x
+        side = 1.0 if hinge - old_centre >= 0 else -1.0
+        if vertical:
+            o.cy = centre
+            o.cx = host.x1 if abs(host.x1 - host.x2) < 1e-9 else o.cx
+            o.hinge_y = centre + side * new_width / 2
+        else:
+            o.cx = centre
+            o.cy = host.y1 if abs(host.y1 - host.y2) < 1e-9 else o.cy
+            o.hinge_x = centre + side * new_width / 2
+        o.width = new_width
+        by_id[o.id] = o
+    if removed:
+        gone = {id(o) for o in removed}
+        openings[:] = [o for o in openings if id(o) not in gone]
+
+
+def host_wall(
+    walls: list[WallSegment], o: Opening, tol: float = 0.01
+) -> WallSegment | None:
+    """Public wrapper for the host-wall lookup used by id assignment and the
+    override post-pass; the openings API needs the same match to report an
+    opening's wall and along-offset (Task 30)."""
+    return _host_wall(walls, o, tol)
+
+
+def _host_wall(
+    walls: list[WallSegment], o: Opening, tol: float = 0.01
+) -> WallSegment | None:
+    best: tuple[float, WallSegment] | None = None
+    for w in walls:
+        w_vertical = abs(w.x1 - w.x2) < 1e-9
+        if w_vertical != (not o.is_horizontal):
+            continue
+        coord = w.x1 if w_vertical else w.y1
+        cross = o.cx if w_vertical else o.cy
+        dist = abs(coord - cross)
+        if dist > w.thickness / 2 + tol:
+            continue
+        lo, hi = sorted((w.y1, w.y2)) if w_vertical else sorted((w.x1, w.x2))
+        along = o.cy if w_vertical else o.cx
+        if not (lo - tol <= along <= hi + tol):
+            continue
+        if best is None or dist < best[0]:
+            best = (dist, w)
+    return best[1] if best else None
+
+
+def _site_polygons(geom: BaseGeometry) -> list[SitePolygon]:
+    """Canonical rings for a Polygon/MultiPolygon of site ground."""
+    polys = getattr(geom, "geoms", None) or ([geom] if not geom.is_empty else [])
+    return [
+        SitePolygon(
+            exterior=[(float(x), float(y)) for x, y in p.exterior.coords],
+            holes=[[(float(x), float(y)) for x, y in ring.coords] for ring in p.interiors],
+        )
+        for p in polys
+    ]
+
+
+def derive_site_context(
+    floorplan: FloorPlan,
+    cfg: PlotConfig,
+    openings: list[Opening],
+    main_door_cx: float | None = None,
+) -> SiteContext:
+    """The canonical site entities every renderer projects (Task 32).
+
+    - `compound_wall_segments`/`gate_posts`: the boundary ring with the
+      road-side gate at `main_door_cx`. Callers with layout context (the
+      PDF/DXF exporters) pass the GROUND floor's main-entrance x so every
+      floor's payload agrees; a self-contained ground-floor build derives it
+      from its own `is_main` opening; anything else leaves it None, which
+      centres the gate — `compound_wall_segments`' own default.
+    - `setback_margin`: plot − buildable (the *legal* landscaped margin the
+      PDF hatches).
+    - `open_terrace`: plot_polygon − this floor's footprint (the open ground
+      the DXF hatches on the ground-floor sheet). Room-level L/T/U shapes
+      (Room.rects) are honoured, so the region stays exact when the shape
+      templates are enabled.
+    """
+    from app.engine.geometry import (
+        compound_wall_gate_posts,
+        compound_wall_segments,
+        landscape_region,
+        plot_polygon,
+    )
+
+    gate_cx = main_door_cx
+    if gate_cx is None and floorplan.floor == 0:
+        gate_cx = next((o.cx for o in openings if o.is_main), None)
+
+    footprint = None
+    if floorplan.rooms:
+        footprint = unary_union(
+            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for room in floorplan.rooms for r in room.rects]
+        )
+    plot = plot_polygon(cfg)
+    terrace = plot.difference(footprint) if footprint is not None else plot
+    posts = compound_wall_gate_posts(cfg, gate_cx=gate_cx)
+    return SiteContext(
+        compound_wall_segments=compound_wall_segments(cfg, gate_cx=gate_cx),
+        gate_posts=[tuple(p) for p in posts] if posts else [],
+        gate_cx=gate_cx,
+        setback_margin=_site_polygons(landscape_region(cfg)),
+        open_terrace=_site_polygons(terrace),
+    )
+
+
+def build_floor_drawing(
+    floorplan: FloorPlan, cfg: PlotConfig, *, site_main_door_cx: float | None = None
+) -> FloorDrawing:
     from app.engine.geometry import buildable_polygon
     from app.engine.standards import get_opening_standards
 
@@ -1978,15 +3320,17 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
             + " (plot_width is the x-extent/frontage, plot_length the y-extent/depth — swapped?)"
         )
     status: dict = {}
+    std = get_opening_standards()
     openings = derive_openings(
         rooms,
         walls,
         columns,
-        get_opening_standards(),
+        std,
         buildable,
         floor=floorplan.floor,
         reasons=diagnostics,
         status=status,
+        vastu_cfg=cfg,
     )
     for d in diagnostics:
         logger.warning("floor %s: %s", floorplan.floor, d)
@@ -1994,6 +3338,17 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
     openings.sort(key=lambda o: (o.kind, o.cx, o.cy))
     columns.sort(key=lambda c: (c.cx, c.cy))
     junctions.sort(key=lambda j: (j.x, j.y))
+    # Added openings resolve onto the derived (sorted) walls BEFORE identity
+    # and marks run, so they receive both through the same passes.
+    apply_added_openings(
+        rooms, walls, openings, floorplan.added_openings, buildable, diagnostics, std
+    )
+    # Identity and marks run AFTER the sorts so both are functions of the
+    # final serialisation order, never of derivation list position.
+    assign_opening_ids(walls, openings)
+    assign_opening_marks(openings)
+    # Overrides key on those ids and run last, before the drawing freezes.
+    apply_opening_overrides(openings, walls, floorplan.opening_overrides, diagnostics)
     return FloorDrawing(
         floor=floorplan.floor,
         walls=walls,
@@ -2006,4 +3361,6 @@ def build_floor_drawing(floorplan: FloorPlan, cfg: PlotConfig) -> FloorDrawing:
         bounds=buildable.bounds,
         diagnostics=diagnostics,
         entrance_not_on_ground_floor=status.get("entrance_not_on_ground_floor", False),
+        site=derive_site_context(floorplan, cfg, openings, site_main_door_cx),
+        fixtures=derive_fixtures(rooms),
     )

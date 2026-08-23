@@ -8,9 +8,7 @@ All coordinates are in metres (plot coordinate system).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-
-from app.engine.standards import get_opening_standards
+from dataclasses import dataclass, field, fields as dataclass_fields
 
 
 @dataclass
@@ -28,6 +26,9 @@ class WallSegment:
     y2: float
     thickness: float  # metres
     kind: str = "internal"  # "external" | "internal"
+    # Deterministic, topology-derived identity assigned by derive_walls()
+    # (plan_geometry._assign_wall_ids). Empty for legacy hand-built segments.
+    id: str = ""
 
     @property
     def length(self) -> float:
@@ -62,6 +63,15 @@ class Opening:
     swing_into_room_id: str = ""
     swing_cw: bool = True
     is_main: bool = False  # main entrance door (MD) on the road-facing wall
+    # Deterministic instance identity: "<host WallSegment.id>#<offset along
+    # that wall>", assigned by plan_geometry.assign_opening_ids(). Empty for
+    # legacy hand-built openings.
+    id: str = ""
+    # IS 962 schedule MARK — a CLASS label shared by every same-kind,
+    # same-snapped-width opening (D1 = all 900 mm doors), with the main
+    # entrance held out as "MD". Assigned by plan_geometry.assign_opening_marks().
+    # A mark deliberately groups; an id deliberately does not.
+    mark: str = ""
 
 
 @dataclass
@@ -113,6 +123,93 @@ def _rounded(node):
     return node
 
 
+def _take(cls, payload: dict) -> dict:
+    """Keep only the keys `cls` knows about — tolerant rehydration."""
+    names = {f.name for f in dataclass_fields(cls)}
+    return {k: v for k, v in payload.items() if k in names}
+
+
+def _stair_from_dict(payload: dict | None) -> StairGeometry | None:
+    if not payload:
+        return None
+    return StairGeometry(
+        room_id=payload["room_id"],
+        treads=[tuple(t) for t in payload.get("treads") or []],
+        break_line=tuple(payload["break_line"]),
+        arrow=tuple(payload["arrow"]),
+        up_label_xy=tuple(payload["up_label_xy"]),
+        tread_count=payload["tread_count"],
+    )
+
+
+@dataclass
+class SitePolygon:
+    """One closed, possibly holed polygon of site ground, in plot metres."""
+
+    exterior: list[tuple[float, float]]
+    holes: list[list[tuple[float, float]]] = field(default_factory=list)
+
+
+@dataclass
+class SiteContext:
+    """Ground/site-level entities shared by every renderer (Phase 7 / T32).
+
+    Until this landed, the compound wall + gate were derived twice (PDF
+    wrapper + DXF caller over geometry.compound_wall_segments) and the two
+    ground-region hatches DISAGREED: the PDF hatched the legal setback
+    margin (plot − buildable) while the DXF hatched the open terrace
+    (plot − footprint). Both regions live here, named, so each renderer
+    projects instead of deriving. `gate_cx` aligns the road-side gate to
+    the ground floor's main entrance; None means "centre it"
+    (compound_wall_segments' own default) for self-contained single-floor
+    builds with no layout context.
+    """
+
+    compound_wall_segments: list[tuple[float, float, float, float]] = field(
+        default_factory=list
+    )
+    gate_posts: list[tuple[float, float]] = field(default_factory=list)  # 0 or 2
+    gate_cx: float | None = None
+    setback_margin: list[SitePolygon] = field(default_factory=list)
+    open_terrace: list[SitePolygon] = field(default_factory=list)
+
+
+@dataclass
+class FixtureShape:
+    """One drawn primitive of a furniture fixture, in ROOM-RELATIVE metres
+    (origin = the room's (x, y) corner, axes along the room — Task 33).
+
+    kind: "rect" | "circle" | "arc" | "line". Rects are closed outlines
+    (dashed=True for stall/mat markers); arcs follow the DXF convention
+    (centre + radius + start/end degrees ccw). Field discipline by kind
+    keeps asdict round-trips simple and tolerant: unused fields sit at 0.0.
+    """
+
+    kind: str
+    x: float = 0.0  # rect: left; circle/arc: centre-x; line: p1.x
+    y: float = 0.0  # rect: bottom; circle/arc: centre-y; line: p1.y
+    width: float = 0.0  # rect only
+    depth: float = 0.0  # rect only
+    radius: float = 0.0  # circle/arc
+    start_deg: float = 0.0  # arc
+    end_deg: float = 0.0  # arc
+    x2: float = 0.0  # line p2.x
+    y2: float = 0.0  # line p2.y
+    dashed: bool = False  # rect only (parking stall, exercise mat)
+
+
+@dataclass
+class Fixture:
+    """One furniture item in a room ("bed", "sofa", "stove"…) — the canonical
+    entity PDF, DXF and the SVG frontend all project (Task 33). Placement is
+    room-relative, so a moved room takes its furniture with it without
+    touching the fixtures."""
+
+    kind: str
+    room_id: str
+    shapes: list[FixtureShape] = field(default_factory=list)
+
+
 @dataclass
 class FloorDrawing:
     """Complete canonical drawing for one floor — the single source every
@@ -129,36 +226,110 @@ class FloorDrawing:
     bounds: tuple[float, float, float, float]  # buildable bbox
     diagnostics: list[str] = field(default_factory=list)  # placement problems
     entrance_not_on_ground_floor: bool = False
+    # Site entities, shared by every renderer (Task 32). Optional per the
+    # Global Constraints: v1 payloads and hand-built drawings carry None.
+    site: SiteContext | None = None
+    # Canonical furniture fixtures (Task 33) — room-relative, so renderers
+    # project via the room map. Optional: v1 payloads carry none.
+    fixtures: list[Fixture] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         from dataclasses import asdict
 
         payload = _rounded(asdict(self))
-        payload["version"] = 1
+        payload["version"] = 2
         return payload
 
+    @classmethod
+    def from_dict(cls, payload: dict) -> FloorDrawing:
+        """Rehydrate a to_dict() payload of any stored version.
 
-@dataclass
-class DoorSymbol:
-    """Door defined by hinge point, width, wall side, and swing direction."""
-
-    hinge_x: float
-    hinge_y: float
-    width: float  # metres (default 0.9 m)
-    angle_start: float  # angle of door leaf at rest (degrees)
-    swing_cw: bool = True  # clockwise swing
-
-
-@dataclass
-class WindowSymbol:
-    """Window defined by centre point and width, on a given wall."""
-
-    cx: float
-    cy: float
-    width: float  # metres (default 1.2 m)
-    is_horizontal: bool = (
-        True  # True = window on horizontal wall (N/S), False = vertical (E/W)
-    )
+        Follows LayoutScore's optional-with-default pattern (models.py): every
+        field added after v1 — wall/opening ids, opening marks, and later the
+        site-context and fixture entities — has a default, so a stored v1
+        payload (revision snapshots taken before Phase 7) deserialises and
+        renders unchanged. Unknown keys are ignored so future payloads stay
+        loadable here.
+        """
+        site_payload = payload.get("site")
+        site = (
+            SiteContext(
+                compound_wall_segments=[
+                    tuple(seg)
+                    for seg in site_payload.get("compound_wall_segments") or []
+                ],
+                gate_posts=[tuple(p) for p in site_payload.get("gate_posts") or []],
+                gate_cx=site_payload.get("gate_cx"),
+                setback_margin=[
+                    SitePolygon(
+                        exterior=[tuple(pt) for pt in p.get("exterior") or []],
+                        holes=[
+                            [tuple(pt) for pt in ring] for ring in p.get("holes") or []
+                        ],
+                    )
+                    for p in site_payload.get("setback_margin") or []
+                ],
+                open_terrace=[
+                    SitePolygon(
+                        exterior=[tuple(pt) for pt in p.get("exterior") or []],
+                        holes=[
+                            [tuple(pt) for pt in ring] for ring in p.get("holes") or []
+                        ],
+                    )
+                    for p in site_payload.get("open_terrace") or []
+                ],
+            )
+            if site_payload is not None
+            else None
+        )
+        fixtures = [
+            Fixture(
+                kind=f["kind"],
+                room_id=f["room_id"],
+                shapes=[FixtureShape(**_take(FixtureShape, sh)) for sh in f.get("shapes") or []],
+            )
+            for f in payload.get("fixtures") or []
+        ]
+        return cls(
+            floor=payload["floor"],
+            bounds=tuple(payload.get("bounds") or (0.0, 0.0, 0.0, 0.0)),
+            diagnostics=list(payload.get("diagnostics") or []),
+            entrance_not_on_ground_floor=bool(
+                payload.get("entrance_not_on_ground_floor", False)
+            ),
+            site=site,
+            fixtures=fixtures,
+            walls=[
+                WallSegment(**_take(WallSegment, w)) for w in payload.get("walls") or []
+            ],
+            openings=[
+                Opening(**_take(Opening, o)) for o in payload.get("openings") or []
+            ],
+            columns=[
+                ColumnMarker(**_take(ColumnMarker, c))
+                for c in payload.get("columns") or []
+            ],
+            junctions=[
+                WallJunction(**_take(WallJunction, j))
+                for j in payload.get("junctions") or []
+            ],
+            dim_chains=[
+                DimChain(
+                    **{
+                        **_take(DimChain, d),
+                        "entries": [
+                            DimChainEntry(**_take(DimChainEntry, e))
+                            for e in d.get("entries") or []
+                        ],
+                    }
+                )
+                for d in payload.get("dim_chains") or []
+            ],
+            labels=[
+                LabelBox(**_take(LabelBox, lb)) for lb in payload.get("labels") or []
+            ],
+            stair=_stair_from_dict(payload.get("stair")),
+        )
 
 
 @dataclass
@@ -168,143 +339,3 @@ class ColumnMarker:
     cx: float
     cy: float
     size: float = 0.3  # metres
-
-
-@dataclass
-class GridLine:
-    """Structural grid line."""
-
-    x1: float
-    y1: float
-    x2: float
-    y2: float
-    label: str
-
-
-@dataclass
-class DimensionLine:
-    """IS-compliant linear dimension."""
-
-    x1: float  # start of measured extent
-    y1: float
-    x2: float  # end of measured extent
-    y2: float
-    offset: float  # offset from the measured line (positive = away from building)
-    text: str  # e.g. "3.05 m"
-    is_horizontal: bool = True
-
-
-@dataclass
-class CADDrawing:
-    """Collection of all CAD elements for one floor."""
-
-    walls: list[WallSegment] = field(default_factory=list)
-    doors: list[DoorSymbol] = field(default_factory=list)
-    windows: list[WindowSymbol] = field(default_factory=list)
-    columns: list[ColumnMarker] = field(default_factory=list)
-    grid_lines: list[GridLine] = field(default_factory=list)
-    dimensions: list[DimensionLine] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Factory functions
-# ---------------------------------------------------------------------------
-
-
-def build_dimensions(
-    plot_width: float,
-    plot_length: float,
-    buildable_x: float,
-    buildable_y: float,
-    buildable_w: float,
-    buildable_d: float,
-    offset: float = 1.2,
-) -> list[DimensionLine]:
-    """Generate overall plot dimension lines."""
-    dims: list[DimensionLine] = []
-
-    # Overall width dimension (bottom)
-    dims.append(
-        DimensionLine(
-            x1=0,
-            y1=0,
-            x2=plot_width,
-            y2=0,
-            offset=-offset,
-            text=f"{plot_width:.2f} m",
-            is_horizontal=True,
-        )
-    )
-    # Overall depth dimension (left side)
-    dims.append(
-        DimensionLine(
-            x1=0,
-            y1=0,
-            x2=0,
-            y2=plot_length,
-            offset=-offset,
-            text=f"{plot_length:.2f} m",
-            is_horizontal=False,
-        )
-    )
-    # Buildable width dimension
-    dims.append(
-        DimensionLine(
-            x1=buildable_x,
-            y1=buildable_y + buildable_d,
-            x2=buildable_x + buildable_w,
-            y2=buildable_y + buildable_d,
-            offset=offset * 0.7,
-            text=f"{buildable_w:.2f} m",
-            is_horizontal=True,
-        )
-    )
-
-    return dims
-
-
-def build_columns(rooms) -> list[ColumnMarker]:
-    """Place 300×300 column markers at room intersections."""
-    xs = sorted({r.x for r in rooms} | {r.x + r.width for r in rooms})
-    ys = sorted({r.y for r in rooms} | {r.y + r.depth for r in rooms})
-    return [ColumnMarker(cx=round(x, 3), cy=round(y, 3)) for x in xs for y in ys]
-
-
-def build_windows(
-    rooms,
-    buildable_x: float,
-    buildable_y: float,
-    buildable_w: float,
-    buildable_d: float,
-) -> list[WindowSymbol]:
-    """Add windows on exterior-facing room walls for habitable rooms."""
-    windows: list[WindowSymbol] = []
-    habitable = {"living", "bedroom", "kitchen", "study", "dining"}
-    bx2 = buildable_x + buildable_w
-    by2 = buildable_y + buildable_d
-
-    for room in rooms:
-        if room.type not in habitable:
-            continue
-        cx = room.x + room.width / 2
-        cy = room.y + room.depth / 2
-        _std = get_opening_standards()
-        win_w = min(_std.window_width_m, room.width * _std.window_max_room_fraction)
-
-        # Check each face of the room against building exterior
-        if abs(room.y - buildable_y) < 0.05:  # front wall
-            windows.append(
-                WindowSymbol(cx=cx, cy=buildable_y, width=win_w, is_horizontal=True)
-            )
-        elif abs(room.y + room.depth - by2) < 0.05:  # rear wall
-            windows.append(WindowSymbol(cx=cx, cy=by2, width=win_w, is_horizontal=True))
-        if abs(room.x - buildable_x) < 0.05:  # left wall
-            windows.append(
-                WindowSymbol(cx=buildable_x, cy=cy, width=win_w, is_horizontal=False)
-            )
-        elif abs(room.x + room.width - bx2) < 0.05:  # right wall
-            windows.append(
-                WindowSymbol(cx=bx2, cy=cy, width=win_w, is_horizontal=False)
-            )
-
-    return windows

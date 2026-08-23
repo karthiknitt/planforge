@@ -11,7 +11,21 @@ from app.engine.cad_advanced import (
     draw_structural_grid,
     shapely_poly_to_dxf,
 )
+from app.engine.cad_elements import SiteContext
+from app.engine.furniture import derive_fixtures
+from app.engine.geometry import compound_wall_gate_posts, compound_wall_segments
 from app.engine.models import PlotConfig, Room
+
+
+def _site_for(cfg: PlotConfig, gate_cx: float | None = None) -> SiteContext:
+    """The canonical site for a cfg-only test, as derive_site_context
+    assembles it (Task 32): gate-cut segments + posts at gate_cx."""
+    posts = compound_wall_gate_posts(cfg, gate_cx=gate_cx)
+    return SiteContext(
+        compound_wall_segments=compound_wall_segments(cfg, gate_cx=gate_cx),
+        gate_posts=[tuple(pt) for pt in posts] if posts else [],
+        gate_cx=gate_cx,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -44,8 +58,8 @@ def _room(id_: str, type_: str, x: float, y: float, w: float, d: float) -> Room:
 
 def _cfg(road_side: str = "S", pw: float = 10.0, pl: float = 12.0) -> PlotConfig:
     return PlotConfig(
-        plot_length=pl,
-        plot_width=pw,
+        plot_y_extent=pl,
+        plot_x_extent=pw,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,
@@ -130,14 +144,14 @@ def test_footprint_adjacent_rooms_merge(msp):
 
 
 def test_compound_wall_entities_created(msp):
-    draw_compound_wall(msp, _cfg(road_side="S"), "A-COMPOUND-WALL", 0.0)
+    draw_compound_wall(msp, _site_for(_cfg(road_side="S")), "A-COMPOUND-WALL", 0.0)
     assert len(_on_layer(msp, "A-COMPOUND-WALL")) > 0
 
 
 def test_compound_wall_south_gate_gap(msp):
     """South gate: south wall is split into 2 segments; count should be > north-only."""
     cfg_s = _cfg(road_side="S")
-    draw_compound_wall(msp, cfg_s, "A-COMPOUND-WALL", 0.0)
+    draw_compound_wall(msp, _site_for(cfg_s), "A-COMPOUND-WALL", 0.0)
     # With gate, south side has 2 segments + 2 posts; other sides have 1 each
     polys = _type_on_layer(msp, "LWPOLYLINE", "A-COMPOUND-WALL")
     # At minimum: 3 full sides (each produces ≥1 poly) + 2 gate segments + 2 posts
@@ -146,7 +160,7 @@ def test_compound_wall_south_gate_gap(msp):
 
 def test_compound_wall_north_orientation(msp):
     """North gate: entities still created on A-COMPOUND-WALL."""
-    draw_compound_wall(msp, _cfg(road_side="N"), "A-COMPOUND-WALL", 0.0)
+    draw_compound_wall(msp, _site_for(_cfg(road_side="N")), "A-COMPOUND-WALL", 0.0)
     assert len(_on_layer(msp, "A-COMPOUND-WALL")) > 0
 
 
@@ -158,7 +172,12 @@ def test_compound_wall_north_orientation(msp):
 def test_terrace_hatch_created(msp):
     from shapely.geometry import box
 
-    draw_open_terrace(msp, box(0, 0, 10, 12), box(1, 1.5, 9, 11), "A-TERRACE", 0.0)
+    draw_open_terrace(
+        msp,
+        box(0, 0, 10, 12).difference(box(1, 1.5, 9, 11)),
+        "A-TERRACE",
+        0.0,
+    )
     assert len(_type_on_layer(msp, "HATCH", "A-TERRACE")) > 0
 
 
@@ -220,35 +239,37 @@ def test_grid_labels_alpha(msp):
 
 def test_bedroom_creates_entities(msp):
     room = _room("r1", "bedroom", 0, 0, 3.5, 4.0)
-    draw_furniture(msp, room, "A-FURNITURE", 0.0)
+    draw_furniture(msp, room, derive_fixtures([room]), "A-FURNITURE", 0.0)
     assert len(_type_on_layer(msp, "LWPOLYLINE", "A-FURNITURE")) >= 1
     assert len(_type_on_layer(msp, "ARC", "A-FURNITURE")) >= 1
 
 
 def test_kitchen_creates_entities(msp):
     room = _room("r1", "kitchen", 0, 0, 3.0, 3.0)
-    draw_furniture(msp, room, "A-FURNITURE", 0.0)
+    draw_furniture(msp, room, derive_fixtures([room]), "A-FURNITURE", 0.0)
     assert len(_type_on_layer(msp, "LWPOLYLINE", "A-FURNITURE")) >= 1
     assert len(_type_on_layer(msp, "CIRCLE", "A-FURNITURE")) >= 1
 
 
 def test_toilet_creates_entities(msp):
     room = _room("r1", "toilet", 0, 0, 1.5, 2.0)
-    draw_furniture(msp, room, "A-FURNITURE", 0.0)
+    draw_furniture(msp, room, derive_fixtures([room]), "A-FURNITURE", 0.0)
     assert len(_type_on_layer(msp, "ARC", "A-FURNITURE")) >= 1
 
 
 def test_living_creates_entities(msp):
     """Living room: sofa (rects) + coffee table + TV unit — no dining table here."""
     room = _room("r1", "living", 0, 0, 4.5, 5.0)
-    draw_furniture(msp, room, "A-FURNITURE", 0.0)
+    draw_furniture(msp, room, derive_fixtures([room]), "A-FURNITURE", 0.0)
     # Sofa back + armrests + coffee table + TV unit = at least 4 polylines
     assert len(_type_on_layer(msp, "LWPOLYLINE", "A-FURNITURE")) >= 4
 
 
 def test_furniture_tiny_room_no_crash(msp):
     room = _room("r1", "bedroom", 0, 0, 1.0, 1.0)
-    draw_furniture(msp, room, "A-FURNITURE", 0.0)  # must not raise
+    draw_furniture(
+        msp, room, derive_fixtures([room]), "A-FURNITURE", 0.0
+    )  # must not raise
 
 
 # ─────────────────────────────────────────────────────────────────────────────

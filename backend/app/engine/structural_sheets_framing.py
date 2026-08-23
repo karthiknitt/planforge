@@ -56,6 +56,7 @@ from app.engine.structural_data import (
     BeamRun,
     FloorFraming,
     SlabPanel,
+    Stirrup,
     StructuralModel,
 )
 from app.engine.structural_sheet import (
@@ -152,32 +153,64 @@ def _inner_design(design: dict) -> dict:
     return inner if isinstance(inner, dict) else design
 
 
-def _read_steel(design: dict) -> _BeamSteel:
-    design = design or {}
+def _read_steel(source: BeamRun | dict) -> _BeamSteel:
+    """Typed-first (Task 31): when handed a BeamRun, its parsed
+    BarGroup/Stirrup/Cover beats the design-dict read; the dict path below is
+    the migration fallback, unchanged (unit tests still pin it). The
+    `assumed` flags fire exactly when neither the typed entity nor the
+    payload supplied the value."""
+    if isinstance(source, BeamRun):
+        run: BeamRun | None = source
+        design = source.design or {}
+    else:
+        run = None
+        design = source or {}
+    bottom_bars = run.bottom_bars if run else None
+    top_bars = run.top_bars if run else None
+    stirrups = run.stirrups if run else None
+    cover_t = run.cover if run else None
     d = _inner_design(design)
     st = d.get("stirrups") if isinstance(d.get("stirrups"), dict) else {}
     inputs = design.get("inputs") if isinstance(design.get("inputs"), dict) else {}
     assumed: list[str] = []
 
-    n_bot_f, ok = _num(d.get("n_bars"), 2.0)
-    if not ok:
-        assumed.append("BOT NOS")
-    dia_bot, ok = _num(d.get("bar_dia"), 12.0)
-    if not ok:
-        assumed.append("BAR DIA")
     doubly = bool(d.get("doubly_reinforced"))
-    n_top_f, ok = _num(d.get("n_bars_comp"), 2.0)
-    if doubly and not ok:
-        assumed.append("TOP NOS")
-    dia_top, _ = _num(d.get("bar_dia_comp"), dia_bot)
-    sv, ok = _num(st.get("sv_provided"), 150.0)
-    if not ok:
-        assumed.append("STIRRUP SPACING")
-    dia_st, ok = _num(st.get("dia") or inputs.get("stirrup_dia"), 8.0)
-    if not ok:
-        assumed.append("STIRRUP DIA")
-    legs_f, _ = _num(st.get("legs"), 2.0)
-    cover, _ = _num(d.get("cover_mm") or inputs.get("cover_mm"), 25.0)
+
+    if (
+        bottom_bars is not None
+        and bottom_bars.quantity > 0
+        and bottom_bars.diameter_mm > 0
+    ):
+        n_bot_f, dia_bot = float(bottom_bars.quantity), bottom_bars.diameter_mm
+    else:
+        n_bot_f, ok = _num(d.get("n_bars"), 2.0)
+        if not ok:
+            assumed.append("BOT NOS")
+        dia_bot, ok = _num(d.get("bar_dia"), 12.0)
+        if not ok:
+            assumed.append("BAR DIA")
+    if top_bars is not None and top_bars.quantity > 0 and top_bars.diameter_mm > 0:
+        n_top_f, dia_top = float(top_bars.quantity), top_bars.diameter_mm
+    else:
+        n_top_f, ok = _num(d.get("n_bars_comp"), 2.0)
+        if doubly and not ok:
+            assumed.append("TOP NOS")
+        dia_top, _ = _num(d.get("bar_dia_comp"), dia_bot)
+    if stirrups is not None and stirrups.spacing_mm > 0 and stirrups.diameter_mm > 0:
+        sv, dia_st = stirrups.spacing_mm, stirrups.diameter_mm
+        legs_f = float(stirrups.legs) if stirrups.legs is not None else 2.0
+    else:
+        sv, ok = _num(st.get("sv_provided"), 150.0)
+        if not ok:
+            assumed.append("STIRRUP SPACING")
+        dia_st, ok = _num(st.get("dia") or inputs.get("stirrup_dia"), 8.0)
+        if not ok:
+            assumed.append("STIRRUP DIA")
+        legs_f, _ = _num(st.get("legs"), 2.0)
+    if cover_t is not None and cover_t.mm > 0:
+        cover = cover_t.mm
+    else:
+        cover, _ = _num(d.get("cover_mm") or inputs.get("cover_mm"), 25.0)
 
     return _BeamSteel(
         n_bot=max(1, int(round(n_bot_f))),
@@ -273,7 +306,7 @@ def _distinct_marks(beams: list[BeamRun]) -> list[tuple[str, BeamRun, int]]:
 def _beam_schedule_rows(beams: list[BeamRun]) -> list[tuple[str, ...]]:
     rows: list[tuple[str, ...]] = []
     for mark, run, nos in _distinct_marks(beams):
-        st = _read_steel(run.design)
+        st = _read_steel(run)
         rows.append(
             (
                 mark,
@@ -304,6 +337,25 @@ def _compact(text: str) -> str:
     return re.sub(r"c/c$", "", re.sub(r"\s+", "", str(text))) or "—"
 
 
+def _stirrup_bar_string(s: Stirrup | None) -> str | None:
+    """Render a typed Stirrup in structapi's bar-string shape, so the
+    _compact() pipeline prints byte-identical text."""
+    if s is None:
+        return None
+    return f"{s.diameter_mm:g} φ @ {s.spacing_mm:g} c/c"
+
+
+def _bar_text(typed: Stirrup | None, raw: dict | None) -> str:
+    """Typed-first (Task 31): the parsed Stirrup's canonical bar string beats
+    the raw payload; when absent, the raw ``{"bar": "…"}`` passes through
+    verbatim (including unparseable junk — a migration fallback, not a
+    validator)."""
+    canonical = _stirrup_bar_string(typed)
+    if canonical is not None:
+        return canonical
+    return (raw or {}).get("bar") or "—"
+
+
 def _slab_steel_text(panel: SlabPanel) -> tuple[str, str]:
     """``(main, distribution)`` bar strings from structapi's slab record.
 
@@ -314,17 +366,17 @@ def _slab_steel_text(panel: SlabPanel) -> tuple[str, str]:
     """
     d = panel.design or {}
     if not panel.is_two_way:
-        main = (d.get("main") or {}).get("bar")
-        dist = (d.get("distribution") or {}).get("bar")
-        return _compact(main or "—"), _compact(dist or "—")
+        main = _bar_text(panel.main_steel, d.get("main"))
+        dist = _bar_text(panel.dist_steel, d.get("distribution"))
+        return _compact(main), _compact(dist)
     strips = d.get("strips") or {}
-    short = next(
-        (v.get("bar") for k, v in strips.items() if "short" in k and "bot" in k), None
+    short_raw = next(
+        (v for k, v in strips.items() if "short" in k and "bot" in k), None
     )
-    long_ = next(
-        (v.get("bar") for k, v in strips.items() if "long" in k and "bot" in k), None
-    )
-    return _compact(short or "—"), _compact(long_ or "—")
+    long_raw = next((v for k, v in strips.items() if "long" in k and "bot" in k), None)
+    short = _bar_text(panel.main_steel, short_raw)
+    long_ = _bar_text(panel.dist_steel, long_raw)
+    return _compact(short), _compact(long_)
 
 
 def _slab_schedule_rows(slabs: list[SlabPanel]) -> list[tuple[str, ...]]:
@@ -851,7 +903,7 @@ def _draw_beam_detail(
     b_mm: float,
     D_mm: float,
     span_m: float,
-    design: dict,
+    design: dict | BeamRun,
     x: float,
     y: float,
     avail_w: float,
@@ -868,6 +920,9 @@ def _draw_beam_detail(
     own page instead.
     """
     m = _box_metrics(b_mm, D_mm, span_m, avail_w)
+    # during the Task 31 migration this is called with either the BeamRun
+    # (typed-first read) or its raw design dict (legacy read) — identical
+    # steel when the payload keyed it the old way
     st = _read_steel(design)
 
     c.setFillColor(_BEAM_C)
@@ -936,9 +991,7 @@ def _beam_items(beams: list[BeamRun], avail_w: float) -> list[_Item]:
             span: float = span,
             box_h: float = m.total_h,
         ) -> None:
-            _draw_beam_detail(
-                c, mark, run.b_mm, run.D_mm, span, run.design, x, y, w, box_h
-            )
+            _draw_beam_detail(c, mark, run.b_mm, run.D_mm, span, run, x, y, w, box_h)
 
         items.append(_Item(m.total_h, _draw, mark))
     return items

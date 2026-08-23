@@ -33,20 +33,26 @@ export function buildRoomLabels(rooms: RoomData[]): RoomLabelEntry[] {
 }
 
 /** "PLOT 12.0m × 9.0m" — overall plot footprint, drawn once at the margin. */
-export function plotDimensionLabel(plotWidth: number, plotLength: number): string {
-  return `PLOT ${plotWidth.toFixed(1)}m × ${plotLength.toFixed(1)}m`;
+export function plotDimensionLabel(plotXExtent: number, plotYExtent: number): string {
+  return `PLOT ${plotXExtent.toFixed(1)}m × ${plotYExtent.toFixed(1)}m`;
 }
 
 /** Plan-space unit vector pointing toward true north, given which edge faces
  * the road. Mirrors the road_side -> compass mapping in
- * backend/app/engine/vastu.py (ZONE_GRIDS) so every view of a layout — the
+ * backend/app/engine/vastu.py (ROAD_SIDE_NORTH_ANGLE_DEG) so every view of a layout — the
  * Vastu zone grid, the PDF, and this R3F capture — agrees on where north is:
  *   road_side "S" (default/most common): y=0 is South, y=max is North
  *   road_side "N": y=0 is North, y=max is South
  *   road_side "E": x=0 is East,  x=max is West   -> North is x=0
  *   road_side "W": x=0 is West,  x=max is East   -> North is x=max
  * Unknown/missing road_side falls back to "S", matching vastu.py's
- * `ZONE_GRIDS.get(road_side.upper(), ZONE_GRID_ROAD_S)`. */
+ * `ROAD_SIDE_NORTH_ANGLE_DEG.get(road_side.upper(), 0.0)` (0 deg == road_side "S").
+ *
+ * NOTE: vastu.py now expresses orientation as a continuous `north_angle_deg`, of
+ * which these four road sides are the axis-aligned special cases. This function
+ * only knows the four. When `north_angle_deg` is plumbed through the API schema,
+ * this must consume it directly or the north arrow will disagree with the Vastu
+ * zones on any non-cardinal plot. */
 export function northUnitVector(roadSide: string | undefined): { dx: number; dy: number } {
   switch ((roadSide ?? "S").toUpperCase()) {
     case "N":

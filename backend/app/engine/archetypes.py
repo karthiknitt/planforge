@@ -76,8 +76,8 @@ def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     """
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
-    width = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    width = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    depth = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     return FloorPlate(ox=ox, oy=oy, width=width, depth=depth)
 
 
@@ -114,8 +114,8 @@ def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
     sb_l = cfg.setback_left + ewt
     sb_f = cfg.setback_front + ewt
 
-    W = cfg.plot_width
-    L = cfg.plot_length
+    W = cfg.plot_x_extent
+    L = cfg.plot_y_extent
     cw = cfg.cutout_width
     ch = cfg.cutout_height
     corner = (cfg.cutout_corner or "NE").upper()
@@ -172,6 +172,14 @@ def _l_shaped_floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
 
 
 def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
+    # A `plot_template` notch keeps plot_shape == "rectangular", so it must be
+    # caught BEFORE the plain-rectangle fallback at the bottom — otherwise the
+    # archetypes would lay rooms straight across the cutout. `_inscribed_plate`
+    # is safe on this outline even though its docstring says convex: the
+    # notched region spans the full width at the front and a prefix of it at
+    # the rear, so an x-interval valid at both extremes is valid throughout.
+    if cfg.plot_template != "RECT" and cfg.notch_width > 0 and cfg.notch_depth > 0:
+        return _inscribed_plate(cfg, ewt)
     if cfg.plot_shape == "quadrilateral" and cfg.plot_corners:
         return _quad_floor_plate(cfg, ewt)
     if cfg.plot_shape == "l_shaped":
@@ -186,8 +194,8 @@ def _floor_plate(cfg: PlotConfig, ewt: float) -> FloorPlate:
         return _l_shaped_floor_plate(cfg, ewt)
     ox = cfg.setback_left + ewt
     oy = cfg.setback_front + ewt
-    width = cfg.plot_width - cfg.setback_left - cfg.setback_right - 2 * ewt
-    depth = cfg.plot_length - cfg.setback_front - cfg.setback_rear - 2 * ewt
+    width = cfg.plot_x_extent - cfg.setback_left - cfg.setback_right - 2 * ewt
+    depth = cfg.plot_y_extent - cfg.setback_front - cfg.setback_rear - 2 * ewt
     return FloorPlate(ox=ox, oy=oy, width=width, depth=depth)
 
 
@@ -885,7 +893,15 @@ def layout_c(cfg: PlotConfig, ewt: float = EWT, iwt: float = IWT) -> Layout:
         _r("ff_stair", "Staircase", "staircase", stair_x, stair_y, STAIR_W, d_stair)
     )
     toilet_zone_w = W - STAIR_W - iwt
-    ff_rooms += _stair_band_rooms(cfg, ox, stair_y, toilet_zone_w, d_stair, iwt)
+    # Same trailing-edge stair as the GF band above: `stair_x` is the RIGHT
+    # end of this strip, so the band precedes it and `reverse=True` is what
+    # keeps the circulation filler (not the toilet) hard against the stair.
+    # Without it the FF stair had a WC as its only doorable partition and no
+    # circulation neighbour at all — run 0.000 m against every circulation
+    # room, on both test configs.
+    ff_rooms += _stair_band_rooms(
+        cfg, ox, stair_y, toilet_zone_w, d_stair, iwt, reverse=True
+    )
 
     gf = FloorPlan(floor=0, rooms=gf_rooms, columns=_columns_from_rooms(gf_rooms))
     ff = FloorPlan(floor=1, rooms=ff_rooms, columns=_columns_from_rooms(ff_rooms))

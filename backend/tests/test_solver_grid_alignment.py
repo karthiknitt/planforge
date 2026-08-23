@@ -29,8 +29,8 @@ NEAR_MISS_HI = 0.50
 
 def _cfg(**kwargs) -> PlotConfig:
     defaults = dict(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,
@@ -188,18 +188,67 @@ def test_cross_floor_columns_stack(solved_layouts):
     reason="archetype layout_d's cross-floor stacking is improved (issue #51b "
     "aligned its living/parking <-> lounge/toilet joint) but still short of "
     "the 60% floor on its own — see issue #51 for the remaining gap "
-    "(measured 6/13 ~= 0.46 after the joint-alignment fix). Remove this xfail "
-    "once a further band-alignment fix closes it.",
+    "(measured 5/12 ~= 0.4167 via a forced-archetype-fallback generate() call "
+    "as of the solver-capability-uplift branch; the plain solved_layouts "
+    "fixture no longer surfaces an archetype layout at all now that the "
+    "solver succeeds for this config, so this test forces the real "
+    "generate()-level fallback instead of hoping one appears). Remove this "
+    "xfail once a further band-alignment fix closes it.",
 )
-def test_cross_floor_columns_stack_archetype(solved_layouts):
-    for layout in solved_layouts:
-        if not _is_archetype_layout(layout):
-            continue
-        ratio = _stacked_ratio(layout)
-        if ratio is None:
-            continue
+def test_cross_floor_columns_stack_archetype(monkeypatch):
+    """Exercise layout_d's archetype fallback path directly.
+
+    The old version of this test filtered `solved_layouts` (plain
+    `generate(_cfg())`) for an archetype-origin layout. Tasks 1-10 made the
+    solver succeed reliably for this test's config, so `generate()` never
+    falls through to archetypes any more and that filter loop ran zero
+    iterations — the test passed for every run without ever checking a
+    ratio. See issue #51's investigation notes for how this was caught.
+
+    To force the real fallback pipeline (fill/split/trim/re-snap, identical
+    to what ships), `solve_layouts` is monkeypatched to raise — the same
+    `except Exception: pass  # always fall through to archetypes` path
+    generate() takes on a genuine solver failure — and layout_a/b/c/e are
+    monkeypatched to `layout_d` itself so every archetype candidate
+    `generate()` considers is unambiguously layout_d's output (avoids
+    relying on generate()'s A/B/C rank-reassigned ids, which don't identify
+    which archetype function produced a given layout).
+    """
+    import app.engine.generator as generator_module
+    from app.engine.archetypes import layout_d
+
+    def _forced_solver_failure(*_args, **_kwargs):
+        raise RuntimeError("forced solver failure — test wants the archetype fallback")
+
+    monkeypatch.setattr(generator_module, "solve_layouts", _forced_solver_failure)
+    monkeypatch.setattr(generator_module, "layout_a", layout_d)
+    monkeypatch.setattr(generator_module, "layout_b", layout_d)
+    monkeypatch.setattr(generator_module, "layout_c", layout_d)
+    monkeypatch.setattr(generator_module, "layout_e", layout_d)
+    monkeypatch.setattr(generator_module, "layout_f", lambda *_a, **_k: None)
+
+    cfg = _cfg()
+    layouts = generator_module.generate(cfg)
+
+    archetype_layouts = [lay for lay in layouts if _is_archetype_layout(lay)]
+    # Proves the assertion body below is actually reached: with the solver
+    # forced to fail and every generator slot pointed at layout_d, every
+    # returned layout MUST be archetype-origin. An empty list here would
+    # mean the forcing itself is broken, not that the test still has
+    # nothing to check.
+    assert archetype_layouts, (
+        "forced-fallback generate() returned no archetype-origin layouts — "
+        "the monkeypatch setup is broken, not evidence layout_d is fine"
+    )
+
+    ratios = [_stacked_ratio(lay) for lay in archetype_layouts]
+    assert all(r is not None for r in ratios), (
+        "expected every forced-archetype layout to have first-floor columns"
+    )
+
+    for layout, ratio in zip(archetype_layouts, ratios):
         assert ratio >= 0.6, (
-            f"layout {layout.id}: only {ratio:.2f} of first-floor columns "
+            f"layout {layout.id}: only {ratio:.4f} of first-floor columns "
             "land on ground-floor column positions"
         )
 
@@ -300,7 +349,7 @@ def test_scorer_has_grid_regularity_component():
     from app.engine.scorer import score_layout
 
     cfg = _cfg(
-        num_bedrooms=2, toilets=2, parking=False, plot_length=12.0, plot_width=9.0
+        num_bedrooms=2, toilets=2, parking=False, plot_y_extent=12.0, plot_x_extent=9.0
     )
     rooms = [
         _room("l", 1.13, 1.73, 3.5, 4.0, "living"),

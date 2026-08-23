@@ -21,7 +21,7 @@ def test_golden_fixture_is_deterministic():
     a = golden_layout()
     b = golden_layout()
     assert [r.id for r in a.ground_floor.rooms] == [r.id for r in b.ground_floor.rooms]
-    assert golden_config().plot_width == 9.0
+    assert golden_config().plot_x_extent == 9.0
 
 
 def test_pdf_pages_and_text():

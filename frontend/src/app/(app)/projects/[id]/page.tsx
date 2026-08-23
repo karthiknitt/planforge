@@ -39,8 +39,8 @@ interface LayoutSectionProps {
   projectId: string;
   userId: string;
   projectName: string;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide: string;
   northDirection: string;
   planTier: string;
@@ -64,8 +64,8 @@ async function LayoutSection({
   projectId,
   userId,
   projectName,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide,
   northDirection,
   planTier,
@@ -89,8 +89,8 @@ async function LayoutSection({
     <LayoutViewer
       generateData={generateData}
       dismissedHints={dismissedHints}
-      plotWidth={plotWidth}
-      plotLength={plotLength}
+      plotXExtent={plotXExtent}
+      plotYExtent={plotYExtent}
       roadSide={roadSide}
       northDirection={northDirection}
       projectId={projectId}
@@ -253,8 +253,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           projectId={id}
           userId={session.user.id}
           projectName={project.name}
-          plotWidth={parseFloat(project.plotWidth)}
-          plotLength={parseFloat(project.plotLength)}
+          plotXExtent={parseFloat(project.plotWidth)}
+          plotYExtent={parseFloat(project.plotLength)}
           roadSide={project.roadSide}
           northDirection={project.northDirection}
           planTier={planTier}

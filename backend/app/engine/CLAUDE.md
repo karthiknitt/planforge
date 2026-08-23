@@ -7,8 +7,15 @@ functions over Shapely objects; keep I/O and persistence in `../services/`.
 
 - **Never do raw float math for polygon operations** — use Shapely. Floating-point edge
   cases in setback and inset logic have caused several solver bugs.
-- **Compliance thresholds live in `backend/config/compliance_rules.json`**, never
-  hardcoded. That includes Vastu zone rules (`vastu_zones`) and opening standards.
+- **Compliance thresholds live in `backend/app/config/compliance_rules.json`**, never
+  hardcoded (path confirmed by `compliance.py:8`; it is *not* `backend/config/`).
+  That includes the Vastu rules — both `vastu_zones` (zone-keyed, three tiers:
+  `preferred`/`avoid`/`prohibit`, though `check_vastu` reads only the latter two) and
+  `vastu_room_rules` (room-type-keyed, three tiers: `preferred`/`acceptable`/`avoid`,
+  read by `vastu_room_score`) — and opening standards. `vastu_room_rules` is a
+  **derived transpose** of `vastu_zones`, pinned in both directions by the round-trip
+  tests in `tests/test_vastu_score.py`: edit `vastu_zones` and re-derive, never author
+  a `vastu_room_rules` cell by hand.
 - **Never run `ruff format` on `*.json`** — it corrupts the rules file.
 - **PDF generation is ReportLab only** — not matplotlib, not cairosvg.
 - **DXF is ezdxf, and `doc.write()` needs `StringIO`** (text mode), not `BytesIO`.
@@ -24,13 +31,29 @@ light, adjacency, aspect ratio, circulation, Vastu at 10% weight).
 
 ## Drawing pipeline
 
-`plan_geometry.py` → walls, doors, windows, main-entrance pass (GF only).
+`plan_geometry.py` → walls, doors, windows, main-entrance pass (GF only), plus the
+canonical `FloorDrawing.site` (compound wall/gate/ground hatches, Task 32) and
+`FloorDrawing.fixtures` (canonical furniture, derived in `furniture.py`, Task 33).
+PDF, DXF and the SVG frontend all PROJECT these — never re-derive site or
+furniture geometry in a renderer. Opening edits are `OpeningOverride`/`AddedOpening`
+deltas on the floor plan, applied as a post-pass before ids/marks (Tasks 29–30).
 `section_geometry.py` → SECTION A-A + FRONT ELEVATION, consumed by `section_render.py`
 (IS 962 hatching) and both PDF generators.
 `structural_grid.py` / `footing_placement.py` / `structural_drawing_set.py` feed the
-structural sheets; member design itself happens in structapi, not here.
+structural sheets; member design itself happens in structapi, not here. The sheets
+read typed detailing entities (`BarGroup`/`Stirrup`/`Lap`/`Cover` on the structural
+model items) typed-first, with the raw `design` dict kept as the migration fallback
+(Task 31) — never add a fresh `.get()` chain into `design` when a typed field exists.
 
 ## Gotcha
 
 OR-Tools 9.x: `new_interval_var(x, w, x + w, name)` fails because `x + w` is a two-IntVar
 sum, not affine. Introduce an explicit end var: `model.add(ex == x + w)`.
+
+`IntVar.proto.domain` does **not** honour negative indexing. It is a protobuf
+repeated-scalar container, so `v.proto.domain[-1]` silently returns `0` instead
+of the upper bound — no exception, just a wrong number. `tuple(v.proto.domain)`
+is `(lo, hi)` and `v.proto.domain[0]` is correct. This has already cost one
+mutation-testing round on the Vastu solver terms: a mutation written against
+`domain[-1]` was a no-op and was scored as evidence of coverage it never
+provided. Read bounds via `domain[0]` / `tuple(...)`, never a negative index.

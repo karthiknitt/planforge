@@ -2,11 +2,18 @@
 
 import math
 
+from app.engine.cad_elements import Opening, WallSegment
 from app.engine.geometry import buildable_polygon
+from app.engine.models import AddedOpening, OpeningOverride, Room
 from app.engine.plan_geometry import (
+    _all_exterior_edges,
+    _plate_bounds,
+    apply_added_openings,
+    apply_opening_overrides,
     derive_columns,
     derive_openings,
     derive_walls,
+    exterior_wall_spans,
     opening_boxes,
     validate_floor_connectivity,
     wall_polygons,
@@ -629,6 +636,165 @@ def test_gapped_parking_gets_no_repair_door():
         )
 
 
+def test_gapped_parking_is_not_flagged_unreachable():
+    """A car porch gapped from every neighbour is intentionally door-less
+    (reachable only from the driveway). The reachability gate must agree
+    with `_repair_connectivity`'s parking exemption and not flag it."""
+    for rtype in ("parking", "parking_4w", "parking_2w"):
+        rooms = [
+            _room("living", 1.23, 1.73, 3.5, 5.0),
+            _room("porch", 1.23, 6.93, 3.5, 3.0, rtype=rtype),
+        ]
+        openings, _walls = _openings_for(rooms, _cfg_9x15())
+        problems = validate_floor_connectivity(rooms, openings, 0)
+        flagged = {p.split()[0] for p in problems}
+        assert "porch" not in flagged, (
+            f"{rtype}: gapped car porch wrongly flagged: {problems}"
+        )
+
+
+def test_open_to_sky_void_is_not_flagged_unreachable():
+    """A double-height void has no door and needs none; the gate must not
+    flag it just because it is not on the door graph."""
+    rooms = [
+        _room("st", 1.23, 1.73, 6.54, 1.27, rtype="staircase"),
+        _room("liv", 1.23, 3.115, 6.54, 2.0),
+        Room(
+            id="void",
+            name="void",
+            type="open_to_sky",
+            x=2.5,
+            y=3.5,
+            width=1.5,
+            depth=1.5,
+            void_over="liv",
+        ),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15(), floor=1)
+    problems = validate_floor_connectivity(rooms, openings, 1)
+    flagged = {p.split()[0] for p in problems}
+    assert "void" not in flagged, f"open_to_sky void wrongly flagged: {problems}"
+
+
+def test_entrance_routes_to_a_habitable_room_behind_a_full_width_car_porch():
+    """A car porch spans the entire frontage, so no habitable room touches the
+    road. The main entrance must be placed DELIBERATELY on the habitable
+    room's side elevation near the road — not left to the repair pass's
+    arbitrary mid-wall side door (the old behaviour: no main door at all plus
+    a repair door punched at mid-height on the side wall)."""
+    rooms = [
+        Room(
+            id="porch",
+            name="Car Porch",
+            type="parking_4w",
+            x=1.23,
+            y=1.73,
+            width=6.54,
+            depth=5.0,
+            open_sides=frozenset({"S"}),
+        ),
+        _room("living", 1.23, 6.73, 6.54, 5.0),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    mains = [o for o in openings if o.is_main]
+    assert len(mains) == 1, f"expected exactly one main door, got {len(mains)}"
+    md = mains[0]
+    assert md.swing_into_room_id == "living", "main door must serve the living room"
+    # door sits on a SIDE (vertical) wall — x=1.115 or x=7.885 (plate external
+    # centrelines), never on the rear elevation
+    assert not md.is_horizontal, f"expected a side-wall door, got {md.cx},{md.cy}"
+    assert abs(md.cx - 1.115) < 0.06 or abs(md.cx - 7.885) < 0.06, md.cx
+    # ...and near the road end of that wall (cy close to the porch's rear 6.73),
+    # not the mid-height 10.28 the repair pass used to pick
+    assert 6.5 < md.cy < 8.5, f"door not near the road end of the side wall: {md.cy}"
+
+
+def test_entrance_prefers_a_habitable_road_facing_room_when_one_exists():
+    """Regression: stage 1 (road-facing habitable room) still wins over the
+    through-porch route when it applies."""
+    rooms = [
+        _room("living", 1.23, 1.73, 3.5, 5.0),
+        _room("bedroom", 4.93, 1.73, 3.0, 5.0),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    mains = [o for o in openings if o.is_main]
+    assert len(mains) == 1
+    assert mains[0].is_horizontal, "main door left the frontage"
+    assert abs(mains[0].cy - 1.615) < 0.06, "main door left the frontage"
+    assert mains[0].swing_into_room_id == "living"
+
+
+def test_no_opening_on_an_open_side():
+    """A room with a declared-open N and E side (e.g. an open-air sit-out
+    off the living room) gets no door, window, or vent cut into either edge:
+    there is no wall there for an opening to cut into.
+
+    `Opening` has no `x1/y1/x2/y2` fields (see `cad_elements.py`) — it stores
+    a centre `(cx, cy)` sitting ON the wall centreline plus `width` running
+    along the wall, and `is_horizontal` selects which axis that is. A wall
+    centreline sits `ewt / 2` (0.115 m) outside the raw room edge, so we
+    compare against the centreline position with a 0.125 tolerance — the
+    same slack `derive_walls` uses for its own open-edge drop (Task 2).
+
+    Two scenario choices matter to avoid a vacuous pass (Task 2 already
+    learned this the hard way):
+
+    1. The target room's type is `"living"` (in `_WINDOW_TYPES`), not
+       `"parking_4w"` — parking rooms never get windows/vents at all
+       (`_WINDOW_TYPES`/`_WET_TYPES` exclude them), so an open-sided
+       *parking* room would pass this assertion regardless of whether the
+       open-edge filter under test does anything.
+    2. The room sits in the plate's NE corner, so its N and E edges land
+       exactly on the buildable plate boundary (x2=7.77/y2=13.77 for
+       `_cfg_9x15`) — `_all_exterior_edges`'s plate-boundary source
+       (`_exterior_edges`) yields a candidate edge purely from plate
+       geometry, independent of whether `derive_walls` drew a wall there.
+       Its S and W sides are filled by neighbour rooms so they read as
+       internal walls, not additional exterior edges an opening could
+       legitimately land on instead.
+    """
+    from app.engine.models import Room
+
+    rooms = [
+        _room("west", 2.27, 10.77, 2.0, 3.0, rtype="bedroom"),
+        _room("south", 4.27, 9.77, 3.5, 1.0, rtype="bedroom"),
+        Room(
+            id="target",
+            name="Open Sit-out",
+            type="living",
+            x=4.27,
+            y=10.77,
+            width=3.5,
+            depth=3.0,
+            open_sides=frozenset({"N", "E"}),
+        ),
+    ]
+    openings, _walls = _openings_for(rooms, _cfg_9x15())
+    ewt = EWT
+    tol = 0.125
+    # target's declared-open N edge: y = 13.77 (== plate y2), x in [4.27, 7.77].
+    n_centreline = 10.77 + 3.0 + ewt / 2
+    n_span = (4.27, 7.77)
+    # target's declared-open E edge: x = 7.77 (== plate x2), y in [10.77, 13.77].
+    e_centreline = 4.27 + 3.5 + ewt / 2
+    e_span = (10.77, 13.77)
+
+    def _overlaps(along_lo: float, along_hi: float, span: tuple[float, float]) -> bool:
+        return along_lo < span[1] - tol and along_hi > span[0] + tol
+
+    for o in openings:
+        if o.is_horizontal and abs(o.cy - n_centreline) < tol:
+            along_lo, along_hi = o.cx - o.width / 2, o.cx + o.width / 2
+            assert not _overlaps(along_lo, along_hi, n_span), (
+                f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on the target's open N edge"
+            )
+        if (not o.is_horizontal) and abs(o.cx - e_centreline) < tol:
+            along_lo, along_hi = o.cy - o.width / 2, o.cy + o.width / 2
+            assert not _overlaps(along_lo, along_hi, e_span), (
+                f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on the target's open E edge"
+            )
+
+
 # ── Entrance-placement diagnostics (Task 6: #6, #6b, G, #6d) ─────────────────
 
 
@@ -642,13 +808,15 @@ def _drawing_for(rooms):
 
 def test_main_door_all_parking_frontage_is_diagnosed():  # #6d
     # every parking type (2W/4W variants included) is ineligible to host the
-    # main entrance — a frontage of only parking + stair must be diagnosed
+    # main entrance — a frontage of only parking + stair, with no habitable
+    # room directly behind the porch to route through (the living sits behind
+    # the STAIRCASE here), must be diagnosed
     for rtype in ("parking", "parking_4w", "parking_2w"):
         drawing = _drawing_for(
             [
                 _room("porch", 1.23, 1.73, 4.0, 3.0, rtype=rtype),
                 _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
-                _room("living", 1.23, 4.73, 4.0, 3.0),
+                _room("living", 5.23, 8.73, 2.0, 3.0),
             ]
         )
         diag = [d for d in drawing.diagnostics if d.startswith("main_entrance:")]
@@ -669,7 +837,7 @@ def test_main_door_all_parking_frontage_flags_entrance_not_on_ground_floor():  #
         [
             _room("porch", 1.23, 1.73, 4.0, 3.0, rtype="parking"),
             _room("stair", 5.23, 1.73, 2.0, 7.0, rtype="staircase"),
-            _room("living", 1.23, 4.73, 4.0, 3.0),
+            _room("living", 5.23, 8.73, 2.0, 3.0),
         ]
     )
     assert drawing.entrance_not_on_ground_floor is True
@@ -945,3 +1113,305 @@ def test_void_facing_wet_room_receives_ventilator():
         and 3.23 - 0.13 <= o.cx <= 5.77 + 0.13
     ]
     assert toilet_vents, "toilet got no ventilator on its void-facing exterior wall"
+
+
+def _l_room():
+    """An L living room whose bbox top edge exists only over a narrow leg.
+
+    ratio 0.3 → base band y in [1.73, 2.93] spanning the full 6 m width, leg
+    x in [1.23, 3.03] rising to y = 5.73. The bbox's N edge (y = 5.73) is
+    therefore only 1.8 m of real wall; the other 4.2 m is open air over the
+    notch. width > depth so N/S are the two LONGEST edges and the window pass
+    actually targets that line.
+    """
+    from app.engine.models import Room
+
+    return Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=1.23,
+        y=1.73,
+        width=6.0,
+        depth=4.0,
+        template="L",
+        shape_ratio=0.3,
+    )
+
+
+def test_exterior_edges_of_an_l_room_stop_at_the_notch():
+    """`_all_exterior_edges` is what opening placement consumes. Its N run
+    must be the union-boundary run (the leg only), not the bbox's full
+    6 m span."""
+    room = _l_room()
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    walls = derive_walls([room], buildable)
+    plate = _plate_bounds([room], buildable, EWT)
+    north = [
+        e
+        for e in _all_exterior_edges(room, walls, plate, EWT, 0.01)
+        if e[0] and abs(e[1] - (5.73 + EWT / 2)) < 0.06
+    ]
+    assert north, "the L's north exterior edge vanished entirely"
+    for _is_h, _coord, lo, hi in north:
+        assert hi <= 3.03 + 0.01, (
+            f"north exterior edge spans x=[{lo}, {hi}] — past the leg's east "
+            "face at 3.03, i.e. straight across the notch"
+        )
+
+
+def test_no_opening_is_placed_across_an_l_notch():
+    """End-to-end guard: nothing may be cut into the bbox's N line beyond the
+    leg, because there is no wall there."""
+    room = _l_room()
+    openings, _walls = _openings_for([room], _cfg_9x15())
+    notch_centreline = 5.73 + EWT / 2
+    leg_x_max = 3.03
+    for o in openings:
+        if o.is_horizontal and abs(o.cy - notch_centreline) < 0.06:
+            assert o.cx + o.width / 2 <= leg_x_max + EWT / 2 + 0.01, (
+                f"{o.kind} at (cx={o.cx}, cy={o.cy}) placed on a bbox edge "
+                "that is not part of the room"
+            )
+
+
+# ── Deterministic opening ids + canonical schedule marks (Phase 7 / T27) ─────
+
+
+def _opening_key(o) -> tuple:
+    return (o.kind, round(o.cx, 4), round(o.cy, 4))
+
+
+def test_opening_ids_stable_unique_and_local():
+    """Stability + uniqueness on re-derivation, and locality: shrinking room
+    d (which moves only walls that back onto d) leaves every other opening's
+    id untouched."""
+
+    def quad(d_width: float):
+        return [
+            _room("a", 1.23, 7.73, 3.155, 6.04),
+            _room("b", 4.5, 7.73, 3.27, 6.04),
+            _room("c", 1.23, 1.73, 3.155, 5.885),
+            _room("d", 4.5, 1.73, d_width, 5.885),
+        ]
+
+    da = _drawing_for(quad(3.27))
+    db = _drawing_for(quad(2.97))
+    ids_a = [o.id for o in da.openings]
+    assert ids_a and all(ids_a), "every opening carries a non-empty id"
+    assert len(set(ids_a)) == len(ids_a), f"duplicate opening ids: {sorted(ids_a)}"
+    # Locality, at the same strength as the wall-level property: an opening
+    # whose HOST WALL is unchanged (same id in both drawings) keeps its own
+    # id. Openings on a merged run that d's shrink shortened legitimately
+    # re-address — the wall they are addressed through changed.
+    wall_ids_a = {w.id for w in da.walls}
+    wall_ids_b = {w.id for w in db.walls}
+    survivors = [
+        o for o in db.openings if o.id.split("#")[0] in wall_ids_a & wall_ids_b
+    ]
+    assert survivors, "sanity: some openings sit on walls untouched by d's shrink"
+    by_wall = {(o.kind, round(o.cx, 4), round(o.cy, 4)): o.id for o in da.openings}
+    for o in survivors:
+        k = (o.kind, round(o.cx, 4), round(o.cy, 4))
+        assert k in by_wall and by_wall[k] == o.id, (
+            f"opening {k} on an untouched wall changed id: {by_wall.get(k)} -> {o.id}"
+        )
+
+
+def test_opening_id_names_its_host_wall():
+    """An opening id is derived from its host wall's id plus the position
+    along that wall — so it reads as an address, not a list index."""
+    drawing = _drawing_for(_two_bedrooms())
+    wall_by_id = {w.id: w for w in drawing.walls}
+    for o in drawing.openings:
+        host = o.id.split("#")[0]
+        w = wall_by_id.get(host)
+        assert w is not None, f"{o.id}: host wall not found"
+        if o.is_horizontal:
+            assert abs(w.y1 - o.cy) < 0.2 and abs(w.y1 - w.y2) < 1e-6
+        else:
+            assert abs(w.x1 - o.cx) < 0.2 and abs(w.x1 - w.x2) < 1e-6
+
+
+def test_same_size_doors_share_mark_but_differ_in_id():
+    """The mark/class vs id/instance distinction: two 900 mm doors in
+    different rooms share one schedule mark and must still be individually
+    addressable."""
+    rooms = [
+        _room("a", 1.23, 1.73, 2.77, 5.0),
+        _room("b", 4.115, 1.73, 3.655, 5.0),
+        _room("c", 1.23, 6.845, 6.54, 6.925),
+    ]
+    drawing = _drawing_for(rooms)
+    doors = [o for o in drawing.openings if o.kind == "door"]
+    assert len(doors) >= 2
+    by_mark: dict[str, list] = {}
+    for d in doors:
+        assert d.mark, "every door carries a mark"
+        by_mark.setdefault(d.mark, []).append(d)
+    shared = [g for g in by_mark.values() if len(g) >= 2]
+    assert shared, f"expected at least one shared door mark, got {by_mark.keys()}"
+    for group in shared:
+        instance_ids = {d.id for d in group}
+        assert len(instance_ids) == len(group), "shared mark must not mean shared id"
+        widths = {round(d.width * 1000 / 50) * 50 for d in group}
+        assert len(widths) == 1, "a mark groups equal snapped widths only"
+
+
+def test_main_door_keeps_md_mark():
+    from app.engine.models import FloorPlan
+    from app.engine.plan_geometry import build_floor_drawing
+
+    fp = FloorPlan(
+        floor=0, floor_type="ground", rooms=golden_layout().ground_floor.rooms
+    )
+    drawing = build_floor_drawing(fp, _cfg_9x15())
+    mains = [o for o in drawing.openings if o.is_main]
+    assert mains, "golden layout has a main entrance"
+    assert all(o.mark == "MD" for o in mains)
+
+
+def test_schedule_rows_survive_mark_promotion():
+    """The PDF openings-schedule rows built from promoted `Opening.mark`
+    fields are identical to the legacy index-keyed computation."""
+    from app.engine.pdf import _openings_schedule_rows
+
+    drawing = _drawing_for(_two_bedrooms())
+    rows = _openings_schedule_rows(drawing)
+    # legacy algorithm, verbatim from pre-promotion pdf.py
+    height_mm = {"door": 2100, "window": 1200, "ventilator": 600}
+    prefix = {"door": "D", "window": "W", "ventilator": "V"}
+    groups: dict[tuple[str, int], list[int]] = {}
+    main_idx: list[int] = []
+    for i, o in enumerate(drawing.openings):
+        if getattr(o, "is_main", False):
+            main_idx.append(i)
+            continue
+        groups.setdefault((o.kind, round(o.width * 1000 / 50) * 50), []).append(i)
+    counters = dict.fromkeys(prefix, 0)
+    legacy: list[tuple] = []
+    for (kind, width_mm), idxs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], -kv[0][1])
+    ):
+        counters[kind] += 1
+        legacy.append(
+            (
+                f"{prefix[kind]}{counters[kind]}",
+                kind.upper(),
+                width_mm,
+                height_mm[kind],
+                len(idxs),
+            )
+        )
+    if main_idx:
+        width_mm = round(drawing.openings[main_idx[0]].width * 1000 / 50) * 50
+        legacy.insert(
+            0, ("MD", "MAIN DOOR", width_mm, height_mm["door"], len(main_idx))
+        )
+    assert rows == legacy
+
+
+# ── apply_opening_overrides (T29) — CodeRabbit review on PR #97 ─────────────
+
+
+def _vertical_wall_with_door(along=4.0, width=0.9):
+    """A vertical host wall (x1==x2) at x=5, y∈[0,10], with a door cut into
+    it at along-position `along` (y) and cross position 5.0 (x)."""
+    wall = WallSegment(x1=5.0, y1=0.0, x2=5.0, y2=10.0, thickness=0.23, kind="external")
+    hinge_y = along - width / 2  # hinge on the lower jamb (side=-1)
+    door = Opening(
+        kind="door",
+        cx=5.0,
+        cy=along,
+        width=width,
+        is_horizontal=False,
+        wall_thickness=0.23,
+        hinge_x=5.0,
+        hinge_y=hinge_y,
+        id="w1#0",
+    )
+    return [wall], door
+
+
+def test_width_only_override_keeps_the_along_wall_position():
+    """CodeRabbit finding on PR #97: `apply_opening_overrides` read o.cx as the
+    along-wall coordinate for a VERTICAL wall instead of o.cy (and vice versa
+    for horizontal), so a width-only override silently relocated the opening
+    along the wall it never asked to move."""
+    walls, door = _vertical_wall_with_door(along=4.0, width=0.9)
+    ov = OpeningOverride(opening_id="w1#0", width=1.2)
+    diagnostics: list[str] = []
+    apply_opening_overrides([door], walls, [ov], diagnostics)
+    assert not diagnostics, diagnostics
+    assert door.cy == 4.0, f"width-only override moved the door along the wall: {door}"
+    assert door.cx == 5.0
+    assert door.width == 1.2
+
+
+def test_override_keeps_the_door_on_its_derived_jamb_side():
+    """The axis-swap bug also picked the wrong hinge/old-centre pair, which
+    could flip a lower-hinged door to the upper jamb on any override."""
+    walls, door = _vertical_wall_with_door(along=4.0, width=0.9)
+    assert door.hinge_y < door.cy, "fixture must start lower-hinged"
+    ov = OpeningOverride(opening_id="w1#0", width=1.2)
+    apply_opening_overrides([door], walls, [ov], [])
+    assert door.hinge_y < door.cy, "override flipped the door to the upper jamb"
+
+
+def test_non_positive_override_width_is_rejected():
+    walls, door = _vertical_wall_with_door(along=4.0, width=0.9)
+    ov = OpeningOverride(opening_id="w1#0", width=0.0)
+    diagnostics: list[str] = []
+    apply_opening_overrides([door], walls, [ov], diagnostics)
+    assert any("must be positive" in d for d in diagnostics)
+    assert door.width == 0.9, "rejected override must not mutate the opening"
+
+
+def test_exterior_wall_spans_skips_a_declared_open_edge():
+    """A room edge marked `open_sides` never had a wall drawn there (see
+    derive_walls) — offering it as a candidate exterior span for a new
+    door/window would place the opening on a wall that doesn't exist."""
+    cfg = _cfg_9x15()
+    buildable = buildable_polygon(cfg)
+    open_room = Room(
+        id="a",
+        name="a",
+        type="bedroom",
+        x=1.23,
+        y=1.73,
+        width=2.77,
+        depth=12.04,
+        open_sides=frozenset({"S"}),
+    )
+    rooms = [open_room, _room("b", 4.115, 1.73, 3.655, 12.04)]
+    spans = exterior_wall_spans(open_room, rooms, buildable)
+    assert all(side != "S" for side, *_ in spans)
+
+
+def test_apply_added_openings_rejects_an_unsupported_kind():
+    rooms = _two_bedrooms()
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls(rooms, buildable)
+    added = [AddedOpening(kind="skylight", room_a="a", room_b="outside")]
+    diagnostics: list[str] = []
+    openings: list[Opening] = []
+    apply_added_openings(rooms, walls, openings, added, buildable, diagnostics, STD)
+    assert not openings
+    assert any("unsupported kind" in d for d in diagnostics)
+
+
+def test_apply_added_openings_uses_configured_standard_widths():
+    rooms = _two_bedrooms()
+    buildable = buildable_polygon(_cfg_9x15())
+    walls = derive_walls(rooms, buildable)
+    custom_std = OpeningStandards(door_width_m=1.1)
+    added = [AddedOpening(kind="door", room_a="a", room_b="b")]
+    diagnostics: list[str] = []
+    openings: list[Opening] = []
+    apply_added_openings(
+        rooms, walls, openings, added, buildable, diagnostics, custom_std
+    )
+    assert diagnostics == []
+    assert len(openings) == 1
+    assert openings[0].width == custom_std.door_width_m

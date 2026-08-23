@@ -193,8 +193,8 @@ async def perform_render(
         reference_kind = "cad"
     prompt = build_render_prompt(
         stored.geometry,
-        plot_length_m=cfg.plot_length,
-        plot_width_m=cfg.plot_width,
+        plot_length_m=cfg.plot_y_extent,
+        plot_width_m=cfg.plot_x_extent,
         north_direction=project.north_direction,
         floor=floor,
         reference_kind=reference_kind,

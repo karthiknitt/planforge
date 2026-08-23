@@ -9,10 +9,13 @@ diffing) plus a smoke render of both PDFs from the frozen golden fixture.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from reportlab.lib.pagesizes import A4
 
 from app.engine.approval_pdf import OwnerInfo, generate_approval_pdf
+from app.engine.cad_elements import Opening
 from app.engine.models import PlotConfig
 from app.engine.pdf import (
     MARGIN,
@@ -25,6 +28,7 @@ from app.engine.pdf import (
     _area_schedule_height,
     _centered_plot_oy,
     _openings_schedule_height,
+    _openings_schedule_rows,
     _schedule_column_x,
     _standard_scale,
     render_pdf,
@@ -57,8 +61,8 @@ _ASPECTS = [
 
 def _cfg(width: float, length: float) -> PlotConfig:
     return PlotConfig(
-        plot_length=length,
-        plot_width=width,
+        plot_y_extent=length,
+        plot_x_extent=width,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,
@@ -78,7 +82,7 @@ def test_plot_group_is_vertically_centered(width: float, length: float) -> None:
     bottom-anchored)."""
     cfg = _cfg(width, length)
     s, _ = _standard_scale(cfg, PAGE_W, PAGE_H, reserve_w=SCHED_RESERVE)
-    plot_py = cfg.plot_length * s
+    plot_py = cfg.plot_y_extent * s
     road_below = ROAD_H + ROAD_GAP
     oy = _centered_plot_oy(
         PAGE_H, plot_py, title_h=TITLE_H, margin=MARGIN, road_below=road_below
@@ -110,7 +114,7 @@ def test_centering_accounts_for_road_above() -> None:
 def test_schedule_column_clear_of_plot(width: float, length: float) -> None:
     cfg = _cfg(width, length)
     s, _ = _standard_scale(cfg, PAGE_W, PAGE_H, reserve_w=SCHED_RESERVE)
-    plot_px = cfg.plot_width * s
+    plot_px = cfg.plot_x_extent * s
     ox = MARGIN + (PAGE_W - 2 * MARGIN - SCHED_RESERVE - plot_px) / 2
     sched_x = _schedule_column_x(PAGE_W, MARGIN)
 
@@ -130,6 +134,23 @@ def test_schedule_tables_sit_above_title_block_not_top_corner() -> None:
     assert area_top < PAGE_H / 2
     # Its bottom edge clears the title block.
     assert area_top - area_h >= TITLE_H
+
+
+def test_schedule_rows_survive_legacy_openings_with_empty_marks() -> None:
+    """Hand-built openings default `mark` to "" and never went through
+    `assign_opening_marks`. `_mark_order` used to call `int(mark[1:])` on that
+    empty string and crash — CodeRabbit finding on PR #96. Schedule generation
+    must instead assign canonical marks on the fly, not crash."""
+    door = Opening(
+        kind="door", cx=1.0, cy=0.0, width=0.9, is_horizontal=True, wall_thickness=0.115
+    )
+    window = Opening(
+        kind="window", cx=3.0, cy=0.0, width=1.2, is_horizontal=True, wall_thickness=0.23
+    )
+    drawing = SimpleNamespace(openings=[door, window])
+    rows = _openings_schedule_rows(drawing)
+    assert {row[1] for row in rows} == {"DOOR", "WINDOW"}
+    assert door.mark and window.mark, "legacy openings must get real marks assigned"
 
 
 def test_schedule_height_helpers_match_row_math() -> None:

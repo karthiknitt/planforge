@@ -30,7 +30,7 @@ from app.engine.plan_geometry import (
     derive_openings,
     derive_walls,
 )
-from app.engine.standards import OpeningStandards
+from app.engine.standards import OpeningStandards, get_opening_standards
 
 # Rooms abut across one internal wall (115 mm) plus post-solve snap jitter.
 _ABUT_TOL = 0.2
@@ -41,8 +41,8 @@ def _mylatest_cfg() -> PlotConfig:
     60 x 40 ft (18.288 x 12.192 m), 2BHK, 2 attached toilets, G+1, road E.
     """
     return PlotConfig(
-        plot_length=12.192,
-        plot_width=18.288,
+        plot_y_extent=12.192,
+        plot_x_extent=18.288,
         setback_front=1.524,
         setback_rear=1.524,
         setback_left=0.914,
@@ -59,8 +59,8 @@ def _mylatest_cfg() -> PlotConfig:
 
 def _standard_cfg() -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=12.0,
+        plot_y_extent=15.0,
+        plot_x_extent=12.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.9,
@@ -109,14 +109,23 @@ def _floor_plan(layout, floor_idx: int):
 
 _FLOORS = [0, 1]
 
-#: (layout fixture, floor) cases. Each archetype hand-rolls its own ground-floor
-#: stair band, so that fix is per-archetype; only the UPPER-floor band is shared
-#: (`archetypes._stair_band_rooms`), which is why every first-floor case passes.
+#: (layout fixture, floor) cases, asserted over `generate()` output — i.e. over
+#: whatever survives RANKING into the top 3.
 #:
-#: All six archetypes' GF bands now give the stair a real circulation-room
-#: neighbour before parking/wet rooms (#50, #51, #61 — layout_c/layout_e were
-#: the last two, both hand-rolled and not covered by the earlier shared-helper
-#: fix). No more xfail needed here.
+#: These cases are NOT a safety net on their own, and the file used to claim
+#: they were: an earlier version of this comment said "only the UPPER-floor band
+#: is shared (`archetypes._stair_band_rooms`), which is why every first-floor
+#: case passes". That was false. Both first-floor cases were failing on
+#: `layout_c` until commit e11e500 (the E/W Vastu grid fix) changed the zone
+#: map, hence the Vastu score, hence the ranking — `layout_c` simply stopped
+#: reaching the top 3. The bug did not move; the test stopped looking at it.
+#: (`layout_c` passed the band to `_stair_band_rooms` without `reverse=True`
+#: even though its stair sits at the band's TRAILING edge, so the toilet — not
+#: the circulation filler — ended up hard against the stair core.)
+#:
+#: The real net is `test_archetype_*_direct` below, which calls every archetype
+#: builder directly and cannot be silenced by a scoring tweak. Keep these
+#: generate()-level cases as integration coverage, not as the invariant.
 #:
 #: Gotcha when extending this: `generate()` REASSIGNS layout ids to A/B/C, so
 #: the layout reported as "A" is NOT necessarily `layout_a()` — identify the
@@ -233,3 +242,123 @@ def test_every_staircase_still_has_a_door(fixture, floor_idx, request):
             assert _doors_on_room(stair, doors), (
                 f"{layout.id} floor {floor_idx}: staircase {stair.id} has no door"
             )
+
+
+# ---------------------------------------------------------------------------
+# Direct-archetype invariants
+#
+# Parametrised over every archetype builder and both configs, bypassing
+# `generate()` and its ranking entirely. A regression here cannot be hidden by
+# a scoring change the way the generate()-level cases above were (see the
+# _CASES comment).
+# ---------------------------------------------------------------------------
+
+_ARCHETYPE_NAMES = [
+    "layout_a",
+    "layout_b",
+    "layout_c",
+    "layout_d",
+    "layout_e",
+    "layout_f",
+]
+_CFGS = {"mylatest": _mylatest_cfg, "standard": _standard_cfg}
+
+
+def _archetype_floors(archetype_name: str, cfg_name: str):
+    """Yield (floor_plan, cfg) for every floor the archetype actually builds."""
+    from app.engine import archetypes
+
+    cfg = _CFGS[cfg_name]()
+    layout = getattr(archetypes, archetype_name)(cfg)
+    if layout is None:  # layout_f declines some plots
+        pytest.skip(f"{archetype_name} returns no layout for the {cfg_name} config")
+    for fp in (
+        layout.ground_floor,
+        layout.first_floor,
+        layout.second_floor,
+        layout.basement_floor,
+    ):
+        if fp is not None:
+            yield fp, cfg
+
+
+def _stair_door_targets(fp):
+    """Mirror solver.py's own hard constraint: circulation rooms if the floor
+    has any, else any ordinary (non-wet, non-parking) room as a last resort."""
+    targets = [r for r in fp.rooms if r.type in _CIRCULATION_TYPES]
+    if not targets:
+        targets = [
+            r
+            for r in fp.rooms
+            if r.type not in _WET_TYPES
+            and r.type not in _PARKING_TYPES
+            and r.type != "staircase"
+        ]
+    return targets
+
+
+@pytest.mark.parametrize("cfg_name", sorted(_CFGS))
+@pytest.mark.parametrize("archetype_name", _ARCHETYPE_NAMES)
+def test_archetype_staircase_gets_a_doorable_circulation_wall_direct(
+    archetype_name, cfg_name
+):
+    """Every archetype, every floor: the stair core shares at least a door
+    leaf plus jambs of wall with a circulation room.
+
+    `layout_c`'s first floor violated this with a best run of exactly 0.000 m
+    on both configs — its stair sits at the trailing edge of the band, but the
+    call to `_stair_band_rooms` omitted `reverse=True`, so the toilet took the
+    edge against the stair and the Family Lounge / Landing was pushed to the
+    far end of the strip.
+    """
+    for fp, _cfg in _archetype_floors(archetype_name, cfg_name):
+        targets = _stair_door_targets(fp)
+        for stair in [r for r in fp.rooms if r.type == "staircase"]:
+            runs = [_shared_wall_run(stair, other) for other in targets]
+            best = max(runs, default=0.0)
+            assert best >= _STAIR_DOOR_MIN_RUN_M - 1e-6, (
+                f"{archetype_name}/{cfg_name} floor {fp.floor}: staircase "
+                f"{stair.id} has no circulation partition >= "
+                f"{_STAIR_DOOR_MIN_RUN_M} m (best run {best:.3f} m) — its door "
+                "has nowhere legal to go"
+            )
+
+
+@pytest.mark.parametrize("cfg_name", sorted(_CFGS))
+@pytest.mark.parametrize("archetype_name", _ARCHETYPE_NAMES)
+def test_archetype_no_door_in_a_wet_room_staircase_wall_direct(
+    archetype_name, cfg_name
+):
+    """The other half of the same invariant, straight off the archetype: no
+    door may sit in a wall shared by the staircase and a WC/bath."""
+    for fp, cfg in _archetype_floors(archetype_name, cfg_name):
+        buildable = buildable_polygon(cfg)
+        walls = derive_walls(fp.rooms, buildable)
+        columns = derive_columns(walls, rooms=fp.rooms)
+        openings = derive_openings(
+            fp.rooms,
+            walls,
+            columns,
+            get_opening_standards(),
+            buildable,
+            floor=fp.floor,
+        )
+        doors = [o for o in openings if o.kind == "door"]
+        wets = [r for r in fp.rooms if r.type in _WET_TYPES]
+        for stair in [r for r in fp.rooms if r.type == "staircase"]:
+            stair_doors = _doors_on_room(stair, doors)
+            assert stair_doors, (
+                f"{archetype_name}/{cfg_name} floor {fp.floor}: staircase "
+                f"{stair.id} has no door at all — a wet-wall ban satisfied by "
+                "leaving the stair doorless is not a fix"
+            )
+            for wet in wets:
+                if _shared_wall_run(stair, wet) <= 0:
+                    continue
+                shared = [d for d in stair_doors if d in _doors_on_room(wet, doors)]
+                assert not shared, (
+                    f"{archetype_name}/{cfg_name} floor {fp.floor}: door at "
+                    f"{[(round(d.cx, 2), round(d.cy, 2)) for d in shared]} sits "
+                    f"in the wall shared by staircase {stair.id} and wet room "
+                    f"{wet.id}"
+                )

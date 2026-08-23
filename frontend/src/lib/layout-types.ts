@@ -25,6 +25,8 @@ export interface WallSegment {
   y2: number;
   thickness: number;
   kind: "external" | "internal";
+  /** Deterministic topology-derived id (payload v2; absent in stored v1). */
+  id?: string;
 }
 
 export interface WallJunction {
@@ -45,6 +47,10 @@ export interface Opening {
   swing_into_room_id: string;
   swing_cw: boolean;
   is_main?: boolean;
+  /** Instance identity: "<host wall id>#<offset along it>" (payload v2). */
+  id?: string;
+  /** IS 962 schedule mark — class label shared by same-size openings (payload v2). */
+  mark?: string;
 }
 
 export interface LabelBox {
@@ -85,6 +91,43 @@ export interface ColumnMarker {
   size: number;
 }
 
+/** Room-relative drawn primitive of a furniture fixture (payload v2, T33). */
+export interface FixtureShape {
+  kind: "rect" | "circle" | "arc" | "line";
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  radius: number;
+  start_deg: number;
+  end_deg: number;
+  x2: number;
+  y2: number;
+  dashed: boolean;
+}
+
+/** One furniture item in a room — room-relative shapes (payload v2, T33). */
+export interface Fixture {
+  kind: string;
+  room_id: string;
+  shapes: FixtureShape[];
+}
+
+/** Closed, possibly holed polygon of site ground (payload v2, T32). */
+export interface SitePolygon {
+  exterior: [number, number][];
+  holes: [number, number][][];
+}
+
+/** Compound wall/gate/ground hatches shared by every renderer (payload v2, T32). */
+export interface SiteContext {
+  compound_wall_segments: [number, number, number, number][];
+  gate_posts: [number, number][];
+  gate_cx: number | null;
+  setback_margin: SitePolygon[];
+  open_terrace: SitePolygon[];
+}
+
 export interface FloorDrawing {
   floor: number;
   walls: WallSegment[];
@@ -96,6 +139,10 @@ export interface FloorDrawing {
   stair: StairGeometry | null;
   bounds: [number, number, number, number];
   version: number;
+  /** Site entities — absent in payloads from before Task 32. */
+  site?: SiteContext | null;
+  /** Canonical furniture fixtures — absent in payloads from before Task 33. */
+  fixtures?: Fixture[];
 }
 
 export interface FloorPlanData {
@@ -228,6 +275,13 @@ export const ROOM_TYPES = [
   { value: "study", label: "Study" },
   { value: "balcony", label: "Balcony" },
   { value: "courtyard", label: "Courtyard" },
+  { value: "terrace", label: "Terrace" },
+  { value: "garden", label: "Garden" },
+  { value: "verandah", label: "Verandah" },
+  { value: "seating", label: "Seating" },
+  { value: "open_to_sky", label: "Open to Sky" },
+  { value: "duct", label: "Duct" },
+  { value: "washbasin_nook", label: "Wash Basin" },
 ] as const;
 
 export type RoomTypeValue = (typeof ROOM_TYPES)[number]["value"];

@@ -15,11 +15,13 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.engine.generator import generate
 from app.engine.models import (
+    AddedOpening,
     Column,
     ComplianceResult,
     FloorPlan,
     Layout,
     LayoutScore,
+    OpeningOverride,
     PlotConfig,
     Room,
 )
@@ -27,12 +29,14 @@ from app.engine.plan_geometry import build_floor_drawing
 from app.models.layout import StoredLayout
 from app.models.project import Project
 from app.schemas.layout import (
+    AddedOpeningOut,
     ColumnOut,
     ComplianceOut,
     FloorPlanOut,
     GenerateResponse,
     LayoutOut,
     LayoutScoreOut,
+    OpeningOverrideOut,
     RoomOut,
 )
 from app.services.plot_config import plot_config_from_project
@@ -57,6 +61,26 @@ def floor_plan_out(fp: Any) -> FloorPlanOut:
             for r in fp.rooms
         ],
         columns=[ColumnOut(x=c.x, y=c.y) for c in fp.columns],
+        opening_overrides=[
+            OpeningOverrideOut(
+                opening_id=ov.opening_id,
+                along=ov.along,
+                width=ov.width,
+                suppressed=ov.suppressed,
+            )
+            for ov in getattr(fp, "opening_overrides", [])
+        ],
+        added_openings=[
+            AddedOpeningOut(
+                kind=a.kind,
+                room_a=a.room_a,
+                room_b=a.room_b,
+                along=a.along,
+                width=a.width,
+                side=a.side,
+            )
+            for a in getattr(fp, "added_openings", [])
+        ],
     )
 
 
@@ -86,6 +110,7 @@ def layout_out_from_engine(lay: Any) -> LayoutOut:
         )
         if lay.score
         else None,
+        vastu_score=getattr(lay, "vastu_score", None),
         space_notes=getattr(lay, "space_notes", []),
         auto_added_rooms=getattr(lay, "space_notes", []),
     )
@@ -243,6 +268,26 @@ def _floor_from_dict(
         ],
         columns=[Column(x=c["x"], y=c["y"]) for c in fp.get("columns", [])],
         needs_mech_ventilation=fp.get("needs_mech_ventilation", False),
+        opening_overrides=[
+            OpeningOverride(
+                opening_id=o["opening_id"],
+                along=o.get("along"),
+                width=o.get("width"),
+                suppressed=o.get("suppressed", False),
+            )
+            for o in fp.get("opening_overrides", [])
+        ],
+        added_openings=[
+            AddedOpening(
+                kind=a["kind"],
+                room_a=a["room_a"],
+                room_b=a["room_b"],
+                along=a.get("along"),
+                width=a.get("width"),
+                side=a.get("side"),
+            )
+            for a in fp.get("added_openings", [])
+        ],
     )
 
 
@@ -274,5 +319,6 @@ def engine_layout_from_geometry(g: dict) -> Layout:
         )
         if score
         else None,
+        vastu_score=g.get("vastu_score"),
         space_notes=g.get("space_notes", []),
     )

@@ -743,6 +743,556 @@ async def update_layout_rooms(
     }
 
 
+# ── Opening-level operations (Phase 7 / Task 30) ──────────────────────────────
+#
+# Openings are DERIVED, so an edit is a stored delta — an OpeningOverride
+# (move/resize/suppress) or an AddedOpening (a new door/window between two
+# rooms or to the outside) — applied on top of the persisted layout and
+# validated by simulation BEFORE it is written: an infeasible or
+# connectivity-breaking request is rejected with a machine-readable reason
+# and, where one exists, a feasible alternative. Never silently applied.
+
+
+class OpeningMoveRequest(BaseModel):
+    floor: str  # gf | ff | sf | basement
+    along: float = Field(description="Offset (m) from the host wall's low end")
+
+
+class OpeningResizeRequest(BaseModel):
+    floor: str
+    width: float = Field(gt=0.1, le=5.0, description="New width in metres")
+
+
+class AddDoorRequest(BaseModel):
+    floor: str
+    room_id: str
+    to_room_id: str = "outside"  # room id, or the literal "outside"
+    width: float | None = Field(default=None, gt=0.1, le=5.0)
+    along: float | None = Field(
+        default=None, description="Offset (m) from the shared span's low end"
+    )
+    side: str | None = Field(
+        default=None, description="N|S|E|W — only when to_room_id is 'outside'"
+    )
+
+
+def _floor_plan_for(state: dict, floor: str, project_id: str):
+    """Engine FloorPlan (rooms + overrides + added openings) for one floor."""
+    from app.services.layout_store import engine_layout_from_geometry
+
+    if floor not in FLOOR_MAP_IN:
+        raise HTTPException(
+            422, f"unknown floor {floor!r} — use one of {list(FLOOR_MAP_IN)}"
+        )
+    attr = FLOOR_MAP_IN[floor][0]
+    fp = getattr(engine_layout_from_geometry(state), attr)
+    if fp is None:
+        raise HTTPException(404, f"floor {floor} has no plan in this layout")
+    return fp
+
+
+def _floor_dict_for(state: dict, floor: str) -> dict:
+    return state[FLOOR_MAP_IN[floor][0]]
+
+
+def _drawing_for(fp, project: Project):
+    from app.engine.plan_geometry import build_floor_drawing
+    from app.services.plot_config import plot_config_from_project
+
+    return build_floor_drawing(fp, plot_config_from_project(project))
+
+
+def _find_opening(openings, opening_id: str):
+    for o in openings:
+        if o.id == opening_id:
+            return o
+    return None
+
+
+def _opening_not_found(opening_id: str) -> HTTPException:
+    return HTTPException(404, {"code": "opening_not_found", "opening_id": opening_id})
+
+
+def _opening_item(fp, drawing, o) -> dict:
+    from app.engine.plan_geometry import host_wall, opening_room_ids
+
+    item = {
+        "id": o.id,
+        "kind": o.kind,
+        "mark": o.mark,
+        "cx": o.cx,
+        "cy": o.cy,
+        "width": o.width,
+        "is_horizontal": o.is_horizontal,
+        "rooms": opening_room_ids(o, fp.rooms),
+        "along": None,
+        "wall_id": None,
+        "wall_length": None,
+    }
+    host = host_wall(drawing.walls, o)
+    if host is not None:
+        vertical = abs(host.x1 - host.x2) < 1e-9
+        lo, hi = sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
+        item["wall_id"] = host.id
+        item["along"] = round((o.cy if vertical else o.cx) - lo, 6)
+        item["wall_length"] = hi - lo
+    return item
+
+
+def _connectivity_delta(before: list[str], after: list[str]) -> list[str]:
+    return [p for p in after if p not in set(before)]
+
+
+def _suggest_alternative_door(
+    fp,
+    drawing,
+    unreachable_room_ids: set[str],
+    exclude_pair: frozenset[str] | None = None,
+) -> dict | None:
+    """A concrete, buildable `add_door` that would reconnect the room — the
+    feasible alternative a rejection must carry (Task 30). `exclude_pair`
+    skips the very wall the rejected edit targeted."""
+    from app.engine.plan_geometry import (
+        NO_TRANSIT_TYPES,
+        PARKING_TYPES,
+        door_graph_reachable,
+        shared_wall_span,
+    )
+
+    reachable_idx = door_graph_reachable(fp.rooms, drawing.openings, fp.floor)
+    reachable = {fp.rooms[i].id for i in reachable_idx}
+    for room in fp.rooms:
+        if room.id not in unreachable_room_ids:
+            continue
+        for other in fp.rooms:
+            if other.id == room.id or other.id not in reachable:
+                continue
+            if exclude_pair is not None and {room.id, other.id} == set(exclude_pair):
+                continue
+            if other.type in NO_TRANSIT_TYPES and room.type not in NO_TRANSIT_TYPES:
+                continue
+            if room.type in PARKING_TYPES or other.type in PARKING_TYPES:
+                continue
+            span = shared_wall_span(room, other)
+            if span is None:
+                continue
+            return {
+                "operation": "add_door",
+                "room_id": room.id,
+                "to_room_id": other.id,
+                "along": round((span[3] - span[2]) / 2, 3),
+            }
+    return None
+
+
+async def _mutate_opening(
+    project_id: str,
+    user_id: str,
+    db: AsyncSession,
+    body_floor: str,
+    operation: str,
+    mutate,
+):
+    """Shared load → simulate → validate → commit flow for opening edits.
+
+    `mutate(floor_state_dict, fp_engine, drawing_before)` applies the requested
+    delta to the (already deep-copied) state dict and returns partial response
+    content;
+    raising HTTPException or returning an {"ok": False, ...} dict rejects
+    without writing anything.
+    """
+    import copy
+
+    tier = await _get_plan_tier(user_id, db)
+    if not tier_at_least(tier, "pro"):
+        raise HTTPException(403, "Pro plan required for agentic chat")
+
+    project, row, state = await _load_layout_state(project_id, user_id, db)
+    fp_before = _floor_plan_for(copy.deepcopy(state), body_floor, project_id)
+    drawing_before = _drawing_for(fp_before, project)
+
+    state_after = copy.deepcopy(state)
+    result = mutate(
+        _floor_dict_for(state_after, body_floor),
+        _floor_plan_for(state_after, body_floor, project_id),
+        drawing_before,
+    )
+    if isinstance(result, dict) and result.get("ok") is False:
+        return result["response"]
+
+    # `mutate` learns the opening's real kind (door/window/ventilator) only
+    # once it resolves the target, which happens inside itself — so it can
+    # report a kind-accurate operation label back here via "operation",
+    # overriding the generic literal the route handler passed in. Falls back
+    # to that literal so a `mutate` that doesn't set it still works.
+    op_label = (
+        result.get("operation") if isinstance(result, dict) else None
+    ) or operation
+
+    fp_after = _floor_plan_for(state_after, body_floor, project_id)
+    drawing_after = _drawing_for(fp_after, project)
+
+    from app.engine.plan_geometry import validate_floor_connectivity
+
+    before = validate_floor_connectivity(
+        fp_before.rooms, drawing_before.openings, fp_before.floor
+    )
+    after = validate_floor_connectivity(
+        fp_after.rooms, drawing_after.openings, fp_after.floor
+    )
+    new_problems = _connectivity_delta(before, after)
+    if new_problems:
+        cut = {p.split(" ")[0] for p in new_problems}
+        exclude = result.get("_exclude_pair") if isinstance(result, dict) else None
+        return {
+            "success": False,
+            "operation": op_label,
+            "reason": "would break connectivity: " + "; ".join(new_problems),
+            "alternative": _suggest_alternative_door(
+                fp_after, drawing_after, cut, exclude_pair=exclude
+            ),
+        }
+
+    await _push_undo(db, project_id, user_id, state)
+    await layout_store.save_edited_geometry(row, state_after, db)
+    response = result if isinstance(result, dict) else {}
+    response.pop("ok", None)
+    response.pop("_exclude_pair", None)
+    response.pop("operation", None)
+    response.update(
+        {
+            "success": True,
+            "operation": op_label,
+            "validation": {
+                "status": "passed" if not after else "failed",
+                "connectivity_violations": after,
+            },
+        }
+    )
+    return response
+
+
+@router.get("/projects/{project_id}/openings")
+async def list_openings(
+    project_id: str,
+    floor: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Opening ids, marks, positions and host-wall offsets for one floor —
+    the discovery surface every opening-level tool relies on."""
+    tier = await _get_plan_tier(user_id, db)
+    if not tier_at_least(tier, "pro"):
+        raise HTTPException(403, "Pro plan required for agentic chat")
+
+    project, _row, state = await _load_layout_state(project_id, user_id, db)
+    fp = _floor_plan_for(state, floor, project_id)
+    drawing = _drawing_for(fp, project)
+    return {
+        "floor": floor,
+        "openings": [_opening_item(fp, drawing, o) for o in drawing.openings],
+    }
+
+
+@router.post("/projects/{project_id}/openings/{opening_id}/move")
+async def move_opening(
+    project_id: str,
+    opening_id: str,
+    body: OpeningMoveRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.engine.plan_geometry import host_wall
+
+    def mutate(floor_state: dict, fp, drawing_before) -> dict:
+        target = _find_opening(drawing_before.openings, opening_id)
+        if target is None:
+            raise _opening_not_found(opening_id)
+        op = f"move_{target.kind}"
+        host = host_wall(drawing_before.walls, target)
+        if host is None:
+            return {
+                "ok": False,
+                "response": {
+                    "success": False,
+                    "operation": op,
+                    "reason": f"opening {opening_id!r} has no host wall in the derived drawing",
+                    "alternative": None,
+                },
+            }
+        vertical = abs(host.x1 - host.x2) < 1e-9
+        lo, hi = sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
+        length = hi - lo
+        half = target.width / 2
+        if not (half - 1e-6 <= body.along <= length - half + 1e-6):
+            return {
+                "ok": False,
+                "response": {
+                    "success": False,
+                    "operation": op,
+                    "reason": (
+                        f"along {body.along:.3f} would place the {target.kind} "
+                        f"outside its host wall (length {length:.3f})"
+                    ),
+                    "alternative": {
+                        "min_along": half,
+                        "max_along": round(length - half, 6),
+                    },
+                },
+            }
+        ovs = floor_state.setdefault("opening_overrides", [])
+        for ov in ovs:
+            if ov["opening_id"] == opening_id:
+                ov["along"] = body.along
+                break
+        else:
+            ovs.append({"opening_id": opening_id, "along": body.along})
+        new_c = lo + body.along
+        return {
+            "ok": True,
+            "operation": op,
+            "changes": {
+                "opening_id": opening_id,
+                "along": body.along,
+                "cx": round(new_c, 6) if not vertical else target.cx,
+                "cy": round(new_c, 6) if vertical else target.cy,
+                "width": target.width,
+            },
+            "affected_entities": [opening_id]
+            + [f"room:{rid}" for rid in _rooms_of(opening_id, fp, drawing_before)],
+        }
+
+    return await _mutate_opening(
+        project_id, user_id, db, body.floor, "move_window", mutate
+    )
+
+
+def _rooms_of(opening_id: str, fp, drawing) -> list[str]:
+    from app.engine.plan_geometry import opening_room_ids
+
+    target = _find_opening(drawing.openings, opening_id)
+    return opening_room_ids(target, fp.rooms) if target is not None else []
+
+
+@router.post("/projects/{project_id}/openings/{opening_id}/resize")
+async def resize_opening(
+    project_id: str,
+    opening_id: str,
+    body: OpeningResizeRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.engine.plan_geometry import host_wall
+
+    def mutate(floor_state: dict, fp, drawing_before) -> dict:
+        target = _find_opening(drawing_before.openings, opening_id)
+        if target is None:
+            raise _opening_not_found(opening_id)
+        op = f"resize_{target.kind}"
+        host = host_wall(drawing_before.walls, target)
+        if host is None:
+            return {
+                "ok": False,
+                "response": {
+                    "success": False,
+                    "operation": op,
+                    "reason": f"opening {opening_id!r} has no host wall in the derived drawing",
+                    "alternative": None,
+                },
+            }
+        vertical = abs(host.x1 - host.x2) < 1e-9
+        lo, hi = sorted((host.y1, host.y2)) if vertical else sorted((host.x1, host.x2))
+        length = hi - lo
+        along = (target.cy if vertical else target.cx) - lo
+        half = body.width / 2
+        if not (along - half >= -1e-6 and along + half <= length + 1e-6):
+            return {
+                "ok": False,
+                "response": {
+                    "success": False,
+                    "operation": op,
+                    "reason": (
+                        f"width {body.width:.3f} does not fit the host wall at "
+                        f"the current position (along {along:.3f}, wall {length:.3f})"
+                    ),
+                    "alternative": {
+                        "max_width_at_position": round(
+                            2 * min(along, length - along), 6
+                        )
+                    },
+                },
+            }
+        ovs = floor_state.setdefault("opening_overrides", [])
+        for ov in ovs:
+            if ov["opening_id"] == opening_id:
+                ov["width"] = body.width
+                break
+        else:
+            ovs.append({"opening_id": opening_id, "width": body.width})
+        return {
+            "ok": True,
+            "operation": op,
+            "changes": {
+                "opening_id": opening_id,
+                "cx": target.cx,
+                "cy": target.cy,
+                "width": body.width,
+            },
+            "affected_entities": [opening_id]
+            + [f"room:{rid}" for rid in _rooms_of(opening_id, fp, drawing_before)],
+        }
+
+    return await _mutate_opening(
+        project_id, user_id, db, body.floor, "resize_window", mutate
+    )
+
+
+@router.delete("/projects/{project_id}/openings/{opening_id}")
+async def remove_opening(
+    project_id: str,
+    opening_id: str,
+    floor: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    def mutate(floor_state: dict, fp, drawing_before) -> dict:
+        target = _find_opening(drawing_before.openings, opening_id)
+        if target is None:
+            raise _opening_not_found(opening_id)
+        ovs = floor_state.setdefault("opening_overrides", [])
+        for ov in ovs:
+            if ov["opening_id"] == opening_id:
+                ov["suppressed"] = True
+                break
+        else:
+            ovs.append({"opening_id": opening_id, "suppressed": True})
+        return {
+            "ok": True,
+            "_exclude_pair": frozenset(_rooms_of(opening_id, fp, drawing_before)),
+            "changes": {"opening_id": opening_id, "removed": True},
+            "affected_entities": [opening_id]
+            + [f"room:{rid}" for rid in _rooms_of(opening_id, fp, drawing_before)],
+        }
+
+    return await _mutate_opening(
+        project_id, user_id, db, floor, "remove_opening", mutate
+    )
+
+
+@router.post("/projects/{project_id}/openings/doors")
+async def add_door(
+    project_id: str,
+    body: AddDoorRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    import copy
+
+    from app.engine.plan_geometry import (
+        exterior_wall_spans,
+        opening_room_ids,
+        shared_wall_span,
+        validate_floor_connectivity,
+    )
+
+    tier = await _get_plan_tier(user_id, db)
+    if not tier_at_least(tier, "pro"):
+        raise HTTPException(403, "Pro plan required for agentic chat")
+
+    project, row, state = await _load_layout_state(project_id, user_id, db)
+    fp_before = _floor_plan_for(state, body.floor, project_id)
+
+    # Pre-validate against the CURRENT geometry so the rejection can be
+    # specific — the engine's post-pass would only degrade to a diagnostic.
+    rooms = {r.id: r for r in fp_before.rooms}
+    room = rooms.get(body.room_id)
+    if room is None:
+        raise HTTPException(404, {"code": "room_not_found", "room_id": body.room_id})
+    if body.to_room_id == "outside":
+        cands = exterior_wall_spans(room, fp_before.rooms, _buildable_box(project))
+        if body.side:
+            cands = [c for c in cands if c[0] == body.side]
+        if not cands:
+            return {
+                "success": False,
+                "operation": "add_door",
+                "reason": (
+                    f"room {body.room_id!r} has no exterior edge"
+                    + (f" on side {body.side!r}" if body.side else "")
+                ),
+                "alternative": None,
+            }
+    else:
+        other = rooms.get(body.to_room_id)
+        if other is None:
+            raise HTTPException(
+                404, {"code": "room_not_found", "room_id": body.to_room_id}
+            )
+        if shared_wall_span(room, other) is None:
+            return {
+                "success": False,
+                "operation": "add_door",
+                "reason": (
+                    f"rooms {body.room_id!r} and {body.to_room_id!r} "
+                    "share no wall — a door cannot connect them"
+                ),
+                "alternative": None,
+            }
+
+    state_after = copy.deepcopy(state)
+    _floor_dict_for(state_after, body.floor).setdefault("added_openings", []).append(
+        {
+            "kind": "door",
+            "room_a": body.room_id,
+            "room_b": body.to_room_id,
+            "along": body.along,
+            "width": body.width,
+            "side": body.side,
+        }
+    )
+
+    drawing_before = _drawing_for(fp_before, project)
+    fp_after = _floor_plan_for(state_after, body.floor, project_id)
+    drawing_after = _drawing_for(fp_after, project)
+    before_ids = {o.id for o in drawing_before.openings}
+    new = [o for o in drawing_after.openings if o.id not in before_ids]
+    if not new:
+        reason = next(
+            (d for d in drawing_after.diagnostics if "added_opening" in d),
+            "the door could not be placed (see drawing diagnostics)",
+        )
+        return {
+            "success": False,
+            "operation": "add_door",
+            "reason": reason,
+            "alternative": None,
+        }
+    door = new[0]
+
+    problems = validate_floor_connectivity(
+        fp_after.rooms, drawing_after.openings, fp_after.floor
+    )
+    await _push_undo(db, project_id, user_id, state)
+    await layout_store.save_edited_geometry(row, state_after, db)
+    return {
+        "success": True,
+        "operation": "add_door",
+        "changes": {
+            "opening_id": door.id,
+            "mark": door.mark,
+            "cx": door.cx,
+            "cy": door.cy,
+            "width": door.width,
+        },
+        "affected_entities": [door.id]
+        + [f"room:{rid}" for rid in opening_room_ids(door, fp_after.rooms)],
+        "validation": {
+            "status": "passed" if not problems else "failed",
+            "connectivity_violations": problems,
+        },
+    }
+
+
 @router.post("/projects/{project_id}/rooms/undo")
 async def undo_last(
     project_id: str,

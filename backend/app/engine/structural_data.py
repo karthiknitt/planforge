@@ -28,6 +28,7 @@ Two facts about structapi's contract shape everything here:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -68,6 +69,121 @@ class GridRef:
         return (vals[0], vals[-1]) if vals else (0.0, 0.0)
 
 
+# ── typed detailing entities (Phase 7 / Task 31) ─────────────────────────────
+#
+# structapi's payload carries steel loosely — "6-16", "4-16φ", "10 φ @ 150
+# c/c", nested {"dia": …, "spacing": …} dicts. These four entities are the
+# typed reading of that data, parsed ONCE at the assembly boundary
+# (build_structural_model). The legacy `bars: str` and `design: dict` fields
+# stay populated during the migration, so unconverted renderers keep reading
+# exactly what they read before.
+
+_FI = r"(\d+(?:\.\d+)?)"  # float-or-int capture
+_BARGROUP_RE = re.compile(rf"^\s*{_FI}\s*[-xXtT]\s*{_FI}\s*[φø⌀]?\s*$")
+_STIRRUP_RE = re.compile(rf"^\s*{_FI}\s*[φø⌀]?\s*@\s*{_FI}\s*(?:c/c)?\s*$")
+
+
+@dataclass(frozen=True)
+class BarGroup:
+    """N longitudinal bars of one diameter (column mains, beam top/bottom).
+
+    The canonical callout is "6-16" — the wire format structapi already emits
+    and the format the column schedule renders, so consuming renderers print
+    byte-identical strings. "3T20" (engineer's TOR-steel spelling) parses to
+    the same entity and canonicalises on output.
+    """
+
+    quantity: int
+    diameter_mm: float
+
+    @classmethod
+    def parse(cls, text: str | None) -> BarGroup | None:
+        m = _BARGROUP_RE.match(text or "")
+        if not m:
+            return None
+        qty = float(m.group(1))
+        if qty != int(qty):
+            return None
+        return cls(quantity=int(qty), diameter_mm=float(m.group(2)))
+
+    @property
+    def callout(self) -> str:
+        return f"{self.quantity}-{self.diameter_mm:g}"
+
+
+@dataclass(frozen=True)
+class Stirrup:
+    """A dia+spacing steel group: column ties, beam stirrups, footing mesh,
+    slab reinforcement groups. `callout` matches the sheets' "8@150" render."""
+
+    diameter_mm: float
+    spacing_mm: float
+    legs: int | None = None
+
+    @classmethod
+    def parse(cls, text: str | None) -> Stirrup | None:
+        m = _STIRRUP_RE.match(text or "")
+        if not m:
+            return None
+        return cls(diameter_mm=float(m.group(1)), spacing_mm=float(m.group(2)))
+
+    @classmethod
+    def from_payload(cls, d: dict | None) -> Stirrup | None:
+        """`{"dia": 8, "spacing": 150}` / `{"dia": 8, "sv_provided": 150}` —
+        the two keyings structapi uses; plus the {"bar": "…"} string shape."""
+        if not isinstance(d, dict):
+            return None
+        if "bar" in d:
+            return cls.parse(str(d.get("bar")))
+        dia = d.get("dia")
+        spacing = d.get("spacing")
+        if spacing is None:
+            spacing = d.get("sv_provided")
+        if dia is None or spacing is None:
+            return None
+        legs = d.get("legs")
+        try:
+            return cls(
+                diameter_mm=float(dia),
+                spacing_mm=float(spacing),
+                legs=int(legs) if legs is not None else None,
+            )
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def callout(self) -> str:
+        return f"{self.diameter_mm:g}@{self.spacing_mm:g}"
+
+
+@dataclass(frozen=True)
+class Cover:
+    """Clear concrete cover (mm)."""
+
+    mm: float
+
+    @classmethod
+    def from_payload(cls, d: dict | None) -> Cover | None:
+        v = (d or {}).get("cover_mm")
+        return None if v is None else cls(mm=float(v))
+
+
+@dataclass(frozen=True)
+class Lap:
+    """Lap-splice spec for column mains: IS 456 Cl 26.2.5.1 tension lap of
+    50 × bar diameter, staggered across the cage (the renderer already draws
+    it this way — this types the constant at the model layer)."""
+
+    length_mm: float
+    staggered: bool = True
+
+    @classmethod
+    def tension(cls, bars: BarGroup | None) -> Lap | None:
+        if bars is None:
+            return None
+        return cls(length_mm=50.0 * bars.diameter_mm)
+
+
 @dataclass(frozen=True)
 class ColumnItem:
     tag: str  # sequential plan tag, e.g. "C7"
@@ -79,6 +195,12 @@ class ColumnItem:
     D_mm: float
     bars: str
     design: dict = field(default_factory=dict)
+    # typed detailing (None when the payload does not supply it — the
+    # renderer's code-minimum fallback keeps firing, byte-identical output)
+    main_bars: BarGroup | None = None
+    ties: Stirrup | None = None
+    lap: Lap | None = None
+    cover: Cover | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +213,9 @@ class FootingItem:
     width_m: float
     depth_mm: float
     design: dict = field(default_factory=dict)
+    mesh_x: Stirrup | None = None
+    mesh_y: Stirrup | None = None
+    cover: Cover | None = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +231,10 @@ class BeamRun:
     D_mm: float
     span_m: float
     design: dict = field(default_factory=dict)
+    bottom_bars: BarGroup | None = None
+    top_bars: BarGroup | None = None
+    stirrups: Stirrup | None = None
+    cover: Cover | None = None
 
     @property
     def endpoints(self) -> tuple[float, float, float, float]:
@@ -127,6 +256,9 @@ class SlabPanel:
     case: str  # structapi panel case (interior/edge/corner variants)
     D_mm: float
     design: dict = field(default_factory=dict)
+    main_steel: Stirrup | None = None
+    dist_steel: Stirrup | None = None
+    top_steel: Stirrup | None = None
 
     @property
     def is_two_way(self) -> bool:
@@ -230,6 +362,7 @@ def _build_columns(
         j = _nearest(grid.y_lines_m, col.y)
         cls = _column_class(i, len(grid.x_lines_m), j, len(grid.y_lines_m))
         d = (columns_data.get(cls) or {}) if columns_data else {}
+        main_bars = BarGroup.parse(str(d.get("bars", "")))
         out.append(
             ColumnItem(
                 tag=f"C{n}",
@@ -241,6 +374,10 @@ def _build_columns(
                 D_mm=float(d.get("D_mm", 300.0)),
                 bars=str(d.get("bars", "—")),
                 design=d,
+                main_bars=main_bars,
+                ties=Stirrup.from_payload(d.get("ties")),
+                lap=Lap.tension(main_bars),
+                cover=Cover.from_payload(d),
             )
         )
     return out
@@ -265,6 +402,9 @@ def _build_footings(
                 width_m=float(d["B_m"]),
                 depth_mm=float(d.get("D_overall_mm", 0.0)),
                 design=d,
+                mesh_x=Stirrup.from_payload(d.get("bars_x")),
+                mesh_y=Stirrup.from_payload(d.get("bars_y")),
+                cover=Cover.from_payload(d),
             )
         )
     return out
@@ -300,6 +440,10 @@ def _build_beam_runs(
         for line in indices:
             if not (0 <= int(line) < len(perp_lines)):
                 continue
+            inner = d.get("design") if isinstance(d.get("design"), dict) else d
+            st = Stirrup.from_payload(inner.get("stirrups")) or Stirrup.from_payload(
+                d.get("stirrups")
+            )
             runs.append(
                 BeamRun(
                     mark=marks[key],
@@ -311,9 +455,53 @@ def _build_beam_runs(
                     D_mm=float(d.get("D_mm", 380.0)),
                     span_m=float(d.get("span_m", 0.0)),
                     design=d,
+                    bottom_bars=_beam_bargroup(inner, "n_bars", "bar_dia"),
+                    top_bars=_beam_bargroup(inner, "n_bars_comp", "bar_dia_comp"),
+                    stirrups=st,
+                    cover=Cover.from_payload(inner),
                 )
             )
     return runs
+
+
+def _beam_bargroup(d: dict, n_key: str, dia_key: str) -> BarGroup | None:
+    """Beam longitudinal steel from the flat payload keys (n_bars/bar_dia and
+    n_bars_comp/bar_dia_comp)."""
+    n, dia = d.get(n_key), d.get(dia_key)
+    if isinstance(n, (int, float)) and isinstance(dia, (int, float)):
+        return BarGroup(quantity=int(n), diameter_mm=float(dia))
+    return None
+
+
+def _slab_steel(d: dict, *payload_keys: str) -> Stirrup | None:
+    """First parseable steel group among the named payload keys. structapi
+    has written slab steel three ways: bar strings
+    ({"main": {"bar": "10 φ @ 150 c/c"}}), a strips dict for two-way panels,
+    and flat keyed pairs ({"main_bar_dia_mm": 8, "main_bar_spacing_mm": 150})."""
+    for k in payload_keys:
+        group = d.get(k)
+        if isinstance(group, dict):
+            s = Stirrup.from_payload(group)
+            if s is not None:
+                return s
+        flat_dia = d.get(f"{k}_bar_dia_mm")
+        flat_sp = d.get(f"{k}_bar_spacing_mm")
+        if isinstance(flat_dia, (int, float)) and isinstance(flat_sp, (int, float)):
+            return Stirrup(diameter_mm=float(flat_dia), spacing_mm=float(flat_sp))
+    return None
+
+
+def _slab_typed_steel(d: dict) -> tuple[Stirrup | None, Stirrup | None, Stirrup | None]:
+    """(main, dist, top) typed steel for one slab design payload."""
+    strips = d.get("strips") if isinstance(d.get("strips"), dict) else {}
+    main = _slab_steel(d, "main") or _slab_steel(strips, "short_span_bottom")
+    dist = _slab_steel(d, "distribution", "dist") or _slab_steel(
+        strips, "long_span_bottom"
+    )
+    top = _slab_steel(d, "top") or _slab_steel(
+        strips, "short_span_top", "long_span_top"
+    )
+    return main, dist, top
 
 
 def _build_slab_panels(grid: GridRef, slabs_data: dict) -> list[SlabPanel]:
@@ -338,6 +526,7 @@ def _build_slab_panels(grid: GridRef, slabs_data: dict) -> list[SlabPanel]:
     for n, (i, j, d) in enumerate(cells, start=1):
         if not (0 <= i < len(xs) - 1 and 0 <= j < len(ys) - 1):
             continue
+        main_s, dist_s, top_s = _slab_typed_steel(d)
         out.append(
             SlabPanel(
                 mark=f"S{n}",
@@ -351,6 +540,9 @@ def _build_slab_panels(grid: GridRef, slabs_data: dict) -> list[SlabPanel]:
                 case=str(d.get("case_", "")),
                 D_mm=float(d.get("D_mm", 0.0)),
                 design=d,
+                main_steel=main_s,
+                dist_steel=dist_s,
+                top_steel=top_s,
             )
         )
     return out
@@ -376,6 +568,7 @@ def _plinth_runs(walls, plinth_beams_data: dict) -> list[BeamRun]:
         d = (plinth_beams_data or {}).get(key) or {}
         horizontal = abs(w.y1 - w.y2) < 1e-9
         axis = "x" if horizontal else "y"
+        inner = d.get("design", {}) or d
         runs.append(
             BeamRun(
                 mark=marks.get(key, ""),
@@ -386,7 +579,11 @@ def _plinth_runs(walls, plinth_beams_data: dict) -> list[BeamRun]:
                 b_mm=float(d.get("b_mm", w.thickness * 1000)),
                 D_mm=float(d.get("D_mm", 300.0)),
                 span_m=float(d.get("span_m", w.length)),
-                design=d.get("design", {}) or d,
+                design=inner,
+                bottom_bars=_beam_bargroup(inner, "n_bars", "bar_dia"),
+                top_bars=_beam_bargroup(inner, "n_bars_comp", "bar_dia_comp"),
+                stirrups=Stirrup.from_payload(inner.get("stirrups")),
+                cover=Cover.from_payload(inner),
             )
         )
     return runs

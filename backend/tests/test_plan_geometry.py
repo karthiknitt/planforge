@@ -13,13 +13,18 @@ import math
 import pytest
 from shapely.geometry import box
 
-from app.engine.cad_elements import WallJunction
+from app.engine.cad_elements import WallJunction, WallSegment
 from app.engine.geometry import buildable_polygon
 from app.engine.models import PlotConfig, Room
 from app.engine.plan_geometry import (
     _SNAP,
+    _adjacencies,
+    _assign_wall_ids,
     _merge_adjacent_columns,
     _near_staircase,
+    _plate_bounds,
+    _room_label_lines,
+    _structural_rooms,
     derive_columns,
     derive_junctions,
     derive_walls,
@@ -34,8 +39,8 @@ IWT = 0.115
 
 def _cfg_9x15() -> PlotConfig:
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=9.0,
+        plot_y_extent=15.0,
+        plot_x_extent=9.0,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=1.0,
@@ -239,8 +244,8 @@ def _cfg_narrow_5x15() -> PlotConfig:
     # Buildable width ~4.27 m ring-to-ring — under max_beam_span_m (4.5 m)
     # even without any intermediate column.
     return PlotConfig(
-        plot_length=15.0,
-        plot_width=5.5,
+        plot_y_extent=15.0,
+        plot_x_extent=5.5,
         setback_front=1.5,
         setback_rear=1.0,
         setback_left=0.5,
@@ -514,3 +519,733 @@ def test_external_ring_leaves_notch_open_no_false_wall():
     for w in ext:
         for x, y in ((w.x1, w.y1), (w.x2, w.y2)):
             assert not (x > 5.0 and y > 10.0), f"false wall in notch corner: {w}"
+
+
+# --- Room.open_sides: walls omitted on declared-open edges -----------------
+
+
+def _buildable():
+    return box(0, 0, 12, 12)
+
+
+def _walls_on_edge(walls, *, vertical: bool, coord: float, tol: float = 0.12):
+    """WallSegments whose centreline sits on x=coord (vertical) or y=coord.
+
+    `tol` must exceed EWT/2 (0.115): a room edge on the plate boundary is
+    walled by the external ring, whose centreline sits ewt/2 *outside* the
+    edge (a room at y=0 gets its south wall at y=-0.115). Room edges in
+    these fixtures are metres apart, so 0.12 is still unambiguous.
+    """
+    out = []
+    for w in walls:
+        is_v = abs(w.x1 - w.x2) < 1e-6
+        if is_v != vertical:
+            continue
+        c = w.x1 if is_v else w.y1
+        if abs(c - coord) <= tol:
+            out.append(w)
+    return out
+
+
+def test_open_side_gets_no_wall():
+    """A car porch open on its road-facing (S) edge gets no wall there,
+    but keeps its other three walls."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    walls = derive_walls([porch], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=0.0) == []
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), "N wall must remain"
+    assert _walls_on_edge(walls, vertical=True, coord=1.0), "W wall must remain"
+    assert _walls_on_edge(walls, vertical=True, coord=4.0), "E wall must remain"
+
+
+def test_closed_room_unchanged_by_the_feature():
+    """Regression: a room with no open_sides derives exactly the walls it
+    derived before this feature existed — all four edges present."""
+    r = Room(id="r", name="Living", type="living", x=1.0, y=1.0, width=4.0, depth=3.0)
+    walls = derive_walls([r], _buildable())
+    for vertical, coord in ((False, 1.0), (False, 4.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord), (
+            f"missing wall at {'x' if vertical else 'y'}={coord}"
+        )
+
+
+def test_party_wall_survives_neighbour_declaring_open():
+    """A porch open on its N edge that abuts a living room must NOT delete the
+    living room's S wall — the shared wall is still real."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=1.0,
+        y=5.0,
+        width=3.0,
+        depth=4.0,
+    )
+    walls = derive_walls([porch, living], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), (
+        "shared porch/living wall was wrongly deleted"
+    )
+
+
+def test_party_wall_survives_two_neighbours_declaring_open():
+    """Horizontal party wall shared by TWO non-open rooms.
+
+    The wall the pairing pass builds is a single merged segment spanning both
+    neighbours, so the rescue must see the neighbours' south edges as one
+    merged run too — matching each raw per-room edge on its own never
+    contains the merged wall, and the wall gets dropped. Note both
+    neighbours here have EMPTY open_sides: they must not lose a wall
+    because some *other* room declared itself open.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=4.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living", name="Living", type="living", x=1.0, y=5.0, width=2.0, depth=4.0
+    )
+    kitchen = Room(
+        id="kitchen", name="Kitchen", type="kitchen", x=3.0, y=5.0, width=2.0, depth=4.0
+    )
+    rooms = [porch, living, kitchen]
+    walls = derive_walls(rooms, _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=5.0), (
+        "party wall shared by two non-open neighbours was wrongly deleted"
+    )
+    # ...and the feature is still a no-op for the closed rooms: the same
+    # layout with nothing declared open derives the same wall count.
+    closed = derive_walls(
+        [
+            Room(
+                id="porch",
+                name="Car Porch",
+                type="parking_4w",
+                x=1.0,
+                y=0.0,
+                width=4.0,
+                depth=5.0,
+            ),
+            living,
+            kitchen,
+        ],
+        _buildable(),
+    )
+    assert len(walls) == len(closed)
+
+
+def test_vertical_party_wall_survives_two_neighbours_declaring_open():
+    """Same multi-neighbour rescue on the VERTICAL axis.
+
+    Guards the covered_v/covered_h split: a porch open on its E edge abutting
+    two stacked rooms must not delete their shared W wall.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=0.0,
+        y=0.0,
+        width=3.0,
+        depth=6.0,
+        open_sides=frozenset({"E"}),
+    )
+    r1 = Room(id="r1", name="Bed 1", type="bedroom", x=3.0, y=0.0, width=4.0, depth=3.0)
+    r2 = Room(id="r2", name="Bed 2", type="bedroom", x=3.0, y=3.0, width=4.0, depth=3.0)
+    walls = derive_walls([porch, r1, r2], _buildable())
+    assert _walls_on_edge(walls, vertical=True, coord=3.0), (
+        "vertical party wall shared by two non-open neighbours was deleted"
+    )
+
+
+def test_perpendicular_edge_does_not_rescue_an_open_wall():
+    """The party-wall rescue must not match across axes.
+
+    A corner porch open to the road on S: its south wall's centreline is
+    y=-0.115 and the wall spans x=[-0.115, 3.115]. The porch's OWN west edge
+    is the vertical line x=0.0 spanning y=[0, 5] — numerically close enough
+    to -0.115, and wide enough to contain the span, that an orientation-blind
+    `covered` set rescues the very wall the porch declared open. Keeping the
+    covered edges split by axis is what prevents that.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=0.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    walls = derive_walls([porch], _buildable())
+    assert _walls_on_edge(walls, vertical=False, coord=0.0) == [], (
+        "S wall survived: a perpendicular (vertical) edge wrongly rescued it"
+    )
+    assert _walls_on_edge(walls, vertical=True, coord=0.0), "W wall must remain"
+
+
+# --- carved / nested rooms (Room.parent_id) ---------------------------------
+
+
+def _carve_pair() -> tuple[Room, Room]:
+    """A 4x4 bedroom with a 1.5x2.0 toilet carved into its SW corner."""
+    bedroom = Room(
+        id="bed",
+        name="Bedroom",
+        type="bedroom",
+        x=1.0,
+        y=1.0,
+        width=4.0,
+        depth=4.0,
+    )
+    toilet = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="bed",
+    )
+    return bedroom, toilet
+
+
+def test_carved_room_does_not_duplicate_parent_walls():
+    """A toilet carved into a bedroom's rectangle gets its own two internal
+    separating walls, and the bedroom keeps all four of its own outer walls —
+    the carve must not punch a hole in the parent's envelope."""
+    bedroom, toilet = _carve_pair()
+    walls = derive_walls([bedroom, toilet], _buildable())
+    # Parent envelope intact on all four sides.
+    for vertical, coord in ((False, 1.0), (False, 5.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord), (
+            f"parent lost its wall at {'x' if vertical else 'y'}={coord}"
+        )
+    # Carve produces the two interior separating walls (x=2.5 and y=3.0).
+    assert _walls_on_edge(walls, vertical=True, coord=2.5), "missing carve E wall"
+    assert _walls_on_edge(walls, vertical=False, coord=3.0), "missing carve N wall"
+
+
+def test_carve_separating_walls_are_internal_not_exterior():
+    """The carve's own edges face the parent's mass, so they must read as
+    interior partitions (iwt) — never as void-facing external surfaces."""
+    bedroom, toilet = _carve_pair()
+    walls = derive_walls([bedroom, toilet], _buildable())
+    for vertical, coord in ((True, 2.5), (False, 3.0)):
+        segs = _walls_on_edge(walls, vertical=vertical, coord=coord)
+        assert segs, f"no wall at {'x' if vertical else 'y'}={coord}"
+        assert all(w.kind == "internal" for w in segs), (
+            f"carve wall at {'x' if vertical else 'y'}={coord} is not internal: "
+            f"{[(w.kind, w.thickness) for w in segs]}"
+        )
+        assert all(abs(w.thickness - IWT) < 1e-9 for w in segs)
+
+
+def test_carved_child_excluded_from_parent_net_area():
+    bedroom, toilet = _carve_pair()
+    assert bedroom.area == 16.0
+    assert bedroom.net_area([toilet]) == 13.0
+    # An unrelated room never reduces the parent's net area.
+    other = Room(
+        id="oth", name="Store", type="store_room", x=20.0, y=20.0, width=2.0, depth=2.0
+    )
+    assert bedroom.net_area([other]) == 16.0
+    # No children at all -> net area equals gross area (default behaviour).
+    assert bedroom.net_area([]) == bedroom.area
+
+
+def test_carve_must_lie_inside_its_parent():
+    bedroom, _ = _carve_pair()
+    stray = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=9.0,
+        y=9.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="bed",
+    )
+    with pytest.raises(ValueError, match="not contained"):
+        derive_walls([bedroom, stray], _buildable())
+
+
+def test_carve_with_unknown_parent_is_rejected():
+    bedroom, _ = _carve_pair()
+    orphan = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=1.5,
+        depth=2.0,
+        parent_id="nope",
+    )
+    with pytest.raises(ValueError, match="unknown parent_id"):
+        derive_walls([bedroom, orphan], _buildable())
+
+
+# Golden wall set for the 6-room ground floor of the shared fixture, captured
+# BEFORE `Room.parent_id` existed. Every entry is
+# (x1, y1, x2, y2, thickness, kind), rounded to 4 dp and sorted.
+_GOLDEN_GF_WALLS = [
+    (1.115, 1.615, 1.115, 4.845, 0.23, "external"),
+    (1.115, 1.615, 7.885, 1.615, 0.23, "external"),
+    (1.115, 4.845, 2.1875, 4.845, 0.23, "external"),
+    (1.115, 5.944, 1.115, 13.885, 0.23, "external"),
+    (1.115, 5.944, 4.995, 5.944, 0.23, "external"),
+    (1.115, 13.885, 7.885, 13.885, 0.23, "external"),
+    (2.1875, 1.615, 2.1875, 4.845, 0.115, "internal"),
+    (2.1875, 4.845, 4.995, 4.845, 0.23, "external"),
+    (4.8845, 5.944, 4.8845, 13.885, 0.115, "internal"),
+    (4.8845, 5.944, 5.0525, 5.944, 0.23, "external"),
+    (4.8845, 6.0015, 6.9615, 6.0015, 0.115, "internal"),
+    (4.995, 4.7875, 4.995, 5.944, 0.23, "external"),
+    (5.0525, 1.615, 5.0525, 4.845, 0.115, "internal"),
+    (6.904, 6.0015, 7.019, 6.0015, 0.115, "internal"),
+    (6.9615, 6.0015, 6.9615, 13.885, 0.115, "internal"),
+    (6.9615, 6.0015, 7.885, 6.0015, 0.115, "internal"),
+    (7.885, 1.615, 7.885, 13.885, 0.23, "external"),
+]
+
+
+def _wall_tuples(walls) -> list[tuple[float, float, float, float, float, str]]:
+    return sorted(
+        (
+            round(w.x1, 4),
+            round(w.y1, 4),
+            round(w.x2, 4),
+            round(w.y2, 4),
+            round(w.thickness, 4),
+            w.kind,
+        )
+        for w in walls
+    )
+
+
+def test_parent_id_defaults_to_none_and_changes_nothing():
+    """The load-bearing invariant of the whole phase: with no `parent_id`
+    anywhere, `derive_walls` must reproduce the pre-feature wall set exactly
+    — same count, same centrelines, same thicknesses, same kinds."""
+    rooms, cfg = golden_layout().ground_floor.rooms, golden_config()
+    assert all(r.parent_id is None for r in rooms)
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    assert len(walls) == len(_GOLDEN_GF_WALLS)
+    assert _wall_tuples(walls) == _GOLDEN_GF_WALLS
+
+
+def test_room_is_its_own_parent_is_rejected():
+    """Self-parent is trivially "contained", so only the cycle pass catches
+    it — and unchecked it empties `_structural_rooms` and degrades the plate
+    to the whole buildable inset."""
+    bedroom, _ = _carve_pair()
+    bedroom.parent_id = "bed"
+    with pytest.raises(ValueError, match="parent_id cycle"):
+        derive_walls([bedroom], _buildable())
+
+
+def test_two_node_parent_id_cycle_is_rejected():
+    a, b = _carve_pair()
+    a.parent_id = "wc"  # bed -> wc -> bed
+    with pytest.raises(ValueError, match="parent_id cycle") as exc:
+        derive_walls([a, b], _buildable())
+    assert "bed" in str(exc.value) and "wc" in str(exc.value)
+
+
+def test_three_node_parent_id_cycle_is_rejected():
+    a = Room(id="a", name="A", type="bedroom", x=1.0, y=1.0, width=4.0, depth=4.0)
+    b = Room(id="b", name="B", type="toilet", x=1.0, y=1.0, width=2.0, depth=2.0)
+    c = Room(id="c", name="C", type="store_room", x=1.0, y=1.0, width=1.0, depth=1.0)
+    a.parent_id, b.parent_id, c.parent_id = "b", "c", "a"
+    with pytest.raises(ValueError, match="parent_id cycle") as exc:
+        derive_walls([a, b, c], _buildable())
+    assert all(rid in str(exc.value) for rid in ("a", "b", "c"))
+
+
+def test_cycle_would_otherwise_degrade_the_plate_to_the_buildable():
+    """Pins WHY the cycle guard exists: without it, every room is filtered
+    out as a carve and the plate silently falls back to the buildable ring.
+    `_structural_rooms` alone still shows the degradation, so the guard in
+    `derive_walls` is the only thing standing between that and a wall ring
+    drawn around empty plot."""
+    bedroom, toilet = _carve_pair()
+    bedroom.parent_id = "wc"
+    assert _structural_rooms([bedroom, toilet]) == []
+    degraded = _plate_bounds([bedroom, toilet], _buildable(), EWT)
+    assert degraded == pytest.approx((EWT, EWT, 12.0 - EWT, 12.0 - EWT))
+    with pytest.raises(ValueError, match="parent_id cycle"):
+        derive_walls([bedroom, toilet], _buildable())
+
+
+def test_carve_within_containment_tolerance_does_not_inflate_the_plate():
+    """`_validate_carves` allows 1 cm of slop, so a carve CAN stick marginally
+    past its parent. It must still be filtered out of the footprint union, or
+    that slop silently grows the plate the exterior ring is built on."""
+    bedroom, _ = _carve_pair()
+    sloppy = Room(
+        id="wc",
+        name="Toilet",
+        type="toilet",
+        x=1.0,
+        y=1.0,
+        width=4.01,  # 1 cm past the parent's E edge — inside the 0.01 tol
+        depth=2.0,
+        parent_id="bed",
+    )
+    assert _structural_rooms([bedroom, sloppy]) == [bedroom]
+    derive_walls([bedroom, sloppy], _buildable())  # tolerated, not an error
+    _px1, _py1, px2, _py2 = _plate_bounds([bedroom, sloppy], _buildable(), EWT)
+    assert px2 == pytest.approx(5.0), (
+        f"carve mass leaked into the plate: east bound {px2} != parent's 5.0"
+    )
+
+
+# --- Task 7: walls derive from the part union, not the bbox -----------------
+
+
+def test_l_shaped_room_has_six_wall_runs_not_four():
+    """An L room's notch must be a real re-entrant corner: 6 boundary runs,
+    and NO wall closing the notch off as if it were a rectangle."""
+    r = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=1.0,
+        y=1.0,
+        width=10.0,
+        depth=10.0,
+        template="L",
+        shape_ratio=0.6,
+    )
+    walls = derive_walls([r], box(0, 0, 14, 14))
+    # Base band spans y=1..7 full width; leg spans x=1..7 up to y=11.
+    # The notch corner is at (7, 7): there must be walls along x=7 above y=7
+    # and along y=7 to the right of x=7 ...
+    assert _walls_on_edge(walls, vertical=True, coord=7.0), "missing notch E wall"
+    assert _walls_on_edge(walls, vertical=False, coord=7.0), "missing notch N wall"
+    # ... and NO wall spanning the top of the bbox across the notch. The bound
+    # is the notch's x plus EWT/2 (+tol), not x itself: `_snap_ends`
+    # legitimately extends the north run out to the notch wall's *centreline*
+    # (x = 7 + EWT/2) for corner closure. A wall genuinely drawn across the
+    # notch would run all the way to the bbox's east ring at x = 11 + EWT/2.
+    top = _walls_on_edge(walls, vertical=False, coord=11.0)
+    assert top, "the L's north run is missing entirely"
+    for w in top:
+        assert max(w.x1, w.x2) <= 7.0 + EWT / 2 + 0.01, (
+            "a wall was drawn across the L's notch — the room was treated as "
+            "its bounding rectangle"
+        )
+
+
+def test_rect_room_still_has_exactly_four_runs():
+    """Regression: RECT rooms are untouched by the union-boundary rewrite."""
+    r = Room(id="r", name="R", type="living", x=1.0, y=1.0, width=4.0, depth=3.0)
+    walls = derive_walls([r], box(0, 0, 12, 12))
+    for vertical, coord in ((False, 1.0), (False, 4.0), (True, 1.0), (True, 5.0)):
+        assert _walls_on_edge(walls, vertical=vertical, coord=coord)
+
+
+def test_u_shaped_room_leaves_its_central_notch_wall_less():
+    """The U template's mid-edge notch is the case `_plate_bounds`'s corner
+    probe cannot see, so only a union-boundary walk can keep it open."""
+    r = Room(
+        id="u",
+        name="U Hall",
+        type="living",
+        x=1.0,
+        y=1.0,
+        width=10.0,
+        depth=10.0,
+        template="U",
+        shape_ratio=0.6,
+    )
+    walls = derive_walls([r], box(0, 0, 14, 14))
+    # legs: x in [1,3] and [9,11]; notch floor at y=7 spanning x in [3,9].
+    assert _walls_on_edge(walls, vertical=False, coord=7.0), "missing notch floor wall"
+    north = _walls_on_edge(walls, vertical=False, coord=11.0)
+    assert north, "the U's leg tops lost their walls"
+    for w in north:
+        lo, hi = min(w.x1, w.x2), max(w.x1, w.x2)
+        assert hi <= 3.0 + EWT / 2 + 0.01 or lo >= 9.0 - EWT / 2 - 0.01, (
+            "a wall bridges the U's notch at the top of its bounding box"
+        )
+
+
+def test_merged_ring_wall_is_split_at_an_open_side():
+    """Task 2's deferred under-firing case.
+
+    The porch's south run and its neighbour's south run are separated only by
+    a partition slit, so `_merge_intervals` joins them into ONE ring wall.
+    The old containment-only filter kept that wall whole (the merged wall is
+    not *wholly* inside the porch's open interval), leaving a wall across the
+    porch opening. Interval SUBTRACTION must remove only the porch's share.
+    """
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"S"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=4.115,
+        y=0.0,
+        width=3.885,
+        depth=5.0,
+    )
+    walls = derive_walls([porch, living], _buildable())
+    south = _walls_on_edge(walls, vertical=False, coord=0.0)
+    assert south, "the neighbour's south wall was deleted along with the porch's"
+    for w in south:
+        assert min(w.x1, w.x2) >= 4.0 - EWT / 2 - 0.01, (
+            "a wall still runs across the porch's declared-open south side — "
+            "the merged run was kept whole instead of being split"
+        )
+    assert any(max(w.x1, w.x2) >= 7.9 for w in south), (
+        "the living room's south wall no longer reaches its east end"
+    )
+
+
+def test_label_area_uses_the_part_union_not_the_bbox():
+    """`_room_label_lines` reported round(width * depth * 10.7639) — the
+    bounding box. An L room's printed SQFT must be its occupied area."""
+    r = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=1.0,
+        y=1.0,
+        width=10.0,
+        depth=10.0,
+        template="L",
+        shape_ratio=0.6,
+    )
+    lines = _room_label_lines(r)
+    sqft = next(int(t.split()[0]) for t in lines if t.endswith("SQFT"))
+    assert sqft == round(r.area * 10.7639)
+    assert sqft < round(10.0 * 10.0 * 10.7639)
+
+
+def test_rect_label_area_is_unchanged():
+    r = _room("r", 1.0, 1.0, 3.5, 4.0)
+    lines = _room_label_lines(r)
+    sqft = next(int(t.split()[0]) for t in lines if t.endswith("SQFT"))
+    assert sqft == round(3.5 * 4.0 * 10.7639)
+
+
+def test_adjacency_of_an_l_room_covers_only_the_parts_that_touch():
+    """Doors are hung on `_adjacencies` runs. An L room touches its
+    neighbour only along the part that actually reaches it — a bbox-derived
+    run would claim a shared wall across the notch, where a door would open
+    onto open air."""
+    l_room = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=0.0,
+        y=0.0,
+        width=6.0,
+        depth=6.0,
+        template="L",
+        shape_ratio=0.5,
+    )
+    nbr = _room("nbr", 6.115, 0.0, 3.0, 6.0)
+    adjs = [
+        a
+        for a in _adjacencies([l_room, nbr], IWT, 0.01)
+        if a.vertical and abs(a.coord - 6.0575) < 0.01
+    ]
+    assert adjs, "the L's base band lost its contact with the neighbour"
+    for a in adjs:
+        assert a.hi <= 3.0 + 0.01, (
+            f"adjacency spans y=[{a.lo}, {a.hi}] — past the base band's top at "
+            "3.0, i.e. across the notch where the L is not present"
+        )
+
+
+# --- Deterministic wall IDs (Phase 7 / Task 26) -----------------------------
+
+
+def _wall_key(w) -> tuple:
+    """Geometry key identifying a wall independent of list position."""
+    return (w.kind, round(w.x1, 4), round(w.y1, 4), round(w.x2, 4), round(w.y2, 4))
+
+
+def _id_by_key(walls) -> dict[tuple, str]:
+    return {_wall_key(w): w.id for w in walls}
+
+
+def test_wall_ids_stable_and_unique_on_rederivation():
+    """Property 1 — stability: deriving the same floor twice yields identical
+    per-wall IDs (and no duplicates)."""
+    walls_a = derive_walls(_two_full_height_rooms(), buildable_polygon(_cfg_9x15()))
+    walls_b = derive_walls(_two_full_height_rooms(), buildable_polygon(_cfg_9x15()))
+    ids = [w.id for w in walls_a]
+    assert ids and all(ids), "every wall carries a non-empty id"
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+    assert _id_by_key(walls_a) == _id_by_key(walls_b)
+
+
+def _grid_room(rid: str, x: float, y: float, rtype: str = "bedroom") -> Room:
+    return Room(id=rid, name=rid, type=rtype, x=x, y=y, width=5.9425, depth=5.9425)
+
+
+def _grid_rooms(shrink_d: bool) -> list[Room]:
+    d_w = 5.6425 if shrink_d else 5.9425
+    return [
+        _grid_room("a", 0.0, 6.0575),
+        _grid_room("b", 6.0575, 6.0575),
+        _grid_room("c", 0.0, 0.0),
+        Room(
+            id="d", name="d", type="bedroom", x=6.0575, y=0.0, width=d_w, depth=5.9425
+        ),
+    ]
+
+
+def test_wall_ids_local_to_their_own_rooms():
+    """Property 2 — locality: shrinking room d must not change the ID of any
+    wall whose geometry is unchanged (an index-based scheme fails this the
+    moment d's edit removes or adds a wall earlier in the output list)."""
+    before = derive_walls(_grid_rooms(False), box(0, 0, 12, 12))
+    after = derive_walls(_grid_rooms(True), box(0, 0, 12, 12))
+    ids_before = _id_by_key(before)
+    ids_after = _id_by_key(after)
+    shared = set(ids_before) & set(ids_after)
+    assert shared, "sanity: the two layouts share walls"
+    drifted = {
+        k: (ids_before[k], ids_after[k])
+        for k in shared
+        if ids_before[k] != ids_after[k]
+    }
+    assert not drifted, f"untouched walls changed id: {drifted}"
+    # The a|b partition is topologically untouched by d's shrink — pin it.
+    ab = [k for k in shared if k[0] == "internal" and abs(k[1] - 6.0) < 0.01]
+    assert ab, "expected the a|b internal wall to survive unchanged"
+
+
+def test_wall_ids_unique_with_three_room_party_wall():
+    """Property 3 — uniqueness: rooms b and c stacked against one face of
+    `a` give the x=6 centreline THREE derived walls (two party stretches and
+    the b|c return) plus ring runs backed by multiple rooms; every id stays
+    distinct (the afb3794 multi-neighbour case)."""
+    rooms = [
+        _room("a", 0.0, 0.0, 5.9425, 12.0),
+        _room("b", 6.0575, 0.0, 5.9425, 5.9425),
+        _room("c", 6.0575, 6.0575, 5.9425, 5.9425),
+    ]
+    walls = derive_walls(rooms, box(0, 0, 12, 12))
+    ids = [w.id for w in walls]
+    assert all(ids)
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+    # The two party stretches share BOTH flanking-room sets ({a}|{b} vs
+    # {a}|{c}) only in the room dimension — the b|c junction splits the run,
+    # and the span disambiguator keeps their ids apart.
+    party = [
+        w.id
+        for w in walls
+        if w.kind == "internal" and abs(w.x1 - 6.0) < 0.01 and abs(w.x2 - 6.0) < 0.01
+    ]
+    assert len(party) >= 2 and len(set(party)) == len(party)
+    # A ring run backed by more than one room proves set-based attribution.
+    assert any(
+        "+" in w.id.split(":")[3].split(">")[1]
+        or "+" in w.id.split(":")[3].split(">")[0]
+        for w in walls
+        if w.kind == "external"
+    )
+
+
+def test_wall_ids_unique_on_l_shaped_parts_union():
+    """Property 3 — uniqueness on an L-shaped `Room.parts` union."""
+    l_room = Room(
+        id="l",
+        name="L Living",
+        type="living",
+        x=0.0,
+        y=0.0,
+        width=10.0,
+        depth=10.0,
+        template="L",
+        shape_ratio=0.5,
+    )
+    walls = derive_walls([l_room], box(0, 0, 12, 12))
+    ids = [w.id for w in walls]
+    assert ids and all(ids)
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+
+
+def test_wall_ids_unique_after_open_side_split():
+    """An open-sided porch splits the centreline it shares with its neighbour;
+    both pieces keep IDs of their own — no collision, and the surviving party
+    stretch keeps a stable id."""
+    porch = Room(
+        id="porch",
+        name="Car Porch",
+        type="parking_4w",
+        x=1.0,
+        y=0.0,
+        width=3.0,
+        depth=5.0,
+        open_sides=frozenset({"N"}),
+    )
+    living = Room(
+        id="living",
+        name="Living",
+        type="living",
+        x=1.0,
+        y=5.115,
+        width=3.0,
+        depth=4.0,
+    )
+    walls = derive_walls([porch, living], box(0, 0, 12, 12))
+    ids = [w.id for w in walls]
+    assert all(ids)
+    assert len(set(ids)) == len(ids), f"duplicate wall ids: {sorted(ids)}"
+
+
+def test_wall_ids_unique_across_a_sub_centimetre_span_difference():
+    """Two same-kind, same-(empty)-support walls whose span differs by only
+    3mm must not collide: the id's disambiguator rounds coordinates to 6
+    decimals (micron precision), not 2 (cm precision) — a CodeRabbit-flagged
+    regression risk on PR #96 (plan_geometry.py `_assign_wall_ids`)."""
+    walls = [
+        WallSegment(x1=0.0, y1=0.0, x2=1.000, y2=0.0, thickness=0.115, kind="internal"),
+        WallSegment(x1=0.0, y1=0.0, x2=1.003, y2=0.0, thickness=0.115, kind="internal"),
+    ]
+    _assign_wall_ids(walls, rooms=[])
+    ids = [w.id for w in walls]
+    assert all(ids)
+    assert len(set(ids)) == 2, f"sub-cm span difference collided into one id: {ids}"

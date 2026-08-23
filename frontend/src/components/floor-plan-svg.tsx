@@ -62,6 +62,16 @@ const PALETTE: Record<string, { fill: string; stroke: string; text: string }> = 
   foyer: { fill: "#F1F5F9", stroke: "#64748B", text: "#334155" },
   courtyard: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
   wardrobe: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  // open / semi-open programme (reverse_engr corpus) — reuse the
+  // courtyard/balcony open-space family
+  terrace: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  garden: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  verandah: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  seating: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  open_to_sky: { fill: "#F0F9FF", stroke: "#0369A1", text: "#0C4A6E" },
+  // service nooks — reuse the utility/wardrobe slate family
+  duct: { fill: "#F8FAFC", stroke: "#94A3B8", text: "#475569" },
+  washbasin_nook: { fill: "#E0F2FE", stroke: "#0284C7", text: "#0C4A6E" },
 };
 
 // Dark-mode counterpart of PALETTE — same room-type keys, values chosen so
@@ -95,6 +105,13 @@ const PALETTE_DARK: Record<string, { fill: string; stroke: string; text: string 
   foyer: { fill: "#283643", stroke: "#8e9bae", text: "#e0e4eb" },
   courtyard: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
   wardrobe: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  terrace: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  garden: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  verandah: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  seating: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  open_to_sky: { fill: "#1f3a4c", stroke: "#4cb6f0", text: "#d9e9f2" },
+  duct: { fill: "#283643", stroke: "#8b9bb2", text: "#e1e5ea" },
+  washbasin_nook: { fill: "#1f3d4c", stroke: "#4cb8f0", text: "#d9e9f2" },
 };
 
 const color = (type: string, dark = false) => {
@@ -1070,16 +1087,16 @@ export function detectSharedWalls(rooms: RoomData[]): SharedWall[] {
 
 // ── L-shape polygon point helper ─────────────────────────────────────────────
 function computeLShapePoints(
-  plotWidth: number,
-  plotLength: number,
+  plotXExtent: number,
+  plotYExtent: number,
   cutoutCorner: string,
   cutoutWidth: number,
   cutoutHeight: number,
   px: (x: number) => number,
   py: (y: number) => number
 ): string {
-  const W = plotWidth;
-  const H = plotLength;
+  const W = plotXExtent;
+  const H = plotYExtent;
   const cw = cutoutWidth;
   const ch = cutoutHeight;
   let vertices: [number, number][];
@@ -1125,8 +1142,8 @@ function computeLShapePoints(
 // ── Main component ────────────────────────────────────────────────────────────
 interface FloorPlanSVGProps {
   floorPlan: FloorPlanData;
-  plotWidth: number;
-  plotLength: number;
+  plotXExtent: number;
+  plotYExtent: number;
   roadSide?: string;
   northDirection?: string;
   className?: string;
@@ -1180,15 +1197,23 @@ const VASTU_GRID_ROAD_N = [
   ["E", "C", "W"],
   ["NE", "N", "NW"],
 ];
+// row 0 = rear (high y), row 2 = front (low y, the road-facing edge).
+// `roadSide` names the compass direction the FRONT edge faces, so the front row
+// must be that direction's third of the plot: an east road's front row is
+// [SE, E, NE]. These two constants used to hold each other's contents — each
+// the other rotated 180 degrees — which silently mirrored the overlay on every
+// east- and west-facing plot. Keep in sync with ZONE_GRID_ROAD_E/_W in
+// backend/app/engine/vastu.py, whose compass anchor test
+// (test_road_facing_row_is_that_compass_directions_third) pins the same rows.
 const VASTU_GRID_ROAD_E = [
-  ["NE", "E", "SE"],
-  ["N", "C", "S"],
-  ["NW", "W", "SW"],
+  ["SW", "W", "NW"], // rear = West
+  ["S", "C", "N"],
+  ["SE", "E", "NE"], // front = East
 ];
 const VASTU_GRID_ROAD_W = [
-  ["SW", "W", "NW"],
-  ["S", "C", "N"],
-  ["SE", "E", "NE"],
+  ["NE", "E", "SE"], // rear = East
+  ["N", "C", "S"],
+  ["NW", "W", "SW"], // front = West
 ];
 const VASTU_GRIDS: Record<string, string[][]> = {
   S: VASTU_GRID_ROAD_S,
@@ -1199,8 +1224,8 @@ const VASTU_GRIDS: Record<string, string[][]> = {
 
 export function FloorPlanSVG({
   floorPlan,
-  plotWidth,
-  plotLength,
+  plotXExtent,
+  plotYExtent,
   roadSide = "S",
   className,
   plotShape,
@@ -1299,12 +1324,12 @@ export function FloorPlanSVG({
   const availW = VP_W - 2 * PAD;
   const availH = VP_H - 2 * PAD - ROAD_H;
 
-  const scaleX = availW / plotWidth;
-  const scaleY = availH / plotLength;
+  const scaleX = availW / plotXExtent;
+  const scaleY = availH / plotYExtent;
   const scale = Math.min(scaleX, scaleY);
 
-  const drawW = plotWidth * scale;
-  const drawH = plotLength * scale;
+  const drawW = plotXExtent * scale;
+  const drawH = plotYExtent * scale;
 
   const originX = PAD + (availW - drawW) / 2;
   const originY = PAD + (availH - drawH) / 2;
@@ -1386,8 +1411,8 @@ export function FloorPlanSVG({
         dyM,
         getMinSide(target.type),
         base,
-        plotWidth,
-        plotLength
+        plotXExtent,
+        plotYExtent
       );
       setEditRooms(base.map((r) => (r.id === rz.roomId ? { ...r, ...resized } : r)));
       return;
@@ -1410,8 +1435,8 @@ export function FloorPlanSVG({
           depth: moving.depth,
         },
         base,
-        plotWidth,
-        plotLength
+        plotXExtent,
+        plotYExtent
       );
       setEditRooms(base.map((r) => (r.id === m.roomId ? { ...r, x: snapped.x, y: snapped.y } : r)));
       return;
@@ -1610,8 +1635,8 @@ export function FloorPlanSVG({
         ) : plotShape === "l_shaped" && cutoutWidth > 0 && cutoutHeight > 0 ? (
           <polygon
             points={computeLShapePoints(
-              plotWidth,
-              plotLength,
+              plotXExtent,
+              plotYExtent,
               cutoutCorner,
               cutoutWidth,
               cutoutHeight,
@@ -1928,7 +1953,7 @@ export function FloorPlanSVG({
               y1={originY + drawH}
               x2={originX + drawW}
               y2={originY + drawH}
-              label={`${plotWidth} m`}
+              label={`${plotXExtent} m`}
               offset={-28}
               horizontal
             />
@@ -1937,7 +1962,7 @@ export function FloorPlanSVG({
               y1={originY}
               x2={originX}
               y2={originY + drawH}
-              label={`${plotLength} m`}
+              label={`${plotYExtent} m`}
               offset={-28}
               horizontal={false}
             />
@@ -1950,10 +1975,13 @@ export function FloorPlanSVG({
         {/* ── Scale bar ─────────────────────────────────────────────────── */}
         <ScaleBar x={originX + 4} y={originY + drawH - 10} scale={scale} />
 
-        {/* ── Furniture overlay (presentation mode) ─────────────────────── */}
+        {/* ── Furniture overlay (presentation mode) — the canonical payload
+            fixtures; nothing derived client-side (Task 33). Rooms are still
+            passed for the room-origin translation. ──────────────────────── */}
         {showFurniture && (
           <FurnitureOverlay
             rooms={rooms}
+            fixtures={drawing?.fixtures ?? []}
             scale={scale}
             offsetX={originX}
             offsetY={originY}
