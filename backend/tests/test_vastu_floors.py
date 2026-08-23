@@ -340,7 +340,7 @@ FRONT_ROW = {
 # The tie-break prefers N/NE/E. Only two road sides put such a cell on the
 # front row; on the other two it is provably inert. Literal on purpose — the
 # rule itself is imported from production, so widening production's rule to a
-# cell that appears on an S or E front row makes this assertion fail instead of
+# cell that appears on an S or W front row makes this assertion fail instead of
 # silently agreeing with itself.
 TIE_BREAK_CAN_FIRE = {"N", "E"}
 
