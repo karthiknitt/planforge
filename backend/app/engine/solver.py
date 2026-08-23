@@ -76,6 +76,11 @@ SOLVE_TIME_S = 70.0  # per-solve wall-clock budget (generation runs async)
 # That is acceptable because generation is an async Inngest job, and because the
 # cap only binds in exactly the regime where the old behaviour returned wrong
 # output rather than slow output.
+#
+# Validated separately from the 2 timing/diagnostic runs above: 5/5 full
+# generate() runs at the new 70.0/25.0 caps returned the same 3-layout,
+# bit-for-bit-identical fingerprint (vs the 4/8-degraded baseline at the old
+# caps quoted above) — see this PR's test plan.
 PHASE1_TIME_S = 25.0
 # Deterministic (machine-independent) work budgets — see the comment above
 # PHASE1_TIME_S. These are the values meant to actually bind; module-level so
