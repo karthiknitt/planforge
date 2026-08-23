@@ -758,9 +758,7 @@ def _render_dxf(
 
         # 6c. Furniture per room — projected from the canonical drawing (T33)
         for room in rooms:
-            draw_furniture(
-                msp, room, drawing.fixtures, layer="A-FURNITURE", z=z_offset
-            )
+            draw_furniture(msp, room, drawing.fixtures, layer="A-FURNITURE", z=z_offset)
 
         # 6d. Open terrace hatching (ground floor only) — the canonical
         # region, identical to the old per-renderer plot−footprint

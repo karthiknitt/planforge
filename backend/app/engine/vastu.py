@@ -266,9 +266,7 @@ def zone_distribution(
         for j in range(samples):
             py = room.y + room.depth * (j + 0.5) / samples
             v = (py - plot_l / 2.0) / plot_l
-            zone = _zone_from_components(
-                u * cos_t - v * sin_t, u * sin_t + v * cos_t
-            )
+            zone = _zone_from_components(u * cos_t - v * sin_t, u * sin_t + v * cos_t)
             counts[zone] = counts.get(zone, 0) + 1
     total = float(samples * samples)
     return {zone: count / total for zone, count in counts.items()}

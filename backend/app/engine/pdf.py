@@ -767,9 +767,7 @@ def _openings_schedule_rows(drawing) -> list[tuple]:
     """
     from app.engine.plan_geometry import assign_opening_marks
 
-    if any(
-        not o.mark and not getattr(o, "is_main", False) for o in drawing.openings
-    ):
+    if any(not o.mark and not getattr(o, "is_main", False) for o in drawing.openings):
         assign_opening_marks(drawing.openings)
 
     groups: dict[tuple[str, str, int, int], int] = {}

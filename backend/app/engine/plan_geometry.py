@@ -3160,8 +3160,7 @@ def apply_opening_overrides(
         new_width = o.width if ov.width is None else ov.width
         if new_width <= 0:
             diagnostics.append(
-                f"opening_override: {ov.opening_id!r} rejected — width must be "
-                "positive"
+                f"opening_override: {ov.opening_id!r} rejected — width must be positive"
             )
             continue
         # `along` runs along the WALL's own axis: y for a vertical wall (its
@@ -3237,7 +3236,9 @@ def _site_polygons(geom: BaseGeometry) -> list[SitePolygon]:
     return [
         SitePolygon(
             exterior=[(float(x), float(y)) for x, y in p.exterior.coords],
-            holes=[[(float(x), float(y)) for x, y in ring.coords] for ring in p.interiors],
+            holes=[
+                [(float(x), float(y)) for x, y in ring.coords] for ring in p.interiors
+            ],
         )
         for p in polys
     ]
@@ -3278,7 +3279,11 @@ def derive_site_context(
     footprint = None
     if floorplan.rooms:
         footprint = unary_union(
-            [box(r.x, r.y, r.x + r.width, r.y + r.depth) for room in floorplan.rooms for r in room.rects]
+            [
+                box(r.x, r.y, r.x + r.width, r.y + r.depth)
+                for room in floorplan.rooms
+                for r in room.rects
+            ]
         )
     plot = plot_polygon(cfg)
     terrace = plot.difference(footprint) if footprint is not None else plot

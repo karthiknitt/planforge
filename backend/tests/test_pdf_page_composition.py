@@ -145,7 +145,12 @@ def test_schedule_rows_survive_legacy_openings_with_empty_marks() -> None:
         kind="door", cx=1.0, cy=0.0, width=0.9, is_horizontal=True, wall_thickness=0.115
     )
     window = Opening(
-        kind="window", cx=3.0, cy=0.0, width=1.2, is_horizontal=True, wall_thickness=0.23
+        kind="window",
+        cx=3.0,
+        cy=0.0,
+        width=1.2,
+        is_horizontal=True,
+        wall_thickness=0.23,
     )
     drawing = SimpleNamespace(openings=[door, window])
     rows = _openings_schedule_rows(drawing)
