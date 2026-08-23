@@ -49,8 +49,9 @@ assertion is the regression test to write first.
 
 ## 2. Every north arrow in the product is wrong
 
-**Severity: high — corrected upward after a closer look. There are THREE arrow
-drawers and none of them is right, including on the default south plot.**
+**Severity: high — THREE arrow drawers, and none is right for a non-south plot.
+The DXF drawer is wrong on every orientation, including the default south
+plot; the two ReportLab (PDF) drawers are wrong on the other three.**
 
 | drawer | orientation input | behaviour |
 |---|---|---|
@@ -76,9 +77,15 @@ other three. The arrow points at the road on every plot.
 **Fix direction:** one orientation source for all three.
 `vastu.resolve_north_angle(cfg)` already returns the clockwise angle from the
 plan's +y to true north, honouring a surveyed `north_angle_deg` over the road
-side, and works for non-cardinal bearings. Rotate each glyph by it. The DXF
-drawer additionally needs its caller to stop passing `road_side` as if it were a
-north direction.
+side, and works for non-cardinal bearings. Rotate each glyph by it — but not by
+the same formula: ReportLab's page space is y-up with `rotate()` measured
+counter-clockwise, while `cad_primitives.draw_north_arrow`'s
+`{"N": 90, "E": 0, "S": 270, "W": 180}` mapping is DXF's own convention. Each
+renderer needs its own conversion from `resolve_north_angle`'s clockwise-from-+y
+value into that renderer's rotation convention — a single shared angle plugged
+into both APIs unchanged would silently reintroduce the bug for one of the two.
+The DXF drawer additionally needs its caller to stop passing `road_side` as if
+it were a north direction.
 
 **Note:** `ROAD_SIDE_NORTH_ANGLE_DEG` was itself wrong for E and W until commit
 `e11e500` on this branch, so any earlier attempt to fix the arrows from that
@@ -90,6 +97,13 @@ PDF/DXF tests check that an arrow is emitted, not where it points.
 ## 3. A west-facing entrance has no auspicious cell
 
 **Severity: low — a missing preference, not a wrong output.**
+
+Scoped to the `north_angle_deg is None` fallback: `resolve_north_angle` prefers
+an explicit surveyed `north_angle_deg` over `road_side` (see finding 1's "Where"
+note and `vastu.py:298-309`), so everything below describes only plots without a
+surveyed bearing — the common case, since `north_angle_deg` is engine-only today
+(not yet exposed to the wizard), but not the only one the code accepts. A
+surveyed non-cardinal bearing is not covered by this table.
 
 The main entrance can only sit on the road-facing (y-min) wall, so its candidates
 occupy exactly one row of the 3x3 Vastu grid. After `e11e500` (E/W grids
