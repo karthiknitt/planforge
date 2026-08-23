@@ -58,9 +58,39 @@ def test_north_angle_is_wrapped_into_range():
     assert GenerateRequest(**_payload(north_angle_deg=-90.0)).north_angle_deg == 270.0
 
 
+def test_zero_or_negative_plot_extent_is_rejected():
+    with pytest.raises(ValidationError):
+        GenerateRequest(**_payload(plot_x_extent=0.0))
+    with pytest.raises(ValidationError):
+        GenerateRequest(**_payload(plot_y_extent=-5.0))
+
+
+def test_oversized_plot_extent_is_rejected():
+    with pytest.raises(ValidationError):
+        GenerateRequest(**_payload(plot_x_extent=150.0))
+
+
+def test_negative_setback_is_rejected():
+    with pytest.raises(ValidationError):
+        GenerateRequest(**_payload(setback_front=-1.0))
+
+
+def test_setbacks_consuming_the_plot_are_rejected():
+    with pytest.raises(ValidationError, match="setbacks consume"):
+        GenerateRequest(
+            **_payload(plot_x_extent=5.0, setback_left=3.0, setback_right=3.0)
+        )
+    with pytest.raises(ValidationError, match="setbacks consume"):
+        GenerateRequest(
+            **_payload(plot_y_extent=5.0, setback_front=3.0, setback_rear=3.0)
+        )
+
+
 def test_notch_dims_required_for_non_rect_plot():
     with pytest.raises(ValidationError, match="notch"):
         GenerateRequest(**_payload(plot_template="L"))
+    with pytest.raises(ValidationError, match="notch"):
+        GenerateRequest(**_payload(plot_template="L", notch_width=0.0, notch_depth=2.0))
 
 
 def test_notch_must_fit_inside_the_plot():

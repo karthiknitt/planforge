@@ -269,12 +269,16 @@ class GenerateRequest(BaseModel):
     on top of the dimensions a project already persists.
     """
 
-    plot_x_extent: float
-    plot_y_extent: float
-    setback_front: float
-    setback_rear: float
-    setback_left: float
-    setback_right: float
+    # Bounds mirror ProjectCreate's geometry contract above — this request
+    # skipped it entirely (CodeRabbit review on PR #95), so a plot with a
+    # zero/negative extent or setbacks that consume the whole plot passed
+    # here while ProjectCreate would have rejected it outright.
+    plot_x_extent: float = Field(ge=5.0, le=100.0, allow_inf_nan=False)
+    plot_y_extent: float = Field(ge=5.0, le=100.0, allow_inf_nan=False)
+    setback_front: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    setback_rear: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    setback_left: float = Field(ge=0, le=20.0, allow_inf_nan=False)
+    setback_right: float = Field(ge=0, le=20.0, allow_inf_nan=False)
     num_bedrooms: int = Field(ge=1, le=6)
     toilets: int = Field(ge=1, le=6)
     parking: bool
@@ -291,10 +295,16 @@ class GenerateRequest(BaseModel):
     @model_validator(mode="after")
     def _check(self) -> "GenerateRequest":
         self.north_angle_deg %= 360.0
+        if (
+            self.setback_front + self.setback_rear >= self.plot_y_extent
+            or self.setback_left + self.setback_right >= self.plot_x_extent
+        ):
+            raise ValueError("setbacks consume the entire plot")
         if self.plot_template != "RECT":
-            if self.notch_width is None or self.notch_depth is None:
+            if not self.notch_width or not self.notch_depth:
                 raise ValueError(
-                    "notch_width and notch_depth are required for a non-rectangular plot"
+                    "notch_width and notch_depth are required and must be "
+                    "positive for a non-rectangular plot"
                 )
             if (
                 self.notch_width >= self.plot_x_extent
