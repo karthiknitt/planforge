@@ -181,6 +181,27 @@ def zone_for_point(
     return ZONE_GRID_ROAD_S[row][col]
 
 
+def _zone_from_components(east: float, north: float) -> str:
+    """Same col/row classification as `zone_for_point`, factored out so
+    `zone_distribution` can reuse it against pre-rotated (east, north)
+    components instead of re-deriving them per sample point."""
+    if east < -_BAND:
+        col = 0
+    elif east < _BAND:
+        col = 1
+    else:
+        col = 2
+
+    if north > _BAND:
+        row = 0
+    elif north > -_BAND:
+        row = 1
+    else:
+        row = 2
+
+    return ZONE_GRID_ROAD_S[row][col]
+
+
 def zone_distribution(
     room: Room,
     plot_w: float,
@@ -194,13 +215,27 @@ def zone_distribution(
     than testing only its centroid, so a room 40% inside NE and 60% inside N
     reports both instead of being credited wholly to whichever zone its midpoint
     happens to land in.
+
+    The rotation (`math.radians`/`cos`/`sin` of `north_angle_deg`) is hoisted
+    out of the sample loop: `zone_for_point` recomputed it per point, and this
+    runs `samples * samples` = 1600 times per room, for every ruled room on
+    every floor of every candidate layout — the trigonometry was landing on
+    the order of 10^5-10^6 evaluations per generation request for a value
+    that is constant across the whole call. `_zone_from_components` shares the
+    same col/row classification as `zone_for_point`, so behaviour is unchanged.
     """
     counts: dict[str, int] = {}
+    theta = math.radians(north_angle_deg)
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
     for i in range(samples):
         px = room.x + room.width * (i + 0.5) / samples
+        u = (px - plot_w / 2.0) / plot_w
         for j in range(samples):
             py = room.y + room.depth * (j + 0.5) / samples
-            zone = zone_for_point(px, py, plot_w, plot_l, north_angle_deg)
+            v = (py - plot_l / 2.0) / plot_l
+            zone = _zone_from_components(
+                u * cos_t - v * sin_t, u * sin_t + v * cos_t
+            )
             counts[zone] = counts.get(zone, 0) + 1
     total = float(samples * samples)
     return {zone: count / total for zone, count in counts.items()}
@@ -411,7 +446,7 @@ def _floor_label(floor: FloorPlan) -> str:
     `check_vastu` reads every floor, and stacked floors are the normal case: a
     G+1's first-floor toilet sits directly above the ground-floor one with the
     same `name` and the same (x, y), so both land in the same zone and produce a
-    byte-identical sentence. `generator._apply_vastu` extends
+    byte-identical sentence. `generator._attach_vastu` extends
     `layout.compliance.warnings` with these strings verbatim, so the duplicate
     reaches the API/UI payload and the user cannot tell which floor is meant.
 

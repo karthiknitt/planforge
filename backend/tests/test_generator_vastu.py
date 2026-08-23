@@ -121,7 +121,12 @@ def _swapped_pair() -> tuple[Layout, Layout]:
     ranking difference is attributable to Vastu alone.
 
     good: kitchen in SE (preferred 1.0) + utility in NE (preferred 1.0) -> 100.0
-    bad:  kitchen in NE (avoid 0.0)     + utility in SE (no rule -> 0.45) -> 22.5
+    bad:  kitchen in NE (avoid 0.0)     + utility in SE (its rule is silent
+          about SE, so NEUTRAL 0.45) -> 22.5
+
+    `utility` must HAVE a rule for this arithmetic to hold: `vastu_layout_score`
+    excludes rule-less rooms from the denominator entirely, so a genuinely
+    rule-less second room would leave `bad` at 0.0, not 22.5.
     """
     good = _layout(
         [_room("k", "kitchen", *SE_CORNER), _room("u", "utility", *NE_CORNER)],

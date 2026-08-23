@@ -692,7 +692,12 @@ def _attach_vastu(layout: Layout, cfg: PlotConfig) -> None:
     """
     if not cfg.vastu_enabled:
         return
-    _v_violations, v_warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
+    v_violations, v_warnings = check_vastu(layout, cfg, road_side=cfg.road_side)
+    # Both lists land in `warnings`, never `violations` — per this function's
+    # own docstring, a prohibited-zone room must never flip `compliance.passed`.
+    # Dropping `v_violations` entirely (the pre-fix behaviour) went further
+    # than that: it left prohibited placements with no finding at all.
+    layout.compliance.warnings.extend(v_violations)
     layout.compliance.warnings.extend(v_warnings)
     layout.vastu_score = vastu_layout_score(layout_floors(layout), cfg)
 
