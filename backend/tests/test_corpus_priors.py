@@ -3,6 +3,7 @@ from app.engine.corpus_priors import (
     get_position_prior,
     get_shape_usage_prior,
     get_size_prior,
+    load_priors,
 )
 from app.engine.models import PlotConfig
 
@@ -82,3 +83,12 @@ def test_get_shape_usage_prior_returns_real_value_for_known_room_type() -> None:
 def test_get_shape_usage_prior_returns_zero_when_no_style_given() -> None:
     # corpus_priors.json has no corpus-wide shape_usage table -- only per-style.
     assert get_shape_usage_prior(_cfg(None), "kitchen") == 0.0
+
+
+def test_load_priors_parses_the_artifact_only_once() -> None:
+    """Every accessor calls this per lookup; the adjacency term, O(n^2) times.
+
+    Identity, not equality: two equal dicts would mean the 173 KB file was
+    re-read and re-parsed, which is exactly what the cache exists to stop.
+    """
+    assert load_priors() is load_priors()

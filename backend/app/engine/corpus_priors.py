@@ -9,6 +9,7 @@ docs/plans/2026-08-24-corpus-learned-generation-priors-design.md.
 
 from __future__ import annotations
 
+import functools
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,11 @@ class SizePrior:
     aspect_std: float
 
 
+# Safe to cache for the process lifetime: the artifact is a static generated
+# file that this module's docstring already pins as never mutated at runtime.
+# The accessors below call this once per lookup, and the adjacency term asks
+# O(n^2) times per solve -- re-parsing 173 KB of JSON on every one of those.
+@functools.lru_cache(maxsize=1)
 def load_priors() -> dict:
     return json.loads(_PRIORS_PATH.read_text())
 

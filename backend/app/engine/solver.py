@@ -20,7 +20,7 @@ from typing import Callable, NamedTuple
 
 from ortools.sat.python import cp_model
 
-from .corpus_priors import get_size_prior
+from .corpus_priors import get_adjacency_prior, get_size_prior
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
 from .vastu import ZONE_GRID_ROAD_S, _rule_for, _verdict, resolve_north_angle
@@ -228,6 +228,22 @@ SIZE_PRIOR_UNITS_PER_STD = 100
 # a mere nudge. Task 13 tunes this against the GCS regression baseline; rough
 # parity with the growth reward sits closer to SIZE_PRIOR_WEIGHT ~= 10.
 SIZE_PRIOR_WEIGHT = 100
+# Reward for a room pair the corpus finds typical actually sharing a wall,
+# scaled by that pair's observed frequency (so 1.0 pays the full weight).
+#
+# Scale: the nearest neighbours are the coalignment bonuses, but neither is
+# the term this one competes with. ALIGN_BONUS (2 500) rewards two rooms
+# agreeing on a grid LINE and CROSS_FLOOR_ALIGN_BONUS (60 000) rewards a
+# column stacking — both are orthogonal to contact, and a shared wall with
+# the usual 115 mm cavity earns neither. What this term actually has to
+# outbid is the centre-distance pull `dist_terms` already exerts on a room's
+# other partners (~24 units/mm at 12 pts). At 5 000 the bonus buys roughly a
+# 200 mm reposition against one such partner: enough to close a near-miss
+# cavity into real contact, an order of magnitude short of the ~24 000 it
+# would take to drag a room across the plan, and far below the toilet and
+# parking placement penalties (150 000–250 000) it must never overturn.
+# Task 13 tunes this against the GCS regression baseline — not here.
+ADJACENCY_PRIOR_WEIGHT = 5_000
 
 # Zones that may carry a HARD exclusion at all (spec: Safety / Global
 # Constraints). Everything outside this pair stays soft on every room type.
@@ -1598,6 +1614,82 @@ def _add_size_prior_terms(
     return terms
 
 
+def _add_adjacency_prior_terms(
+    model: cp_model.CpModel,
+    cfg: PlotConfig,
+    room_vars: list[_RoomVar],
+) -> list[tuple[int, cp_model.IntVar]]:
+    """Reward for room pairs the corpus finds typical actually sharing a wall.
+
+    A BONUS, so the costs are negative and `base_objective` adds them with the
+    same plain `+` the size penalty uses. Only built when
+    `cfg.corpus_priors_enabled`; pairs the corpus never observed are skipped
+    rather than given a zero-weight term.
+
+    THIS DELIBERATELY DOES NOT REUSE `align_bools`.
+
+    Those reify `e1 == e2` on a pair of edge coordinates — exact equality. Two
+    rooms that genuinely share a wall are separated by an internal wall
+    thickness (`_IWT_MM`), so their facing edges are precisely NOT equal, and
+    the `xll`/`yhh` forms hold between rooms at opposite ends of the plot that
+    merely landed on one grid line. Neither form tests perpendicular overlap,
+    so even a corner-to-corner touch would score. Attaching a reward to them
+    would pay for coalignment, which `ALIGN_BONUS` already prices, rather than
+    for adjacency.
+
+    What it reuses instead is the four-side shared-wall PATTERN the hard
+    en-suite and stair-access constraints already use: facing edges within one
+    wall thickness AND real overlap on the perpendicular axis.
+
+    THE REIFICATION RUNS ONE WAY, AND THAT DIRECTION IS THE OPPOSITE OF THE
+    PENALTY BLOCKS'.
+
+    The toilet-repulsion block only ever forces its literal TRUE, because
+    under a penalty the solver's incentive is to escape the cost and a free
+    literal settles false on its own. A reward inverts that incentive: the
+    solver wants the boolean true, so what has to be enforced is `share` ⇒ the
+    geometry. Left free in that direction it would simply help itself to every
+    bonus in the model. Nothing forces `share` false when the rooms ARE
+    adjacent — the solver does that for us — which is why full reification
+    would be wasted propagation here.
+    """
+    terms: list[tuple[int, cp_model.IntVar]] = []
+    for i, a in enumerate(room_vars):
+        for b in room_vars[i + 1 :]:
+            # A wall cannot be shared across a slab. Also keeps this to one
+            # term per unordered pair: the slice above never revisits (b, a).
+            if a.floor != b.floor:
+                continue
+            freq = get_adjacency_prior(cfg, a.room_type, b.room_type)
+            reward = round(ADJACENCY_PRIOR_WEIGHT * freq)
+            if reward <= 0:
+                continue
+            share = model.new_bool_var(f"adjp_{a.room_id}_{b.room_id}")
+            side_bools = []
+            # (gap between the facing edges, then both rooms' extents on the
+            # perpendicular axis) — same four cases as the en-suite block.
+            cases = (
+                (b.x - a.xe, a.y, a.ye, b.y, b.ye),  # a left of b
+                (a.x - b.xe, a.y, a.ye, b.y, b.ye),  # a right of b
+                (b.y - a.ye, a.x, a.xe, b.x, b.xe),  # a in front of b
+                (a.y - b.ye, a.x, a.xe, b.x, b.xe),  # a behind b
+            )
+            for ci, (gap, a_lo, a_hi, b_lo, b_hi) in enumerate(cases):
+                sb = model.new_bool_var(f"adjps_{a.room_id}_{b.room_id}_{ci}")
+                model.add(gap >= 0).only_enforce_if(sb)
+                model.add(gap <= _IWT_MM).only_enforce_if(sb)
+                # The en-suite block's pair of half-tests rather than the
+                # stair block's exact min/max: they agree whenever both rooms
+                # are at least the threshold wide on that axis, which at
+                # 100 mm every real room is, and this costs no extra IntVars.
+                model.add(a_hi - b_lo >= _MIN_SHARE_OVERLAP_MM).only_enforce_if(sb)
+                model.add(b_hi - a_lo >= _MIN_SHARE_OVERLAP_MM).only_enforce_if(sb)
+                side_bools.append(sb)
+            model.add_bool_or(side_bools).only_enforce_if(share)
+            terms.append((-reward, share))
+    return terms
+
+
 def _add_vastu_terms(
     model: cp_model.CpModel,
     cfg: PlotConfig,
@@ -2230,8 +2322,10 @@ def _solve_one(
 
     # ── Corpus-mined size priors ─────────────────────────────────────────────
     size_prior_terms: list[tuple[int, cp_model.IntVar]] = []
+    adjacency_prior_terms: list[tuple[int, cp_model.IntVar]] = []
     if cfg.corpus_priors_enabled:
         size_prior_terms = _add_size_prior_terms(model, cfg, room_vars)
+        adjacency_prior_terms = _add_adjacency_prior_terms(model, cfg, room_vars)
 
     base_objective = (
         sum(dist_terms)
@@ -2242,6 +2336,8 @@ def _solve_one(
         + deviation_weight * sum(deviation_terms)
         + sum(cost * var for cost, var in vastu_terms)
         + sum(cost * var for cost, var in size_prior_terms)
+        # Costs are already negative — a bonus, like the align terms above.
+        + sum(cost * var for cost, var in adjacency_prior_terms)
     )
 
     # ── Solve ─────────────────────────────────────────────────────────────────

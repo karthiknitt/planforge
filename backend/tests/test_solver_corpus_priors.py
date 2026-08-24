@@ -223,3 +223,199 @@ def test_the_term_pulls_a_free_room_toward_the_prior_mean(monkeypatch):
     area = solver.value(rv.w) * solver.value(rv.d)
     # Within a hundredth of a sigma -- the resolution the divisor quantises to.
     assert abs(area - mean_mm2) <= 20.0 * _SQFT_TO_MM2 / S.SIZE_PRIOR_UNITS_PER_STD
+
+
+# ── Corpus-mined adjacency priors (Task 9) ───────────────────────────────────
+
+
+def _room(
+    model: cp_model.CpModel,
+    room_id: str,
+    room_type: str,
+    x: tuple[int, int],
+    y: tuple[int, int],
+    w: int,
+    d: int,
+    floor: int = 0,
+) -> S._RoomVar:
+    """A room with pinned w/d and a free-or-pinned x/y, plus consistent ends."""
+    xv = model.new_int_var(x[0], x[1], f"x_{room_id}")
+    yv = model.new_int_var(y[0], y[1], f"y_{room_id}")
+    wv = model.new_int_var(w, w, f"w_{room_id}")
+    dv = model.new_int_var(d, d, f"d_{room_id}")
+    xe = model.new_int_var(x[0], x[1] + w, f"xe_{room_id}")
+    ye = model.new_int_var(y[0], y[1] + d, f"ye_{room_id}")
+    model.add(xe == xv + wv)
+    model.add(ye == yv + dv)
+    return S._RoomVar(
+        room_id=room_id,
+        room_type=room_type,
+        room_name=room_id.upper(),
+        floor=floor,
+        x=xv,
+        y=yv,
+        w=wv,
+        d=dv,
+        xe=xe,
+        ye=ye,
+        template="RECT",
+        shape_ratio=1.0,
+    )
+
+
+def _flat_prior(monkeypatch, freq: float) -> None:
+    monkeypatch.setattr(S, "get_adjacency_prior", lambda cfg, a, b: freq)
+
+
+def _bonus_of(model: cp_model.CpModel, terms) -> int:
+    """Best achievable value of the adjacency terms alone, as a plain int."""
+    model.minimize(sum(cost * var for cost, var in terms))
+    solver = cp_model.CpSolver()
+    solver.parameters.num_workers = 1
+    assert solver.solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    return int(solver.objective_value)
+
+
+def test_adjacency_disabled_never_calls_the_term_builder(monkeypatch):
+    """Same spy posture as the size-prior flag test: never invoked, so nothing
+    it could add to the model exists on the flag-off path."""
+    calls: list[int] = []
+    real = S._add_adjacency_prior_terms
+
+    def spy(model, cfg, room_vars):
+        calls.append(len(room_vars))
+        return real(model, cfg, room_vars)
+
+    monkeypatch.setattr(S, "_add_adjacency_prior_terms", spy)
+
+    assert S.solve_layout(_cfg(style_preset="Kerala")) is not None
+    assert calls == []
+
+
+def test_adjacency_enabled_calls_the_term_builder_and_still_solves(monkeypatch):
+    calls: list[int] = []
+    real = S._add_adjacency_prior_terms
+
+    def spy(model, cfg, room_vars):
+        calls.append(len(room_vars))
+        return real(model, cfg, room_vars)
+
+    monkeypatch.setattr(S, "_add_adjacency_prior_terms", spy)
+
+    layout = S.solve_layout(_cfg(style_preset="Kerala", corpus_priors_enabled=True))
+    assert layout is not None
+    assert calls and all(n > 0 for n in calls)
+
+
+def test_a_pair_the_corpus_finds_typical_gets_a_term():
+    """Real corpus data, no monkeypatch: bedroom|toilet is a known positive."""
+    model = cp_model.CpModel()
+    rooms = [
+        _room(model, "b1", "bedroom", (0, 5000), (0, 0), 3000, 3000),
+        _room(model, "t1", "toilet", (0, 5000), (0, 0), 1500, 1500),
+    ]
+    terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), rooms)
+    assert len(terms) == 1
+    cost, var = terms[0]
+    assert cost < 0, "adjacency is a reward, and base_objective is minimised"
+    assert var.name.startswith("adjp_")
+
+
+def test_a_pair_the_corpus_never_observed_gets_no_term():
+    # bedroom|bedroom is 0.0 in both the Kerala block and corpus-wide.
+    model = cp_model.CpModel()
+    rooms = [
+        _room(model, "b1", "bedroom", (0, 5000), (0, 0), 3000, 3000),
+        _room(model, "b2", "bedroom", (0, 5000), (0, 0), 3000, 3000),
+    ]
+    assert S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), rooms) == []
+
+
+def test_each_unordered_pair_is_counted_exactly_once(monkeypatch):
+    """Three mutually-typical rooms must yield C(3,2) = 3 terms, not 6 or 9."""
+    _flat_prior(monkeypatch, 1.0)
+    model = cp_model.CpModel()
+    rooms = [
+        _room(model, f"r{i}", "bedroom", (0, 5000), (0, 0), 2000, 2000)
+        for i in range(3)
+    ]
+    terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), rooms)
+    assert len(terms) == 3
+    assert len({var.name for _, var in terms}) == 3
+
+
+def test_rooms_on_different_floors_are_never_paired(monkeypatch):
+    """A wall cannot be shared across a slab, whatever the corpus says."""
+    _flat_prior(monkeypatch, 1.0)
+    model = cp_model.CpModel()
+    rooms = [
+        _room(model, "g1", "bedroom", (0, 5000), (0, 0), 2000, 2000, floor=0),
+        _room(model, "f1", "bedroom", (0, 5000), (0, 0), 2000, 2000, floor=1),
+    ]
+    assert S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), rooms) == []
+
+
+def test_the_bonus_scales_with_the_corpus_frequency(monkeypatch):
+    def cost_at(freq: float) -> int:
+        _flat_prior(monkeypatch, freq)
+        model = cp_model.CpModel()
+        rooms = [
+            _room(model, "a", "bedroom", (0, 5000), (0, 0), 2000, 2000),
+            _room(model, "b", "toilet", (0, 5000), (0, 0), 2000, 2000),
+        ]
+        terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), rooms)
+        assert len(terms) == 1
+        return terms[0][0]
+
+    assert cost_at(1.0) == -S.ADJACENCY_PRIOR_WEIGHT
+    assert cost_at(0.5) == pytest.approx(-S.ADJACENCY_PRIOR_WEIGHT / 2, abs=1)
+
+
+def test_a_frequency_too_small_to_price_gets_no_term(monkeypatch):
+    """A term whose reward rounds to zero is pure model bloat -- skip it."""
+    _flat_prior(monkeypatch, 1e-9)
+    model = cp_model.CpModel()
+    rooms = [
+        _room(model, "a", "bedroom", (0, 5000), (0, 0), 2000, 2000),
+        _room(model, "b", "toilet", (0, 5000), (0, 0), 2000, 2000),
+    ]
+    assert S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), rooms) == []
+
+
+def test_the_bonus_is_earned_when_the_rooms_can_share_a_wall(monkeypatch):
+    """Minimising the term alone must pull the pair into real wall contact."""
+    _flat_prior(monkeypatch, 1.0)
+    model = cp_model.CpModel()
+    a = _room(model, "a", "bedroom", (0, 6000), (0, 0), 2000, 2000)
+    b = _room(model, "b", "toilet", (0, 6000), (0, 0), 2000, 2000)
+    terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), [a, b])
+    assert _bonus_of(model, terms) == -S.ADJACENCY_PRIOR_WEIGHT
+
+
+def test_the_bonus_cannot_be_claimed_when_the_rooms_are_far_apart(monkeypatch):
+    """The reification is one-directional, so this is the load-bearing test:
+    nothing forces the boolean false, only the enforced geometry stops the
+    solver helping itself to a reward it has not earned."""
+    _flat_prior(monkeypatch, 1.0)
+    model = cp_model.CpModel()
+    a = _room(model, "a", "bedroom", (0, 0), (0, 0), 2000, 2000)
+    b = _room(model, "b", "toilet", (5000, 5000), (0, 0), 2000, 2000)
+    terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), [a, b])
+    assert terms
+    assert _bonus_of(model, terms) == 0
+
+
+def test_touching_edges_with_no_overlap_is_not_a_shared_wall(monkeypatch):
+    """Corner-to-corner contact aligns edges but shares no wall segment.
+
+    This is exactly what the `align_bools` this term deliberately does NOT
+    reuse would score as adjacency: `a.xe == b.x` holds, yet the rooms meet
+    at a single point.
+    """
+    _flat_prior(monkeypatch, 1.0)
+    model = cp_model.CpModel()
+    a = _room(model, "a", "bedroom", (0, 0), (0, 0), 2000, 2000)
+    b = _room(model, "b", "toilet", (2000, 2000), (2000, 2000), 2000, 2000)
+    terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), [a, b])
+    assert terms
+    assert _bonus_of(model, terms) == 0
