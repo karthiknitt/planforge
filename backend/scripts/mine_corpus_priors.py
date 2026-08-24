@@ -367,3 +367,89 @@ def mine_shape_usage_priors(
     for style in {k[0] for k in floors}:
         result[style] = _stats([k for k in floors if k[0] == style])
     return result
+
+
+def _size_stat_to_dict(stat: SizeStat) -> dict:
+    return {
+        "area": {"mean": stat.area_mean, "std": stat.area_std},
+        "aspect": {"mean": stat.aspect_mean, "std": stat.aspect_std},
+        "n": stat.n,
+        "is_fallback": stat.is_fallback,
+    }
+
+
+def _adjacency_to_str_keys(table: dict[AdjacencyKey, float]) -> dict[str, float]:
+    return {f"{a}|{b}": v for (a, b), v in table.items()}
+
+
+def _shape_usage_to_dict(
+    table: dict[RoomType, ShapeUsageStat],
+) -> dict[str, dict]:
+    return {
+        rt: {"p_nonrect": stat.p_nonrect, "n": stat.n} for rt, stat in table.items()
+    }
+
+
+def build_priors_artifact(corpus_root: Path) -> dict:
+    """Mine the full corpus and assemble the JSON-serializable priors artifact.
+
+    Pure serialization glue over Tasks 1-5's mining functions -- no new
+    statistics are computed here. Dataclasses (SizeStat, ShapeUsageStat) and
+    tuple dict keys (SizePriorKey, AdjacencyKey) aren't JSON-serializable, so
+    everything is flattened into string-keyed dicts/plain dicts here.
+    """
+    records = load_extracts(corpus_root)
+
+    size_table = mine_size_priors(records)
+    adjacency_table = mine_adjacency_priors(records)
+    position_table = mine_position_priors(records)
+    shape_usage_table = mine_shape_usage_priors(records)
+
+    styles = {r.style for r in records}
+    designs_by_style: dict[str, set[str]] = {}
+    for r in records:
+        designs_by_style.setdefault(r.style, set()).add(r.design)
+
+    corpus_wide = {
+        room_type: _size_stat_to_dict(stat)
+        for (style, room_type), stat in size_table.items()
+        if style is None
+    }
+
+    by_style: dict[str, dict] = {}
+    for style in styles:
+        rooms = {
+            room_type: _size_stat_to_dict(stat)
+            for (s, room_type), stat in size_table.items()
+            if s == style
+        }
+        by_style[style] = {
+            "n_designs": len(designs_by_style.get(style, set())),
+            "rooms": rooms,
+            "adjacency": _adjacency_to_str_keys(adjacency_table.get(style, {})),
+            "position": position_table.get(style, {}),
+            "shape_usage": _shape_usage_to_dict(shape_usage_table.get(style, {})),
+        }
+
+    return {
+        "version": "2026-08-24",
+        "source_extract_count": len({(r.style, r.design) for r in records}),
+        "corpus_wide": corpus_wide,
+        "adjacency_corpus_wide": _adjacency_to_str_keys(adjacency_table.get(None, {})),
+        "by_style": by_style,
+    }
+
+
+def main() -> None:
+    corpus_root = (
+        Path(__file__).parents[2] / "docs" / "superpowers" / "specs" / "reverse_engr"
+    )
+    out_path = Path(__file__).parents[1] / "app" / "config" / "corpus_priors.json"
+    artifact = build_priors_artifact(corpus_root)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {out_path} ({artifact['source_extract_count']} designs)")
+
+
+if __name__ == "__main__":
+    main()

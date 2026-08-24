@@ -6,6 +6,7 @@ import pytest
 from scripts.mine_corpus_priors import (
     RoomRecord,
     bbox_looks_normalized,
+    build_priors_artifact,
     load_extracts,
     mine_adjacency_priors,
     mine_position_priors,
@@ -552,3 +553,39 @@ def test_shape_usage_excludes_flagged_and_pixel_space_records() -> None:
     assert "bedroom" not in table.get("Kerala", {})
     assert "kitchen" not in table.get("Kerala", {})
     assert table[None] == {}
+
+
+def test_build_priors_artifact_has_expected_top_level_keys(
+    fixture_corpus: Path,
+) -> None:
+    artifact = build_priors_artifact(fixture_corpus)
+    assert set(artifact) == {
+        "version",
+        "source_extract_count",
+        "corpus_wide",
+        "adjacency_corpus_wide",
+        "by_style",
+    }
+    assert artifact["by_style"]["Kerala"]["n_designs"] == 1
+
+
+def test_build_priors_artifact_is_json_serializable(fixture_corpus: Path) -> None:
+    artifact = build_priors_artifact(fixture_corpus)
+    dumped = json.dumps(artifact)
+    reloaded = json.loads(dumped)
+    assert reloaded["source_extract_count"] == 1
+    assert "master_bedroom" in artifact["corpus_wide"]
+    assert artifact["corpus_wide"]["master_bedroom"]["area"]["mean"] == pytest.approx(
+        167.75
+    )
+
+
+def test_build_priors_artifact_flattens_adjacency_keys(fixture_corpus: Path) -> None:
+    artifact = build_priors_artifact(fixture_corpus)
+    for key in artifact["adjacency_corpus_wide"]:
+        assert isinstance(key, str)
+        assert "|" in key
+    for style_block in artifact["by_style"].values():
+        for key in style_block["adjacency"]:
+            assert isinstance(key, str)
+            assert "|" in key

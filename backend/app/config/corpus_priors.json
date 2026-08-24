@@ -1,0 +1,6835 @@
+{
+  "adjacency_corpus_wide": {
+    "balcony|bedroom": 0.5555555555555556,
+    "balcony|courtyard": 0.3333333333333333,
+    "balcony|kitchen": 0.0,
+    "balcony|living": 0.25,
+    "balcony|master_bedroom": 1.0,
+    "balcony|parking_4w": 1.0,
+    "balcony|pooja": 1.0,
+    "balcony|staircase": 0.14285714285714285,
+    "balcony|store_room": 1.0,
+    "balcony|terrace": 0.5,
+    "balcony|toilet": 0.11764705882352941,
+    "balcony|wardrobe": 0.2,
+    "bedroom|courtyard": 0.4444444444444444,
+    "bedroom|dining": 0.36,
+    "bedroom|foyer": 0.21052631578947367,
+    "bedroom|garden": 0.0,
+    "bedroom|kitchen": 0.36470588235294116,
+    "bedroom|living": 0.3918918918918919,
+    "bedroom|master_bedroom": 0.0,
+    "bedroom|open_to_sky": 1.0,
+    "bedroom|parking_4w": 0.22972972972972974,
+    "bedroom|passage": 1.0,
+    "bedroom|pooja": 0.0,
+    "bedroom|seating": 0.55,
+    "bedroom|servant_quarter": 0.0,
+    "bedroom|staircase": 0.46511627906976744,
+    "bedroom|store_room": 0.23809523809523808,
+    "bedroom|study": 1.0,
+    "bedroom|terrace": 0.3125,
+    "bedroom|toilet": 0.4798387096774194,
+    "bedroom|utility": 0.1702127659574468,
+    "bedroom|wardrobe": 0.6206896551724138,
+    "bedroom|wc_only": 1.0,
+    "courtyard|dining": 0.8181818181818182,
+    "courtyard|foyer": 0.0,
+    "courtyard|garden": 0.2,
+    "courtyard|kitchen": 0.4,
+    "courtyard|living": 0.3333333333333333,
+    "courtyard|master_bedroom": 0.5,
+    "courtyard|parking_4w": 0.0,
+    "courtyard|seating": 0.0,
+    "courtyard|servant_quarter": 0.0,
+    "courtyard|store_room": 0.18181818181818182,
+    "courtyard|toilet": 0.4838709677419355,
+    "courtyard|utility": 0.0625,
+    "courtyard|verandah": 0.0,
+    "courtyard|wardrobe": 0.0,
+    "dining|duct": 1.0,
+    "dining|foyer": 0.2558139534883721,
+    "dining|garden": 0.14285714285714285,
+    "dining|kitchen": 0.8857142857142857,
+    "dining|living": 0.8064516129032258,
+    "dining|master_bedroom": 0.21052631578947367,
+    "dining|parking_4w": 0.09375,
+    "dining|pooja": 0.3333333333333333,
+    "dining|servant_quarter": 0.0,
+    "dining|staircase": 0.6428571428571429,
+    "dining|store_room": 0.35714285714285715,
+    "dining|toilet": 0.5135135135135135,
+    "dining|utility": 0.4857142857142857,
+    "dining|wardrobe": 0.14285714285714285,
+    "dining|washbasin_nook": 1.0,
+    "dining|wc_only": 0.0,
+    "duct|kitchen": 0.0,
+    "duct|living": 1.0,
+    "duct|parking_4w": 0.0,
+    "duct|toilet": 1.0,
+    "duct|utility": 0.0,
+    "foyer|garden": 1.0,
+    "foyer|kitchen": 0.125,
+    "foyer|living": 0.7142857142857143,
+    "foyer|master_bedroom": 0.0,
+    "foyer|parking_4w": 0.9583333333333334,
+    "foyer|passage": 1.0,
+    "foyer|pooja": 0.625,
+    "foyer|seating": 0.5,
+    "foyer|staircase": 0.2,
+    "foyer|store_room": 0.1875,
+    "foyer|toilet": 0.07692307692307693,
+    "foyer|utility": 0.0,
+    "foyer|wardrobe": 0.0,
+    "garden|kitchen": 0.5,
+    "garden|living": 0.36363636363636365,
+    "garden|master_bedroom": 0.42857142857142855,
+    "garden|parking_4w": 0.0,
+    "garden|servant_quarter": 0.0,
+    "garden|staircase": 1.0,
+    "garden|store_room": 0.0,
+    "garden|toilet": 0.06666666666666667,
+    "garden|utility": 0.14285714285714285,
+    "garden|verandah": 0.0,
+    "kitchen|living": 0.323943661971831,
+    "kitchen|master_bedroom": 0.058823529411764705,
+    "kitchen|open_to_sky": 0.0,
+    "kitchen|parking_4w": 0.1111111111111111,
+    "kitchen|pooja": 0.25,
+    "kitchen|seating": 0.25,
+    "kitchen|servant_quarter": 1.0,
+    "kitchen|staircase": 0.13333333333333333,
+    "kitchen|store_room": 0.7619047619047619,
+    "kitchen|terrace": 0.0,
+    "kitchen|toilet": 0.2361111111111111,
+    "kitchen|utility": 0.9743589743589743,
+    "kitchen|verandah": 0.0,
+    "kitchen|wardrobe": 0.4,
+    "kitchen|washbasin_nook": 0.0,
+    "kitchen|wc_only": 0.0,
+    "living|master_bedroom": 0.47619047619047616,
+    "living|open_to_sky": 1.0,
+    "living|parking_4w": 0.6376811594202898,
+    "living|passage": 1.0,
+    "living|pooja": 0.3333333333333333,
+    "living|seating": 0.5,
+    "living|servant_quarter": 0.0,
+    "living|staircase": 0.75,
+    "living|store_room": 0.0967741935483871,
+    "living|terrace": 0.9333333333333333,
+    "living|toilet": 0.3333333333333333,
+    "living|utility": 0.05357142857142857,
+    "living|verandah": 1.0,
+    "living|wardrobe": 0.24390243902439024,
+    "living|washbasin_nook": 0.0,
+    "living|wc_only": 1.0,
+    "master_bedroom|open_to_sky": 0.0,
+    "master_bedroom|parking_4w": 0.1875,
+    "master_bedroom|staircase": 0.3333333333333333,
+    "master_bedroom|store_room": 0.0,
+    "master_bedroom|terrace": 0.4166666666666667,
+    "master_bedroom|toilet": 0.5423728813559322,
+    "master_bedroom|utility": 0.15384615384615385,
+    "master_bedroom|verandah": 0.0,
+    "master_bedroom|wardrobe": 0.625,
+    "master_bedroom|washbasin_nook": 0.5,
+    "open_to_sky|parking_4w": 0.0,
+    "open_to_sky|toilet": 0.5,
+    "parking_4w|passage": 1.0,
+    "parking_4w|pooja": 0.0,
+    "parking_4w|seating": 0.0,
+    "parking_4w|servant_quarter": 0.0,
+    "parking_4w|staircase": 0.0,
+    "parking_4w|store_room": 0.0,
+    "parking_4w|terrace": 0.5,
+    "parking_4w|toilet": 0.09090909090909091,
+    "parking_4w|utility": 0.075,
+    "parking_4w|verandah": 0.0,
+    "parking_4w|wardrobe": 0.0,
+    "parking_4w|wc_only": 0.0,
+    "passage|toilet": 1.0,
+    "pooja|staircase": 0.0,
+    "pooja|store_room": 1.0,
+    "pooja|toilet": 0.0,
+    "seating|store_room": 0.0,
+    "seating|toilet": 0.21052631578947367,
+    "seating|utility": 0.0,
+    "seating|wardrobe": 1.0,
+    "servant_quarter|store_room": 0.0,
+    "servant_quarter|toilet": 0.0,
+    "servant_quarter|utility": 0.3333333333333333,
+    "staircase|store_room": 0.0,
+    "staircase|terrace": 1.0,
+    "staircase|toilet": 0.42857142857142855,
+    "staircase|utility": 0.0,
+    "staircase|wardrobe": 0.3,
+    "staircase|washbasin_nook": 0.5,
+    "store_room|terrace": 0.0,
+    "store_room|toilet": 0.23076923076923078,
+    "store_room|utility": 0.9666666666666667,
+    "store_room|wardrobe": 0.6,
+    "study|terrace": 1.0,
+    "study|toilet": 0.0,
+    "terrace|toilet": 0.22580645161290322,
+    "terrace|utility": 0.0,
+    "terrace|wardrobe": 0.5714285714285714,
+    "toilet|utility": 0.14285714285714285,
+    "toilet|wardrobe": 0.5512820512820513,
+    "toilet|washbasin_nook": 0.5,
+    "toilet|wc_only": 0.0,
+    "utility|verandah": 0.0,
+    "utility|wardrobe": 0.0,
+    "utility|washbasin_nook": 0.0
+  },
+  "by_style": {
+    "Assamese": {
+      "adjacency": {
+        "balcony|bedroom": 1.0,
+        "balcony|living": 0.0,
+        "balcony|toilet": 0.0,
+        "balcony|wardrobe": 1.0,
+        "bedroom|dining": 0.6666666666666666,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 1.0,
+        "bedroom|living": 0.125,
+        "bedroom|parking_4w": 0.3333333333333333,
+        "bedroom|staircase": 0.3333333333333333,
+        "bedroom|terrace": 0.0,
+        "bedroom|toilet": 0.6,
+        "bedroom|utility": 0.0,
+        "bedroom|wardrobe": 0.6,
+        "dining|foyer": 0.0,
+        "dining|garden": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 1.0,
+        "dining|parking_4w": 0.0,
+        "dining|staircase": 1.0,
+        "dining|toilet": 0.75,
+        "dining|utility": 0.5,
+        "foyer|garden": 1.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.6666666666666666,
+        "foyer|parking_4w": 1.0,
+        "foyer|toilet": 0.0,
+        "garden|living": 0.0,
+        "garden|parking_4w": 0.0,
+        "garden|toilet": 0.0,
+        "kitchen|living": 0.0,
+        "living|parking_4w": 0.8333333333333334,
+        "living|staircase": 0.75,
+        "living|toilet": 0.3076923076923077,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.14285714285714285,
+        "master_bedroom|staircase": 0.5,
+        "master_bedroom|toilet": 1.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "parking_4w|wardrobe": 0.0,
+        "staircase|toilet": 0.14285714285714285,
+        "staircase|utility": 0.0,
+        "staircase|wardrobe": 0.5,
+        "terrace|toilet": 1.0,
+        "toilet|utility": 0.6666666666666666,
+        "toilet|wardrobe": 0.2222222222222222
+      },
+      "n_designs": 11,
+      "position": {
+        "balcony": {
+          "SW": 0.5,
+          "W": 0.5
+        },
+        "bedroom": {
+          "C": 0.3,
+          "N": 0.2,
+          "S": 0.3,
+          "W": 0.2
+        },
+        "dining": {
+          "C": 1.0
+        },
+        "foyer": {
+          "E": 0.3333333333333333,
+          "N": 0.6666666666666666
+        },
+        "garden": {
+          "NE": 1.0
+        },
+        "kitchen": {
+          "S": 1.0
+        },
+        "living": {
+          "C": 0.5,
+          "E": 0.16666666666666666,
+          "N": 0.16666666666666666,
+          "SW": 0.08333333333333333,
+          "W": 0.08333333333333333
+        },
+        "master_bedroom": {
+          "C": 0.3333333333333333,
+          "N": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "parking_4w": {
+          "C": 0.2,
+          "E": 0.2,
+          "N": 0.2,
+          "NE": 0.2,
+          "W": 0.2
+        },
+        "staircase": {
+          "C": 0.5714285714285714,
+          "N": 0.2857142857142857,
+          "S": 0.14285714285714285
+        },
+        "terrace": {
+          "N": 1.0
+        },
+        "toilet": {
+          "C": 0.4,
+          "E": 0.2,
+          "S": 0.26666666666666666,
+          "SE": 0.13333333333333333
+        },
+        "utility": {
+          "E": 0.6666666666666666,
+          "SE": 0.3333333333333333
+        },
+        "wardrobe": {
+          "S": 0.3333333333333333,
+          "SE": 0.16666666666666666,
+          "SW": 0.16666666666666666,
+          "W": 0.3333333333333333
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "bedroom": {
+          "area": {
+            "mean": 135.01916666666668,
+            "std": 14.229808770285315
+          },
+          "aspect": {
+            "mean": 1.2463643009037748,
+            "std": 0.2557014959037612
+          },
+          "is_fallback": false,
+          "n": 12
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.66169642857143,
+            "std": 38.76925208130225
+          },
+          "aspect": {
+            "mean": 1.3371157275816719,
+            "std": 0.2881534230018143
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "living": {
+          "area": {
+            "mean": 145.72307692307692,
+            "std": 32.28245305344575
+          },
+          "aspect": {
+            "mean": 1.257302997927998,
+            "std": 0.21620192193703672
+          },
+          "is_fallback": false,
+          "n": 13
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "toilet": {
+          "area": {
+            "mean": 38.93078125,
+            "std": 9.086197453020345
+          },
+          "aspect": {
+            "mean": 1.3927700077700076,
+            "std": 0.3696584706761179
+          },
+          "is_fallback": false,
+          "n": 16
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 66.33416666666666,
+            "std": 20.99203031642141
+          },
+          "aspect": {
+            "mean": 1.3462962962962965,
+            "std": 0.34655367737647075
+          },
+          "is_fallback": false,
+          "n": 6
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 10,
+          "p_nonrect": 0.2
+        },
+        "dining": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "garden": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 12,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 15,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 6,
+          "p_nonrect": 0.16666666666666666
+        }
+      }
+    },
+    "Bengali": {
+      "adjacency": {
+        "balcony|living": 0.3333333333333333,
+        "balcony|staircase": 0.0,
+        "balcony|toilet": 0.0,
+        "balcony|wardrobe": 0.0,
+        "bedroom|dining": 0.5,
+        "bedroom|foyer": 0.75,
+        "bedroom|kitchen": 0.6666666666666666,
+        "bedroom|living": 0.2857142857142857,
+        "bedroom|parking_4w": 0.0,
+        "bedroom|staircase": 0.0,
+        "bedroom|store_room": 0.0,
+        "bedroom|study": 1.0,
+        "bedroom|terrace": 0.3333333333333333,
+        "bedroom|toilet": 0.47368421052631576,
+        "bedroom|utility": 0.5,
+        "bedroom|wardrobe": 1.0,
+        "courtyard|dining": 0.5,
+        "courtyard|foyer": 0.0,
+        "courtyard|store_room": 0.0,
+        "courtyard|utility": 0.0,
+        "dining|foyer": 0.14285714285714285,
+        "dining|garden": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 0.75,
+        "dining|master_bedroom": 0.0,
+        "dining|parking_4w": 0.5,
+        "dining|pooja": 0.0,
+        "dining|staircase": 1.0,
+        "dining|store_room": 0.0,
+        "dining|toilet": 0.25,
+        "dining|utility": 0.5,
+        "foyer|garden": 1.0,
+        "foyer|kitchen": 0.3333333333333333,
+        "foyer|living": 0.7142857142857143,
+        "foyer|master_bedroom": 0.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|pooja": 0.25,
+        "foyer|staircase": 0.3333333333333333,
+        "foyer|store_room": 1.0,
+        "foyer|toilet": 0.25,
+        "foyer|utility": 0.0,
+        "garden|living": 0.0,
+        "garden|master_bedroom": 0.0,
+        "garden|parking_4w": 0.0,
+        "garden|toilet": 0.0,
+        "kitchen|living": 0.25,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|pooja": 0.0,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.0,
+        "kitchen|utility": 1.0,
+        "living|master_bedroom": 0.0,
+        "living|parking_4w": 1.0,
+        "living|pooja": 0.0,
+        "living|staircase": 0.0,
+        "living|store_room": 0.5,
+        "living|terrace": 1.0,
+        "living|toilet": 0.25,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.6666666666666666,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|toilet": 1.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.6666666666666666,
+        "parking_4w|utility": 0.0,
+        "staircase|toilet": 0.5,
+        "staircase|wardrobe": 1.0,
+        "store_room|terrace": 0.0,
+        "store_room|toilet": 0.0,
+        "store_room|utility": 1.0,
+        "store_room|wardrobe": 0.0,
+        "study|terrace": 1.0,
+        "study|toilet": 0.0,
+        "terrace|toilet": 0.0,
+        "terrace|wardrobe": 0.5,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.6666666666666666
+      },
+      "n_designs": 13,
+      "position": {
+        "balcony": {
+          "N": 0.3333333333333333,
+          "NE": 0.3333333333333333,
+          "S": 0.3333333333333333
+        },
+        "bedroom": {
+          "C": 0.2222222222222222,
+          "E": 0.05555555555555555,
+          "N": 0.05555555555555555,
+          "S": 0.5555555555555556,
+          "SE": 0.05555555555555555,
+          "W": 0.05555555555555555
+        },
+        "courtyard": {
+          "C": 0.25,
+          "E": 0.5,
+          "NE": 0.25
+        },
+        "dining": {
+          "C": 0.5,
+          "E": 0.16666666666666666,
+          "S": 0.16666666666666666,
+          "W": 0.16666666666666666
+        },
+        "foyer": {
+          "C": 0.3333333333333333,
+          "E": 0.16666666666666666,
+          "N": 0.3333333333333333,
+          "NE": 0.08333333333333333,
+          "NW": 0.08333333333333333
+        },
+        "garden": {
+          "N": 1.0
+        },
+        "kitchen": {
+          "C": 0.25,
+          "S": 0.5,
+          "SW": 0.25
+        },
+        "living": {
+          "C": 0.3,
+          "N": 0.3,
+          "NW": 0.1,
+          "S": 0.2,
+          "W": 0.1
+        },
+        "master_bedroom": {
+          "C": 1.0
+        },
+        "parking_4w": {
+          "C": 0.3333333333333333,
+          "N": 0.6666666666666666
+        },
+        "pooja": {
+          "C": 1.0
+        },
+        "staircase": {
+          "E": 0.3333333333333333,
+          "N": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "store_room": {
+          "C": 0.3333333333333333,
+          "S": 0.6666666666666666
+        },
+        "study": {
+          "C": 1.0
+        },
+        "terrace": {
+          "C": 0.5,
+          "N": 0.25,
+          "S": 0.25
+        },
+        "toilet": {
+          "C": 0.5882352941176471,
+          "E": 0.058823529411764705,
+          "N": 0.058823529411764705,
+          "NW": 0.058823529411764705,
+          "S": 0.11764705882352941,
+          "SE": 0.058823529411764705,
+          "W": 0.058823529411764705
+        },
+        "utility": {
+          "E": 0.3333333333333333,
+          "S": 0.3333333333333333,
+          "SE": 0.3333333333333333
+        },
+        "wardrobe": {
+          "C": 0.5,
+          "N": 0.25,
+          "SE": 0.25
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 147.45473684210526,
+            "std": 27.168016871318038
+          },
+          "aspect": {
+            "mean": 1.3327649713356626,
+            "std": 0.28881525809919534
+          },
+          "is_fallback": false,
+          "n": 19
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "dining": {
+          "area": {
+            "mean": 119.79833333333333,
+            "std": 68.44629900310332
+          },
+          "aspect": {
+            "mean": 1.5099984438219731,
+            "std": 0.3242927455934834
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.66169642857143,
+            "std": 38.76925208130225
+          },
+          "aspect": {
+            "mean": 1.3371157275816719,
+            "std": 0.2881534230018143
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "living": {
+          "area": {
+            "mean": 190.28199999999998,
+            "std": 41.980836294671406
+          },
+          "aspect": {
+            "mean": 1.4541795665634676,
+            "std": 0.4078368129270078
+          },
+          "is_fallback": false,
+          "n": 10
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "pooja": {
+          "area": {
+            "mean": 132.2625,
+            "std": 117.05300815762916
+          },
+          "aspect": {
+            "mean": 1.5650992685475438,
+            "std": 0.07994939159128157
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "study": {
+          "area": {
+            "mean": 176.0,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 2.0694444444444446,
+            "std": 0.12493699596373944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 39.926842105263155,
+            "std": 7.776245916508596
+          },
+          "aspect": {
+            "mean": 1.4557075277663514,
+            "std": 0.3573761550820606
+          },
+          "is_fallback": false,
+          "n": 19
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "verandah": {
+          "area": {
+            "mean": 48.25,
+            "std": 12.25
+          },
+          "aspect": {
+            "mean": 1.272727272727273,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 4
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 18,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 12,
+          "p_nonrect": 0.08333333333333333
+        },
+        "garden": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 10,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "pooja": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "study": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 17,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 4,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Chettinad": {
+      "adjacency": {
+        "balcony|bedroom": 0.0,
+        "balcony|courtyard": 0.0,
+        "bedroom|courtyard": 1.0,
+        "bedroom|dining": 0.0,
+        "bedroom|foyer": 0.0,
+        "bedroom|garden": 0.0,
+        "bedroom|kitchen": 0.0,
+        "bedroom|living": 0.4444444444444444,
+        "bedroom|master_bedroom": 0.0,
+        "bedroom|parking_4w": 0.3333333333333333,
+        "bedroom|pooja": 0.0,
+        "bedroom|staircase": 0.0,
+        "bedroom|store_room": 0.0,
+        "bedroom|terrace": 1.0,
+        "bedroom|toilet": 0.38461538461538464,
+        "bedroom|utility": 0.0,
+        "courtyard|toilet": 0.0,
+        "courtyard|utility": 0.0,
+        "dining|foyer": 0.0,
+        "dining|garden": 1.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 0.6666666666666666,
+        "dining|master_bedroom": 0.5,
+        "dining|parking_4w": 0.0,
+        "dining|staircase": 1.0,
+        "dining|store_room": 1.0,
+        "dining|toilet": 0.5,
+        "dining|utility": 1.0,
+        "foyer|living": 0.5,
+        "foyer|pooja": 1.0,
+        "foyer|toilet": 0.0,
+        "garden|kitchen": 0.0,
+        "garden|living": 0.0,
+        "garden|master_bedroom": 1.0,
+        "garden|parking_4w": 0.0,
+        "garden|staircase": 1.0,
+        "garden|store_room": 0.0,
+        "garden|toilet": 0.3333333333333333,
+        "garden|utility": 0.0,
+        "kitchen|living": 0.25,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|pooja": 0.0,
+        "kitchen|staircase": 1.0,
+        "kitchen|store_room": 0.5,
+        "kitchen|toilet": 0.25,
+        "kitchen|utility": 1.0,
+        "living|master_bedroom": 0.3333333333333333,
+        "living|parking_4w": 0.6666666666666666,
+        "living|pooja": 1.0,
+        "living|staircase": 0.0,
+        "living|store_room": 0.0,
+        "living|terrace": 0.5,
+        "living|toilet": 0.25,
+        "living|utility": 0.5,
+        "living|wardrobe": 0.0,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|staircase": 1.0,
+        "master_bedroom|store_room": 0.0,
+        "master_bedroom|terrace": 0.0,
+        "master_bedroom|toilet": 0.5,
+        "master_bedroom|utility": 0.0,
+        "parking_4w|pooja": 0.0,
+        "parking_4w|staircase": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|terrace": 0.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "staircase|store_room": 0.0,
+        "staircase|toilet": 0.6666666666666666,
+        "staircase|utility": 0.0,
+        "store_room|toilet": 0.25,
+        "store_room|utility": 1.0,
+        "store_room|wardrobe": 1.0,
+        "terrace|toilet": 0.6666666666666666,
+        "toilet|utility": 0.16666666666666666,
+        "toilet|wardrobe": 0.6666666666666666,
+        "utility|wardrobe": 0.0
+      },
+      "n_designs": 11,
+      "position": {
+        "balcony": {
+          "N": 1.0
+        },
+        "bedroom": {
+          "C": 0.25,
+          "E": 0.08333333333333333,
+          "N": 0.08333333333333333,
+          "S": 0.4166666666666667,
+          "SE": 0.08333333333333333,
+          "SW": 0.08333333333333333
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "C": 1.0
+        },
+        "foyer": {
+          "C": 0.25,
+          "N": 0.25,
+          "NW": 0.5
+        },
+        "garden": {
+          "S": 1.0
+        },
+        "kitchen": {
+          "C": 0.25,
+          "E": 0.25,
+          "S": 0.25,
+          "W": 0.25
+        },
+        "living": {
+          "C": 0.7,
+          "N": 0.1,
+          "S": 0.1,
+          "W": 0.1
+        },
+        "master_bedroom": {
+          "S": 1.0
+        },
+        "parking_4w": {
+          "C": 0.3333333333333333,
+          "E": 0.3333333333333333,
+          "N": 0.3333333333333333
+        },
+        "pooja": {
+          "C": 0.5,
+          "E": 0.5
+        },
+        "staircase": {
+          "C": 1.0
+        },
+        "store_room": {
+          "S": 0.3333333333333333,
+          "SE": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "terrace": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "toilet": {
+          "C": 0.3333333333333333,
+          "E": 0.05555555555555555,
+          "NE": 0.1111111111111111,
+          "S": 0.3888888888888889,
+          "SW": 0.05555555555555555,
+          "W": 0.05555555555555555
+        },
+        "utility": {
+          "NE": 0.25,
+          "S": 0.5,
+          "W": 0.25
+        },
+        "wardrobe": {
+          "S": 0.6666666666666666,
+          "SW": 0.3333333333333333
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "bedroom": {
+          "area": {
+            "mean": 145.02928571428572,
+            "std": 25.905206444233702
+          },
+          "aspect": {
+            "mean": 1.2733040106794988,
+            "std": 0.23251267915978346
+          },
+          "is_fallback": false,
+          "n": 14
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "garden": {
+          "area": {
+            "mean": 130.08333333333334,
+            "std": 44.74037761227423
+          },
+          "aspect": {
+            "mean": 1.0588235294117645,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.66169642857143,
+            "std": 38.76925208130225
+          },
+          "aspect": {
+            "mean": 1.3371157275816719,
+            "std": 0.2881534230018143
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "living": {
+          "area": {
+            "mean": 195.69111111111113,
+            "std": 58.78249558885979
+          },
+          "aspect": {
+            "mean": 1.4070436099847865,
+            "std": 0.32549057841549384
+          },
+          "is_fallback": false,
+          "n": 9
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "staircase": {
+          "area": {
+            "mean": 100.0,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 1.8999999999999988,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 38.06588235294117,
+            "std": 7.711462102018336
+          },
+          "aspect": {
+            "mean": 1.4422734128616477,
+            "std": 0.4691162330819716
+          },
+          "is_fallback": false,
+          "n": 17
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 12,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "garden": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 10,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "pooja": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 18,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 3,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Colonial": {
+      "adjacency": {
+        "balcony|bedroom": 0.3333333333333333,
+        "balcony|courtyard": 1.0,
+        "balcony|living": 1.0,
+        "balcony|toilet": 1.0,
+        "balcony|wardrobe": 0.0,
+        "bedroom|courtyard": 0.6666666666666666,
+        "bedroom|dining": 0.0,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.5,
+        "bedroom|living": 0.0,
+        "bedroom|parking_4w": 0.25,
+        "bedroom|store_room": 0.0,
+        "bedroom|terrace": 0.5,
+        "bedroom|toilet": 0.42857142857142855,
+        "bedroom|utility": 0.2,
+        "bedroom|wardrobe": 0.6666666666666666,
+        "courtyard|dining": 0.0,
+        "courtyard|toilet": 1.0,
+        "courtyard|utility": 0.0,
+        "dining|utility": 0.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.5,
+        "foyer|parking_4w": 1.0,
+        "foyer|store_room": 0.0,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.3333333333333333,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.5,
+        "kitchen|utility": 1.0,
+        "living|parking_4w": 0.6666666666666666,
+        "living|store_room": 0.0,
+        "living|toilet": 0.0,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.5,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 1.0,
+        "parking_4w|utility": 0.0,
+        "staircase|toilet": 0.0,
+        "staircase|wardrobe": 1.0,
+        "store_room|utility": 1.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.6666666666666666
+      },
+      "n_designs": 10,
+      "position": {
+        "balcony": {
+          "C": 0.3333333333333333,
+          "N": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "bedroom": {
+          "C": 0.26666666666666666,
+          "E": 0.06666666666666667,
+          "N": 0.06666666666666667,
+          "S": 0.4666666666666667,
+          "SE": 0.06666666666666667,
+          "W": 0.06666666666666667
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "NW": 1.0
+        },
+        "foyer": {
+          "C": 0.5,
+          "N": 0.5
+        },
+        "kitchen": {
+          "C": 0.25,
+          "E": 0.25,
+          "S": 0.5
+        },
+        "living": {
+          "C": 0.4,
+          "N": 0.2,
+          "SW": 0.2,
+          "W": 0.2
+        },
+        "master_bedroom": {
+          "C": 0.6666666666666666,
+          "S": 0.3333333333333333
+        },
+        "parking_4w": {
+          "C": 0.25,
+          "N": 0.25,
+          "NW": 0.25,
+          "W": 0.25
+        },
+        "staircase": {
+          "W": 1.0
+        },
+        "store_room": {
+          "NE": 0.5,
+          "S": 0.5
+        },
+        "terrace": {
+          "S": 1.0
+        },
+        "toilet": {
+          "C": 0.5714285714285714,
+          "N": 0.14285714285714285,
+          "S": 0.14285714285714285,
+          "W": 0.14285714285714285
+        },
+        "utility": {
+          "E": 0.2,
+          "NE": 0.2,
+          "S": 0.2,
+          "SE": 0.2,
+          "SW": 0.2
+        },
+        "wardrobe": {
+          "C": 0.6,
+          "S": 0.2,
+          "SW": 0.2
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "bedroom": {
+          "area": {
+            "mean": 153.04611111111112,
+            "std": 25.55962596207127
+          },
+          "aspect": {
+            "mean": 1.1572815319873182,
+            "std": 0.13752402345369547
+          },
+          "is_fallback": false,
+          "n": 18
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 131.8,
+            "std": 42.72581842399278
+          },
+          "aspect": {
+            "mean": 1.337121212121212,
+            "std": 0.26117142690815437
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "living": {
+          "area": {
+            "mean": 207.22333333333333,
+            "std": 63.52405519871106
+          },
+          "aspect": {
+            "mean": 1.3916666666666666,
+            "std": 0.17380544678845186
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "toilet": {
+          "area": {
+            "mean": 45.703125,
+            "std": 14.589157133274526
+          },
+          "aspect": {
+            "mean": 1.366089466089466,
+            "std": 0.27163788319747534
+          },
+          "is_fallback": false,
+          "n": 8
+        },
+        "utility": {
+          "area": {
+            "mean": 48.52428571428572,
+            "std": 15.046891332614528
+          },
+          "aspect": {
+            "mean": 1.720476190476191,
+            "std": 0.9818160783931918
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 38.748000000000005,
+            "std": 17.13520749801414
+          },
+          "aspect": {
+            "mean": 1.425103785103785,
+            "std": 0.34979863532862215
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "wc_only": {
+          "area": {
+            "mean": 49.41332857142857,
+            "std": 8.100845681905119
+          },
+          "aspect": {
+            "mean": 1.0000000000000007,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 15,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 5,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Contemporary": {
+      "adjacency": {
+        "bedroom|courtyard": 0.0,
+        "bedroom|dining": 0.3333333333333333,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.5625,
+        "bedroom|living": 0.25,
+        "bedroom|master_bedroom": 0.0,
+        "bedroom|parking_4w": 0.14285714285714285,
+        "bedroom|passage": 1.0,
+        "bedroom|pooja": 0.0,
+        "bedroom|seating": 0.0,
+        "bedroom|staircase": 0.2727272727272727,
+        "bedroom|store_room": 0.2,
+        "bedroom|study": 1.0,
+        "bedroom|terrace": 0.3333333333333333,
+        "bedroom|toilet": 0.5161290322580645,
+        "bedroom|utility": 0.42857142857142855,
+        "bedroom|wardrobe": 0.6666666666666666,
+        "courtyard|dining": 1.0,
+        "courtyard|foyer": 0.0,
+        "courtyard|store_room": 0.0,
+        "courtyard|toilet": 0.0,
+        "courtyard|utility": 0.0,
+        "courtyard|wardrobe": 0.0,
+        "dining|foyer": 0.375,
+        "dining|garden": 0.0,
+        "dining|kitchen": 0.6666666666666666,
+        "dining|living": 0.75,
+        "dining|master_bedroom": 0.0,
+        "dining|parking_4w": 0.0,
+        "dining|pooja": 1.0,
+        "dining|staircase": 0.0,
+        "dining|store_room": 0.0,
+        "dining|toilet": 0.5,
+        "dining|utility": 0.5,
+        "dining|wardrobe": 0.0,
+        "foyer|garden": 1.0,
+        "foyer|kitchen": 0.16666666666666666,
+        "foyer|living": 0.7142857142857143,
+        "foyer|master_bedroom": 0.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|pooja": 1.0,
+        "foyer|staircase": 0.5,
+        "foyer|store_room": 0.3333333333333333,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "foyer|wardrobe": 0.0,
+        "garden|living": 0.0,
+        "garden|master_bedroom": 0.0,
+        "garden|parking_4w": 0.0,
+        "garden|toilet": 0.0,
+        "garden|utility": 0.0,
+        "kitchen|living": 0.2,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|pooja": 1.0,
+        "kitchen|seating": 1.0,
+        "kitchen|staircase": 0.25,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.5,
+        "kitchen|utility": 0.8,
+        "kitchen|wardrobe": 1.0,
+        "living|master_bedroom": 0.5,
+        "living|parking_4w": 0.5714285714285714,
+        "living|pooja": 0.0,
+        "living|seating": 1.0,
+        "living|staircase": 1.0,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.4,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.0,
+        "master_bedroom|parking_4w": 0.5,
+        "master_bedroom|staircase": 0.5,
+        "master_bedroom|store_room": 0.0,
+        "master_bedroom|toilet": 0.42857142857142855,
+        "master_bedroom|utility": 0.0,
+        "master_bedroom|wardrobe": 0.6666666666666666,
+        "parking_4w|seating": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|terrace": 0.6666666666666666,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "parking_4w|wardrobe": 0.0,
+        "passage|toilet": 1.0,
+        "pooja|staircase": 0.0,
+        "pooja|toilet": 0.0,
+        "staircase|toilet": 0.6666666666666666,
+        "staircase|wardrobe": 1.0,
+        "store_room|toilet": 0.0,
+        "store_room|utility": 0.8571428571428571,
+        "store_room|wardrobe": 1.0,
+        "study|terrace": 1.0,
+        "study|toilet": 0.0,
+        "terrace|toilet": 0.16666666666666666,
+        "terrace|wardrobe": 0.5,
+        "toilet|utility": 0.3333333333333333,
+        "toilet|wardrobe": 0.6,
+        "utility|wardrobe": 0.0
+      },
+      "n_designs": 24,
+      "position": {
+        "bedroom": {
+          "C": 0.1388888888888889,
+          "E": 0.08333333333333333,
+          "N": 0.1388888888888889,
+          "S": 0.3055555555555556,
+          "SE": 0.1111111111111111,
+          "SW": 0.1111111111111111,
+          "W": 0.1111111111111111
+        },
+        "courtyard": {
+          "C": 0.25,
+          "E": 0.5,
+          "S": 0.25
+        },
+        "dining": {
+          "C": 0.7272727272727273,
+          "E": 0.18181818181818182,
+          "N": 0.09090909090909091
+        },
+        "foyer": {
+          "C": 0.36363636363636365,
+          "N": 0.45454545454545453,
+          "NE": 0.09090909090909091,
+          "NW": 0.09090909090909091
+        },
+        "garden": {
+          "N": 1.0
+        },
+        "kitchen": {
+          "C": 0.4166666666666667,
+          "E": 0.16666666666666666,
+          "N": 0.08333333333333333,
+          "S": 0.3333333333333333
+        },
+        "living": {
+          "C": 0.5238095238095238,
+          "E": 0.14285714285714285,
+          "N": 0.09523809523809523,
+          "S": 0.047619047619047616,
+          "SE": 0.047619047619047616,
+          "SW": 0.047619047619047616,
+          "W": 0.09523809523809523
+        },
+        "master_bedroom": {
+          "C": 0.3333333333333333,
+          "NW": 0.1111111111111111,
+          "S": 0.4444444444444444,
+          "SW": 0.1111111111111111
+        },
+        "parking_4w": {
+          "C": 0.1,
+          "N": 0.5,
+          "NE": 0.2,
+          "NW": 0.1,
+          "W": 0.1
+        },
+        "passage": {
+          "C": 1.0
+        },
+        "pooja": {
+          "N": 1.0
+        },
+        "seating": {
+          "C": 1.0
+        },
+        "staircase": {
+          "C": 0.42857142857142855,
+          "E": 0.14285714285714285,
+          "S": 0.42857142857142855
+        },
+        "store_room": {
+          "E": 0.14285714285714285,
+          "N": 0.14285714285714285,
+          "NE": 0.14285714285714285,
+          "S": 0.5714285714285714
+        },
+        "study": {
+          "C": 1.0
+        },
+        "terrace": {
+          "C": 0.3333333333333333,
+          "N": 0.16666666666666666,
+          "S": 0.3333333333333333,
+          "W": 0.16666666666666666
+        },
+        "toilet": {
+          "C": 0.3225806451612903,
+          "E": 0.06451612903225806,
+          "N": 0.03225806451612903,
+          "NW": 0.03225806451612903,
+          "S": 0.45161290322580644,
+          "SE": 0.06451612903225806,
+          "W": 0.03225806451612903
+        },
+        "utility": {
+          "E": 0.3,
+          "NE": 0.1,
+          "S": 0.3,
+          "SE": 0.2,
+          "W": 0.1
+        },
+        "wardrobe": {
+          "C": 0.1,
+          "NW": 0.1,
+          "S": 0.7,
+          "W": 0.1
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 147.418125,
+            "std": 33.34094158939889
+          },
+          "aspect": {
+            "mean": 1.2569990984397363,
+            "std": 0.23771207328269886
+          },
+          "is_fallback": false,
+          "n": 48
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "dining": {
+          "area": {
+            "mean": 133.99555555555557,
+            "std": 47.47648847613618
+          },
+          "aspect": {
+            "mean": 1.4803240740740742,
+            "std": 0.4744029282042337
+          },
+          "is_fallback": false,
+          "n": 9
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "garden": {
+          "area": {
+            "mean": 130.08333333333334,
+            "std": 44.74037761227423
+          },
+          "aspect": {
+            "mean": 1.0588235294117645,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.29266666666668,
+            "std": 43.06834916218122
+          },
+          "aspect": {
+            "mean": 1.3325580465286349,
+            "std": 0.2575267266333101
+          },
+          "is_fallback": false,
+          "n": 15
+        },
+        "living": {
+          "area": {
+            "mean": 193.66846153846154,
+            "std": 50.4316640989268
+          },
+          "aspect": {
+            "mean": 1.2564991991372565,
+            "std": 0.2846074135821221
+          },
+          "is_fallback": false,
+          "n": 26
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 155.96388888888887,
+            "std": 26.78458074027105
+          },
+          "aspect": {
+            "mean": 1.1668331132099246,
+            "std": 0.09923727249177805
+          },
+          "is_fallback": false,
+          "n": 9
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "store_room": {
+          "area": {
+            "mean": 43.51714285714286,
+            "std": 21.972686105569288
+          },
+          "aspect": {
+            "mean": 1.1835652442795297,
+            "std": 0.06956715006898553
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "study": {
+          "area": {
+            "mean": 176.0,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 2.0694444444444446,
+            "std": 0.12493699596373944
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "toilet": {
+          "area": {
+            "mean": 38.712138461538466,
+            "std": 9.510178381988355
+          },
+          "aspect": {
+            "mean": 1.3944900977159038,
+            "std": 0.3522841791118429
+          },
+          "is_fallback": false,
+          "n": 39
+        },
+        "utility": {
+          "area": {
+            "mean": 43.04818181818182,
+            "std": 12.086867267020784
+          },
+          "aspect": {
+            "mean": 1.4406349206349207,
+            "std": 0.5973983725565316
+          },
+          "is_fallback": false,
+          "n": 11
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 44.052307692307686,
+            "std": 17.313901108578424
+          },
+          "aspect": {
+            "mean": 1.5322258297258298,
+            "std": 0.5444200528638895
+          },
+          "is_fallback": false,
+          "n": 13
+        },
+        "wc_only": {
+          "area": {
+            "mean": 49.41332857142857,
+            "std": 8.100845681905119
+          },
+          "aspect": {
+            "mean": 1.0000000000000007,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "bedroom": {
+          "n": 36,
+          "p_nonrect": 0.05555555555555555
+        },
+        "courtyard": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 11,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 11,
+          "p_nonrect": 0.0
+        },
+        "garden": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 12,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 21,
+          "p_nonrect": 0.047619047619047616
+        },
+        "master_bedroom": {
+          "n": 9,
+          "p_nonrect": 0.1111111111111111
+        },
+        "parking_4w": {
+          "n": 10,
+          "p_nonrect": 0.0
+        },
+        "passage": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "pooja": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "study": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 6,
+          "p_nonrect": 0.16666666666666666
+        },
+        "toilet": {
+          "n": 31,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 10,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 10,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "European-Cottage": {
+      "adjacency": {
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 1.0,
+        "bedroom|living": 0.0,
+        "bedroom|parking_4w": 0.0,
+        "bedroom|passage": 1.0,
+        "bedroom|store_room": 0.0,
+        "bedroom|study": 1.0,
+        "bedroom|terrace": 0.25,
+        "bedroom|toilet": 0.42857142857142855,
+        "bedroom|utility": 1.0,
+        "dining|foyer": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 0.3333333333333333,
+        "dining|master_bedroom": 0.0,
+        "dining|parking_4w": 0.0,
+        "dining|toilet": 1.0,
+        "dining|utility": 0.5,
+        "dining|wardrobe": 1.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 1.0,
+        "foyer|master_bedroom": 0.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.0,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.0,
+        "kitchen|utility": 1.0,
+        "kitchen|wardrobe": 0.0,
+        "living|master_bedroom": 0.25,
+        "living|parking_4w": 1.0,
+        "living|staircase": 1.0,
+        "living|store_room": 0.0,
+        "living|toilet": 0.0,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.0,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|staircase": 0.0,
+        "master_bedroom|toilet": 0.0,
+        "master_bedroom|utility": 0.0,
+        "master_bedroom|wardrobe": 0.5,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "passage|toilet": 1.0,
+        "staircase|wardrobe": 0.0,
+        "store_room|utility": 1.0,
+        "study|terrace": 1.0,
+        "study|toilet": 0.0,
+        "terrace|toilet": 0.3333333333333333,
+        "toilet|utility": 0.5,
+        "toilet|wardrobe": 1.0,
+        "utility|wardrobe": 0.0
+      },
+      "n_designs": 6,
+      "position": {
+        "bedroom": {
+          "N": 0.14285714285714285,
+          "S": 0.8571428571428571
+        },
+        "dining": {
+          "C": 1.0
+        },
+        "foyer": {
+          "C": 0.5,
+          "N": 0.5
+        },
+        "kitchen": {
+          "E": 0.3333333333333333,
+          "S": 0.6666666666666666
+        },
+        "living": {
+          "C": 0.3333333333333333,
+          "N": 0.5,
+          "W": 0.16666666666666666
+        },
+        "master_bedroom": {
+          "C": 0.2,
+          "E": 0.2,
+          "S": 0.6
+        },
+        "parking_4w": {
+          "N": 1.0
+        },
+        "passage": {
+          "C": 1.0
+        },
+        "staircase": {
+          "S": 0.5,
+          "W": 0.5
+        },
+        "store_room": {
+          "S": 1.0
+        },
+        "study": {
+          "C": 1.0
+        },
+        "terrace": {
+          "N": 0.5,
+          "S": 0.5
+        },
+        "toilet": {
+          "C": 0.5,
+          "E": 0.3333333333333333,
+          "S": 0.16666666666666666
+        },
+        "utility": {
+          "E": 0.3333333333333333,
+          "NE": 0.3333333333333333,
+          "S": 0.3333333333333333
+        },
+        "wardrobe": {
+          "C": 0.3333333333333333,
+          "E": 0.3333333333333333,
+          "S": 0.3333333333333333
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 139.54714285714286,
+            "std": 9.785164739522369
+          },
+          "aspect": {
+            "mean": 1.3963659147869674,
+            "std": 0.30274413241381615
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.66169642857143,
+            "std": 38.76925208130225
+          },
+          "aspect": {
+            "mean": 1.3371157275816719,
+            "std": 0.2881534230018143
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "living": {
+          "area": {
+            "mean": 195.96,
+            "std": 83.75771188374239
+          },
+          "aspect": {
+            "mean": 1.3064646464646466,
+            "std": 0.23824306749251709
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 130.23600000000002,
+            "std": 30.14451167293974
+          },
+          "aspect": {
+            "mean": 1.2126190476190477,
+            "std": 0.16029194948684958
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "study": {
+          "area": {
+            "mean": 176.0,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 2.0694444444444446,
+            "std": 0.12493699596373944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 50.50595714285714,
+            "std": 22.645235908549893
+          },
+          "aspect": {
+            "mean": 1.3301587301587303,
+            "std": 0.23748599300966633
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 3
+        }
+      },
+      "shape_usage": {
+        "bedroom": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 6,
+          "p_nonrect": 0.16666666666666666
+        },
+        "master_bedroom": {
+          "n": 5,
+          "p_nonrect": 0.2
+        },
+        "parking_4w": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "passage": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "study": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 3,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Goan": {
+      "adjacency": {
+        "bedroom|courtyard": 1.0,
+        "bedroom|dining": 0.3333333333333333,
+        "bedroom|garden": 0.0,
+        "bedroom|kitchen": 0.5,
+        "bedroom|living": 0.6,
+        "bedroom|master_bedroom": 0.0,
+        "bedroom|open_to_sky": 1.0,
+        "bedroom|parking_4w": 0.0,
+        "bedroom|seating": 1.0,
+        "bedroom|servant_quarter": 0.0,
+        "bedroom|staircase": 0.3333333333333333,
+        "bedroom|store_room": 0.5,
+        "bedroom|toilet": 0.5,
+        "bedroom|utility": 0.0,
+        "bedroom|wardrobe": 0.42857142857142855,
+        "courtyard|dining": 1.0,
+        "courtyard|garden": 0.0,
+        "courtyard|living": 0.0,
+        "courtyard|parking_4w": 0.0,
+        "courtyard|servant_quarter": 0.0,
+        "courtyard|store_room": 1.0,
+        "courtyard|toilet": 1.0,
+        "courtyard|utility": 0.0,
+        "dining|garden": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 1.0,
+        "dining|parking_4w": 0.5,
+        "dining|servant_quarter": 0.0,
+        "dining|store_room": 0.6666666666666666,
+        "dining|toilet": 0.6666666666666666,
+        "dining|utility": 0.6,
+        "foyer|living": 1.0,
+        "foyer|store_room": 0.0,
+        "foyer|toilet": 0.0,
+        "garden|living": 0.0,
+        "garden|parking_4w": 0.0,
+        "garden|servant_quarter": 0.0,
+        "garden|store_room": 0.0,
+        "garden|toilet": 0.0,
+        "garden|utility": 0.5,
+        "kitchen|living": 0.5,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|open_to_sky": 0.0,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|toilet": 0.0,
+        "kitchen|utility": 1.0,
+        "living|master_bedroom": 1.0,
+        "living|open_to_sky": 1.0,
+        "living|parking_4w": 0.3333333333333333,
+        "living|servant_quarter": 0.0,
+        "living|store_room": 0.5,
+        "living|toilet": 0.5,
+        "living|utility": 0.5,
+        "master_bedroom|open_to_sky": 0.0,
+        "master_bedroom|parking_4w": 1.0,
+        "master_bedroom|toilet": 0.5,
+        "open_to_sky|parking_4w": 0.0,
+        "open_to_sky|toilet": 0.5,
+        "parking_4w|servant_quarter": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.2,
+        "parking_4w|utility": 0.0,
+        "seating|toilet": 0.0,
+        "seating|wardrobe": 1.0,
+        "servant_quarter|store_room": 0.0,
+        "servant_quarter|toilet": 0.0,
+        "servant_quarter|utility": 0.5,
+        "staircase|wardrobe": 0.0,
+        "store_room|toilet": 0.3333333333333333,
+        "store_room|utility": 1.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.5714285714285714
+      },
+      "n_designs": 11,
+      "position": {
+        "bedroom": {
+          "C": 0.07142857142857142,
+          "N": 0.35714285714285715,
+          "S": 0.21428571428571427,
+          "SE": 0.07142857142857142,
+          "W": 0.2857142857142857
+        },
+        "courtyard": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "dining": {
+          "C": 0.8,
+          "NW": 0.2
+        },
+        "foyer": {
+          "N": 1.0
+        },
+        "garden": {
+          "N": 1.0
+        },
+        "kitchen": {
+          "C": 0.3333333333333333,
+          "S": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "living": {
+          "C": 0.6666666666666666,
+          "E": 0.16666666666666666,
+          "N": 0.16666666666666666
+        },
+        "master_bedroom": {
+          "SW": 1.0
+        },
+        "open_to_sky": {
+          "S": 1.0
+        },
+        "parking_4w": {
+          "N": 0.3333333333333333,
+          "NW": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "seating": {
+          "C": 1.0
+        },
+        "servant_quarter": {
+          "NE": 1.0
+        },
+        "staircase": {
+          "S": 1.0
+        },
+        "store_room": {
+          "C": 0.25,
+          "E": 0.5,
+          "W": 0.25
+        },
+        "toilet": {
+          "C": 0.26666666666666666,
+          "E": 0.13333333333333333,
+          "N": 0.06666666666666667,
+          "S": 0.13333333333333333,
+          "SE": 0.13333333333333333,
+          "SW": 0.2,
+          "W": 0.06666666666666667
+        },
+        "utility": {
+          "C": 0.16666666666666666,
+          "E": 0.16666666666666666,
+          "NE": 0.16666666666666666,
+          "S": 0.16666666666666666,
+          "SE": 0.16666666666666666,
+          "SW": 0.16666666666666666
+        },
+        "wardrobe": {
+          "C": 0.5,
+          "SW": 0.3333333333333333,
+          "W": 0.16666666666666666
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 180.42473684210526,
+            "std": 62.22411669614088
+          },
+          "aspect": {
+            "mean": 1.1444719077562375,
+            "std": 0.1301691104827366
+          },
+          "is_fallback": false,
+          "n": 19
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "dining": {
+          "area": {
+            "mean": 108.184,
+            "std": 39.67258479101154
+          },
+          "aspect": {
+            "mean": 1.363003663003663,
+            "std": 0.23421525128918091
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 135.054,
+            "std": 40.530998803385046
+          },
+          "aspect": {
+            "mean": 1.362719298245614,
+            "std": 0.07677067496328449
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "living": {
+          "area": {
+            "mean": 202.51600000000002,
+            "std": 56.5046485167371
+          },
+          "aspect": {
+            "mean": 1.5107624831309046,
+            "std": 0.15755449762903423
+          },
+          "is_fallback": false,
+          "n": 10
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "toilet": {
+          "area": {
+            "mean": 52.565,
+            "std": 11.445985540791147
+          },
+          "aspect": {
+            "mean": 1.4353374403374406,
+            "std": 0.29899430084711426
+          },
+          "is_fallback": false,
+          "n": 20
+        },
+        "utility": {
+          "area": {
+            "mean": 67.48190476190476,
+            "std": 29.852318931336495
+          },
+          "aspect": {
+            "mean": 1.5671296296296304,
+            "std": 0.9433332469935555
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 57.112857142857145,
+            "std": 7.901662961112705
+          },
+          "aspect": {
+            "mean": 1.2586296056884292,
+            "std": 0.2404673920769272
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "wc_only": {
+          "area": {
+            "mean": 49.41332857142857,
+            "std": 8.100845681905119
+          },
+          "aspect": {
+            "mean": 1.0000000000000007,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "bedroom": {
+          "n": 14,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "garden": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "open_to_sky": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "servant_quarter": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 15,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 6,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Gujrati": {
+      "adjacency": {
+        "balcony|bedroom": 1.0,
+        "bedroom|dining": 0.0,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.5,
+        "bedroom|living": 0.45454545454545453,
+        "bedroom|parking_4w": 0.6666666666666666,
+        "bedroom|seating": 1.0,
+        "bedroom|staircase": 0.25,
+        "bedroom|store_room": 1.0,
+        "bedroom|terrace": 0.0,
+        "bedroom|toilet": 0.5555555555555556,
+        "bedroom|utility": 0.0,
+        "bedroom|wardrobe": 1.0,
+        "bedroom|wc_only": 1.0,
+        "courtyard|store_room": 0.0,
+        "courtyard|toilet": 1.0,
+        "courtyard|utility": 0.0,
+        "dining|foyer": 0.25,
+        "dining|garden": 0.0,
+        "dining|kitchen": 0.0,
+        "dining|living": 0.5714285714285714,
+        "dining|master_bedroom": 0.0,
+        "dining|parking_4w": 0.3333333333333333,
+        "dining|staircase": 1.0,
+        "dining|store_room": 0.0,
+        "dining|toilet": 0.2222222222222222,
+        "dining|utility": 1.0,
+        "dining|wardrobe": 0.0,
+        "dining|wc_only": 0.0,
+        "foyer|garden": 1.0,
+        "foyer|living": 0.5,
+        "foyer|master_bedroom": 0.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|staircase": 0.0,
+        "foyer|toilet": 0.0,
+        "foyer|wardrobe": 0.0,
+        "garden|living": 0.0,
+        "garden|master_bedroom": 0.0,
+        "garden|parking_4w": 0.0,
+        "garden|toilet": 0.0,
+        "kitchen|living": 0.25,
+        "kitchen|parking_4w": 1.0,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.0,
+        "kitchen|utility": 1.0,
+        "kitchen|wc_only": 0.0,
+        "living|master_bedroom": 0.4,
+        "living|parking_4w": 0.8333333333333334,
+        "living|staircase": 1.0,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.26666666666666666,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.0,
+        "living|wc_only": 1.0,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|toilet": 0.5,
+        "master_bedroom|wardrobe": 0.5,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "parking_4w|wc_only": 0.0,
+        "seating|toilet": 0.0,
+        "staircase|terrace": 1.0,
+        "staircase|toilet": 0.0,
+        "store_room|toilet": 0.0,
+        "store_room|utility": 1.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.375,
+        "toilet|wc_only": 0.0
+      },
+      "n_designs": 15,
+      "position": {
+        "balcony": {
+          "W": 1.0
+        },
+        "bedroom": {
+          "C": 0.3125,
+          "E": 0.1875,
+          "N": 0.125,
+          "NE": 0.0625,
+          "S": 0.125,
+          "SE": 0.0625,
+          "SW": 0.0625,
+          "W": 0.0625
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "C": 0.5714285714285714,
+          "E": 0.14285714285714285,
+          "N": 0.2857142857142857
+        },
+        "foyer": {
+          "C": 0.375,
+          "N": 0.25,
+          "NE": 0.125,
+          "NW": 0.125,
+          "W": 0.125
+        },
+        "garden": {
+          "N": 1.0
+        },
+        "kitchen": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "living": {
+          "C": 0.5333333333333333,
+          "E": 0.06666666666666667,
+          "N": 0.2,
+          "S": 0.06666666666666667,
+          "SE": 0.06666666666666667,
+          "SW": 0.06666666666666667
+        },
+        "master_bedroom": {
+          "NW": 0.3333333333333333,
+          "S": 0.6666666666666666
+        },
+        "parking_4w": {
+          "C": 0.4,
+          "N": 0.2,
+          "W": 0.4
+        },
+        "seating": {
+          "C": 1.0
+        },
+        "staircase": {
+          "E": 0.5,
+          "N": 0.5
+        },
+        "store_room": {
+          "N": 0.3333333333333333,
+          "S": 0.3333333333333333,
+          "W": 0.3333333333333333
+        },
+        "terrace": {
+          "N": 1.0
+        },
+        "toilet": {
+          "C": 0.2608695652173913,
+          "E": 0.17391304347826086,
+          "N": 0.08695652173913043,
+          "NW": 0.043478260869565216,
+          "S": 0.043478260869565216,
+          "SE": 0.17391304347826086,
+          "SW": 0.08695652173913043,
+          "W": 0.13043478260869565
+        },
+        "utility": {
+          "C": 0.25,
+          "E": 0.25,
+          "NW": 0.25,
+          "S": 0.25
+        },
+        "wardrobe": {
+          "E": 0.4,
+          "S": 0.4,
+          "W": 0.2
+        },
+        "wc_only": {
+          "C": 1.0
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "bedroom": {
+          "area": {
+            "mean": 162.66125,
+            "std": 36.46144599807903
+          },
+          "aspect": {
+            "mean": 1.3165047714583318,
+            "std": 0.27996602319652797
+          },
+          "is_fallback": false,
+          "n": 24
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "dining": {
+          "area": {
+            "mean": 90.04857142857144,
+            "std": 29.257749365923274
+          },
+          "aspect": {
+            "mean": 1.3713675213675212,
+            "std": 0.3377106840178259
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "foyer": {
+          "area": {
+            "mean": 61.398,
+            "std": 17.863999999999997
+          },
+          "aspect": {
+            "mean": 1.6840909090909086,
+            "std": 0.09545454545454472
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.66169642857143,
+            "std": 38.76925208130225
+          },
+          "aspect": {
+            "mean": 1.3371157275816719,
+            "std": 0.2881534230018143
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "living": {
+          "area": {
+            "mean": 206.18789473684208,
+            "std": 75.55504376064599
+          },
+          "aspect": {
+            "mean": 1.2212477085695939,
+            "std": 0.24456699154366765
+          },
+          "is_fallback": false,
+          "n": 19
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 43.73935897435898,
+            "std": 11.458179701318992
+          },
+          "aspect": {
+            "mean": 1.4556367474526042,
+            "std": 0.466275396447801
+          },
+          "is_fallback": false,
+          "n": 26
+        },
+        "utility": {
+          "area": {
+            "mean": 38.812,
+            "std": 7.155851871021368
+          },
+          "aspect": {
+            "mean": 1.2650641025641025,
+            "std": 0.12092596598949752
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 54.411111111111104,
+            "std": 15.245748243565247
+          },
+          "aspect": {
+            "mean": 1.53,
+            "std": 0.5633382642782221
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "wc_only": {
+          "area": {
+            "mean": 49.41332857142857,
+            "std": 8.100845681905119
+          },
+          "aspect": {
+            "mean": 1.0000000000000007,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 2
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 16,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 8,
+          "p_nonrect": 0.0
+        },
+        "garden": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 15,
+          "p_nonrect": 0.06666666666666667
+        },
+        "master_bedroom": {
+          "n": 3,
+          "p_nonrect": 0.3333333333333333
+        },
+        "parking_4w": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 23,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "wc_only": {
+          "n": 1,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Kerala": {
+      "adjacency": {
+        "bedroom|courtyard": 0.0,
+        "bedroom|dining": 0.5,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.2857142857142857,
+        "bedroom|living": 0.6,
+        "bedroom|master_bedroom": 0.0,
+        "bedroom|open_to_sky": 1.0,
+        "bedroom|parking_4w": 0.25,
+        "bedroom|seating": 1.0,
+        "bedroom|staircase": 1.0,
+        "bedroom|store_room": 0.0,
+        "bedroom|terrace": 0.3333333333333333,
+        "bedroom|toilet": 0.5,
+        "bedroom|utility": 0.0,
+        "courtyard|garden": 0.5,
+        "courtyard|kitchen": 0.0,
+        "courtyard|living": 1.0,
+        "courtyard|master_bedroom": 0.5,
+        "courtyard|parking_4w": 0.0,
+        "courtyard|toilet": 0.0,
+        "courtyard|utility": 0.0,
+        "courtyard|verandah": 0.0,
+        "dining|foyer": 0.5,
+        "dining|kitchen": 1.0,
+        "dining|living": 0.75,
+        "dining|master_bedroom": 1.0,
+        "dining|parking_4w": 0.0,
+        "dining|store_room": 0.0,
+        "dining|toilet": 1.0,
+        "dining|utility": 0.3333333333333333,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.6666666666666666,
+        "foyer|store_room": 0.0,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "garden|kitchen": 0.5,
+        "garden|living": 0.75,
+        "garden|master_bedroom": 0.5,
+        "garden|parking_4w": 0.0,
+        "garden|utility": 0.0,
+        "garden|verandah": 0.0,
+        "kitchen|living": 0.42857142857142855,
+        "kitchen|master_bedroom": 0.2,
+        "kitchen|open_to_sky": 0.0,
+        "kitchen|parking_4w": 0.25,
+        "kitchen|toilet": 0.18181818181818182,
+        "kitchen|utility": 1.0,
+        "kitchen|verandah": 0.0,
+        "living|master_bedroom": 0.2,
+        "living|open_to_sky": 1.0,
+        "living|parking_4w": 0.2,
+        "living|staircase": 1.0,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.4,
+        "living|utility": 0.2,
+        "living|verandah": 1.0,
+        "living|wardrobe": 0.5,
+        "master_bedroom|open_to_sky": 0.0,
+        "master_bedroom|parking_4w": 0.3333333333333333,
+        "master_bedroom|terrace": 0.5,
+        "master_bedroom|toilet": 0.45454545454545453,
+        "master_bedroom|utility": 0.5,
+        "master_bedroom|verandah": 0.0,
+        "open_to_sky|parking_4w": 0.0,
+        "open_to_sky|toilet": 0.5,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "parking_4w|verandah": 0.0,
+        "seating|toilet": 1.0,
+        "staircase|toilet": 1.0,
+        "staircase|wardrobe": 0.0,
+        "store_room|utility": 1.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.0,
+        "utility|verandah": 0.0
+      },
+      "n_designs": 10,
+      "position": {
+        "bedroom": {
+          "C": 0.3125,
+          "E": 0.125,
+          "N": 0.0625,
+          "S": 0.3125,
+          "SE": 0.1875
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "C": 1.0
+        },
+        "foyer": {
+          "C": 0.3333333333333333,
+          "N": 0.6666666666666666
+        },
+        "garden": {
+          "C": 0.5,
+          "W": 0.5
+        },
+        "kitchen": {
+          "C": 0.5,
+          "NW": 0.125,
+          "S": 0.25,
+          "W": 0.125
+        },
+        "living": {
+          "C": 0.5454545454545454,
+          "E": 0.09090909090909091,
+          "N": 0.18181818181818182,
+          "W": 0.18181818181818182
+        },
+        "master_bedroom": {
+          "C": 0.25,
+          "S": 0.125,
+          "SW": 0.375,
+          "W": 0.25
+        },
+        "open_to_sky": {
+          "S": 1.0
+        },
+        "parking_4w": {
+          "C": 0.4,
+          "N": 0.4,
+          "W": 0.2
+        },
+        "seating": {
+          "C": 1.0
+        },
+        "staircase": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "store_room": {
+          "NE": 1.0
+        },
+        "terrace": {
+          "N": 1.0
+        },
+        "toilet": {
+          "C": 0.47368421052631576,
+          "E": 0.10526315789473684,
+          "S": 0.3157894736842105,
+          "SE": 0.10526315789473684
+        },
+        "utility": {
+          "N": 0.25,
+          "NE": 0.25,
+          "SE": 0.25,
+          "W": 0.25
+        },
+        "verandah": {
+          "N": 1.0
+        },
+        "wardrobe": {
+          "E": 0.5,
+          "S": 0.5
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 140.38133333333332,
+            "std": 26.278531127561568
+          },
+          "aspect": {
+            "mean": 1.3766530296329058,
+            "std": 0.2989213854947129
+          },
+          "is_fallback": false,
+          "n": 15
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 121.78571428571429,
+            "std": 28.267671012833652
+          },
+          "aspect": {
+            "mean": 1.5952922077922083,
+            "std": 0.38577993942533145
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "living": {
+          "area": {
+            "mean": 176.2,
+            "std": 46.485589164815366
+          },
+          "aspect": {
+            "mean": 1.4012141148325359,
+            "std": 0.2396323383212353
+          },
+          "is_fallback": false,
+          "n": 10
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 166.04714285714286,
+            "std": 31.899011052420562
+          },
+          "aspect": {
+            "mean": 1.2389530373552928,
+            "std": 0.16558734186521998
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 40.686470588235295,
+            "std": 10.6277322804823
+          },
+          "aspect": {
+            "mean": 1.4811143105260751,
+            "std": 0.5728318939811213
+          },
+          "is_fallback": false,
+          "n": 17
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "verandah": {
+          "area": {
+            "mean": 48.25,
+            "std": 12.25
+          },
+          "aspect": {
+            "mean": 1.272727272727273,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 2
+        }
+      },
+      "shape_usage": {
+        "bedroom": {
+          "n": 16,
+          "p_nonrect": 0.0625
+        },
+        "courtyard": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "garden": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 8,
+          "p_nonrect": 0.125
+        },
+        "living": {
+          "n": 11,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 8,
+          "p_nonrect": 0.125
+        },
+        "open_to_sky": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 19,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "verandah": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 2,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Maratha": {
+      "adjacency": {
+        "bedroom|dining": 0.5,
+        "bedroom|foyer": 0.16666666666666666,
+        "bedroom|kitchen": 0.45454545454545453,
+        "bedroom|living": 0.25,
+        "bedroom|parking_4w": 0.14285714285714285,
+        "bedroom|passage": 1.0,
+        "bedroom|staircase": 0.6666666666666666,
+        "bedroom|store_room": 0.5,
+        "bedroom|study": 1.0,
+        "bedroom|terrace": 0.2857142857142857,
+        "bedroom|toilet": 0.5,
+        "bedroom|utility": 0.2,
+        "courtyard|parking_4w": 0.0,
+        "courtyard|seating": 0.0,
+        "courtyard|toilet": 0.25,
+        "dining|foyer": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 1.0,
+        "dining|parking_4w": 0.0,
+        "dining|staircase": 0.5,
+        "dining|toilet": 0.5,
+        "dining|wardrobe": 0.0,
+        "foyer|kitchen": 0.3333333333333333,
+        "foyer|living": 1.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|staircase": 1.0,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.42857142857142855,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|staircase": 0.0,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.0,
+        "kitchen|utility": 1.0,
+        "kitchen|wardrobe": 0.0,
+        "kitchen|washbasin_nook": 0.0,
+        "living|master_bedroom": 0.0,
+        "living|parking_4w": 1.0,
+        "living|staircase": 0.6666666666666666,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.25,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.0,
+        "living|washbasin_nook": 0.0,
+        "master_bedroom|toilet": 0.5,
+        "master_bedroom|utility": 0.0,
+        "master_bedroom|washbasin_nook": 0.0,
+        "parking_4w|seating": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.5,
+        "passage|toilet": 1.0,
+        "seating|toilet": 0.25,
+        "staircase|toilet": 0.75,
+        "staircase|wardrobe": 0.0,
+        "store_room|utility": 1.0,
+        "study|terrace": 1.0,
+        "study|toilet": 0.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 1.0,
+        "toilet|washbasin_nook": 1.0,
+        "utility|washbasin_nook": 0.0
+      },
+      "n_designs": 12,
+      "position": {
+        "bedroom": {
+          "C": 0.045454545454545456,
+          "N": 0.2727272727272727,
+          "S": 0.6818181818181818
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "C": 0.4,
+          "E": 0.2,
+          "W": 0.4
+        },
+        "foyer": {
+          "E": 0.3333333333333333,
+          "N": 0.6666666666666666
+        },
+        "kitchen": {
+          "C": 0.25,
+          "E": 0.125,
+          "N": 0.125,
+          "S": 0.25,
+          "SE": 0.125,
+          "W": 0.125
+        },
+        "living": {
+          "C": 0.5833333333333334,
+          "N": 0.4166666666666667
+        },
+        "master_bedroom": {
+          "NW": 0.5,
+          "SW": 0.5
+        },
+        "parking_4w": {
+          "C": 0.2,
+          "N": 0.2,
+          "NE": 0.2,
+          "S": 0.2,
+          "W": 0.2
+        },
+        "passage": {
+          "C": 1.0
+        },
+        "seating": {
+          "S": 1.0
+        },
+        "staircase": {
+          "C": 0.3333333333333333,
+          "NW": 0.3333333333333333,
+          "S": 0.3333333333333333
+        },
+        "store_room": {
+          "S": 1.0
+        },
+        "study": {
+          "C": 1.0
+        },
+        "terrace": {
+          "N": 0.6666666666666666,
+          "S": 0.3333333333333333
+        },
+        "toilet": {
+          "C": 0.5,
+          "E": 0.125,
+          "NE": 0.0625,
+          "S": 0.3125
+        },
+        "utility": {
+          "N": 0.25,
+          "S": 0.5,
+          "SE": 0.25
+        },
+        "wardrobe": {
+          "S": 0.5,
+          "SE": 0.5
+        },
+        "washbasin_nook": {
+          "S": 1.0
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 146.642,
+            "std": 29.37637418062345
+          },
+          "aspect": {
+            "mean": 1.4031344119019566,
+            "std": 0.29789943407390357
+          },
+          "is_fallback": false,
+          "n": 25
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 114.53,
+            "std": 30.19343342884711
+          },
+          "aspect": {
+            "mean": 1.2613076725905674,
+            "std": 0.18774332019793571
+          },
+          "is_fallback": false,
+          "n": 9
+        },
+        "living": {
+          "area": {
+            "mean": 174.698,
+            "std": 26.27559090359974
+          },
+          "aspect": {
+            "mean": 1.3467785563141292,
+            "std": 0.3616717213356023
+          },
+          "is_fallback": false,
+          "n": 12
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "study": {
+          "area": {
+            "mean": 176.0,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 2.0694444444444446,
+            "std": 0.12493699596373944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 40.89083333333333,
+            "std": 9.10022744679128
+          },
+          "aspect": {
+            "mean": 1.6116550116550112,
+            "std": 0.3184461045437363
+          },
+          "is_fallback": false,
+          "n": 18
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "washbasin_nook": {
+          "area": {
+            "mean": 15.2,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 1.111111111111111,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "bedroom": {
+          "n": 22,
+          "p_nonrect": 0.09090909090909091
+        },
+        "courtyard": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 8,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 12,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "passage": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "study": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 16,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "washbasin_nook": {
+          "n": 1,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Mediterranean-Spanish": {
+      "adjacency": {
+        "bedroom|dining": 0.0,
+        "bedroom|foyer": 0.5,
+        "bedroom|kitchen": 0.0,
+        "bedroom|living": 0.6666666666666666,
+        "bedroom|parking_4w": 0.0,
+        "bedroom|staircase": 0.0,
+        "bedroom|terrace": 0.0,
+        "bedroom|toilet": 0.5,
+        "bedroom|utility": 0.0,
+        "dining|foyer": 0.3333333333333333,
+        "dining|kitchen": 0.5,
+        "dining|living": 1.0,
+        "dining|pooja": 0.0,
+        "dining|staircase": 1.0,
+        "dining|toilet": 0.5,
+        "dining|utility": 0.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.5,
+        "foyer|master_bedroom": 0.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|pooja": 1.0,
+        "foyer|staircase": 0.0,
+        "foyer|toilet": 0.25,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.0,
+        "kitchen|pooja": 0.0,
+        "kitchen|staircase": 0.0,
+        "kitchen|toilet": 0.5,
+        "kitchen|utility": 1.0,
+        "living|parking_4w": 1.0,
+        "living|pooja": 0.0,
+        "living|staircase": 1.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.14285714285714285,
+        "living|utility": 0.0,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|staircase": 1.0,
+        "master_bedroom|toilet": 0.0,
+        "master_bedroom|utility": 1.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "pooja|toilet": 0.0,
+        "staircase|toilet": 0.0,
+        "staircase|utility": 0.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.2
+      },
+      "n_designs": 8,
+      "position": {
+        "bedroom": {
+          "E": 0.3333333333333333,
+          "S": 0.3333333333333333,
+          "SE": 0.16666666666666666,
+          "W": 0.16666666666666666
+        },
+        "dining": {
+          "C": 0.5,
+          "W": 0.5
+        },
+        "foyer": {
+          "C": 0.6666666666666666,
+          "E": 0.1111111111111111,
+          "N": 0.1111111111111111,
+          "W": 0.1111111111111111
+        },
+        "kitchen": {
+          "E": 0.5,
+          "SW": 0.5
+        },
+        "living": {
+          "C": 0.4,
+          "NW": 0.2,
+          "W": 0.4
+        },
+        "master_bedroom": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "parking_4w": {
+          "N": 0.5,
+          "W": 0.5
+        },
+        "pooja": {
+          "C": 1.0
+        },
+        "staircase": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "terrace": {
+          "N": 1.0
+        },
+        "toilet": {
+          "C": 0.3125,
+          "E": 0.1875,
+          "N": 0.125,
+          "S": 0.25,
+          "SW": 0.0625,
+          "W": 0.0625
+        },
+        "utility": {
+          "N": 0.3333333333333333,
+          "NE": 0.3333333333333333,
+          "S": 0.3333333333333333
+        },
+        "wardrobe": {
+          "W": 1.0
+        }
+      },
+      "rooms": {
+        "bedroom": {
+          "area": {
+            "mean": 155.2,
+            "std": 27.19577173017894
+          },
+          "aspect": {
+            "mean": 1.3058862433862433,
+            "std": 0.30661641722690774
+          },
+          "is_fallback": false,
+          "n": 10
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "foyer": {
+          "area": {
+            "mean": 61.917142857142856,
+            "std": 14.771872610070913
+          },
+          "aspect": {
+            "mean": 1.5309690309690311,
+            "std": 0.13268861991151326
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "kitchen": {
+          "area": {
+            "mean": 122.66169642857143,
+            "std": 38.76925208130225
+          },
+          "aspect": {
+            "mean": 1.3371157275816719,
+            "std": 0.2881534230018143
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "living": {
+          "area": {
+            "mean": 162.23285714285717,
+            "std": 44.00689774319012
+          },
+          "aspect": {
+            "mean": 1.3825980392156865,
+            "std": 0.2759297789064298
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "pooja": {
+          "area": {
+            "mean": 132.2625,
+            "std": 117.05300815762916
+          },
+          "aspect": {
+            "mean": 1.5650992685475438,
+            "std": 0.07994939159128157
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 39.935,
+            "std": 10.579087626066816
+          },
+          "aspect": {
+            "mean": 1.2641087466455114,
+            "std": 0.22970182241466167
+          },
+          "is_fallback": false,
+          "n": 20
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "bedroom": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 9,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 2,
+          "p_nonrect": 0.5
+        },
+        "parking_4w": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "pooja": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 16,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 1,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Minimalist": {
+      "adjacency": {
+        "balcony|bedroom": 0.4,
+        "balcony|courtyard": 0.0,
+        "balcony|living": 0.0,
+        "balcony|staircase": 0.0,
+        "balcony|toilet": 0.3333333333333333,
+        "balcony|wardrobe": 1.0,
+        "bedroom|courtyard": 0.5,
+        "bedroom|dining": 0.25,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.0,
+        "bedroom|living": 0.5833333333333334,
+        "bedroom|master_bedroom": 0.0,
+        "bedroom|parking_4w": 0.2,
+        "bedroom|staircase": 0.8333333333333334,
+        "bedroom|terrace": 1.0,
+        "bedroom|toilet": 0.4583333333333333,
+        "bedroom|utility": 0.0,
+        "bedroom|wardrobe": 1.0,
+        "courtyard|dining": 1.0,
+        "courtyard|foyer": 0.0,
+        "courtyard|kitchen": 1.0,
+        "courtyard|store_room": 0.0,
+        "courtyard|toilet": 0.75,
+        "courtyard|utility": 0.25,
+        "dining|foyer": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 1.0,
+        "dining|master_bedroom": 0.5,
+        "dining|parking_4w": 0.0,
+        "dining|staircase": 0.6666666666666666,
+        "dining|store_room": 0.0,
+        "dining|toilet": 0.25,
+        "dining|utility": 0.16666666666666666,
+        "dining|washbasin_nook": 1.0,
+        "foyer|kitchen": 1.0,
+        "foyer|living": 1.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|staircase": 0.0,
+        "foyer|store_room": 1.0,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.3333333333333333,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|staircase": 0.0,
+        "kitchen|toilet": 0.25,
+        "kitchen|utility": 1.0,
+        "kitchen|washbasin_nook": 0.0,
+        "living|master_bedroom": 0.5,
+        "living|parking_4w": 0.6666666666666666,
+        "living|staircase": 0.6,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.5,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.0,
+        "living|washbasin_nook": 0.0,
+        "master_bedroom|staircase": 0.0,
+        "master_bedroom|terrace": 0.0,
+        "master_bedroom|toilet": 1.0,
+        "master_bedroom|utility": 0.0,
+        "master_bedroom|washbasin_nook": 1.0,
+        "parking_4w|staircase": 0.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.5,
+        "staircase|toilet": 0.42857142857142855,
+        "staircase|utility": 0.0,
+        "staircase|wardrobe": 0.5,
+        "staircase|washbasin_nook": 0.5,
+        "store_room|toilet": 0.0,
+        "store_room|utility": 1.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.125,
+        "toilet|wardrobe": 0.5,
+        "toilet|washbasin_nook": 0.0,
+        "utility|washbasin_nook": 0.0
+      },
+      "n_designs": 18,
+      "position": {
+        "balcony": {
+          "N": 0.3333333333333333,
+          "W": 0.6666666666666666
+        },
+        "bedroom": {
+          "C": 0.2222222222222222,
+          "E": 0.1111111111111111,
+          "N": 0.16666666666666666,
+          "NE": 0.05555555555555555,
+          "S": 0.2777777777777778,
+          "SE": 0.05555555555555555,
+          "W": 0.1111111111111111
+        },
+        "courtyard": {
+          "C": 0.5,
+          "E": 0.16666666666666666,
+          "S": 0.16666666666666666,
+          "SE": 0.16666666666666666
+        },
+        "dining": {
+          "C": 0.875,
+          "E": 0.125
+        },
+        "foyer": {
+          "C": 0.7142857142857143,
+          "E": 0.14285714285714285,
+          "W": 0.14285714285714285
+        },
+        "kitchen": {
+          "C": 0.16666666666666666,
+          "E": 0.16666666666666666,
+          "N": 0.16666666666666666,
+          "S": 0.16666666666666666,
+          "SW": 0.3333333333333333
+        },
+        "living": {
+          "C": 0.7333333333333333,
+          "E": 0.06666666666666667,
+          "N": 0.06666666666666667,
+          "SW": 0.06666666666666667,
+          "W": 0.06666666666666667
+        },
+        "master_bedroom": {
+          "C": 0.3333333333333333,
+          "SE": 0.6666666666666666
+        },
+        "parking_4w": {
+          "C": 0.16666666666666666,
+          "NE": 0.16666666666666666,
+          "W": 0.6666666666666666
+        },
+        "staircase": {
+          "C": 0.42857142857142855,
+          "E": 0.2857142857142857,
+          "S": 0.2857142857142857
+        },
+        "store_room": {
+          "E": 0.5,
+          "W": 0.5
+        },
+        "terrace": {
+          "N": 1.0
+        },
+        "toilet": {
+          "C": 0.25925925925925924,
+          "E": 0.1111111111111111,
+          "N": 0.037037037037037035,
+          "NE": 0.07407407407407407,
+          "S": 0.14814814814814814,
+          "SE": 0.18518518518518517,
+          "SW": 0.14814814814814814,
+          "W": 0.037037037037037035
+        },
+        "utility": {
+          "E": 0.3333333333333333,
+          "NE": 0.1111111111111111,
+          "NW": 0.1111111111111111,
+          "S": 0.1111111111111111,
+          "SE": 0.1111111111111111,
+          "SW": 0.2222222222222222
+        },
+        "wardrobe": {
+          "C": 0.2,
+          "SW": 0.2,
+          "W": 0.6
+        },
+        "washbasin_nook": {
+          "C": 0.5,
+          "E": 0.5
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "bedroom": {
+          "area": {
+            "mean": 143.61739130434782,
+            "std": 25.081689877433508
+          },
+          "aspect": {
+            "mean": 1.21483589174345,
+            "std": 0.10606665864164382
+          },
+          "is_fallback": false,
+          "n": 23
+        },
+        "courtyard": {
+          "area": {
+            "mean": 80.77833333333334,
+            "std": 27.00444989050673
+          },
+          "aspect": {
+            "mean": 1.4691176470588239,
+            "std": 0.4088359158290022
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "dining": {
+          "area": {
+            "mean": 104.18666666666667,
+            "std": 28.00489580214304
+          },
+          "aspect": {
+            "mean": 1.5388888888888885,
+            "std": 0.412071887831165
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "foyer": {
+          "area": {
+            "mean": 78.23571428571428,
+            "std": 37.568557467702725
+          },
+          "aspect": {
+            "mean": 1.7612794612794611,
+            "std": 0.2146250071799452
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "kitchen": {
+          "area": {
+            "mean": 126.10444444444445,
+            "std": 26.493152201658585
+          },
+          "aspect": {
+            "mean": 1.1807083847525026,
+            "std": 0.09251291974229847
+          },
+          "is_fallback": false,
+          "n": 9
+        },
+        "living": {
+          "area": {
+            "mean": 181.74222222222224,
+            "std": 60.56692978805032
+          },
+          "aspect": {
+            "mean": 1.234317018010382,
+            "std": 0.2212221217681323
+          },
+          "is_fallback": false,
+          "n": 18
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 154.305,
+            "std": 25.217555888705792
+          },
+          "aspect": {
+            "mean": 1.2191919191919192,
+            "std": 0.19880779238354088
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 45.13862068965517,
+            "std": 12.658555161911574
+          },
+          "aspect": {
+            "mean": 1.3414360331026998,
+            "std": 0.31663654564486954
+          },
+          "is_fallback": false,
+          "n": 29
+        },
+        "utility": {
+          "area": {
+            "mean": 43.616,
+            "std": 10.927538789681783
+          },
+          "aspect": {
+            "mean": 1.3400456478887852,
+            "std": 0.40208723402918123
+          },
+          "is_fallback": false,
+          "n": 10
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 66.62,
+            "std": 7.904122974751847
+          },
+          "aspect": {
+            "mean": 1.2723809523809524,
+            "std": 0.19710115731053424
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "wc_only": {
+          "area": {
+            "mean": 49.41332857142857,
+            "std": 8.100845681905119
+          },
+          "aspect": {
+            "mean": 1.0000000000000007,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 18,
+          "p_nonrect": 0.1111111111111111
+        },
+        "courtyard": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 8,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 15,
+          "p_nonrect": 0.0
+        },
+        "master_bedroom": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 27,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 9,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "washbasin_nook": {
+          "n": 2,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Mughal": {
+      "adjacency": {
+        "balcony|bedroom": 1.0,
+        "balcony|toilet": 0.0,
+        "balcony|wardrobe": 0.0,
+        "bedroom|courtyard": 0.0,
+        "bedroom|dining": 0.5,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.0,
+        "bedroom|living": 0.4166666666666667,
+        "bedroom|master_bedroom": 0.0,
+        "bedroom|parking_4w": 0.2,
+        "bedroom|seating": 0.6666666666666666,
+        "bedroom|store_room": 0.0,
+        "bedroom|terrace": 0.3333333333333333,
+        "bedroom|toilet": 0.2727272727272727,
+        "bedroom|utility": 0.0,
+        "bedroom|wardrobe": 0.5,
+        "courtyard|kitchen": 0.0,
+        "courtyard|living": 0.0,
+        "courtyard|parking_4w": 0.0,
+        "courtyard|seating": 0.0,
+        "courtyard|toilet": 0.0,
+        "dining|foyer": 0.5,
+        "dining|kitchen": 0.5,
+        "dining|living": 0.8333333333333334,
+        "dining|parking_4w": 0.0,
+        "dining|store_room": 0.0,
+        "dining|toilet": 0.6666666666666666,
+        "dining|utility": 0.6666666666666666,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.5,
+        "foyer|parking_4w": 1.0,
+        "foyer|store_room": 0.0,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.5,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.5,
+        "kitchen|seating": 0.0,
+        "kitchen|staircase": 0.0,
+        "kitchen|store_room": 0.5,
+        "kitchen|toilet": 0.4,
+        "kitchen|utility": 1.0,
+        "kitchen|wardrobe": 0.0,
+        "living|master_bedroom": 0.6666666666666666,
+        "living|parking_4w": 1.0,
+        "living|seating": 0.0,
+        "living|staircase": 0.5,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.4166666666666667,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.25,
+        "master_bedroom|staircase": 0.0,
+        "master_bedroom|terrace": 0.5,
+        "master_bedroom|toilet": 1.0,
+        "parking_4w|seating": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.0,
+        "parking_4w|utility": 0.0,
+        "seating|toilet": 0.0,
+        "staircase|toilet": 0.0,
+        "store_room|toilet": 0.5,
+        "store_room|utility": 1.0,
+        "store_room|wardrobe": 1.0,
+        "terrace|toilet": 0.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.5714285714285714
+      },
+      "n_designs": 14,
+      "position": {
+        "balcony": {
+          "C": 0.5,
+          "W": 0.5
+        },
+        "bedroom": {
+          "C": 0.2,
+          "N": 0.3333333333333333,
+          "S": 0.26666666666666666,
+          "SE": 0.06666666666666667,
+          "W": 0.13333333333333333
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "C": 0.7142857142857143,
+          "E": 0.14285714285714285,
+          "N": 0.14285714285714285
+        },
+        "foyer": {
+          "C": 0.25,
+          "N": 0.25,
+          "NW": 0.5
+        },
+        "kitchen": {
+          "C": 0.4,
+          "E": 0.2,
+          "N": 0.4
+        },
+        "living": {
+          "C": 0.6,
+          "E": 0.06666666666666667,
+          "N": 0.2,
+          "SW": 0.06666666666666667,
+          "W": 0.06666666666666667
+        },
+        "master_bedroom": {
+          "C": 0.4,
+          "N": 0.2,
+          "S": 0.2,
+          "W": 0.2
+        },
+        "parking_4w": {
+          "C": 0.2,
+          "NW": 0.4,
+          "W": 0.4
+        },
+        "seating": {
+          "S": 1.0
+        },
+        "staircase": {
+          "C": 0.5,
+          "NE": 0.5
+        },
+        "store_room": {
+          "N": 0.5,
+          "S": 0.5
+        },
+        "terrace": {
+          "N": 1.0
+        },
+        "toilet": {
+          "C": 0.35294117647058826,
+          "E": 0.17647058823529413,
+          "S": 0.17647058823529413,
+          "SE": 0.11764705882352941,
+          "SW": 0.17647058823529413
+        },
+        "utility": {
+          "E": 0.3333333333333333,
+          "NE": 0.3333333333333333,
+          "SE": 0.3333333333333333
+        },
+        "wardrobe": {
+          "E": 0.16666666666666666,
+          "S": 0.5,
+          "W": 0.3333333333333333
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "bedroom": {
+          "area": {
+            "mean": 157.22368421052633,
+            "std": 28.595888959323528
+          },
+          "aspect": {
+            "mean": 1.19958419907269,
+            "std": 0.12122008928176507
+          },
+          "is_fallback": false,
+          "n": 19
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "dining": {
+          "area": {
+            "mean": 103.65285714285714,
+            "std": 50.008572040711385
+          },
+          "aspect": {
+            "mean": 1.4043981481481482,
+            "std": 0.19748680847924877
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "garden": {
+          "area": {
+            "mean": 130.08333333333334,
+            "std": 44.74037761227423
+          },
+          "aspect": {
+            "mean": 1.0588235294117645,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 145.78,
+            "std": 39.722967447776895
+          },
+          "aspect": {
+            "mean": 1.1432644110275691,
+            "std": 0.11560462805919938
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "living": {
+          "area": {
+            "mean": 169.29235294117646,
+            "std": 57.0975583622825
+          },
+          "aspect": {
+            "mean": 1.2965102638976727,
+            "std": 0.2711655330241811
+          },
+          "is_fallback": false,
+          "n": 17
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 144.366,
+            "std": 49.70353935083497
+          },
+          "aspect": {
+            "mean": 1.3841666666666668,
+            "std": 0.29361728680564975
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "toilet": {
+          "area": {
+            "mean": 45.95529411764706,
+            "std": 12.824341798336226
+          },
+          "aspect": {
+            "mean": 1.8137232048996754,
+            "std": 0.5660217178353485
+          },
+          "is_fallback": false,
+          "n": 17
+        },
+        "utility": {
+          "area": {
+            "mean": 48.832,
+            "std": 20.259771370871885
+          },
+          "aspect": {
+            "mean": 1.6666666666666672,
+            "std": 0.6947221666888782
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 45.805,
+            "std": 18.81816830441617
+          },
+          "aspect": {
+            "mean": 1.636111111111111,
+            "std": 0.6445222654162412
+          },
+          "is_fallback": false,
+          "n": 6
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 15,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 15,
+          "p_nonrect": 0.06666666666666667
+        },
+        "master_bedroom": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 17,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 6,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Pahari": {
+      "adjacency": {
+        "balcony|bedroom": 1.0,
+        "balcony|kitchen": 0.0,
+        "balcony|living": 0.0,
+        "balcony|master_bedroom": 1.0,
+        "balcony|parking_4w": 1.0,
+        "balcony|staircase": 0.5,
+        "balcony|terrace": 0.5,
+        "balcony|toilet": 0.0,
+        "balcony|wardrobe": 0.0,
+        "bedroom|courtyard": 0.3333333333333333,
+        "bedroom|dining": 0.0,
+        "bedroom|foyer": 0.75,
+        "bedroom|kitchen": 0.14285714285714285,
+        "bedroom|living": 0.6363636363636364,
+        "bedroom|parking_4w": 0.3,
+        "bedroom|seating": 0.6666666666666666,
+        "bedroom|staircase": 0.5,
+        "bedroom|terrace": 0.5,
+        "bedroom|toilet": 0.5238095238095238,
+        "bedroom|utility": 0.0,
+        "courtyard|garden": 0.0,
+        "courtyard|kitchen": 0.5,
+        "courtyard|living": 0.0,
+        "courtyard|parking_4w": 0.0,
+        "courtyard|seating": 0.0,
+        "courtyard|servant_quarter": 0.0,
+        "courtyard|store_room": 0.0,
+        "courtyard|toilet": 0.2,
+        "courtyard|utility": 0.0,
+        "dining|foyer": 1.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 1.0,
+        "dining|master_bedroom": 0.0,
+        "dining|parking_4w": 0.0,
+        "dining|store_room": 1.0,
+        "dining|toilet": 0.2,
+        "dining|utility": 1.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 1.0,
+        "foyer|parking_4w": 1.0,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "garden|kitchen": 1.0,
+        "garden|living": 1.0,
+        "garden|parking_4w": 0.0,
+        "garden|servant_quarter": 0.0,
+        "garden|store_room": 0.0,
+        "garden|toilet": 0.0,
+        "garden|utility": 0.0,
+        "kitchen|living": 0.6,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.14285714285714285,
+        "kitchen|seating": 0.0,
+        "kitchen|servant_quarter": 1.0,
+        "kitchen|store_room": 0.0,
+        "kitchen|terrace": 0.0,
+        "kitchen|toilet": 0.23076923076923078,
+        "kitchen|utility": 1.0,
+        "living|master_bedroom": 1.0,
+        "living|parking_4w": 0.25,
+        "living|seating": 0.0,
+        "living|servant_quarter": 0.0,
+        "living|staircase": 1.0,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.15384615384615385,
+        "living|utility": 0.0,
+        "living|wardrobe": 1.0,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|staircase": 1.0,
+        "master_bedroom|store_room": 0.0,
+        "master_bedroom|terrace": 0.4,
+        "master_bedroom|toilet": 0.75,
+        "master_bedroom|wardrobe": 0.75,
+        "parking_4w|seating": 0.0,
+        "parking_4w|servant_quarter": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.0625,
+        "parking_4w|utility": 0.3333333333333333,
+        "seating|toilet": 0.0,
+        "servant_quarter|store_room": 0.0,
+        "servant_quarter|toilet": 0.0,
+        "servant_quarter|utility": 0.0,
+        "staircase|terrace": 1.0,
+        "staircase|toilet": 0.5,
+        "staircase|wardrobe": 0.0,
+        "store_room|toilet": 0.5,
+        "store_room|utility": 1.0,
+        "terrace|toilet": 0.3333333333333333,
+        "terrace|utility": 0.0,
+        "terrace|wardrobe": 0.5,
+        "toilet|utility": 0.16666666666666666,
+        "toilet|wardrobe": 0.75
+      },
+      "n_designs": 16,
+      "position": {
+        "balcony": {
+          "C": 0.25,
+          "N": 0.25,
+          "SE": 0.25,
+          "W": 0.25
+        },
+        "bedroom": {
+          "C": 0.3333333333333333,
+          "N": 0.16666666666666666,
+          "S": 0.4444444444444444,
+          "W": 0.05555555555555555
+        },
+        "courtyard": {
+          "C": 0.5,
+          "S": 0.5
+        },
+        "dining": {
+          "C": 1.0
+        },
+        "foyer": {
+          "C": 0.6666666666666666,
+          "W": 0.3333333333333333
+        },
+        "garden": {
+          "N": 1.0
+        },
+        "kitchen": {
+          "C": 0.375,
+          "NE": 0.125,
+          "S": 0.5
+        },
+        "living": {
+          "C": 0.7777777777777778,
+          "N": 0.2222222222222222
+        },
+        "master_bedroom": {
+          "C": 0.375,
+          "E": 0.125,
+          "S": 0.5
+        },
+        "parking_4w": {
+          "E": 0.1111111111111111,
+          "N": 0.3333333333333333,
+          "NW": 0.1111111111111111,
+          "SW": 0.1111111111111111,
+          "W": 0.3333333333333333
+        },
+        "seating": {
+          "S": 1.0
+        },
+        "servant_quarter": {
+          "NE": 1.0
+        },
+        "staircase": {
+          "C": 0.6666666666666666,
+          "W": 0.3333333333333333
+        },
+        "store_room": {
+          "E": 1.0
+        },
+        "terrace": {
+          "C": 0.5,
+          "N": 0.5
+        },
+        "toilet": {
+          "C": 0.2608695652173913,
+          "E": 0.17391304347826086,
+          "NE": 0.13043478260869565,
+          "S": 0.17391304347826086,
+          "SE": 0.17391304347826086,
+          "SW": 0.043478260869565216,
+          "W": 0.043478260869565216
+        },
+        "utility": {
+          "E": 0.5,
+          "S": 0.25,
+          "SW": 0.25
+        },
+        "wardrobe": {
+          "C": 0.3333333333333333,
+          "S": 0.3333333333333333,
+          "SW": 0.3333333333333333
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "bedroom": {
+          "area": {
+            "mean": 148.5076,
+            "std": 25.578445344469237
+          },
+          "aspect": {
+            "mean": 1.5011904761904762,
+            "std": 0.3783442495562331
+          },
+          "is_fallback": false,
+          "n": 25
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "dining": {
+          "area": {
+            "mean": 109.03753246753246,
+            "std": 49.557968579789865
+          },
+          "aspect": {
+            "mean": 1.4206542577691639,
+            "std": 0.33306086422941905
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "kitchen": {
+          "area": {
+            "mean": 116.23692307692308,
+            "std": 33.70774468977428
+          },
+          "aspect": {
+            "mean": 1.3620745547022637,
+            "std": 0.33212217392301496
+          },
+          "is_fallback": false,
+          "n": 13
+        },
+        "living": {
+          "area": {
+            "mean": 201.516,
+            "std": 49.7339364753418
+          },
+          "aspect": {
+            "mean": 1.4981185481185482,
+            "std": 0.374155373946951
+          },
+          "is_fallback": false,
+          "n": 15
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 181.1818181818182,
+            "std": 40.94788968214953
+          },
+          "aspect": {
+            "mean": 1.4130503980248228,
+            "std": 0.2592649485459029
+          },
+          "is_fallback": false,
+          "n": 11
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "terrace": {
+          "area": {
+            "mean": 170.672,
+            "std": 55.81918609223893
+          },
+          "aspect": {
+            "mean": 1.9484848484848487,
+            "std": 1.4901220514410898
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "toilet": {
+          "area": {
+            "mean": 42.03896551724138,
+            "std": 13.951999818300079
+          },
+          "aspect": {
+            "mean": 1.3706795761782973,
+            "std": 0.44683188715218575
+          },
+          "is_fallback": false,
+          "n": 29
+        },
+        "utility": {
+          "area": {
+            "mean": 61.0,
+            "std": 39.6331891943392
+          },
+          "aspect": {
+            "mean": 1.4384803921568625,
+            "std": 0.20371805337536897
+          },
+          "is_fallback": false,
+          "n": 7
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "wc_only": {
+          "area": {
+            "mean": 49.41332857142857,
+            "std": 8.100845681905119
+          },
+          "aspect": {
+            "mean": 1.0000000000000007,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 18,
+          "p_nonrect": 0.05555555555555555
+        },
+        "courtyard": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 3,
+          "p_nonrect": 0.3333333333333333
+        },
+        "garden": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 8,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 9,
+          "p_nonrect": 0.1111111111111111
+        },
+        "master_bedroom": {
+          "n": 8,
+          "p_nonrect": 0.25
+        },
+        "parking_4w": {
+          "n": 9,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "servant_quarter": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 23,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 3,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Rajasthani-Haveli": {
+      "adjacency": {
+        "balcony|bedroom": 1.0,
+        "balcony|kitchen": 0.0,
+        "balcony|living": 0.0,
+        "balcony|parking_4w": 1.0,
+        "bedroom|dining": 0.6666666666666666,
+        "bedroom|foyer": 0.0,
+        "bedroom|kitchen": 0.36363636363636365,
+        "bedroom|living": 0.36363636363636365,
+        "bedroom|parking_4w": 0.3333333333333333,
+        "bedroom|seating": 0.0,
+        "bedroom|staircase": 1.0,
+        "bedroom|store_room": 0.3333333333333333,
+        "bedroom|study": 1.0,
+        "bedroom|terrace": 0.25,
+        "bedroom|toilet": 0.42857142857142855,
+        "bedroom|utility": 0.2,
+        "courtyard|store_room": 0.0,
+        "courtyard|toilet": 1.0,
+        "courtyard|utility": 0.0,
+        "dining|duct": 1.0,
+        "dining|foyer": 0.2,
+        "dining|kitchen": 1.0,
+        "dining|living": 0.75,
+        "dining|parking_4w": 0.0,
+        "dining|staircase": 0.5,
+        "dining|store_room": 0.0,
+        "dining|toilet": 0.6666666666666666,
+        "dining|utility": 0.5,
+        "duct|kitchen": 0.0,
+        "duct|living": 1.0,
+        "duct|parking_4w": 0.0,
+        "duct|toilet": 1.0,
+        "duct|utility": 0.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.8571428571428571,
+        "foyer|parking_4w": 0.5,
+        "foyer|passage": 1.0,
+        "foyer|seating": 0.0,
+        "foyer|staircase": 0.0,
+        "foyer|store_room": 0.0,
+        "foyer|toilet": 0.0,
+        "foyer|utility": 0.0,
+        "kitchen|living": 0.14285714285714285,
+        "kitchen|parking_4w": 0.0,
+        "kitchen|staircase": 0.0,
+        "kitchen|store_room": 1.0,
+        "kitchen|toilet": 0.2857142857142857,
+        "kitchen|utility": 1.0,
+        "living|master_bedroom": 0.5,
+        "living|parking_4w": 0.3333333333333333,
+        "living|passage": 1.0,
+        "living|seating": 1.0,
+        "living|staircase": 0.8,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.36363636363636365,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.25,
+        "master_bedroom|staircase": 0.0,
+        "master_bedroom|toilet": 0.75,
+        "master_bedroom|wardrobe": 0.5,
+        "parking_4w|passage": 1.0,
+        "parking_4w|seating": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.25,
+        "parking_4w|utility": 0.0,
+        "seating|store_room": 0.0,
+        "seating|utility": 0.0,
+        "staircase|toilet": 0.5,
+        "staircase|utility": 0.0,
+        "staircase|wardrobe": 0.0,
+        "store_room|toilet": 0.0,
+        "store_room|utility": 1.0,
+        "study|terrace": 1.0,
+        "terrace|toilet": 1.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.6363636363636364
+      },
+      "n_designs": 14,
+      "position": {
+        "balcony": {
+          "N": 1.0
+        },
+        "bedroom": {
+          "C": 0.2222222222222222,
+          "E": 0.05555555555555555,
+          "N": 0.16666666666666666,
+          "S": 0.4444444444444444,
+          "SE": 0.05555555555555555,
+          "W": 0.05555555555555555
+        },
+        "courtyard": {
+          "C": 1.0
+        },
+        "dining": {
+          "C": 0.8,
+          "E": 0.2
+        },
+        "duct": {
+          "W": 1.0
+        },
+        "foyer": {
+          "C": 0.42857142857142855,
+          "N": 0.2857142857142857,
+          "NW": 0.2857142857142857
+        },
+        "kitchen": {
+          "E": 0.1111111111111111,
+          "S": 0.6666666666666666,
+          "SE": 0.2222222222222222
+        },
+        "living": {
+          "C": 0.38461538461538464,
+          "N": 0.38461538461538464,
+          "S": 0.07692307692307693,
+          "W": 0.15384615384615385
+        },
+        "master_bedroom": {
+          "E": 0.3333333333333333,
+          "S": 0.3333333333333333,
+          "SE": 0.3333333333333333
+        },
+        "parking_4w": {
+          "C": 0.2857142857142857,
+          "N": 0.42857142857142855,
+          "NW": 0.14285714285714285,
+          "SW": 0.14285714285714285
+        },
+        "passage": {
+          "C": 1.0
+        },
+        "seating": {
+          "SW": 1.0
+        },
+        "staircase": {
+          "C": 0.5,
+          "E": 0.16666666666666666,
+          "S": 0.16666666666666666,
+          "W": 0.16666666666666666
+        },
+        "store_room": {
+          "C": 0.25,
+          "NE": 0.25,
+          "S": 0.25,
+          "W": 0.25
+        },
+        "study": {
+          "C": 1.0
+        },
+        "terrace": {
+          "N": 0.3333333333333333,
+          "S": 0.6666666666666666
+        },
+        "toilet": {
+          "C": 0.21052631578947367,
+          "E": 0.10526315789473684,
+          "S": 0.2631578947368421,
+          "SW": 0.21052631578947367,
+          "W": 0.21052631578947367
+        },
+        "utility": {
+          "N": 0.14285714285714285,
+          "NE": 0.14285714285714285,
+          "NW": 0.14285714285714285,
+          "S": 0.2857142857142857,
+          "SE": 0.2857142857142857
+        },
+        "wardrobe": {
+          "C": 0.2857142857142857,
+          "E": 0.14285714285714285,
+          "S": 0.14285714285714285,
+          "SW": 0.14285714285714285,
+          "W": 0.2857142857142857
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "bedroom": {
+          "area": {
+            "mean": 146.46809523809523,
+            "std": 31.45514048670819
+          },
+          "aspect": {
+            "mean": 1.4015658948715775,
+            "std": 0.3340948166947661
+          },
+          "is_fallback": false,
+          "n": 21
+        },
+        "courtyard": {
+          "area": {
+            "mean": 87.12892857142857,
+            "std": 27.721086396367983
+          },
+          "aspect": {
+            "mean": 1.5232915319974143,
+            "std": 0.4090315240074653
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "dining": {
+          "area": {
+            "mean": 104.47333333333334,
+            "std": 44.91798736462809
+          },
+          "aspect": {
+            "mean": 1.4479500891265595,
+            "std": 0.29066202669468894
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "garden": {
+          "area": {
+            "mean": 130.08333333333334,
+            "std": 44.74037761227423
+          },
+          "aspect": {
+            "mean": 1.0588235294117645,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "kitchen": {
+          "area": {
+            "mean": 109.44200000000001,
+            "std": 50.613948433213544
+          },
+          "aspect": {
+            "mean": 1.271841008244517,
+            "std": 0.2284011156339918
+          },
+          "is_fallback": false,
+          "n": 10
+        },
+        "living": {
+          "area": {
+            "mean": 172.855,
+            "std": 36.60357296557474
+          },
+          "aspect": {
+            "mean": 1.3009173394731681,
+            "std": 0.24668222721963615
+          },
+          "is_fallback": false,
+          "n": 13
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 164.06607142857143,
+            "std": 37.2808760137425
+          },
+          "aspect": {
+            "mean": 1.287374905493572,
+            "std": 0.22805582092767054
+          },
+          "is_fallback": true,
+          "n": 3
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "passage": {
+          "area": {
+            "mean": 352.58,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 1.565217391304348,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "study": {
+          "area": {
+            "mean": 176.0,
+            "std": 0.0
+          },
+          "aspect": {
+            "mean": 2.0694444444444446,
+            "std": 0.12493699596373944
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "terrace": {
+          "area": {
+            "mean": 187.3590625,
+            "std": 71.23774026584219
+          },
+          "aspect": {
+            "mean": 1.4562763652345023,
+            "std": 0.7870864804128247
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 42.23166666666666,
+            "std": 14.590999223265463
+          },
+          "aspect": {
+            "mean": 1.5547198172198171,
+            "std": 0.4721826608553436
+          },
+          "is_fallback": false,
+          "n": 18
+        },
+        "utility": {
+          "area": {
+            "mean": 41.165625,
+            "std": 7.738668909080876
+          },
+          "aspect": {
+            "mean": 1.865816326530613,
+            "std": 0.8429774103935419
+          },
+          "is_fallback": false,
+          "n": 8
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 54.945,
+            "std": 17.793367444078708
+          },
+          "aspect": {
+            "mean": 1.6281746031746038,
+            "std": 0.3341668056804039
+          },
+          "is_fallback": false,
+          "n": 6
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 18,
+          "p_nonrect": 0.0
+        },
+        "courtyard": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "dining": {
+          "n": 5,
+          "p_nonrect": 0.2
+        },
+        "duct": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 9,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 13,
+          "p_nonrect": 0.07692307692307693
+        },
+        "master_bedroom": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "passage": {
+          "n": 1,
+          "p_nonrect": 1.0
+        },
+        "seating": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 6,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "study": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 3,
+          "p_nonrect": 0.3333333333333333
+        },
+        "toilet": {
+          "n": 19,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 7,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 7,
+          "p_nonrect": 0.0
+        }
+      }
+    },
+    "Tibetan-Buddhist": {
+      "adjacency": {
+        "balcony|bedroom": 0.5,
+        "balcony|pooja": 1.0,
+        "balcony|staircase": 0.0,
+        "balcony|store_room": 1.0,
+        "bedroom|dining": 0.0,
+        "bedroom|foyer": 0.3333333333333333,
+        "bedroom|kitchen": 0.1111111111111111,
+        "bedroom|living": 0.25,
+        "bedroom|parking_4w": 0.2,
+        "bedroom|seating": 0.4,
+        "bedroom|staircase": 0.5,
+        "bedroom|terrace": 0.0,
+        "bedroom|toilet": 0.4583333333333333,
+        "bedroom|utility": 0.0,
+        "bedroom|wardrobe": 0.5,
+        "dining|foyer": 0.0,
+        "dining|kitchen": 1.0,
+        "dining|living": 1.0,
+        "dining|master_bedroom": 0.0,
+        "dining|parking_4w": 0.0,
+        "dining|store_room": 1.0,
+        "dining|toilet": 1.0,
+        "dining|utility": 1.0,
+        "foyer|kitchen": 0.0,
+        "foyer|living": 0.75,
+        "foyer|parking_4w": 1.0,
+        "foyer|seating": 1.0,
+        "foyer|staircase": 0.0,
+        "foyer|toilet": 0.16666666666666666,
+        "foyer|utility": 0.0,
+        "foyer|wardrobe": 0.0,
+        "kitchen|living": 0.6,
+        "kitchen|master_bedroom": 0.0,
+        "kitchen|parking_4w": 0.14285714285714285,
+        "kitchen|seating": 0.0,
+        "kitchen|staircase": 0.0,
+        "kitchen|store_room": 0.0,
+        "kitchen|toilet": 0.125,
+        "kitchen|utility": 1.0,
+        "kitchen|wardrobe": 1.0,
+        "living|master_bedroom": 1.0,
+        "living|parking_4w": 0.5,
+        "living|staircase": 1.0,
+        "living|store_room": 0.0,
+        "living|terrace": 1.0,
+        "living|toilet": 0.5714285714285714,
+        "living|utility": 0.0,
+        "living|wardrobe": 0.6666666666666666,
+        "master_bedroom|parking_4w": 0.0,
+        "master_bedroom|store_room": 0.0,
+        "master_bedroom|terrace": 1.0,
+        "master_bedroom|utility": 0.0,
+        "master_bedroom|wardrobe": 0.6666666666666666,
+        "parking_4w|seating": 0.0,
+        "parking_4w|staircase": 0.0,
+        "parking_4w|store_room": 0.0,
+        "parking_4w|toilet": 0.14285714285714285,
+        "parking_4w|utility": 0.0,
+        "parking_4w|wardrobe": 0.0,
+        "pooja|store_room": 1.0,
+        "seating|toilet": 0.25,
+        "staircase|toilet": 0.75,
+        "staircase|wardrobe": 0.0,
+        "terrace|wardrobe": 1.0,
+        "toilet|utility": 0.0,
+        "toilet|wardrobe": 0.6
+      },
+      "n_designs": 12,
+      "position": {
+        "balcony": {
+          "C": 0.6666666666666666,
+          "S": 0.3333333333333333
+        },
+        "bedroom": {
+          "C": 0.4,
+          "N": 0.1,
+          "NW": 0.1,
+          "S": 0.35,
+          "W": 0.05
+        },
+        "dining": {
+          "C": 0.75,
+          "S": 0.25
+        },
+        "foyer": {
+          "C": 0.2,
+          "E": 0.4,
+          "N": 0.4
+        },
+        "kitchen": {
+          "C": 0.4444444444444444,
+          "S": 0.1111111111111111,
+          "SE": 0.1111111111111111,
+          "SW": 0.2222222222222222,
+          "W": 0.1111111111111111
+        },
+        "living": {
+          "C": 0.7,
+          "N": 0.1,
+          "S": 0.2
+        },
+        "master_bedroom": {
+          "C": 0.2,
+          "E": 0.2,
+          "S": 0.6
+        },
+        "parking_4w": {
+          "C": 0.125,
+          "E": 0.125,
+          "N": 0.25,
+          "NE": 0.125,
+          "NW": 0.125,
+          "SW": 0.125,
+          "W": 0.125
+        },
+        "pooja": {
+          "C": 1.0
+        },
+        "seating": {
+          "C": 1.0
+        },
+        "staircase": {
+          "C": 0.75,
+          "N": 0.25
+        },
+        "store_room": {
+          "E": 0.5,
+          "SW": 0.5
+        },
+        "terrace": {
+          "C": 0.5,
+          "N": 0.5
+        },
+        "toilet": {
+          "C": 0.3333333333333333,
+          "E": 0.1111111111111111,
+          "S": 0.5555555555555556
+        },
+        "utility": {
+          "C": 0.25,
+          "SE": 0.5,
+          "SW": 0.25
+        },
+        "wardrobe": {
+          "C": 0.8,
+          "S": 0.2
+        }
+      },
+      "rooms": {
+        "balcony": {
+          "area": {
+            "mean": 136.61235294117645,
+            "std": 79.43360886925055
+          },
+          "aspect": {
+            "mean": 1.833076563958917,
+            "std": 0.34873315228401064
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "bedroom": {
+          "area": {
+            "mean": 149.91649999999998,
+            "std": 27.961345868001416
+          },
+          "aspect": {
+            "mean": 1.1888634359141121,
+            "std": 0.14147137966515888
+          },
+          "is_fallback": false,
+          "n": 20
+        },
+        "dining": {
+          "area": {
+            "mean": 88.45166666666667,
+            "std": 31.294513052965407
+          },
+          "aspect": {
+            "mean": 1.1566176470588232,
+            "std": 0.10668354961185601
+          },
+          "is_fallback": false,
+          "n": 6
+        },
+        "foyer": {
+          "area": {
+            "mean": 72.81911111111111,
+            "std": 42.703041516564504
+          },
+          "aspect": {
+            "mean": 1.682711555541541,
+            "std": 0.5404723939447944
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "garden": {
+          "area": {
+            "mean": 130.08333333333334,
+            "std": 44.74037761227423
+          },
+          "aspect": {
+            "mean": 1.0588235294117645,
+            "std": 0.0
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "kitchen": {
+          "area": {
+            "mean": 111.42727272727274,
+            "std": 29.955611734367324
+          },
+          "aspect": {
+            "mean": 1.4657257774904835,
+            "std": 0.3551648641093806
+          },
+          "is_fallback": false,
+          "n": 11
+        },
+        "living": {
+          "area": {
+            "mean": 199.2618181818182,
+            "std": 81.75711776833332
+          },
+          "aspect": {
+            "mean": 1.2833209443690388,
+            "std": 0.11394717634626655
+          },
+          "is_fallback": false,
+          "n": 11
+        },
+        "master_bedroom": {
+          "area": {
+            "mean": 216.2,
+            "std": 13.503147781165694
+          },
+          "aspect": {
+            "mean": 1.2232852824924438,
+            "std": 0.1063982517389837
+          },
+          "is_fallback": false,
+          "n": 5
+        },
+        "parking_4w": {
+          "area": {
+            "mean": 224.08905000000001,
+            "std": 108.41627051398268
+          },
+          "aspect": {
+            "mean": 2.6442205724558665,
+            "std": 1.9183767876360105
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "pooja": {
+          "area": {
+            "mean": 132.2625,
+            "std": 117.05300815762916
+          },
+          "aspect": {
+            "mean": 1.5650992685475438,
+            "std": 0.07994939159128157
+          },
+          "is_fallback": true,
+          "n": 1
+        },
+        "seating": {
+          "area": {
+            "mean": 116.306,
+            "std": 40.436114106080964
+          },
+          "aspect": {
+            "mean": 1.892700156985871,
+            "std": 0.7215700595767008
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "store_room": {
+          "area": {
+            "mean": 41.95184210526316,
+            "std": 19.436106098981316
+          },
+          "aspect": {
+            "mean": 1.278910636147478,
+            "std": 0.3575641921735434
+          },
+          "is_fallback": true,
+          "n": 2
+        },
+        "toilet": {
+          "area": {
+            "mean": 35.44736842105263,
+            "std": 12.314178324664393
+          },
+          "aspect": {
+            "mean": 1.4394993894993893,
+            "std": 0.3127829663881645
+          },
+          "is_fallback": false,
+          "n": 19
+        },
+        "utility": {
+          "area": {
+            "mean": 48.106799242424245,
+            "std": 22.619139673282092
+          },
+          "aspect": {
+            "mean": 1.565320483702837,
+            "std": 0.7178193385534605
+          },
+          "is_fallback": true,
+          "n": 4
+        },
+        "wardrobe": {
+          "area": {
+            "mean": 49.094530516431924,
+            "std": 18.83636673851703
+          },
+          "aspect": {
+            "mean": 1.4913713217857605,
+            "std": 0.5264750172890611
+          },
+          "is_fallback": true,
+          "n": 4
+        }
+      },
+      "shape_usage": {
+        "balcony": {
+          "n": 3,
+          "p_nonrect": 0.0
+        },
+        "bedroom": {
+          "n": 20,
+          "p_nonrect": 0.05
+        },
+        "dining": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "foyer": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "kitchen": {
+          "n": 9,
+          "p_nonrect": 0.0
+        },
+        "living": {
+          "n": 10,
+          "p_nonrect": 0.2
+        },
+        "master_bedroom": {
+          "n": 5,
+          "p_nonrect": 0.0
+        },
+        "parking_4w": {
+          "n": 8,
+          "p_nonrect": 0.0
+        },
+        "pooja": {
+          "n": 1,
+          "p_nonrect": 0.0
+        },
+        "seating": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "staircase": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "store_room": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "terrace": {
+          "n": 2,
+          "p_nonrect": 0.0
+        },
+        "toilet": {
+          "n": 18,
+          "p_nonrect": 0.0
+        },
+        "utility": {
+          "n": 4,
+          "p_nonrect": 0.0
+        },
+        "wardrobe": {
+          "n": 5,
+          "p_nonrect": 0.0
+        }
+      }
+    }
+  },
+  "corpus_wide": {
+    "balcony": {
+      "area": {
+        "mean": 136.61235294117645,
+        "std": 79.43360886925055
+      },
+      "aspect": {
+        "mean": 1.833076563958917,
+        "std": 0.34873315228401064
+      },
+      "is_fallback": false,
+      "n": 17
+    },
+    "bedroom": {
+      "area": {
+        "mean": 150.4483385579937,
+        "std": 33.08507361312186
+      },
+      "aspect": {
+        "mean": 1.2949655543950684,
+        "std": 0.2716915082369688
+      },
+      "is_fallback": false,
+      "n": 319
+    },
+    "courtyard": {
+      "area": {
+        "mean": 87.12892857142857,
+        "std": 27.721086396367983
+      },
+      "aspect": {
+        "mean": 1.5232915319974143,
+        "std": 0.4090315240074653
+      },
+      "is_fallback": false,
+      "n": 28
+    },
+    "dining": {
+      "area": {
+        "mean": 109.03753246753246,
+        "std": 49.557968579789865
+      },
+      "aspect": {
+        "mean": 1.4206542577691639,
+        "std": 0.33306086422941905
+      },
+      "is_fallback": false,
+      "n": 77
+    },
+    "foyer": {
+      "area": {
+        "mean": 72.81911111111111,
+        "std": 42.703041516564504
+      },
+      "aspect": {
+        "mean": 1.682711555541541,
+        "std": 0.5404723939447944
+      },
+      "is_fallback": false,
+      "n": 45
+    },
+    "garden": {
+      "area": {
+        "mean": 130.08333333333334,
+        "std": 44.74037761227423
+      },
+      "aspect": {
+        "mean": 1.0588235294117645,
+        "std": 0.0
+      },
+      "is_fallback": false,
+      "n": 6
+    },
+    "kitchen": {
+      "area": {
+        "mean": 122.66169642857143,
+        "std": 38.76925208130225
+      },
+      "aspect": {
+        "mean": 1.3371157275816719,
+        "std": 0.2881534230018143
+      },
+      "is_fallback": false,
+      "n": 112
+    },
+    "living": {
+      "area": {
+        "mean": 185.94416336633662,
+        "std": 58.223160851185455
+      },
+      "aspect": {
+        "mean": 1.3241043924337514,
+        "std": 0.2872980835002091
+      },
+      "is_fallback": false,
+      "n": 202
+    },
+    "master_bedroom": {
+      "area": {
+        "mean": 164.06607142857143,
+        "std": 37.2808760137425
+      },
+      "aspect": {
+        "mean": 1.287374905493572,
+        "std": 0.22805582092767054
+      },
+      "is_fallback": false,
+      "n": 70
+    },
+    "parking_4w": {
+      "area": {
+        "mean": 224.08905000000001,
+        "std": 108.41627051398268
+      },
+      "aspect": {
+        "mean": 2.6442205724558665,
+        "std": 1.9183767876360105
+      },
+      "is_fallback": false,
+      "n": 14
+    },
+    "passage": {
+      "area": {
+        "mean": 352.58,
+        "std": 0.0
+      },
+      "aspect": {
+        "mean": 1.565217391304348,
+        "std": 0.0
+      },
+      "is_fallback": false,
+      "n": 1
+    },
+    "pooja": {
+      "area": {
+        "mean": 132.2625,
+        "std": 117.05300815762916
+      },
+      "aspect": {
+        "mean": 1.5650992685475438,
+        "std": 0.07994939159128157
+      },
+      "is_fallback": false,
+      "n": 4
+    },
+    "seating": {
+      "area": {
+        "mean": 116.306,
+        "std": 40.436114106080964
+      },
+      "aspect": {
+        "mean": 1.892700156985871,
+        "std": 0.7215700595767008
+      },
+      "is_fallback": false,
+      "n": 10
+    },
+    "staircase": {
+      "area": {
+        "mean": 100.0,
+        "std": 0.0
+      },
+      "aspect": {
+        "mean": 1.8999999999999988,
+        "std": 0.0
+      },
+      "is_fallback": false,
+      "n": 1
+    },
+    "store_room": {
+      "area": {
+        "mean": 41.95184210526316,
+        "std": 19.436106098981316
+      },
+      "aspect": {
+        "mean": 1.278910636147478,
+        "std": 0.3575641921735434
+      },
+      "is_fallback": false,
+      "n": 38
+    },
+    "study": {
+      "area": {
+        "mean": 176.0,
+        "std": 0.0
+      },
+      "aspect": {
+        "mean": 2.0694444444444446,
+        "std": 0.12493699596373944
+      },
+      "is_fallback": false,
+      "n": 6
+    },
+    "terrace": {
+      "area": {
+        "mean": 187.3590625,
+        "std": 71.23774026584219
+      },
+      "aspect": {
+        "mean": 1.4562763652345023,
+        "std": 0.7870864804128247
+      },
+      "is_fallback": false,
+      "n": 32
+    },
+    "toilet": {
+      "area": {
+        "mean": 42.05501859979101,
+        "std": 12.410570794441636
+      },
+      "aspect": {
+        "mean": 1.4476539782703735,
+        "std": 0.41969511438834806
+      },
+      "is_fallback": false,
+      "n": 319
+    },
+    "utility": {
+      "area": {
+        "mean": 48.106799242424245,
+        "std": 22.619139673282092
+      },
+      "aspect": {
+        "mean": 1.565320483702837,
+        "std": 0.7178193385534605
+      },
+      "is_fallback": false,
+      "n": 88
+    },
+    "verandah": {
+      "area": {
+        "mean": 48.25,
+        "std": 12.25
+      },
+      "aspect": {
+        "mean": 1.272727272727273,
+        "std": 0.0
+      },
+      "is_fallback": false,
+      "n": 2
+    },
+    "wardrobe": {
+      "area": {
+        "mean": 49.094530516431924,
+        "std": 18.83636673851703
+      },
+      "aspect": {
+        "mean": 1.4913713217857605,
+        "std": 0.5264750172890611
+      },
+      "is_fallback": false,
+      "n": 71
+    },
+    "washbasin_nook": {
+      "area": {
+        "mean": 15.2,
+        "std": 0.0
+      },
+      "aspect": {
+        "mean": 1.111111111111111,
+        "std": 0.0
+      },
+      "is_fallback": false,
+      "n": 1
+    },
+    "wc_only": {
+      "area": {
+        "mean": 49.41332857142857,
+        "std": 8.100845681905119
+      },
+      "aspect": {
+        "mean": 1.0000000000000007,
+        "std": 0.0
+      },
+      "is_fallback": false,
+      "n": 7
+    }
+  },
+  "source_extract_count": 205,
+  "version": "2026-08-24"
+}
