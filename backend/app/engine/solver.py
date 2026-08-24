@@ -254,8 +254,12 @@ ADJACENCY_PRIOR_WEIGHT = 5_000
 # happen is the corpus REORDERING two Vastu tiers, and the tiers are only
 # 0 / 90 000 / 165 000 / 300 000 apart (VERDICT_* x VASTU_WEIGHT), so the
 # binding number is the narrowest gap between them, 75 000. The largest swing
-# this term can produce between two cells is one full weight, so anything
-# below 75 000 leaves every Vastu ranking intact.
+# this term can produce for ONE ROOM between two cells is one full weight, so
+# below 75 000 no single room's Vastu ranking can be reordered by this term
+# alone. This is a per-room bound, not a global one -- several rooms' rewards
+# can jointly exceed 75 000 (e.g. ~79k across a Kerala 2BHK's C-favoured
+# rooms), it just isn't realizable here since those rooms can't all occupy
+# one cell without overlapping.
 #
 # The floor comes from the OTHER half — courtyard, verandah, foyer, terrace
 # and friends have no Vastu rule at all, so there the only rival positional
@@ -1829,9 +1833,13 @@ def _add_position_prior_terms(
     predicate containing `w`/`d` lets the solver buy its way into a zone by
     RESIZING rather than moving, and under a reward that gaming is if anything
     more attractive than under Vastu's penalty — grow into the rewarded cell,
-    collect, and let `_add_size_prior_terms` eat the size cost. The residual
-    error is bounded by half the room's minimum extent and only matters for a
-    room already sitting on a band boundary.
+    collect, and let `_add_size_prior_terms` eat the size cost. With `w`/`d`
+    fixed out of the predicate there is no resize incentive at all. The
+    anchor-vs-true-centroid gap this leaves is `(w - min_w) / 2`, bounded by
+    half the room's SIZE SLACK (max extent minus min extent), not by its
+    minimum extent -- a room pinned at its minimum has zero gap regardless of
+    how large that minimum is. Only matters for a room already sitting on a
+    band boundary.
 
     HARD-EXCLUDED CELLS ARE NEVER REWARDED.
 
