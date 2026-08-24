@@ -7,6 +7,7 @@ from scripts.mine_corpus_priors import (
     RoomRecord,
     bbox_looks_normalized,
     load_extracts,
+    mine_adjacency_priors,
     mine_size_priors,
 )
 
@@ -296,3 +297,132 @@ def test_pixel_space_bbox_excluded_from_aspect_but_kept_for_area() -> None:
     assert stat.area_mean == 150.0
     # aspect stats: only the normalized-bbox record counts.
     assert stat.aspect_mean == pytest.approx(2.0)
+
+
+def test_adjacency_detects_touching_bboxes() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.2, 0.2),
+            flagged=False,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="DINING",
+            room_type="dining",
+            area_sqft=100.0,
+            bbox=(0.2, 0.0, 0.4, 0.2),  # shares the x=0.2 edge
+            flagged=False,
+        ),
+    ]
+    table = mine_adjacency_priors(records)
+    key = tuple(sorted(("kitchen", "dining")))
+    assert table["Kerala"][key] == 1.0
+
+
+def test_adjacency_zero_for_non_touching_rooms() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.1, 0.1),
+            flagged=False,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="BEDROOM",
+            room_type="bedroom",
+            area_sqft=100.0,
+            bbox=(0.5, 0.5, 0.6, 0.6),
+            flagged=False,
+        ),
+    ]
+    table = mine_adjacency_priors(records)
+    key = tuple(sorted(("kitchen", "bedroom")))
+    assert table["Kerala"].get(key, 0.0) == 0.0
+
+
+def test_adjacency_excludes_pixel_space_bboxes() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.39, 150, 0.58, 370),  # pixel-space
+            flagged=False,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="DINING",
+            room_type="dining",
+            area_sqft=100.0,
+            bbox=(0.39, 150, 0.78, 370),  # would "touch" the above naively
+            flagged=False,
+        ),
+    ]
+    table = mine_adjacency_priors(records)
+    key = tuple(sorted(("kitchen", "dining")))
+    assert key not in table.get("Kerala", {})
+    assert key not in table.get(None, {})
+
+
+def test_adjacency_single_room_floor_has_no_pairs() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.2, 0.2),
+            flagged=False,
+        ),
+    ]
+    table = mine_adjacency_priors(records)
+    assert table["Kerala"] == {}
+
+
+def test_adjacency_excludes_same_room_type_pairs() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="BEDROOM",
+            room_type="bedroom",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.2, 0.2),
+            flagged=False,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="BEDROOM 2",
+            room_type="bedroom",
+            area_sqft=100.0,
+            bbox=(0.2, 0.0, 0.4, 0.2),
+            flagged=False,
+        ),
+    ]
+    table = mine_adjacency_priors(records)
+    assert table["Kerala"] == {}

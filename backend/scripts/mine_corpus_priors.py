@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import statistics
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 
 from app.engine.models import RoomType
@@ -172,3 +173,74 @@ def mine_size_priors(
                 )
 
     return table
+
+
+AdjacencyKey = tuple[RoomType, RoomType]
+
+
+def _bboxes_touch(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+    tol: float,
+) -> bool:
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    x_gap = max(ax0, bx0) - min(ax1, bx1)
+    y_gap = max(ay0, by0) - min(ay1, by1)
+    return x_gap <= tol and y_gap <= tol
+
+
+def mine_adjacency_priors(
+    records: list[RoomRecord], touch_tol: float = 0.02
+) -> dict[str | None, dict[AdjacencyKey, float]]:
+    """Frequency (0-1) that two RoomTypes' bboxes touch/overlap on the same floor.
+
+    Adjacency is only meaningful within one floor of one design, so records are
+    first grouped by (style, design, floor). Bbox-touching in normalized 0-1
+    sheet coordinates is a PROXY for real adjacency, not ground truth -- OCR
+    bbox imprecision and differing sheet layouts across designs mean touch_tol
+    is a tunable, not a fact. This feeds a soft CP-SAT objective term later,
+    never a hard constraint.
+
+    Records whose bbox fails bbox_looks_normalized() are excluded entirely --
+    ~14.66% of the corpus has pixel-space bboxes (see mine_size_priors' fix),
+    and only 31% of those are caught by `flagged`, so this guard is required
+    independently rather than inherited for free. A pixel-space bbox can never
+    meaningfully "touch" a normalized one, and comparing two pixel-space
+    bboxes against a normalized-unit tolerance is equally meaningless.
+
+    Pairs are stored with the lexicographically smaller RoomType first, so
+    (a, b) and (b, a) never both appear. Same-RoomType pairs (e.g. two
+    bedrooms) are excluded -- adjacency priors are for distinct room types.
+    """
+    floors: dict[tuple[str, str, str], list[RoomRecord]] = {}
+    for r in records:
+        if r.flagged or r.room_type is None or not bbox_looks_normalized(r.bbox):
+            continue
+        floors.setdefault((r.style, r.design, r.floor), []).append(r)
+
+    def _count(keys: list[tuple[str, str, str]]) -> dict[AdjacencyKey, float]:
+        touches: dict[AdjacencyKey, int] = {}
+        totals: dict[AdjacencyKey, int] = {}
+        for fkey in keys:
+            for a, b in combinations(floors[fkey], 2):
+                if a.room_type == b.room_type:
+                    continue
+                assert a.room_type is not None
+                assert b.room_type is not None
+                pair: AdjacencyKey = (
+                    (a.room_type, b.room_type)
+                    if a.room_type < b.room_type
+                    else (b.room_type, a.room_type)
+                )
+                totals[pair] = totals.get(pair, 0) + 1
+                if _bboxes_touch(a.bbox, b.bbox, touch_tol):
+                    touches[pair] = touches.get(pair, 0) + 1
+        return {pair: touches.get(pair, 0) / n for pair, n in totals.items()}
+
+    result: dict[str | None, dict[AdjacencyKey, float]] = {
+        None: _count(list(floors.keys()))
+    }
+    for style in {k[0] for k in floors}:
+        result[style] = _count([k for k in floors if k[0] == style])
+    return result
