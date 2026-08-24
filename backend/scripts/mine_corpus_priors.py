@@ -295,3 +295,75 @@ def mine_position_priors(
     for style in {r.style for r in records}:
         result[style] = _histograms([r for r in records if r.style == style])
     return result
+
+
+@dataclass(frozen=True)
+class ShapeUsageStat:
+    p_nonrect: float
+    n: int
+
+
+def _bbox_contained(
+    inner: tuple[float, float, float, float],
+    outer: tuple[float, float, float, float],
+    min_fraction: float = 0.7,
+) -> bool:
+    ix0, iy0, ix1, iy1 = inner
+    ox0, oy0, ox1, oy1 = outer
+    cx0, cy0 = max(ix0, ox0), max(iy0, oy0)
+    cx1, cy1 = min(ix1, ox1), min(iy1, oy1)
+    if cx1 <= cx0 or cy1 <= cy0:
+        return False
+    inter_area = (cx1 - cx0) * (cy1 - cy0)
+    inner_area = (ix1 - ix0) * (iy1 - iy0)
+    return inner_area > 0 and inter_area / inner_area >= min_fraction
+
+
+def mine_shape_usage_priors(
+    records: list[RoomRecord],
+) -> dict[str | None, dict[RoomType, ShapeUsageStat]]:
+    """Confidence signal for how often a RoomType looks non-rectangular per style.
+
+    Detected via bbox containment: another room on the same floor whose bbox
+    is mostly (>=70% of its own area) contained inside this room's bbox --
+    e.g. a toilet carved into a bedroom -- is a real, detectable
+    non-rectangularity signal from 2D bbox data alone. This function does
+    NOT attempt to infer a specific L/T/U template or ratio -- that needs
+    the actual plan image, not the OCR bbox. It only produces a confidence
+    signal (how often is this RoomType non-rectangular for this style),
+    nothing more.
+
+    Excludes flagged and non-bbox_looks_normalized records (same guard as
+    size/adjacency/position mining) -- a pixel-space bbox could spuriously
+    "contain" many small normalized ones, or vice versa.
+    """
+    floors: dict[tuple[str, str, str], list[RoomRecord]] = {}
+    for r in records:
+        if r.flagged or r.room_type is None or not bbox_looks_normalized(r.bbox):
+            continue
+        floors.setdefault((r.style, r.design, r.floor), []).append(r)
+
+    def _stats(keys: list[tuple[str, str, str]]) -> dict[RoomType, ShapeUsageStat]:
+        nonrect: dict[RoomType, int] = {}
+        total: dict[RoomType, int] = {}
+        for fkey in keys:
+            rooms = floors[fkey]
+            for r in rooms:
+                assert r.room_type is not None
+                total[r.room_type] = total.get(r.room_type, 0) + 1
+                has_carved_neighbour = any(
+                    other is not r and _bbox_contained(other.bbox, r.bbox)
+                    for other in rooms
+                )
+                if has_carved_neighbour:
+                    nonrect[r.room_type] = nonrect.get(r.room_type, 0) + 1
+        return {
+            rt: ShapeUsageStat(nonrect.get(rt, 0) / n, n) for rt, n in total.items()
+        }
+
+    result: dict[str | None, dict[RoomType, ShapeUsageStat]] = {
+        None: _stats(list(floors.keys()))
+    }
+    for style in {k[0] for k in floors}:
+        result[style] = _stats([k for k in floors if k[0] == style])
+    return result

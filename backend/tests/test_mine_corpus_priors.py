@@ -9,6 +9,7 @@ from scripts.mine_corpus_priors import (
     load_extracts,
     mine_adjacency_priors,
     mine_position_priors,
+    mine_shape_usage_priors,
     mine_size_priors,
 )
 
@@ -477,4 +478,77 @@ def test_position_priors_excludes_flagged_and_pixel_space_records() -> None:
     table = mine_position_priors(records)
     assert "toilet" not in table["Kerala"]
     assert "kitchen" not in table["Kerala"]
+    assert table[None] == {}
+
+
+def test_shape_usage_flags_room_with_a_carved_neighbour() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="BEDROOM",
+            room_type="bedroom",
+            area_sqft=200.0,
+            bbox=(0.0, 0.0, 0.4, 0.4),
+            flagged=False,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="TOILET",
+            room_type="toilet",
+            area_sqft=20.0,
+            bbox=(0.02, 0.02, 0.12, 0.12),  # contained in bedroom
+            flagged=False,
+        ),
+    ]
+    table = mine_shape_usage_priors(records)
+    assert table["Kerala"]["bedroom"].p_nonrect == 1.0
+
+
+def test_shape_usage_zero_for_a_plain_rectangle() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.2, 0.2),
+            flagged=False,
+        ),
+    ]
+    table = mine_shape_usage_priors(records)
+    assert table["Kerala"]["kitchen"].p_nonrect == 0.0
+
+
+def test_shape_usage_excludes_flagged_and_pixel_space_records() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="BEDROOM",
+            room_type="bedroom",
+            area_sqft=200.0,
+            bbox=(0.0, 0.0, 0.4, 0.4),
+            flagged=True,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.39, 150, 0.58, 370),  # pixel-space
+            flagged=False,
+        ),
+    ]
+    table = mine_shape_usage_priors(records)
+    assert "bedroom" not in table.get("Kerala", {})
+    assert "kitchen" not in table.get("Kerala", {})
     assert table[None] == {}
