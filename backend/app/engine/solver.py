@@ -20,6 +20,7 @@ from typing import Callable, NamedTuple
 
 from ortools.sat.python import cp_model
 
+from .corpus_priors import get_size_prior
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
 from .vastu import ZONE_GRID_ROAD_S, _rule_for, _verdict, resolve_north_angle
@@ -208,6 +209,21 @@ _PARKING_TYPES = {"parking", "parking_4w", "parking_2w"}
 # are SE/SW/N, which on the common road_side="S" plot IS the front band the
 # toilet penalty is already pushing it out of.
 VASTU_WEIGHT = 300_000
+
+# ── Corpus-mined size priors (opt-in via cfg.corpus_priors_enabled) ──────────
+# The mined corpus is imperial: 1 sqft = 0.09290304 m² = 92903.04 mm².
+_SQFT_TO_MM2 = 92903.04
+# Resolution the size deviation is quantised to, in units per standard
+# deviation — 100 means 0.01 sigma. See `_add_size_prior_terms` for why the
+# inverse-std weighting has to live in this divisor rather than in the
+# objective coefficient.
+SIZE_PRIOR_UNITS_PER_STD = 100
+# Cost of one 0.01-sigma unit, so a full 1-sigma miss costs 10 000: above
+# ALIGN_BONUS (2 500), an order of magnitude below VASTU_WEIGHT and the
+# placement penalties, i.e. a nudge that cannot outvote a stated preference.
+# Task 13 tunes this against the GCS regression baseline — not here.
+SIZE_PRIOR_WEIGHT = 100
+
 # Zones that may carry a HARD exclusion at all (spec: Safety / Global
 # Constraints). Everything outside this pair stays soft on every room type.
 VASTU_HARD_EXCLUDE_ZONES = frozenset({"NE", "C"})
@@ -1516,6 +1532,67 @@ def _var_min(var: cp_model.IntVar) -> int:
     return int(var.proto.domain[0])
 
 
+def _var_max(var: cp_model.IntVar) -> int:
+    """Declared upper bound of an IntVar, as a plain int.
+
+    The `tuple(...)` is load-bearing: `proto.domain` is a protobuf repeated
+    scalar container and `[-1]` on one silently returns 0 rather than the
+    bound (see app/engine/CLAUDE.md).
+    """
+    return int(tuple(var.proto.domain)[-1])
+
+
+def _add_size_prior_terms(
+    model: cp_model.CpModel,
+    cfg: PlotConfig,
+    room_vars: list[_RoomVar],
+) -> list[tuple[int, cp_model.IntVar]]:
+    """Soft penalty for a room's area straying from its style's corpus mean.
+
+    Mirrors `_add_vastu_terms`: pure (cost, var) soft terms for `base_objective`,
+    no hard bound, and room types the corpus has no data for are skipped
+    entirely rather than given a middling cost. Only built when
+    `cfg.corpus_priors_enabled`.
+
+    THE INVERSE-STD WEIGHTING LIVES IN THE UNIT, NOT IN THE COEFFICIENT.
+
+    The natural formulation — weight the raw mm² deviation by `K / std` —
+    cannot work here, because an objective coefficient must be a positive
+    integer. One standard deviation is *millions* of mm² (a 20 sqft std is
+    1.86e6 mm²), so the smallest legal coefficient, 1, already prices a
+    1-sigma miss at ~2 000 000: an order of magnitude above `VASTU_WEIGHT`,
+    turning an intended nudge into the dominant term in the whole model.
+
+    So the deviation is DIVIDED instead, by `std / SIZE_PRIOR_UNITS_PER_STD`,
+    which re-expresses it in hundredths of a standard deviation. That is where
+    the z-score-style weighting comes from: a room type the corpus is
+    consistent about (small std) buys fewer mm² per unit, so the same absolute
+    miss costs proportionally more than it would for a type the corpus itself
+    disagrees on. Every room then shares one flat `SIZE_PRIOR_WEIGHT`.
+    """
+    terms: list[tuple[int, cp_model.IntVar]] = []
+    for rv in room_vars:
+        prior = get_size_prior(cfg, rv.room_type)
+        if prior is None or prior.area_std <= 0:
+            continue
+        target_mm2 = round(prior.area_mean * _SQFT_TO_MM2)
+        unit = max(1, round(prior.area_std * _SQFT_TO_MM2 / SIZE_PRIOR_UNITS_PER_STD))
+        # Bounds derived from the room's own declared w/d domains, so these
+        # vars are never wider than the values they can actually take.
+        max_area = _var_max(rv.w) * _var_max(rv.d)
+        max_dev = max(target_mm2, max_area)
+        area = model.new_int_var(0, max_area, f"size_prior_area_{rv.room_id}")
+        model.add_multiplication_equality(area, [rv.w, rv.d])
+        dev = model.new_int_var(0, max_dev, f"size_prior_dev_{rv.room_id}")
+        model.add_abs_equality(dev, area - target_mm2)
+        dev_units = model.new_int_var(
+            0, max_dev // unit, f"size_prior_devu_{rv.room_id}"
+        )
+        model.add_division_equality(dev_units, dev, unit)
+        terms.append((SIZE_PRIOR_WEIGHT, dev_units))
+    return terms
+
+
 def _add_vastu_terms(
     model: cp_model.CpModel,
     cfg: PlotConfig,
@@ -2146,6 +2223,11 @@ def _solve_one(
     if cfg.vastu_enabled and vastu_steering:
         vastu_terms = _add_vastu_terms(model, cfg, room_vars, ox, oy)
 
+    # ── Corpus-mined size priors ─────────────────────────────────────────────
+    size_prior_terms: list[tuple[int, cp_model.IntVar]] = []
+    if cfg.corpus_priors_enabled:
+        size_prior_terms = _add_size_prior_terms(model, cfg, room_vars)
+
     base_objective = (
         sum(dist_terms)
         - sum(size_terms)
@@ -2154,6 +2236,7 @@ def _solve_one(
         + sum(wet_shrink_terms)
         + deviation_weight * sum(deviation_terms)
         + sum(cost * var for cost, var in vastu_terms)
+        + sum(cost * var for cost, var in size_prior_terms)
     )
 
     # ── Solve ─────────────────────────────────────────────────────────────────

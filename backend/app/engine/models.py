@@ -324,6 +324,11 @@ class PlotConfig:
     # terms (a later phase) read this, to pick a style-specific prior over
     # the corpus-wide fallback.
     style_preset: str | None = None
+    # Soft-nudge the solver toward corpus-mined size/adjacency/position/shape
+    # patterns (docs/plans/2026-08-24-corpus-learned-generation-priors-design.md).
+    # OFF by default until weight-tuning (a later task) validates it against
+    # the GCS regression baseline.
+    corpus_priors_enabled: bool = False
 
     def __init__(
         self,
