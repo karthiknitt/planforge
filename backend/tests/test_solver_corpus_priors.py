@@ -610,3 +610,174 @@ def test_position_prior_does_not_alter_vastu_hard_exclusions():
             )
             assert zone not in ("NE", "C"), f"{room.type} {room.id} landed in {zone}"
     assert checked >= 2
+
+
+# ── Corpus-mined shape usage (Task 11) ───────────────────────────────────────
+#
+# Task 11 is NOT an `_add_*_prior_terms` objective term. Template choice is
+# resolved in plain Python before the CP-SAT model exists (see the solver's
+# SHAPE USAGE IS NOT A DECISION VARIABLE note), so these tests exercise a
+# pre-model gate, not a `(cost, var)` pair. The flag-off posture is unchanged:
+# spy on the gate and assert it is never consulted.
+
+
+def _templatable_types() -> list[str]:
+    return sorted(S._TEMPLATE_TYPES)
+
+
+def _spy_gate(monkeypatch) -> list[tuple[str, str]]:
+    seen: list[tuple[str, str]] = []
+    real = S._shape_usage_allows_template
+
+    def spy(cfg, room_id, room_type):
+        seen.append((room_id, room_type))
+        return real(cfg, room_id, room_type)
+
+    monkeypatch.setattr(S, "_shape_usage_allows_template", spy)
+    return seen
+
+
+def test_shape_gate_never_consulted_when_templates_are_disallowed(monkeypatch):
+    """`allow_shape_templates` off is the outer gate: nothing corpus runs."""
+    seen = _spy_gate(monkeypatch)
+    layout = S.solve_layout(
+        _cfg(
+            style_preset="Tibetan-Buddhist",
+            corpus_priors_enabled=True,
+            allow_shape_templates=False,
+        )
+    )
+    assert layout is not None
+    assert seen == []
+    assert all(r.template == "RECT" for r in layout.ground_floor.rooms)
+
+
+def test_shape_gate_never_consulted_when_corpus_priors_are_off(monkeypatch):
+    """The two flags are independent gates; either one off means no gate call.
+
+    With `corpus_priors_enabled` off the pre-change behaviour must survive
+    exactly: every eligible room is templated, unconditionally.
+    """
+    seen = _spy_gate(monkeypatch)
+    layout = S.solve_layout(
+        _cfg(
+            style_preset="Tibetan-Buddhist",
+            corpus_priors_enabled=False,
+            allow_shape_templates=True,
+        )
+    )
+    assert layout is not None
+    assert seen == []
+
+
+def test_shape_gate_is_consulted_when_both_flags_are_on(monkeypatch):
+    seen = _spy_gate(monkeypatch)
+    layout = S.solve_layout(
+        _cfg(
+            style_preset="Tibetan-Buddhist",
+            corpus_priors_enabled=True,
+            allow_shape_templates=True,
+        )
+    )
+    assert layout is not None
+    assert seen, "gate was never consulted with both flags on"
+    assert {rtype for _, rtype in seen} <= set(_templatable_types())
+
+
+def test_a_zero_rate_room_type_is_never_templated(monkeypatch):
+    """p_nonrect == 0 means the corpus never saw this shape: stay RECT.
+
+    This is the direction that actually matters on real data -- `living` and
+    `dining` sit at 0.0 in most styles, while the pre-change code templated
+    them 100% of the time whenever the flag was on.
+    """
+    monkeypatch.setattr(S, "get_shape_usage_prior", lambda cfg, rt: 0.0)
+    cfg = _cfg(
+        style_preset="Kerala",
+        corpus_priors_enabled=True,
+        allow_shape_templates=True,
+    )
+    layout = S.solve_layout(cfg)
+    assert layout is not None
+    for floor in (layout.ground_floor, layout.first_floor):
+        if floor is None:
+            continue
+        assert all(r.template == "RECT" for r in floor.rooms)
+
+
+def test_a_certain_room_type_is_always_templated(monkeypatch):
+    """p_nonrect == 1 must never be rejected by the draw (strict `<` on 1.0)."""
+    monkeypatch.setattr(S, "get_shape_usage_prior", lambda cfg, rt: 1.0)
+    cfg = _cfg(
+        style_preset="Kerala",
+        corpus_priors_enabled=True,
+        allow_shape_templates=True,
+    )
+    for rtype in _templatable_types():
+        assert S._shape_usage_allows_template(cfg, f"{rtype}_0", rtype) is True
+
+
+def test_the_draw_is_deterministic_across_calls():
+    cfg = _cfg(style_preset="Kerala", corpus_priors_enabled=True)
+    first = [
+        S._shape_usage_allows_template(cfg, f"living_{i}", "living") for i in range(25)
+    ]
+    second = [
+        S._shape_usage_allows_template(cfg, f"living_{i}", "living") for i in range(25)
+    ]
+    assert first == second
+
+
+def test_the_draw_frequency_tracks_the_prior(monkeypatch):
+    """The gate reproduces the corpus rate in aggregate, not per room."""
+    monkeypatch.setattr(S, "get_shape_usage_prior", lambda cfg, rt: 0.3)
+    cfg = _cfg(style_preset="Kerala", corpus_priors_enabled=True)
+    hits = sum(
+        S._shape_usage_allows_template(cfg, f"living_{i}", "living")
+        for i in range(2000)
+    )
+    assert 0.25 <= hits / 2000 <= 0.35
+
+
+def test_the_draw_varies_with_the_plot(monkeypatch):
+    """Two different plots in one style must not share a single verdict.
+
+    A plan carries at most one `living`, so seeding on room id alone would
+    freeze the answer per style and the corpus rate could never show up.
+    """
+    monkeypatch.setattr(S, "get_shape_usage_prior", lambda cfg, rt: 0.5)
+    verdicts = {
+        S._shape_usage_allows_template(
+            _cfg(
+                style_preset="Kerala",
+                corpus_priors_enabled=True,
+                plot_x_extent=x,
+            ),
+            "living_0",
+            "living",
+        )
+        for x in (8.0, 9.0, 10.0, 11.0, 12.0, 13.0)
+    }
+    assert verdicts == {True, False}
+
+
+def test_real_corpus_data_suppresses_a_kerala_living_room():
+    """No monkeypatch: Kerala's corpus records living at p_nonrect == 0.0."""
+    cfg = _cfg(
+        style_preset="Kerala",
+        corpus_priors_enabled=True,
+        allow_shape_templates=True,
+    )
+    assert S.get_shape_usage_prior(cfg, "living") == 0.0
+    assert S._shape_usage_allows_template(cfg, "living_0", "living") is False
+
+
+def test_an_unknown_style_suppresses_every_template():
+    """No style block means p_nonrect 0.0 everywhere -- no corpus-wide fallback."""
+    cfg = _cfg(
+        style_preset=None,
+        corpus_priors_enabled=True,
+        allow_shape_templates=True,
+    )
+    for rtype in _templatable_types():
+        assert S._shape_usage_allows_template(cfg, f"{rtype}_0", rtype) is False

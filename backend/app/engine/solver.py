@@ -12,6 +12,7 @@ Falls back gracefully — caller should catch all exceptions.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field, replace
 from math import ceil, cos, gcd, lcm, radians, sin
@@ -20,7 +21,12 @@ from typing import Callable, NamedTuple
 
 from ortools.sat.python import cp_model
 
-from .corpus_priors import get_adjacency_prior, get_position_prior, get_size_prior
+from .corpus_priors import (
+    get_adjacency_prior,
+    get_position_prior,
+    get_shape_usage_prior,
+    get_size_prior,
+)
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
 from .vastu import ZONE_GRID_ROAD_S, _rule_for, _verdict, resolve_north_angle
@@ -310,6 +316,70 @@ _TEMPLATE_RATIO = 0.6
 # over the room's EXISTING x/y/w/d decision vars — the model gains intervals,
 # not degrees of freedom.
 _FRACTION_SCALE = 1000
+
+
+def _shape_usage_allows_template(cfg: PlotConfig, room_id: str, room_type: str) -> bool:
+    """Should this room be templated, given the corpus's non-rectangularity rate?
+
+    SHAPE USAGE IS NOT A DECISION VARIABLE.
+
+    The other three corpus priors (Tasks 8-10) are `_add_*_prior_terms`
+    builders returning `(cost, IntVar)` pairs, because size, adjacency and
+    position are all things CP-SAT decides. Template choice is not. It is
+    resolved in plain Python at the `_fit_template` call in `_solve_one`,
+    before the model exists: a room is templated iff `allow_shape_templates`
+    is on AND its type is in `_TEMPLATE_TYPES` AND the templated bounds fit.
+    There is no `is_rect` BoolVar anywhere in the model to attach an objective
+    term to, and `_TEMPLATE_RATIO` is a module constant that `_fit_template`
+    passes through untouched -- so there is no free geometry to steer either.
+    Building one would mean constructing both a RECT and a templated variant
+    of every eligible room behind a reified choice, doubling that room's
+    variables and constraints to express a preference the corpus data does
+    not need expressed that precisely (see the rates below).
+
+    So the prior is applied where the decision actually happens: here, as a
+    pre-model gate on the SAME Python expression that already decides
+    eligibility. It only ever turns templating OFF for a room the old code
+    would have templated -- it can never template an ineligible type.
+
+    Why this is the useful direction. In `corpus_priors.json` the three
+    templatable types sit at or near zero almost everywhere: `living` is 0.0
+    in 9 of the 16 styles and never exceeds 0.2 (Tibetan-Buddhist), `dining`
+    is 0.0 in 15 of 16 (highest 0.2, Rajasthani-Haveli), and `passage` is
+    recorded in only 4 styles at all.
+    The pre-change code templated those rooms 100% of the time whenever the
+    flag was on. That gap -- always vs almost never -- is precisely the
+    "nothing in the model cared" finding that parked uplift Task 9's ruling
+    and left `allow_shape_templates` default-off. Matching the corpus rate is
+    what makes the flag defensible to turn on; Task 13 owns that call.
+
+    Determinism. `hashlib.sha256` over stable per-request strings, never
+    `random` (`app/` contains no RNG at all) and never `hash()` (salted per
+    process). Identical inputs always produce the identical verdict, so
+    `solve_layout` stays as reproducible as it was. The seed carries the plot
+    as well as the room because a plan holds at most one `living`: seeding on
+    room id alone would freeze one verdict per style forever and the rate
+    would never materialise across a user's plans.
+    """
+    p_nonrect = get_shape_usage_prior(cfg, room_type)
+    if p_nonrect <= 0.0:
+        return False
+    if p_nonrect >= 1.0:
+        return True
+    seed = "|".join(
+        (
+            str(cfg.style_preset),
+            f"{cfg.plot_x_extent:.3f}",
+            f"{cfg.plot_y_extent:.3f}",
+            str(cfg.num_bedrooms),
+            room_id,
+            room_type,
+        )
+    )
+    digest = hashlib.sha256(seed.encode()).digest()
+    draw = int.from_bytes(digest[:8], "big") / float(1 << 64)
+    return draw < p_nonrect
+
 
 _SPECS_PATH = Path(__file__).parent.parent / "config" / "room_specs.json"
 
@@ -2079,10 +2149,19 @@ def _solve_one(
         # the feature is off OR the room type is not eligible OR the templated
         # variant would not fit the spec — so the default path builds exactly
         # the model that existed before shape templates.
+        # `corpus_priors_enabled` is a SECOND, inner gate (Task 11): with it
+        # off the expression is the pre-change one verbatim, and with
+        # `allow_shape_templates` off the gate is not consulted at all.
+        templated = (
+            cfg.allow_shape_templates
+            and rtype in _TEMPLATE_TYPES
+            and (
+                not cfg.corpus_priors_enabled
+                or _shape_usage_allows_template(cfg, rd["id"], rtype)
+            )
+        )
         fit = _fit_template(
-            _TEMPLATE_TYPES[rtype]
-            if cfg.allow_shape_templates and rtype in _TEMPLATE_TYPES
-            else "RECT",
+            _TEMPLATE_TYPES[rtype] if templated else "RECT",
             _TEMPLATE_RATIO,
             min_w,
             max_w,
