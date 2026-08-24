@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.mine_corpus_priors import RoomRecord, load_extracts
+from scripts.mine_corpus_priors import RoomRecord, load_extracts, mine_size_priors
 
 
 @pytest.fixture
@@ -187,3 +187,67 @@ def test_load_extracts_recovers_valid_rooms_alongside_malformed_ones(
     records = load_extracts(corpus)
     assert len(records) == 1
     assert records[0].label == "KITCHEN"
+
+
+def test_size_priors_excludes_flagged_rooms(fixture_corpus: Path) -> None:
+    records = load_extracts(fixture_corpus)
+    table = mine_size_priors(records, min_style_samples=1)
+    # Only M BEDROOM is usable (TOILET flagged, ZORBLAX has no room_type/area).
+    assert ("Kerala", "master_bedroom") in table
+    assert table[("Kerala", "master_bedroom")].n == 1
+
+
+def test_size_priors_falls_back_below_min_samples() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.2, 0.1),
+            flagged=False,
+        ),
+    ]
+    table = mine_size_priors(records, min_style_samples=5)
+    assert table[("Kerala", "kitchen")].is_fallback is True
+    assert table[("Kerala", "kitchen")].area_mean == table[(None, "kitchen")].area_mean
+
+
+def test_aspect_ratio_is_always_at_least_one() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.0, 0.0, 0.1, 0.4),  # tall, narrow bbox
+            flagged=False,
+        ),
+    ]
+    table = mine_size_priors(records, min_style_samples=1)
+    assert table[("Kerala", "kitchen")].aspect_mean >= 1.0
+
+
+def test_size_priors_empty_records_returns_empty_table() -> None:
+    assert mine_size_priors([], min_style_samples=1) == {}
+
+
+def test_size_priors_zero_width_bbox_defaults_to_unit_aspect() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.1, 0.1, 0.1, 0.4),  # zero width
+            flagged=False,
+        ),
+    ]
+    table = mine_size_priors(records, min_style_samples=1)
+    assert table[("Kerala", "kitchen")].aspect_mean == 1.0

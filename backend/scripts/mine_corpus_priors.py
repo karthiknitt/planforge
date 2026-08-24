@@ -7,6 +7,7 @@ docs/plans/2026-08-24-corpus-learned-generation-priors-design.md for why.
 from __future__ import annotations
 
 import json
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,3 +67,87 @@ def load_extracts(corpus_root: Path) -> list[RoomRecord]:
                     )
                 )
     return records
+
+
+SizePriorKey = tuple[str | None, RoomType]
+
+
+@dataclass(frozen=True)
+class SizeStat:
+    area_mean: float
+    area_std: float
+    aspect_mean: float
+    aspect_std: float
+    n: int
+    is_fallback: bool
+
+
+def _aspect_ratio(bbox: tuple[float, float, float, float]) -> float:
+    """Orientation-invariant aspect ratio, always >= 1.0."""
+    width = abs(bbox[2] - bbox[0])
+    height = abs(bbox[3] - bbox[1])
+    if width <= 0 or height <= 0:
+        return 1.0
+    ratio = width / height
+    return ratio if ratio >= 1.0 else 1.0 / ratio
+
+
+def _usable_records(records: list[RoomRecord]) -> list[RoomRecord]:
+    return [
+        r
+        for r in records
+        if not r.flagged and r.area_sqft is not None and r.room_type is not None
+    ]
+
+
+def _size_stat(records: list[RoomRecord], *, is_fallback: bool) -> SizeStat:
+    areas = [r.area_sqft for r in records if r.area_sqft is not None]
+    aspects = [_aspect_ratio(r.bbox) for r in records]
+    return SizeStat(
+        area_mean=statistics.fmean(areas),
+        area_std=statistics.pstdev(areas) if len(areas) > 1 else 0.0,
+        aspect_mean=statistics.fmean(aspects),
+        aspect_std=statistics.pstdev(aspects) if len(aspects) > 1 else 0.0,
+        n=len(records),
+        is_fallback=is_fallback,
+    )
+
+
+def mine_size_priors(
+    records: list[RoomRecord], min_style_samples: int = 5
+) -> dict[SizePriorKey, SizeStat]:
+    """Mean/std area + aspect ratio per (style, RoomType), with corpus-wide fallback.
+
+    Excludes flagged records and any record missing area_sqft or room_type. A
+    style/RoomType bucket with fewer than min_style_samples records falls back
+    to the corpus-wide (None, RoomType) stat, keeping its own n for visibility.
+    """
+    usable = _usable_records(records)
+
+    by_type: dict[RoomType, list[RoomRecord]] = {}
+    by_style_type: dict[tuple[str, RoomType], list[RoomRecord]] = {}
+    for r in usable:
+        assert r.room_type is not None
+        by_type.setdefault(r.room_type, []).append(r)
+        by_style_type.setdefault((r.style, r.room_type), []).append(r)
+
+    table: dict[SizePriorKey, SizeStat] = {}
+    for room_type, type_records in by_type.items():
+        table[(None, room_type)] = _size_stat(type_records, is_fallback=False)
+
+    for (style, room_type), style_records in by_style_type.items():
+        if len(style_records) >= min_style_samples:
+            table[(style, room_type)] = _size_stat(style_records, is_fallback=False)
+        else:
+            fallback = table.get((None, room_type))
+            if fallback is not None:
+                table[(style, room_type)] = SizeStat(
+                    area_mean=fallback.area_mean,
+                    area_std=fallback.area_std,
+                    aspect_mean=fallback.aspect_mean,
+                    aspect_std=fallback.aspect_std,
+                    n=len(style_records),
+                    is_fallback=True,
+                )
+
+    return table
