@@ -14,6 +14,7 @@ from pathlib import Path
 
 from app.engine.models import RoomType
 from app.engine.room_labels import normalize_room_label
+from app.engine.vastu import zone_for_point
 
 
 @dataclass(frozen=True)
@@ -243,4 +244,54 @@ def mine_adjacency_priors(
     }
     for style in {k[0] for k in floors}:
         result[style] = _count([k for k in floors if k[0] == style])
+    return result
+
+
+def _centroid(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
+    return ((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0)
+
+
+def mine_position_priors(
+    records: list[RoomRecord],
+) -> dict[str | None, dict[RoomType, dict[str, float]]]:
+    """Per-style, per-RoomType histogram over Vastu zone labels.
+
+    Reuses vastu.py's zone_for_point() rather than re-deriving zone math. Room
+    bboxes are normalized [0,1] SHEET coordinates, not real plot dimensions, so
+    this calls zone_for_point with plot_w=plot_l=1.0 and the raw centroid as
+    x/y -- zone_for_point's own normalization (x/plot_w, y/plot_l) then
+    correctly centers/buckets it. This treats the full sheet as the plot,
+    ignoring the plot_bbox offset some extracts carry for where the plot sits
+    within the sheet -- an accepted approximation for a soft statistical prior
+    feeding a soft CP-SAT objective term later, not a compliance check.
+
+    North angle: the OCR extracts carry a floor-level, qualitative
+    north_arrow_direction ("up"/"down"/"left"/"right"), which RoomRecord does
+    not currently expose (it is floor-level, not room-level, and threading it
+    through would touch the schema 3 already-shipped tasks depend on). This
+    treats "up" as north universally (north_angle_deg=0.0), matching the
+    design doc's own suggested fallback when a per-design angle isn't
+    reliably available. A future task could thread north_arrow_direction
+    through RoomRecord/load_extracts for a more accurate per-design angle.
+    """
+
+    def _histograms(group: list[RoomRecord]) -> dict[RoomType, dict[str, float]]:
+        counts: dict[RoomType, dict[str, int]] = {}
+        for r in group:
+            if r.flagged or r.room_type is None or not bbox_looks_normalized(r.bbox):
+                continue
+            cx, cy = _centroid(r.bbox)
+            zone = zone_for_point(cx, cy, 1.0, 1.0, 0.0)
+            counts.setdefault(r.room_type, {}).setdefault(zone, 0)
+            counts[r.room_type][zone] += 1
+        return {
+            rt: {z: c / sum(zc.values()) for z, c in zc.items()}
+            for rt, zc in counts.items()
+        }
+
+    result: dict[str | None, dict[RoomType, dict[str, float]]] = {
+        None: _histograms(records)
+    }
+    for style in {r.style for r in records}:
+        result[style] = _histograms([r for r in records if r.style == style])
     return result

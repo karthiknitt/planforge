@@ -8,6 +8,7 @@ from scripts.mine_corpus_priors import (
     bbox_looks_normalized,
     load_extracts,
     mine_adjacency_priors,
+    mine_position_priors,
     mine_size_priors,
 )
 
@@ -426,3 +427,54 @@ def test_adjacency_excludes_same_room_type_pairs() -> None:
     ]
     table = mine_adjacency_priors(records)
     assert table["Kerala"] == {}
+
+
+_VASTU_ZONE_LABELS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW", "C"}
+
+
+def test_position_priors_bucket_by_existing_vastu_zones() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="M BEDROOM",
+            room_type="master_bedroom",
+            area_sqft=100.0,
+            bbox=(0.1, 0.1, 0.2, 0.2),
+            flagged=False,
+        ),
+    ]
+    table = mine_position_priors(records)
+    zones = table["Kerala"]["master_bedroom"]
+    assert set(zones) <= _VASTU_ZONE_LABELS
+    assert sum(zones.values()) == pytest.approx(1.0)
+
+
+def test_position_priors_excludes_flagged_and_pixel_space_records() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="TOILET",
+            room_type="toilet",
+            area_sqft=20.0,
+            bbox=(0.1, 0.1, 0.2, 0.2),
+            flagged=True,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.39, 150, 0.58, 370),  # pixel-space
+            flagged=False,
+        ),
+    ]
+    table = mine_position_priors(records)
+    assert "toilet" not in table["Kerala"]
+    assert "kitchen" not in table["Kerala"]
+    assert table[None] == {}
