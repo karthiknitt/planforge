@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.mine_corpus_priors import RoomRecord, load_extracts, mine_size_priors
+from scripts.mine_corpus_priors import (
+    RoomRecord,
+    bbox_looks_normalized,
+    load_extracts,
+    mine_size_priors,
+)
 
 
 @pytest.fixture
@@ -251,3 +256,43 @@ def test_size_priors_zero_width_bbox_defaults_to_unit_aspect() -> None:
     ]
     table = mine_size_priors(records, min_style_samples=1)
     assert table[("Kerala", "kitchen")].aspect_mean == 1.0
+
+
+def test_bbox_looks_normalized_accepts_0_to_1_range() -> None:
+    assert bbox_looks_normalized((0.0, 0.1, 0.9, 1.0)) is True
+
+
+def test_bbox_looks_normalized_rejects_pixel_space() -> None:
+    assert bbox_looks_normalized((0.39, 150, 0.58, 370)) is False
+
+
+def test_pixel_space_bbox_excluded_from_aspect_but_kept_for_area() -> None:
+    records = [
+        RoomRecord(
+            style="Kerala",
+            design="d1",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=100.0,
+            bbox=(0.2, 0.2, 0.4, 0.3),  # normalized, aspect 2.0
+            flagged=False,
+        ),
+        RoomRecord(
+            style="Kerala",
+            design="d2",
+            floor="ground",
+            label="KITCHEN",
+            room_type="kitchen",
+            area_sqft=200.0,
+            bbox=(0.39, 150, 0.58, 370),  # pixel-space, must not pollute aspect
+            flagged=False,
+        ),
+    ]
+    table = mine_size_priors(records, min_style_samples=1)
+    stat = table[("Kerala", "kitchen")]
+    # area stats: both records count.
+    assert stat.n == 2
+    assert stat.area_mean == 150.0
+    # aspect stats: only the normalized-bbox record counts.
+    assert stat.aspect_mean == pytest.approx(2.0)

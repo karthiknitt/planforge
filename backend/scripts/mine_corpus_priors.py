@@ -82,6 +82,21 @@ class SizeStat:
     is_fallback: bool
 
 
+def bbox_looks_normalized(
+    bbox: tuple[float, float, float, float], tol: float = 0.02
+) -> bool:
+    """True iff every bbox coordinate falls within [-tol, 1.0 + tol].
+
+    Some corpus OCR extractions emit whole designs in pixel space instead of
+    the normalized 0-1 scale the rest of the pipeline assumes (e.g. an entire
+    floor's bboxes as raw pixel coordinates). Only 31% of these are caught by
+    the existing `flagged` field, so any bbox-derived statistic (aspect ratio
+    here; later adjacency/position mining too) must apply this guard itself
+    rather than trusting `flagged` alone.
+    """
+    return all(-tol <= c <= 1.0 + tol for c in bbox)
+
+
 def _aspect_ratio(bbox: tuple[float, float, float, float]) -> float:
     """Orientation-invariant aspect ratio, always >= 1.0."""
     width = abs(bbox[2] - bbox[0])
@@ -102,12 +117,14 @@ def _usable_records(records: list[RoomRecord]) -> list[RoomRecord]:
 
 def _size_stat(records: list[RoomRecord], *, is_fallback: bool) -> SizeStat:
     areas = [r.area_sqft for r in records if r.area_sqft is not None]
-    aspects = [_aspect_ratio(r.bbox) for r in records]
+    aspects = [_aspect_ratio(r.bbox) for r in records if bbox_looks_normalized(r.bbox)]
+    aspect_mean = statistics.fmean(aspects) if aspects else 1.0
+    aspect_std = statistics.pstdev(aspects) if len(aspects) > 1 else 0.0
     return SizeStat(
         area_mean=statistics.fmean(areas),
         area_std=statistics.pstdev(areas) if len(areas) > 1 else 0.0,
-        aspect_mean=statistics.fmean(aspects),
-        aspect_std=statistics.pstdev(aspects) if len(aspects) > 1 else 0.0,
+        aspect_mean=aspect_mean,
+        aspect_std=aspect_std,
         n=len(records),
         is_fallback=is_fallback,
     )
@@ -121,6 +138,10 @@ def mine_size_priors(
     Excludes flagged records and any record missing area_sqft or room_type. A
     style/RoomType bucket with fewer than min_style_samples records falls back
     to the corpus-wide (None, RoomType) stat, keeping its own n for visibility.
+    Records whose bbox is not on the normalized 0-1 scale (see
+    bbox_looks_normalized) are excluded from the aspect stats only -- area is
+    independent of bbox scale, so those records still count toward area_mean
+    and area_std, and toward n.
     """
     usable = _usable_records(records)
 
