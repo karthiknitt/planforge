@@ -219,9 +219,14 @@ _SQFT_TO_MM2 = 92903.04
 # objective coefficient.
 SIZE_PRIOR_UNITS_PER_STD = 100
 # Cost of one 0.01-sigma unit, so a full 1-sigma miss costs 10 000: above
-# ALIGN_BONUS (2 500), an order of magnitude below VASTU_WEIGHT and the
-# placement penalties, i.e. a nudge that cannot outvote a stated preference.
-# Task 13 tunes this against the GCS regression baseline — not here.
+# ALIGN_BONUS (2 500), well below VASTU_WEIGHT (300 000) and the placement
+# penalties. But the term it actually competes with for control of a room's
+# size is `size_terms`' growth reward of 1 per mm, not those placement terms
+# -- and at this weight the size prior wins that contest by roughly 12-16x
+# (marginal cost ~0.005-0.007 per mm^2 vs. the reward's 1 per mm on a ~3 m
+# room dimension), so with the flag on it is the dominant sizing force, not
+# a mere nudge. Task 13 tunes this against the GCS regression baseline; rough
+# parity with the growth reward sits closer to SIZE_PRIOR_WEIGHT ~= 10.
 SIZE_PRIOR_WEIGHT = 100
 
 # Zones that may carry a HARD exclusion at all (spec: Safety / Global
