@@ -1628,14 +1628,17 @@ def _add_adjacency_prior_terms(
 
     THIS DELIBERATELY DOES NOT REUSE `align_bools`.
 
-    Those reify `e1 == e2` on a pair of edge coordinates — exact equality. Two
-    rooms that genuinely share a wall are separated by an internal wall
-    thickness (`_IWT_MM`), so their facing edges are precisely NOT equal, and
-    the `xll`/`yhh` forms hold between rooms at opposite ends of the plot that
-    merely landed on one grid line. Neither form tests perpendicular overlap,
-    so even a corner-to-corner touch would score. Attaching a reward to them
-    would pay for coalignment, which `ALIGN_BONUS` already prices, rather than
-    for adjacency.
+    Those reify `e1 == e2` on a pair of edge coordinates — exact equality.
+    The mixed `xhl`/`xlh`/`yhl`/`ylh` forms DO fire at the zero-gap case, but
+    `add_no_overlap_2d` never forces a nonzero gap, so they capture only that
+    one point of the `[0, _IWT_MM]` range genuine wall-sharing spans, and none
+    of the eight forms tests perpendicular overlap — so even a corner-to-corner
+    touch with zero shared wall length would score. Worse, the `xll`/`yhh`
+    same-side forms hold between rooms at opposite ends of the plot that
+    merely landed on one grid line and carry no adjacency information at all.
+    Attaching a reward to this bucket would pay for coalignment, which
+    `ALIGN_BONUS` already prices, and for corner touches, rather than for
+    actually sharing a wall.
 
     What it reuses instead is the four-side shared-wall PATTERN the hard
     en-suite and stair-access constraints already use: facing edges within one

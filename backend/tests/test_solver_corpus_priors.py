@@ -322,7 +322,9 @@ def test_a_pair_the_corpus_finds_typical_gets_a_term():
 
 
 def test_a_pair_the_corpus_never_observed_gets_no_term():
-    # bedroom|bedroom is 0.0 in both the Kerala block and corpus-wide.
+    # bedroom|bedroom is 0.0 in both the Kerala block and corpus-wide -- not
+    # because the corpus never saw two bedrooms touch, but because
+    # mine_adjacency_priors structurally excludes same-RoomType pairs.
     model = cp_model.CpModel()
     rooms = [
         _room(model, "b1", "bedroom", (0, 5000), (0, 0), 3000, 3000),
