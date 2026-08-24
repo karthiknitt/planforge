@@ -15,6 +15,7 @@ from ortools.sat.python import cp_model
 from app.engine import solver as S
 from app.engine.corpus_priors import SizePrior
 from app.engine.models import PlotConfig
+from app.engine.vastu import _rule_for, resolve_north_angle, zone_for_point
 
 _SQFT_TO_MM2 = 92903.04
 
@@ -421,3 +422,191 @@ def test_touching_edges_with_no_overlap_is_not_a_shared_wall(monkeypatch):
     terms = S._add_adjacency_prior_terms(model, _cfg(style_preset="Kerala"), [a, b])
     assert terms
     assert _bonus_of(model, terms) == 0
+
+
+# ── Position priors (Task 10) ────────────────────────────────────────────────
+
+
+def _zones_of(terms) -> set[str]:
+    """Zone label each position term is gated on, read back off the var name."""
+    return {var.name.rsplit("_", 1)[1] for _, var in terms}
+
+
+def test_position_disabled_never_calls_the_term_builder(monkeypatch):
+    """Same spy posture as the size- and adjacency-prior flag tests."""
+    calls: list[int] = []
+    real = S._add_position_prior_terms
+
+    def spy(model, cfg, room_vars, ox, oy, **kw):
+        calls.append(len(room_vars))
+        return real(model, cfg, room_vars, ox, oy, **kw)
+
+    monkeypatch.setattr(S, "_add_position_prior_terms", spy)
+
+    assert S.solve_layout(_cfg(style_preset="Kerala")) is not None
+    assert calls == []
+
+
+def test_position_enabled_calls_the_term_builder_and_still_solves(monkeypatch):
+    calls: list[int] = []
+    real = S._add_position_prior_terms
+
+    def spy(model, cfg, room_vars, ox, oy, **kw):
+        calls.append(len(room_vars))
+        return real(model, cfg, room_vars, ox, oy, **kw)
+
+    monkeypatch.setattr(S, "_add_position_prior_terms", spy)
+
+    layout = S.solve_layout(_cfg(style_preset="Kerala", corpus_priors_enabled=True))
+    assert layout is not None
+    assert calls and all(n > 0 for n in calls)
+
+
+def test_position_terms_are_still_built_with_vastu_disabled(monkeypatch):
+    """`corpus_priors_enabled` is independent of `vastu_enabled`.
+
+    With Vastu off, `_add_vastu_terms` is never called at all, so the zone
+    membership this term reads has to be built by this term itself.
+    """
+    built: list[int] = []
+    real = S._add_position_prior_terms
+
+    def spy(model, cfg, room_vars, ox, oy, **kw):
+        terms = real(model, cfg, room_vars, ox, oy, **kw)
+        built.append(len(terms))
+        return terms
+
+    monkeypatch.setattr(S, "_add_position_prior_terms", spy)
+
+    layout = S.solve_layout(
+        _cfg(style_preset="Kerala", corpus_priors_enabled=True, vastu_enabled=False)
+    )
+    assert layout is not None
+    assert built and max(built) > 0
+
+
+def test_position_prior_without_a_style_preset_builds_nothing():
+    """`get_position_prior` has NO corpus-wide fallback, unlike size/adjacency.
+
+    So the whole term is a no-op without a style, even with the flag on. The
+    builder still RUNS -- this is not the flag-off case -- it just has no data.
+    """
+    model = cp_model.CpModel()
+    rooms = [_room(model, "k1", "kitchen", (0, 5000), (0, 10000), 3000, 3000)]
+    cfg = _cfg(corpus_priors_enabled=True)
+    assert cfg.style_preset is None
+    assert S._add_position_prior_terms(model, cfg, rooms, 0, 0) == []
+
+
+def test_zones_the_corpus_favours_get_reward_terms():
+    """Real corpus data, no monkeypatch: Kerala kitchen is C/NW/S/W."""
+    model = cp_model.CpModel()
+    rooms = [_room(model, "k1", "kitchen", (0, 5000), (0, 10000), 3000, 3000)]
+    terms = S._add_position_prior_terms(model, _cfg(style_preset="Kerala"), rooms, 0, 0)
+    assert _zones_of(terms) == {"C", "NW", "S", "W"}
+    assert all(cost < 0 for cost, _ in terms), (
+        "a bonus, and base_objective is minimised"
+    )
+    assert all(var.name.startswith("posp_") for _, var in terms)
+
+
+def test_a_room_type_the_corpus_has_no_position_data_for_gets_no_terms():
+    """`bathroom_master` is absent from every style's position histogram."""
+    model = cp_model.CpModel()
+    rooms = [_room(model, "b1", "bathroom_master", (0, 5000), (0, 10000), 2000, 2000)]
+    assert (
+        S._add_position_prior_terms(model, _cfg(style_preset="Kerala"), rooms, 0, 0)
+        == []
+    )
+
+
+def test_the_reward_scales_with_the_zone_frequency():
+    """Kerala kitchen: C is 0.5 and S is 0.25, so C must pay exactly twice."""
+    model = cp_model.CpModel()
+    rooms = [_room(model, "k1", "kitchen", (0, 5000), (0, 10000), 3000, 3000)]
+    terms = S._add_position_prior_terms(model, _cfg(style_preset="Kerala"), rooms, 0, 0)
+    by_zone = {var.name.rsplit("_", 1)[1]: cost for cost, var in terms}
+    assert by_zone["C"] == -round(S.POSITION_PRIOR_WEIGHT * 0.5)
+    assert by_zone["C"] == 2 * by_zone["S"]
+
+
+def test_a_hard_excluded_zone_never_gets_a_reward():
+    """Kerala's corpus puts a toilet in C 47% of the time -- its single
+    largest bucket -- and C is a HARD-excluded zone for toilets. Paying a
+    bonus there would reward a placement the model forbids outright, and the
+    soft anchor point can sit in C while the true centroid (which the hard
+    exclusion tests) does not, so the solver could even collect it."""
+    model = cp_model.CpModel()
+    rooms = [_room(model, "t1", "toilet", (0, 5000), (0, 10000), 1500, 1500)]
+    terms = S._add_position_prior_terms(model, _cfg(style_preset="Kerala"), rooms, 0, 0)
+    assert _zones_of(terms) == {"E", "S", "SE"}
+    assert "C" in S._vastu_hard_excluded_zones("toilet")
+
+
+def test_a_room_type_with_no_vastu_rule_still_gets_position_terms():
+    """Half the room types with position priors have no Vastu rule at all, so
+    the zone reification cannot be gated on having one."""
+    assert _rule_for("courtyard") is None
+    model = cp_model.CpModel()
+    rooms = [_room(model, "c1", "courtyard", (0, 5000), (0, 10000), 3000, 3000)]
+    terms = S._add_position_prior_terms(model, _cfg(style_preset="Kerala"), rooms, 0, 0)
+    assert _zones_of(terms) == {"C"}
+
+
+def test_zone_membership_is_reified_once_per_room_across_both_terms():
+    """The whole point of the shared cache: Vastu and position priors ask the
+    same question, so the cols/rows bools must be built exactly once."""
+    model = cp_model.CpModel()
+    rooms = [_room(model, "k1", "kitchen", (0, 5000), (0, 10000), 3000, 3000)]
+    cfg = _cfg(style_preset="Kerala")
+    cache: dict = {}
+    S._add_vastu_terms(model, cfg, rooms, 0, 0, zone_cache=cache)
+    S._add_position_prior_terms(model, cfg, rooms, 0, 0, zone_cache=cache)
+    names = [v.name for v in model.proto.variables]
+    assert names.count("vcol0_k1") == 1
+    assert names.count("vrow0_k1") == 1
+
+
+def test_the_reward_cannot_be_claimed_from_outside_the_zone():
+    """One-directional reification again: nothing forces `posp_` false, only
+    the enforced zone membership stops the solver taking a free bonus."""
+    model = cp_model.CpModel()
+    # Pinned hard into the SW corner of a 9 x 15 m plot: never in C.
+    rooms = [_room(model, "c1", "courtyard", (0, 0), (0, 0), 2000, 2000)]
+    terms = S._add_position_prior_terms(model, _cfg(style_preset="Kerala"), rooms, 0, 0)
+    assert terms
+    assert _bonus_of(model, terms) == 0
+
+
+@pytest.mark.slow
+def test_position_prior_does_not_alter_vastu_hard_exclusions():
+    """The uplift spec's safety constraint stays load-bearing under the bonus.
+
+    Kerala's corpus puts a toilet in C nearly half the time, so this is the
+    case where the new reward pulls hardest against the exclusion.
+    """
+    cfg = _cfg(
+        num_bedrooms=2,
+        style_preset="Kerala",
+        corpus_priors_enabled=True,
+        vastu_enabled=True,
+    )
+    layout = S.solve_layout(cfg)
+    assert layout is not None
+    checked = 0
+    for floor in (layout.ground_floor, layout.first_floor):
+        if floor is None:
+            continue
+        for room in floor.rooms:
+            if room.type not in ("toilet", "wc_only", "bathroom_master"):
+                continue
+            checked += 1
+            zone = zone_for_point(
+                room.x + room.width / 2,
+                room.y + room.depth / 2,
+                cfg.plot_x_extent,
+                cfg.plot_y_extent,
+                resolve_north_angle(cfg),
+            )
+            assert zone not in ("NE", "C"), f"{room.type} {room.id} landed in {zone}"
+    assert checked >= 2

@@ -20,7 +20,7 @@ from typing import Callable, NamedTuple
 
 from ortools.sat.python import cp_model
 
-from .corpus_priors import get_adjacency_prior, get_size_prior
+from .corpus_priors import get_adjacency_prior, get_position_prior, get_size_prior
 from .models import Column, FloorPlan, Layout, PlotConfig, Room
 from .shapes import SHAPE_TEMPLATES, ShapeTemplate, parts_for
 from .vastu import ZONE_GRID_ROAD_S, _rule_for, _verdict, resolve_north_angle
@@ -244,6 +244,28 @@ SIZE_PRIOR_WEIGHT = 100
 # parking placement penalties (150 000–250 000) it must never overturn.
 # Task 13 tunes this against the GCS regression baseline — not here.
 ADJACENCY_PRIOR_WEIGHT = 5_000
+# Reward for a room landing in a zone its style's corpus histogram favours,
+# scaled by that zone's observed frequency (so 1.0 pays the full weight).
+#
+# Scale: this term is gated on the SAME cols/rows bools `_vastu_zone_cost` is
+# gated on, so for the half of corpus-known room types that have a Vastu rule
+# the two are not neighbours, they are rival bids on one decision. That makes
+# VASTU_WEIGHT the yardstick — but not VASTU_WEIGHT itself. What must never
+# happen is the corpus REORDERING two Vastu tiers, and the tiers are only
+# 0 / 90 000 / 165 000 / 300 000 apart (VERDICT_* x VASTU_WEIGHT), so the
+# binding number is the narrowest gap between them, 75 000. The largest swing
+# this term can produce between two cells is one full weight, so anything
+# below 75 000 leaves every Vastu ranking intact.
+#
+# The floor comes from the OTHER half — courtyard, verandah, foyer, terrace
+# and friends have no Vastu rule at all, so there the only rival positional
+# force is `dist_terms` (2 x pts per mm, i.e. 12-30 units/mm). 25 000 buys
+# roughly 0.8-2 m of repositioning against one adjacency partner: enough to
+# settle a room already near a band boundary into the favoured cell, nowhere
+# near the ~3-5 m a zone is wide on a typical plot. It also sits 6-10x below
+# the toilet and parking placement penalties (150 000-250 000).
+# Task 13 tunes this against the GCS regression baseline — not here.
+POSITION_PRIOR_WEIGHT = 25_000
 
 # Zones that may carry a HARD exclusion at all (spec: Safety / Global
 # Constraints). Everything outside this pair stays soft on every room type.
@@ -1421,6 +1443,11 @@ class _VastuBands(NamedTuple):
     margin: int
 
 
+# room_id -> (cols, rows) from `_zone_membership_bools`. One per solve, shared
+# by every term that asks which Vastu cell a room is in.
+_ZoneCache = dict[str, tuple[list[cp_model.IntVar], list[cp_model.IntVar]]]
+
+
 # Integer value the +-1/6 Vastu band boundary is mapped onto. Tuned, not
 # arbitrary: this constant sets the magnitude of every coefficient the zone
 # half-planes put into the model, and CP-SAT is sensitive to it. At 1e8 the
@@ -1693,12 +1720,176 @@ def _add_adjacency_prior_terms(
     return terms
 
 
+def _zone_membership_bools(
+    model: cp_model.CpModel,
+    rv: _RoomVar,
+    bands: _VastuBands,
+    ox: int,
+    oy: int,
+    cache: _ZoneCache,
+) -> tuple[list[cp_model.IntVar], list[cp_model.IntVar]]:
+    """Reify which of the 3x3 zone bands a room's SOFT anchor point sits in.
+
+    Returns `(cols, rows)`, each a triple of mutually-exclusive BoolVars, so
+    "room is in zone `ZONE_GRID_ROAD_S[ri][ci]`" is `rows[ri] AND cols[ci]`.
+
+    Carries NO cost policy of its own. It is shared verbatim by
+    `_add_vastu_terms` (which charges disfavoured cells) and
+    `_add_position_prior_terms` (which rewards corpus-favoured ones); each
+    caller decides independently what a cell is worth, and neither restricts
+    which rooms get reified. That separation is what lets position priors
+    cover the half of corpus-known room types Vastu has no rule for at all
+    (courtyard, verandah, foyer, terrace, ...) without a second, parallel
+    transcription of the same band arithmetic.
+
+    `cache` is keyed by `room_id` and is what keeps the reification to one
+    build per room per solve when both callers run — CP-SAT reification is not
+    free, and two independent copies would also let the two terms disagree
+    about which zone a room is in.
+    """
+    hit = cache.get(rv.room_id)
+    if hit is not None:
+        return hit
+
+    # SOFT path — the true-centroid expressions with the VARIABLE half-extent
+    # replaced by the room's constant minimum one, so no decision variable but
+    # the anchor survives into the steering predicate. See `_add_vastu_terms`'s
+    # docstring for why the two points differ.
+    min_w, min_d = _var_min(rv.w), _var_min(rv.d)
+    east_soft = cp_model.LinearExpr.weighted_sum(
+        [rv.x, rv.y], [2 * bands.ex, 2 * bands.ey]
+    ) + (
+        2 * ox * bands.ex
+        + 2 * oy * bands.ey
+        + bands.ec
+        + min_w * bands.ex
+        + min_d * bands.ey
+    )
+    north_soft = cp_model.LinearExpr.weighted_sum(
+        [rv.x, rv.y], [2 * bands.nx, 2 * bands.ny]
+    ) + (
+        2 * ox * bands.nx
+        + 2 * oy * bands.ny
+        + bands.nc
+        + min_w * bands.nx
+        + min_d * bands.ny
+    )
+
+    cols = [model.new_bool_var(f"vcol{i}_{rv.room_id}") for i in range(3)]
+    rows = [model.new_bool_var(f"vrow{i}_{rv.room_id}") for i in range(3)]
+    # The three bands partition the line, so `exactly_one` plus the forward
+    # implications is already a full reification — the reverse direction would
+    # be redundant clauses.
+    model.add_exactly_one(cols)
+    model.add_exactly_one(rows)
+    model.add(east_soft <= -bands.band - 1).only_enforce_if(cols[0])
+    model.add(east_soft >= -bands.band).only_enforce_if(cols[1])
+    model.add(east_soft <= bands.band - 1).only_enforce_if(cols[1])
+    model.add(east_soft >= bands.band).only_enforce_if(cols[2])
+    model.add(north_soft >= bands.band + 1).only_enforce_if(rows[0])
+    model.add(north_soft <= bands.band).only_enforce_if(rows[1])
+    model.add(north_soft >= -bands.band + 1).only_enforce_if(rows[1])
+    model.add(north_soft <= -bands.band).only_enforce_if(rows[2])
+
+    cache[rv.room_id] = (cols, rows)
+    return cols, rows
+
+
+def _add_position_prior_terms(
+    model: cp_model.CpModel,
+    cfg: PlotConfig,
+    room_vars: list[_RoomVar],
+    ox: int,
+    oy: int,
+    *,
+    zone_cache: _ZoneCache | None = None,
+) -> list[tuple[int, cp_model.IntVar]]:
+    """Reward for a room landing in a zone its style's corpus histogram favours.
+
+    A BONUS, so the costs are negative and `base_objective` adds them with a
+    plain `+`, like the adjacency term. Only built when
+    `cfg.corpus_priors_enabled`; zones the corpus never put this room type in
+    are skipped rather than given a zero-weight term, which keeps this well
+    under the O(rooms x 9) reifications a dense build would cost.
+
+    THE REIFICATION IS SHARED WITH VASTU, NOT REBUILT.
+
+    "Which of the 9 Vastu cells is this room in" is one question, and
+    `_zone_membership_bools` answers it once per room per solve via
+    `zone_cache`. This term is therefore live even with `vastu_enabled=False`,
+    where `_add_vastu_terms` never runs and the cache arrives empty — the two
+    flags are independent knobs, and a corpus position prior is not a Vastu
+    opinion.
+
+    THE ANCHOR POINT IS NOT THE CENTROID THE CORPUS WAS MINED FROM.
+
+    `mine_position_priors` bucketed real bbox centroids; the shared reification
+    reads Vastu's soft anchor (`x + min_w/2`, `y + min_d/2`) instead. Accepted
+    deliberately, for the same reason Vastu accepts it and one more: a
+    predicate containing `w`/`d` lets the solver buy its way into a zone by
+    RESIZING rather than moving, and under a reward that gaming is if anything
+    more attractive than under Vastu's penalty — grow into the rewarded cell,
+    collect, and let `_add_size_prior_terms` eat the size cost. The residual
+    error is bounded by half the room's minimum extent and only matters for a
+    room already sitting on a band boundary.
+
+    HARD-EXCLUDED CELLS ARE NEVER REWARDED.
+
+    Kerala's corpus puts a toilet in C 47% of the time — its largest bucket,
+    and a cell toilets are hard-excluded from. Paying there would price a
+    placement the model forbids, and because the anchor and the true centroid
+    (which the exclusion tests) can straddle a boundary, the solver could
+    actually collect it. Skipped unconditionally, not just when
+    `cfg.vastu_enabled`: these cells are the product's safety posture, and the
+    corpus is not the right source to override it from.
+
+    THE REIFICATION RUNS ONE WAY, TOWARD THE ZONE.
+
+    Same direction as the adjacency reward and the opposite of Vastu's cost
+    bool: under a reward the solver wants the literal true, so `zb` must imply
+    the membership. Nothing forces `zb` false when the room IS in the zone —
+    the objective does that for us.
+    """
+    if zone_cache is None:
+        zone_cache = {}
+    bands = _vastu_bands(
+        _mm(cfg.plot_x_extent), _mm(cfg.plot_y_extent), resolve_north_angle(cfg)
+    )
+    terms: list[tuple[int, cp_model.IntVar]] = []
+
+    for rv in room_vars:
+        excluded = _vastu_hard_excluded_zones(rv.room_type)
+        for ri in range(3):
+            for ci in range(3):
+                zone = ZONE_GRID_ROAD_S[ri][ci]
+                if zone in excluded:
+                    continue
+                reward = round(
+                    POSITION_PRIOR_WEIGHT * get_position_prior(cfg, rv.room_type, zone)
+                )
+                if reward <= 0:
+                    continue
+                # Built lazily, so a room the corpus knows nothing about (or
+                # any room at all with no style set) costs no vars.
+                cols, rows = _zone_membership_bools(
+                    model, rv, bands, ox, oy, zone_cache
+                )
+                zb = model.new_bool_var(f"posp_{rv.room_id}_{zone}")
+                model.add_implication(zb, rows[ri])
+                model.add_implication(zb, cols[ci])
+                terms.append((-reward, zb))
+
+    return terms
+
+
 def _add_vastu_terms(
     model: cp_model.CpModel,
     cfg: PlotConfig,
     room_vars: list[_RoomVar],
     ox: int,
     oy: int,
+    *,
+    zone_cache: _ZoneCache | None = None,
 ) -> list[tuple[int, cp_model.IntVar]]:
     """Reify each room's Vastu zone and return (cost, bool) objective terms.
 
@@ -1736,6 +1927,8 @@ def _add_vastu_terms(
     in a hard-excluded cell pays no soft cost for that cell (no `zb` is built
     for it), while its true centroid is still forbidden from it outright.
     """
+    if zone_cache is None:
+        zone_cache = {}
     bands = _vastu_bands(
         _mm(cfg.plot_x_extent), _mm(cfg.plot_y_extent), resolve_north_angle(cfg)
     )
@@ -1757,45 +1950,10 @@ def _add_vastu_terms(
             [2 * bands.nx, bands.nx, 2 * bands.ny, bands.ny],
         ) + (2 * ox * bands.nx + 2 * oy * bands.ny + bands.nc)
 
-        # SOFT path — the same expressions with the VARIABLE half-extent
-        # replaced by the room's constant minimum one, so no decision variable
-        # but the anchor survives into the steering predicate. See the
-        # docstring for why the two points differ.
-        min_w, min_d = _var_min(rv.w), _var_min(rv.d)
-        east_soft = cp_model.LinearExpr.weighted_sum(
-            [rv.x, rv.y], [2 * bands.ex, 2 * bands.ey]
-        ) + (
-            2 * ox * bands.ex
-            + 2 * oy * bands.ey
-            + bands.ec
-            + min_w * bands.ex
-            + min_d * bands.ey
-        )
-        north_soft = cp_model.LinearExpr.weighted_sum(
-            [rv.x, rv.y], [2 * bands.nx, 2 * bands.ny]
-        ) + (
-            2 * ox * bands.nx
-            + 2 * oy * bands.ny
-            + bands.nc
-            + min_w * bands.nx
-            + min_d * bands.ny
-        )
-
-        cols = [model.new_bool_var(f"vcol{i}_{rv.room_id}") for i in range(3)]
-        rows = [model.new_bool_var(f"vrow{i}_{rv.room_id}") for i in range(3)]
-        # The three bands partition the line, so `exactly_one` plus the
-        # forward implications is already a full reification — the reverse
-        # direction would be redundant clauses.
-        model.add_exactly_one(cols)
-        model.add_exactly_one(rows)
-        model.add(east_soft <= -bands.band - 1).only_enforce_if(cols[0])
-        model.add(east_soft >= -bands.band).only_enforce_if(cols[1])
-        model.add(east_soft <= bands.band - 1).only_enforce_if(cols[1])
-        model.add(east_soft >= bands.band).only_enforce_if(cols[2])
-        model.add(north_soft >= bands.band + 1).only_enforce_if(rows[0])
-        model.add(north_soft <= bands.band).only_enforce_if(rows[1])
-        model.add(north_soft >= -bands.band + 1).only_enforce_if(rows[1])
-        model.add(north_soft <= -bands.band).only_enforce_if(rows[2])
+        # SOFT path — see `_zone_membership_bools`, which this shares with the
+        # corpus position-prior term, and the docstring above for why the soft
+        # anchor point and the hard centroid differ.
+        cols, rows = _zone_membership_bools(model, rv, bands, ox, oy, zone_cache)
 
         for ri in range(3):
             for ci in range(3):
@@ -2320,15 +2478,24 @@ def _solve_one(
     # phase-1 warm start deliberately omits, and Vastu placement is exactly the
     # kind of whole-plan trade phase 1 should already be making.
     vastu_terms: list[tuple[int, cp_model.IntVar]] = []
+    # Shared by the Vastu terms and the corpus position priors: both ask which
+    # of the 9 zone cells a room is in, and neither may reify it twice.
+    zone_cache: _ZoneCache = {}
     if cfg.vastu_enabled and vastu_steering:
-        vastu_terms = _add_vastu_terms(model, cfg, room_vars, ox, oy)
+        vastu_terms = _add_vastu_terms(
+            model, cfg, room_vars, ox, oy, zone_cache=zone_cache
+        )
 
-    # ── Corpus-mined size priors ─────────────────────────────────────────────
+    # ── Corpus-mined priors ──────────────────────────────────────────────────
     size_prior_terms: list[tuple[int, cp_model.IntVar]] = []
     adjacency_prior_terms: list[tuple[int, cp_model.IntVar]] = []
+    position_prior_terms: list[tuple[int, cp_model.IntVar]] = []
     if cfg.corpus_priors_enabled:
         size_prior_terms = _add_size_prior_terms(model, cfg, room_vars)
         adjacency_prior_terms = _add_adjacency_prior_terms(model, cfg, room_vars)
+        position_prior_terms = _add_position_prior_terms(
+            model, cfg, room_vars, ox, oy, zone_cache=zone_cache
+        )
 
     base_objective = (
         sum(dist_terms)
@@ -2341,6 +2508,7 @@ def _solve_one(
         + sum(cost * var for cost, var in size_prior_terms)
         # Costs are already negative — a bonus, like the align terms above.
         + sum(cost * var for cost, var in adjacency_prior_terms)
+        + sum(cost * var for cost, var in position_prior_terms)
     )
 
     # ── Solve ─────────────────────────────────────────────────────────────────
