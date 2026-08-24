@@ -41,7 +41,14 @@ def load_extracts(corpus_root: Path) -> list[RoomRecord]:
         data = json.loads(path.read_text())
         design = data.get("design", path.stem)
         for floor_name, floor in data.get("floors", {}).items():
-            for room in floor.get("rooms", []):
+            if not isinstance(floor, dict):
+                continue
+            rooms = floor.get("rooms", [])
+            if not isinstance(rooms, list):
+                continue
+            for room in rooms:
+                if not isinstance(room, dict):
+                    continue
                 label = room.get("label")
                 bbox = room.get("bbox")
                 if not label or not bbox or len(bbox) != 4:

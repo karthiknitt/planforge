@@ -98,3 +98,92 @@ def test_load_extracts_skips_standalone_files_without_style_dir(
 def test_load_extracts_returns_room_record_instances(fixture_corpus: Path) -> None:
     records = load_extracts(fixture_corpus)
     assert all(isinstance(r, RoomRecord) for r in records)
+
+
+def _write_malformed_corpus(tmp_path: Path, floors: dict) -> Path:
+    style_dir = tmp_path / "Kerala" / "Kerala-99"
+    style_dir.mkdir(parents=True)
+    (style_dir / "kerala99-ocr.json").write_text(
+        json.dumps({"design": "Kerala-99", "floors": floors})
+    )
+    return tmp_path
+
+
+def test_load_extracts_skips_room_missing_label(tmp_path: Path) -> None:
+    corpus = _write_malformed_corpus(
+        tmp_path,
+        {
+            "ground": {
+                "rooms": [
+                    {
+                        "dims_raw": None,
+                        "area_sqft": None,
+                        "bbox": [0.1, 0.1, 0.2, 0.2],
+                        "flagged": False,
+                    }
+                ]
+            }
+        },
+    )
+    assert load_extracts(corpus) == []
+
+
+def test_load_extracts_skips_room_with_malformed_bbox(tmp_path: Path) -> None:
+    corpus = _write_malformed_corpus(
+        tmp_path,
+        {
+            "ground": {
+                "rooms": [
+                    {"label": "KITCHEN", "bbox": [0.1, 0.2], "flagged": False},
+                    {"label": "KITCHEN", "flagged": False},
+                ]
+            }
+        },
+    )
+    assert load_extracts(corpus) == []
+
+
+def test_load_extracts_skips_non_dict_floor(tmp_path: Path) -> None:
+    corpus = _write_malformed_corpus(tmp_path, {"ground": None, "first": []})
+    assert load_extracts(corpus) == []
+
+
+def test_load_extracts_skips_non_dict_room_entry(tmp_path: Path) -> None:
+    corpus = _write_malformed_corpus(
+        tmp_path, {"ground": {"rooms": ["not a room", 42, None]}}
+    )
+    assert load_extracts(corpus) == []
+
+
+def test_load_extracts_skips_non_list_rooms(tmp_path: Path) -> None:
+    corpus = _write_malformed_corpus(
+        tmp_path, {"ground": {"rooms": {"label": "KITCHEN"}}}
+    )
+    assert load_extracts(corpus) == []
+
+
+def test_load_extracts_recovers_valid_rooms_alongside_malformed_ones(
+    tmp_path: Path,
+) -> None:
+    corpus = _write_malformed_corpus(
+        tmp_path,
+        {
+            "ground": None,
+            "first": {
+                "rooms": [
+                    "not a room",
+                    {"dims_raw": "5x5"},
+                    {
+                        "label": "KITCHEN",
+                        "area_sqft": 100.0,
+                        "bbox": [0.1, 0.1, 0.2, 0.2],
+                        "flagged": False,
+                    },
+                ]
+            },
+            "second": {"rooms": {"not": "a list"}},
+        },
+    )
+    records = load_extracts(corpus)
+    assert len(records) == 1
+    assert records[0].label == "KITCHEN"
