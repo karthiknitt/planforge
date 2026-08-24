@@ -119,18 +119,27 @@ Statuses cross-checked against `solver_limitations.md` and the merged PRs
 | **6** | **Open-sided rooms** (carport, verandah, balcony) | ✅ **Fixed (PR #82) — `Room.open_sides: frozenset[str]` supports multiple edges** |
 | **7** | **Carved / nested rooms** (toilet inside bedroom) | ✅ **Fixed (PR #82) — `Room.parent_id` + cycle rejection** |
 | **8** | **Richer RoomType vocabulary** + label aliasing | ✅ **Fixed (PR #82) — 7 open-programme `RoomType`s + `normalize_room_label()`; still 32 of 231 corpus labels vs the wider tail** |
-| **9** | **Compound wall, gate, landscaped setback fill** | ❌ **M** |
-| **10** | **Rotation-general, area-weighted Vastu zones** | ❌ 4-way discrete, centroid-only |
-| **11** | **Graded (3-tier) Vastu rules** | ❌ binary prohibit/avoid |
-| **12** | **Vastu as a CP-SAT objective term, not a reject filter** | ❌ post-hoc only |
-| **13** | **Vastu on all floors** | ❌ ground floor only |
+| **9** | **Compound wall, gate, landscaped setback fill** | ✅ **Fixed — DXF path (Tasks 11–12), PDF mirror, unified into `FloorDrawing.site: SiteContext` (Task 32, PR #99)** |
+| **10** | **Rotation-general, area-weighted Vastu zones** | ✅ **Fixed (Task 14) — continuous `north_angle_deg`, 40×40-lattice area-weighted zone membership** |
+| **11** | **Graded (3-tier) Vastu rules** | ✅ **Fixed (Task 15) — `preferredZones`/`acceptableZones`/`avoidZones` + `VERDICT_FACTOR`** |
+| **12** | **Vastu as a CP-SAT objective term, not a reject filter** | ✅ **Fixed (Tasks 16–17) — rank-don't-reject in `generator.py`; reified soft objective term in CP-SAT; hard-exclusion stays limited to toilet/wc_only/bathroom_master/staircase from C/NE per the safety constraint** |
+| **13** | **Vastu on all floors** | ✅ **Fixed (Task 18) — loop extended off ground-floor-only, plus entrance tie-break** |
 | 14 | Formal connectivity gate | ✅ Already fixed pre-uplift — `plan_geometry.validate_floor_connectivity()`, wired into `generator.py`'s navigability gate (see `solver_navigability_series` work, 2026-07-20) |
-| 15 | Entrance placement for all-frontage-is-parking | ❌ #6d, diagnosed only |
-| 16 | `plot_width`/`plot_length` naming footgun | ❌ F, mitigated by diagnostic |
-| 17 | Furniture + material-texture rendering | ❌ Not previously tracked |
-| 18 | Floor-N void over floor-N−1 room (double-height) | ❌ Not previously tracked |
-| 19 | Non-rectangular building footprint | ⚠️ Needs go/no-go — different search space |
-| 20 | Curved / arc geometry | ⚠️ Accepted limit — rare, document only |
+| 15 | Entrance placement for all-frontage-is-parking | ✅ **Fixed (Task 20) — SE-end preference for south-facing, NW-end for west-facing entrance fallback** |
+| 16 | `plot_width`/`plot_length` naming footgun | ✅ **Fixed (Task 21) — renamed to `plot_x_extent`/`plot_y_extent` across ~110 files + persisted-schema migration** |
+| 17 | Furniture + material-texture rendering | ✅ **Fixed (Task 33, PR #99) — DXF's 12-renderer dispatcher ported to `engine/furniture.py` as canonical `Fixture` entities on `FloorDrawing`; PDF and the frontend SVG overlay now consume the same source, closing the PDF gap and deleting the frontend's parallel copy** |
+| 18 | Floor-N void over floor-N−1 room (double-height) | ✅ **Fixed (Task 10) — `void_over` cross-floor reference + render suppression** |
+| 19 | Non-rectangular building footprint | ✅ **Landed as RECT + L only (Task 9's ruling) — T/U plot templates were rejected as infeasible; L-shaped plot envelope is rectilinear via Task 9's exact-subtraction region, exposed through the wizard (Task 22–25)** |
+| 20 | Curved / arc geometry | ✅ **Fixed as scoped (Task 13) — render-only `Room.edge_arcs` annotation; solver still sees the straight chord** |
+
+**Whole plan status (2026-08-24):** all 33 tasks across P1–P7 shipped on `main` via
+18 PRs (#82–#99), merged 2026-08-23 (PR #99, "Phase 7.4 — canonical site context +
+furniture on FloorDrawing"). Backend suite: 1,002 fast + 388 slow tests green;
+frontend: 275 tests, `tsc`/Biome clean at merge time. This spec's §1 quantitative
+gaps and §3 status table above are now historical — **superseded by whatever the
+next capability-gap pass finds against the shipped schema**, not a live backlog.
+The `2026-08-15-solver-capability-uplift.md` plan file (companion to this spec) is
+correspondingly closed; see the completion banner at its head.
 
 ---
 
