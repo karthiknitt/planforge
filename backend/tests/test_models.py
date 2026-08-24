@@ -1,5 +1,31 @@
 import pytest
-from app.engine.models import Room
+from app.engine.models import PlotConfig, Room
+
+
+def _plot_config(**kw):
+    base = dict(
+        plot_y_extent=10.0,
+        plot_x_extent=10.0,
+        setback_front=1.0,
+        setback_rear=1.0,
+        setback_left=1.0,
+        setback_right=1.0,
+        num_bedrooms=1,
+        toilets=1,
+        parking=False,
+    )
+    base.update(kw)
+    return PlotConfig(**base)
+
+
+def test_plot_config_style_preset_defaults_to_none():
+    cfg = _plot_config()
+    assert cfg.style_preset is None
+
+
+def test_plot_config_accepts_style_preset():
+    cfg = _plot_config(style_preset="Kerala")
+    assert cfg.style_preset == "Kerala"
 
 
 def test_room_defaults_to_fully_enclosed():

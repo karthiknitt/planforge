@@ -318,6 +318,12 @@ class PlotConfig:
     # When True the parking room's road-facing edge ("S" in plot coordinates,
     # regardless of the true-north angle) carries no wall.
     open_parking: bool = False
+    # Which of the 18 reverse_engr styles seeded the wizard's programme
+    # toggles, if any. NOT consumed for programme selection (see
+    # generator.py:981 for why) -- only the corpus-priors soft objective
+    # terms (a later phase) read this, to pick a style-specific prior over
+    # the corpus-wide fallback.
+    style_preset: str | None = None
 
     def __init__(
         self,
