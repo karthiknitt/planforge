@@ -329,11 +329,16 @@ class PlotConfig:
     # STAYS OFF by default: Task 13 ran the GCS + corpus-similarity baseline
     # (64 style x plot x programme cells, `scripts/tune_corpus_priors.py`) and
     # the comparison was not clean. Priors on cost 3 outright generation
-    # failures -- the extra objective terms exhaust PHASE2_DET_BUDGET before
-    # any incumbent is found (status UNKNOWN, not INFEASIBLE) -- and regressed
-    # GCS in 16-25 of the remaining cells. Lowering the weights 10x does not
-    # help; it is the model's SIZE that costs the budget, not the coefficients.
-    # The blocker is solve-budget calibration, not weight tuning.
+    # failures -- the extra objective terms exhaust BOTH PHASE1_DET_BUDGET and
+    # PHASE2_DET_BUDGET before any incumbent is found (status UNKNOWN, not
+    # INFEASIBLE) -- and regressed GCS in 16-25 of the remaining cells.
+    # Task 13's review confirmed phase 1 going UNKNOWN too is the more serious
+    # half: phase 1 exists to hand phase 2 a feasible warm-start hint, so on a
+    # failing cell priors silently disable the two-phase warm-start
+    # architecture entirely, not just the final solve. Lowering the weights
+    # 10x does not help; it is the model's SIZE that costs the budget (e.g.
+    # +28% constraints on a 12x18m/4BR plot), not the coefficients. The
+    # blocker is calibrating BOTH deterministic budgets, not weight tuning.
     corpus_priors_enabled: bool = False
 
     def __init__(
