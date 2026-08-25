@@ -700,15 +700,23 @@ def test_templating_is_still_reachable_with_both_flags_on():
 
     A plausible failure mode for a near-always-False gate is that templating
     becomes unreachable in practice even though the code path is exercised.
-    Tibetan-Buddhist `living` at plot_x_extent=10.0 is a verified hit (see
-    Task 11 review) -- pin it so a future corpus refresh that silently zeroes
-    the rate everywhere is caught here rather than discovered by its absence.
+    Tibetan-Buddhist `living` at plot_x_extent=10.1 is a verified hit -- pin
+    it so a future corpus refresh that silently zeroes the rate everywhere is
+    caught here rather than discovered by its absence.
+
+    plot_x_extent=10.1, not 10.0 (Task 11's original pin): the seed a
+    follow-up fix widened to also cover setbacks (previously only
+    style/extents/bedrooms/room -- see `_shape_usage_allows_template`'s
+    seed construction) changes the sha256 draw for every existing pinned
+    input, including this one. 10.0 stopped being a hit under the new seed;
+    10.1 was re-verified as one (both directly via
+    `_shape_usage_allows_template` and end-to-end via `solve_layout`).
     """
     cfg = _cfg(
         style_preset="Tibetan-Buddhist",
         corpus_priors_enabled=True,
         allow_shape_templates=True,
-        plot_x_extent=10.0,
+        plot_x_extent=10.1,
     )
     layout = S.solve_layout(cfg)
     assert layout is not None

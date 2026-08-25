@@ -223,6 +223,16 @@ def test_corpus_wide_priors_raise_the_size_score():
     `overall` is not comparable here at all (no `style_preset` on either
     side changes which components are present -- see
     `compute_corpus_similarity`'s docstring).
+
+    Uses the default `_cfg()` (3BR), below `CORPUS_PRIORS_WIDE_BUDGET_MIN_BEDROOMS`
+    (solver.py) -- deliberately, so this stays on the original (narrower)
+    solve budget. A follow-up to the budget-exhaustion fix below found that
+    widening the budget for EVERY priors-on solve (not just the dense/at-risk
+    ones) measurably worsened this exact direction on a normal-sized plot --
+    the two-phase warm-start hand-off means more search time can settle on a
+    genuinely different phase-1 sketch, not just a more-polished one, so it
+    is not a "monotonically better with more time" search. Keeping small
+    plots off the widened budget is what keeps this direction intact.
     """
     off = _cfg(corpus_priors_enabled=False)
     on = _cfg(corpus_priors_enabled=True)
@@ -235,22 +245,34 @@ def test_corpus_wide_priors_raise_the_size_score():
 
 
 @pytest.mark.slow
-def test_corpus_priors_exhaust_the_solve_budget_on_a_dense_plot():
-    """Why `corpus_priors_enabled` still defaults to False (Task 13).
+def test_corpus_priors_no_longer_exhaust_the_solve_budget_on_a_dense_plot():
+    """Regression guard for the Task 13 -> follow-up budget fix.
 
-    The priors' extra objective terms enlarge the model past what
-    `PHASE2_DET_BUDGET` (1.5 deterministic units, calibrated on the
-    priors-off model) can find ANY incumbent for on a dense plot -- the
-    solve returns None where priors-off succeeds. The status is UNKNOWN,
-    not INFEASIBLE: raising the budget 4x makes the same solve succeed, so
-    this is a budget calibration gap, not a modelling error, and lowering
-    the weights does not fix it (measured: model size, not coefficient
-    magnitude, is what costs the budget).
+    Originally: the priors' extra objective terms enlarged the model past
+    what the flat `PHASE2_DET_BUDGET` (1.5 deterministic units, calibrated
+    on the priors-off model) could find ANY incumbent for on a dense plot --
+    solve returned None where priors-off succeeded (status UNKNOWN, not
+    INFEASIBLE -- a budget calibration gap, not a modelling error; lowering
+    weights did not fix it since model *size*, not coefficient magnitude,
+    cost the budget).
 
-    IF THIS TEST STARTS FAILING the blocker is gone -- that is the signal to
-    re-run `scripts/tune_corpus_priors.py` and revisit the flag's default,
-    not to delete the test.
+    Fix: `CORPUS_PRIORS_DET_BUDGET_MULTIPLIER` (solver.py) scales both phase
+    budgets by 3x, but ONLY when `cfg.corpus_priors_enabled` is True AND
+    `cfg.num_bedrooms >= CORPUS_PRIORS_WIDE_BUDGET_MIN_BEDROOMS` (4) -- an
+    earlier version gated purely on the flag and was reverted: it fixed this
+    dense-plot crash but was measured to make a normal-sized plot's
+    corpus-similarity WORSE (see `test_corpus_wide_priors_raise_the_size_score`
+    above), because widening the budget changes the phase-1 warm-start's
+    outcome for every priors-on solve, not just the ones that need it. 3x
+    was the smallest multiplier where both sampled dense cells (12x18m 3BR
+    and 4BR) returned a layout, but only the 4BR cell actually needed it --
+    the 3BR one already solved fine at the base budget, which is the measured
+    basis for the >=4 bedroom cutoff.
+
+    IF THIS TEST STARTS FAILING the fix has regressed -- re-run
+    `scripts/tune_corpus_priors.py` and re-measure both the multiplier and
+    the bedroom cutoff before touching anything here.
     """
     dense = dict(plot_x_extent=12.0, plot_y_extent=18.0, num_bedrooms=4, toilets=3)
     assert solve_layout(_cfg(**dense, corpus_priors_enabled=False)) is not None
-    assert solve_layout(_cfg(**dense, corpus_priors_enabled=True)) is None
+    assert solve_layout(_cfg(**dense, corpus_priors_enabled=True)) is not None

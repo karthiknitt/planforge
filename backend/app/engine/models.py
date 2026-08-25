@@ -326,19 +326,38 @@ class PlotConfig:
     style_preset: str | None = None
     # Soft-nudge the solver toward corpus-mined size/adjacency/position/shape
     # patterns (docs/plans/2026-08-24-corpus-learned-generation-priors-design.md).
-    # STAYS OFF by default: Task 13 ran the GCS + corpus-similarity baseline
-    # (64 style x plot x programme cells, `scripts/tune_corpus_priors.py`) and
-    # the comparison was not clean. Priors on cost 3 outright generation
-    # failures -- the extra objective terms exhaust BOTH PHASE1_DET_BUDGET and
-    # PHASE2_DET_BUDGET before any incumbent is found (status UNKNOWN, not
-    # INFEASIBLE) -- and regressed GCS in 16-25 of the remaining cells.
-    # Task 13's review confirmed phase 1 going UNKNOWN too is the more serious
-    # half: phase 1 exists to hand phase 2 a feasible warm-start hint, so on a
-    # failing cell priors silently disable the two-phase warm-start
-    # architecture entirely, not just the final solve. Lowering the weights
-    # 10x does not help; it is the model's SIZE that costs the budget (e.g.
-    # +28% constraints on a 12x18m/4BR plot), not the coefficients. The
-    # blocker is calibrating BOTH deterministic budgets, not weight tuning.
+    # STAYS OFF by default. Task 13 found priors caused outright generation
+    # failures on dense plots (the extra objective terms exhausted both
+    # PHASE1_DET_BUDGET and PHASE2_DET_BUDGET before any incumbent was found
+    # -- status UNKNOWN, not INFEASIBLE). A follow-up fixed that crash:
+    # `CORPUS_PRIORS_DET_BUDGET_MULTIPLIER` (solver.py) triples both phase
+    # budgets, but ONLY for plots at real risk -- `cfg.corpus_priors_enabled`
+    # AND `cfg.num_bedrooms >= CORPUS_PRIORS_WIDE_BUDGET_MIN_BEDROOMS` (4) --
+    # so priors-off solves (100% of traffic while this flag stays off) and
+    # small priors-on plots both pay nothing. An unconditional "always 3x
+    # when the flag is on" version was tried first and reverted: it measurably
+    # WORSENED a normal 3BR plot's corpus-similarity (size_score 85.6 -> 76.4)
+    # purely from the wider budget changing the two-phase warm-start's
+    # outcome, not from anything about that plot being dense.
+    #
+    # With the crash fixed and the budget change scoped narrowly, re-measuring
+    # (`scripts/tune_corpus_priors.py`, 4 sample cells) surfaced the REAL
+    # reason this stays off: on small/normal plots corpus-wide priors
+    # genuinely improve both GCS (+5 to +10) and size_score (matching Task
+    # 13's consistent win); on dense/large plots needing the wider budget
+    # (num_bedrooms >= 4) they now solve but still produce a measurably worse
+    # house (GCS -10) -- the solver trades away setback/proportion quality to
+    # satisfy the extra corpus-similarity terms on a plot that was already
+    # tight, and no budget size fixes that, only better weight balancing
+    # would. (A dense 3BR plot, which does NOT cross the bedroom threshold,
+    # improved once it stopped needlessly getting the wider budget too: GCS
+    # regression shrank from -15 to -5.) Style-specific priors (a
+    # `style_preset` set) are a separate, independently-worse idea
+    # (adjacency/position regressed in ~20-40% of Task 13's sampled cells) --
+    # if this is ever enabled, it should be corpus-wide only, never
+    # style-specific. Re-run `scripts/tune_corpus_priors.py` before revisiting
+    # this default; rebalancing SIZE_PRIOR_WEIGHT/etc. specifically for the
+    # >=4-bedroom regime is the next thing to try, not attempted yet.
     corpus_priors_enabled: bool = False
 
     def __init__(

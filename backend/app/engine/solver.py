@@ -95,6 +95,40 @@ PHASE1_TIME_S = 25.0
 # without needing a proportionally larger wall-clock cap too.
 PHASE1_DET_BUDGET = 0.7
 PHASE2_DET_BUDGET = 1.5
+# Corpus-priors objective terms (see `_add_size_prior_terms` et al.) enlarge
+# the model enough that the baseline budgets above go UNKNOWN, not
+# INFEASIBLE, on dense plots -- measured on a 12x18m/4BR/3T plot: the phase-1
+# warm-start itself fails at that budget, so phase 2 never gets a feasible
+# hint. Swept 1x/2x/3x/4x the baseline det budget with corpus_priors_enabled
+# on a 12x18m/3BR and /4BR plot (both dense cells from the Task 13 sweep):
+# 3x is the smallest multiplier where BOTH cells return a layout (2x still
+# fails the 4BR cell); 4x adds no further wins over 3x, only latency.
+#
+# NOT applied to every corpus-priors solve, only to plots that actually need
+# it (see CORPUS_PRIORS_WIDE_BUDGET_MIN_BEDROOMS below) -- an unconditional
+# widen was tried and measured WORSE on normal plots. The two-phase solve is
+# a warm-start hand-off, not a plain "more time, same answer" search: a
+# longer phase-1 doesn't just polish the same rough sketch, it can settle on
+# a genuinely DIFFERENT one, which then anchors phase 2 down a different
+# path -- there is no guarantee that path is better for the *combined*
+# objective, even though the model is deterministic and phase 1 alone did
+# find a lower-cost incumbent for its own (penalty-free) objective. Measured
+# on the 9x15m/3BR cell (which never needed the wider budget -- it already
+# solved fine at 1x): corpus-similarity size_score 85.6 -> 76.4 and
+# adjacency_score 53.8 -> 38.5 just from widening the budget, no other
+# change. A flat "always 3x when priors are on" gate was tried first and
+# reverted once this was found. Widening unconditionally ALSO was measured
+# to cost every priors-off solve (100% of production traffic today) ~4x
+# wall-clock if applied without the flag gate at all (~10s -> ~36-46s on a
+# normal 2-3BR plot) -- doubly a reason to keep this narrowly scoped.
+CORPUS_PRIORS_DET_BUDGET_MULTIPLIER = 3.0
+# The one measured differentiator between the two dense (12x18m) sweep
+# cells: /3BR solved fine at the baseline budget, /4BR did not. Only
+# num_bedrooms was varied between them, so that is the cutoff used --
+# NOT independently verified across a wider sample of plot sizes/program
+# combinations. Re-run `scripts/tune_corpus_priors.py` before relying on
+# this cutoff outside the two cells it was measured on.
+CORPUS_PRIORS_WIDE_BUDGET_MIN_BEDROOMS = 4
 MAX_DIM_MM = 50_000  # safety cap: 50 m per dimension
 
 # Wall-coalignment bonus (objective units = mm) per exactly-aligned edge
@@ -395,6 +429,10 @@ def _shape_usage_allows_template(cfg: PlotConfig, room_id: str, room_type: str) 
             str(cfg.style_preset),
             f"{cfg.plot_x_extent:.3f}",
             f"{cfg.plot_y_extent:.3f}",
+            f"{cfg.setback_front:.3f}",
+            f"{cfg.setback_rear:.3f}",
+            f"{cfg.setback_left:.3f}",
+            f"{cfg.setback_right:.3f}",
             str(cfg.num_bedrooms),
             room_id,
             room_type,
@@ -2645,9 +2683,19 @@ def _solve_one(
     # partial hints didn't fit. Phase 1 solves the well-behaved penalty-free
     # model; its solution is a complete, feasible hint for phase 2, which
     # then spends its entire budget relocating toilets out of penalty zones.
+    det_budget_multiplier = (
+        CORPUS_PRIORS_DET_BUDGET_MULTIPLIER
+        if cfg.corpus_priors_enabled
+        and cfg.num_bedrooms >= CORPUS_PRIORS_WIDE_BUDGET_MIN_BEDROOMS
+        else 1.0
+    )
+
     if penalty_terms and not seed_rooms:
         model.minimize(base_objective)
-        pre = _make_solver(det_budget=PHASE1_DET_BUDGET, wall_budget=PHASE1_TIME_S)
+        pre = _make_solver(
+            det_budget=PHASE1_DET_BUDGET * det_budget_multiplier,
+            wall_budget=PHASE1_TIME_S,
+        )
         pre_status = pre.solve(model)
         if pre_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             # Hint everything EXCEPT the common toilets' and parking's
@@ -2667,7 +2715,7 @@ def _solve_one(
                     model.add_hint(var, pre.value(var))
 
     model.minimize(base_objective + sum(penalty_terms))
-    solver = _make_solver(det_budget=PHASE2_DET_BUDGET)
+    solver = _make_solver(det_budget=PHASE2_DET_BUDGET * det_budget_multiplier)
 
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):

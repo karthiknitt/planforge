@@ -42,8 +42,13 @@ def load_extracts(corpus_root: Path) -> list[RoomRecord]:
     for path in sorted(corpus_root.glob("*/*/*-ocr.json")):
         style = path.parent.parent.name
         data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            continue
         design = data.get("design", path.stem)
-        for floor_name, floor in data.get("floors", {}).items():
+        floors = data.get("floors", {})
+        if not isinstance(floors, dict):
+            continue
+        for floor_name, floor in floors.items():
             if not isinstance(floor, dict):
                 continue
             rooms = floor.get("rooms", [])
@@ -54,7 +59,12 @@ def load_extracts(corpus_root: Path) -> list[RoomRecord]:
                     continue
                 label = room.get("label")
                 bbox = room.get("bbox")
-                if not label or not bbox or len(bbox) != 4:
+                if (
+                    not label
+                    or not isinstance(bbox, list | tuple)
+                    or len(bbox) != 4
+                    or not all(isinstance(v, int | float) for v in bbox)
+                ):
                     continue
                 records.append(
                     RoomRecord(

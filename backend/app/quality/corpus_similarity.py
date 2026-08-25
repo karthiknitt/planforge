@@ -135,7 +135,10 @@ def _size_score(cfg: PlotConfig, rooms: list[tuple[int, Room]]) -> float | None:
         prior = get_size_prior(cfg, room.type)
         if prior is None or prior.area_std <= 0:
             continue
-        area_sqft = (room.width * 1000.0) * (room.depth * 1000.0) / _SQFT_TO_MM2
+        # `.area` (union of shape-template parts) rather than `width * depth`
+        # -- identical for RECT rooms, but an L/T/U room's bounding box
+        # overstates its occupied footprint by up to ~16% (see `shapes.py`).
+        area_sqft = (room.area * 1_000_000.0) / _SQFT_TO_MM2
         z = abs(area_sqft - prior.area_mean) / prior.area_std
         scores.append(max(0.0, 100.0 - _SIZE_PENALTY_PER_STD * z))
     return (sum(scores) / len(scores)) if scores else None
