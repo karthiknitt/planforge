@@ -326,8 +326,14 @@ class PlotConfig:
     style_preset: str | None = None
     # Soft-nudge the solver toward corpus-mined size/adjacency/position/shape
     # patterns (docs/plans/2026-08-24-corpus-learned-generation-priors-design.md).
-    # OFF by default until weight-tuning (a later task) validates it against
-    # the GCS regression baseline.
+    # STAYS OFF by default: Task 13 ran the GCS + corpus-similarity baseline
+    # (64 style x plot x programme cells, `scripts/tune_corpus_priors.py`) and
+    # the comparison was not clean. Priors on cost 3 outright generation
+    # failures -- the extra objective terms exhaust PHASE2_DET_BUDGET before
+    # any incumbent is found (status UNKNOWN, not INFEASIBLE) -- and regressed
+    # GCS in 16-25 of the remaining cells. Lowering the weights 10x does not
+    # help; it is the model's SIZE that costs the budget, not the coefficients.
+    # The blocker is solve-budget calibration, not weight tuning.
     corpus_priors_enabled: bool = False
 
     def __init__(

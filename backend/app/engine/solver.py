@@ -231,8 +231,13 @@ SIZE_PRIOR_UNITS_PER_STD = 100
 # -- and at this weight the size prior wins that contest by roughly 12-16x
 # (marginal cost ~0.005-0.007 per mm^2 vs. the reward's 1 per mm on a ~3 m
 # room dimension), so with the flag on it is the dominant sizing force, not
-# a mere nudge. Task 13 tunes this against the GCS regression baseline; rough
-# parity with the growth reward sits closer to SIZE_PRIOR_WEIGHT ~= 10.
+# a mere nudge.
+#
+# Task 13 MEASURED the "rough parity sits closer to ~10" guess this comment
+# used to carry and it is wrong: at 10 the corpus-wide size_score gain over
+# priors-off collapses from +7.8 to +2.3 mean and starts regressing (9/18
+# cells vs 0/48 at 100), while the GCS regressions it was meant to relieve
+# get WORSE (+3.3 -> -3.3 mean). 100 stays. See `scripts/tune_corpus_priors.py`.
 SIZE_PRIOR_WEIGHT = 100
 # Reward for a room pair the corpus finds typical actually sharing a wall,
 # scaled by that pair's observed frequency (so 1.0 pays the full weight).
@@ -248,7 +253,7 @@ SIZE_PRIOR_WEIGHT = 100
 # cavity into real contact, an order of magnitude short of the ~24 000 it
 # would take to drag a room across the plan, and far below the toilet and
 # parking placement penalties (150 000–250 000) it must never overturn.
-# Task 13 tunes this against the GCS regression baseline — not here.
+# Task 13 measured 500 (10x down) as strictly worse on GCS and left 5 000.
 ADJACENCY_PRIOR_WEIGHT = 5_000
 # Reward for a room landing in a zone its style's corpus histogram favours,
 # scaled by that zone's observed frequency (so 1.0 pays the full weight).
@@ -274,7 +279,7 @@ ADJACENCY_PRIOR_WEIGHT = 5_000
 # settle a room already near a band boundary into the favoured cell, nowhere
 # near the ~3-5 m a zone is wide on a typical plot. It also sits 6-10x below
 # the toilet and parking placement penalties (150 000-250 000).
-# Task 13 tunes this against the GCS regression baseline — not here.
+# Task 13 measured 2 500 (10x down) as strictly worse on GCS and left 25 000.
 POSITION_PRIOR_WEIGHT = 25_000
 
 # Zones that may carry a HARD exclusion at all (spec: Safety / Global

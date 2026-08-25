@@ -8,7 +8,10 @@ the golden layout carries no `style_preset`.
 
 from __future__ import annotations
 
+import pytest
+
 from app.engine.models import ComplianceResult, FloorPlan, Layout, PlotConfig, Room
+from app.engine.solver import solve_layout
 from app.quality.corpus_similarity import compute_corpus_similarity
 from tests.helpers.golden import golden_config, golden_layout
 
@@ -198,3 +201,56 @@ def test_shape_score_still_scores_a_type_the_style_did_record():
     layout = _layout([_room("l1", "living", 0.0, 0.0, 4.0, 4.0)])
     score = compute_corpus_similarity(layout, cfg)
     assert score.shape_score == 100.0
+
+
+# ── Task 13's go/no-go findings, pinned ──────────────────────────────────────
+# Both tests below solve for real, so they carry the `slow` marker. The solver
+# runs single-threaded under a deterministic budget
+# (`num_search_workers = 1`, `max_deterministic_time`), so identical inputs
+# give identical output and a pinned-input assertion is legitimate here --
+# these still assert a DIRECTION rather than a number, because any future
+# weight change would move the numbers without invalidating the finding.
+
+
+@pytest.mark.slow
+def test_corpus_wide_priors_raise_the_size_score():
+    """The one direction that held in every cell of Task 13's sweep.
+
+    Corpus-wide priors (priors on, `style_preset` unset) beat priors-off on
+    `size_score` in 48/48 sampled cells, by +3.3 to +15.4 points. Only
+    `size_score` is asserted: `adjacency_score` regressed in 19/48 and
+    `position_score` in 9/48, so neither is a stable direction to pin, and
+    `overall` is not comparable here at all (no `style_preset` on either
+    side changes which components are present -- see
+    `compute_corpus_similarity`'s docstring).
+    """
+    off = _cfg(corpus_priors_enabled=False)
+    on = _cfg(corpus_priors_enabled=True)
+    layout_off = solve_layout(off)
+    layout_on = solve_layout(on)
+    assert layout_off is not None and layout_on is not None
+    score_off = compute_corpus_similarity(layout_off, off)
+    score_on = compute_corpus_similarity(layout_on, on)
+    assert score_on.size_score > score_off.size_score
+
+
+@pytest.mark.slow
+def test_corpus_priors_exhaust_the_solve_budget_on_a_dense_plot():
+    """Why `corpus_priors_enabled` still defaults to False (Task 13).
+
+    The priors' extra objective terms enlarge the model past what
+    `PHASE2_DET_BUDGET` (1.5 deterministic units, calibrated on the
+    priors-off model) can find ANY incumbent for on a dense plot -- the
+    solve returns None where priors-off succeeds. The status is UNKNOWN,
+    not INFEASIBLE: raising the budget 4x makes the same solve succeed, so
+    this is a budget calibration gap, not a modelling error, and lowering
+    the weights does not fix it (measured: model size, not coefficient
+    magnitude, is what costs the budget).
+
+    IF THIS TEST STARTS FAILING the blocker is gone -- that is the signal to
+    re-run `scripts/tune_corpus_priors.py` and revisit the flag's default,
+    not to delete the test.
+    """
+    dense = dict(plot_x_extent=12.0, plot_y_extent=18.0, num_bedrooms=4, toilets=3)
+    assert solve_layout(_cfg(**dense, corpus_priors_enabled=False)) is not None
+    assert solve_layout(_cfg(**dense, corpus_priors_enabled=True)) is None
