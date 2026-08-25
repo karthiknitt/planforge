@@ -668,6 +668,17 @@ def test_shape_gate_never_consulted_when_corpus_priors_are_off(monkeypatch):
     )
     assert layout is not None
     assert seen == []
+    templated_types = {
+        r.type
+        for floor in (layout.ground_floor, layout.first_floor)
+        if floor is not None
+        for r in floor.rooms
+        if r.template != "RECT"
+    }
+    assert templated_types, (
+        "pre-change behaviour must survive: some eligible room should still "
+        "be templated unconditionally with the gate never consulted"
+    )
 
 
 def test_shape_gate_is_consulted_when_both_flags_are_on(monkeypatch):
@@ -682,6 +693,32 @@ def test_shape_gate_is_consulted_when_both_flags_are_on(monkeypatch):
     assert layout is not None
     assert seen, "gate was never consulted with both flags on"
     assert {rtype for _, rtype in seen} <= set(_templatable_types())
+
+
+def test_templating_is_still_reachable_with_both_flags_on():
+    """Real rates are near zero -- confirm the gate can still fire, not just run.
+
+    A plausible failure mode for a near-always-False gate is that templating
+    becomes unreachable in practice even though the code path is exercised.
+    Tibetan-Buddhist `living` at plot_x_extent=10.0 is a verified hit (see
+    Task 11 review) -- pin it so a future corpus refresh that silently zeroes
+    the rate everywhere is caught here rather than discovered by its absence.
+    """
+    cfg = _cfg(
+        style_preset="Tibetan-Buddhist",
+        corpus_priors_enabled=True,
+        allow_shape_templates=True,
+        plot_x_extent=10.0,
+    )
+    layout = S.solve_layout(cfg)
+    assert layout is not None
+    templates = {
+        r.template
+        for floor in (layout.ground_floor, layout.first_floor)
+        if floor is not None
+        for r in floor.rooms
+    }
+    assert templates - {"RECT"}, "templating should still be reachable, not dead code"
 
 
 def test_a_zero_rate_room_type_is_never_templated(monkeypatch):

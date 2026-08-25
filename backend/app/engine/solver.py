@@ -348,10 +348,19 @@ def _shape_usage_allows_template(cfg: PlotConfig, room_id: str, room_type: str) 
     is 0.0 in 15 of 16 (highest 0.2, Rajasthani-Haveli), and `passage` is
     recorded in only 4 styles at all.
     The pre-change code templated those rooms 100% of the time whenever the
-    flag was on. That gap -- always vs almost never -- is precisely the
-    "nothing in the model cared" finding that parked uplift Task 9's ruling
-    and left `allow_shape_templates` default-off. Matching the corpus rate is
-    what makes the flag defensible to turn on; Task 13 owns that call.
+    flag was on. That gap -- always vs almost never -- is close to what
+    uplift Task 9's ruling flagged (see
+    docs/superpowers/plans/2026-08-15-solver-capability-uplift.md:74-78:
+    "nothing fills the notch, because no objective term rewards doing so").
+
+    THIS DOES NOT DISCHARGE TASK 9'S PRECONDITION. Task 9 parked the flag on
+    a notch-filling objective existing -- something that makes a templated
+    room's cut area get used. This gate does not do that: when it fires
+    (e.g. ~20% of Tibetan-Buddhist plots), the room pays the same ~16% bbox
+    cost Task 9 measured, with nothing filling the notch. What this gate buys
+    is that the flag is now nearly a NO-OP in most styles, i.e. SAFE to turn
+    on without changing much -- not that turning it on is now a good idea.
+    Task 13 owns the go/no-go and must not read this as clearance.
 
     Determinism. `hashlib.sha256` over stable per-request strings, never
     `random` (`app/` contains no RNG at all) and never `hash()` (salted per
@@ -360,6 +369,16 @@ def _shape_usage_allows_template(cfg: PlotConfig, room_id: str, room_type: str) 
     as well as the room because a plan holds at most one `living`: seeding on
     room id alone would freeze one verdict per style forever and the rate
     would never materialise across a user's plans.
+
+    Deviates from the design doc, not just the plan. The design doc (Stage 3
+    term 4) frames this as "the notch-filling objective Task 9's ruling
+    flagged as missing" -- this gate is not that; see above. The plan's own
+    Task 11 text (line ~762) frames the goal as biasing template "selection
+    frequency", which this does achieve. Followed the plan's framing.
+
+    Currently unreachable from the production API: generate_from_request
+    hardcodes allow_shape_templates=False and never sets corpus_priors_enabled,
+    so this gate only runs in tests and direct solve_layout() calls today.
     """
     p_nonrect = get_shape_usage_prior(cfg, room_type)
     if p_nonrect <= 0.0:
