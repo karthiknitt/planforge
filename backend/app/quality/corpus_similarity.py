@@ -18,6 +18,7 @@ from app.engine.corpus_priors import (
     get_position_prior,
     get_shape_usage_prior,
     get_size_prior,
+    load_priors,
 )
 from app.engine.solver import (
     _IWT_MM,
@@ -149,6 +150,15 @@ def _adjacency_score(cfg: PlotConfig, rooms: list[tuple[int, Room]]) -> float | 
     adjacency data clears the threshold) scores None, not 0 -- there was
     nothing to satisfy. Computes meaningfully with no `style_preset`, since
     `get_adjacency_prior` has a corpus-wide fallback.
+
+    NOT COMPARABLE ACROSS DIFFERENT PROGRAMMES. The denominator counts ROOM
+    pairs, not TYPE pairs: with 3 bedrooms and 1 living at a corpus
+    bedroom|living frequency of 0.6, this expects ALL THREE bedrooms to
+    touch the living room, plus every bedroom pair to touch each other --
+    frequently geometrically impossible, so 100 is unreachable and the
+    achievable ceiling varies with room count. Hold the programme fixed
+    (same bedroom/toilet count) when comparing priors-on vs priors-off, and
+    never average this across a mixed-programme sweep.
     """
     expected = 0
     matched = 0
@@ -183,6 +193,17 @@ def _position_score(cfg: PlotConfig, rooms: list[tuple[int, Room]]) -> float | N
     against the layout's real plot extents and the same fixed angle, rather
     than the layout's own `cfg.north_angle_deg`, to stay comparable to what
     the priors were actually mined against.
+
+    HAS AN UNREACHABLE CEILING FOR ZONES THE SOLVER HARD-EXCLUDES. This is a
+    pure corpus-similarity number; it does not know about
+    `solver.VASTU_HARD_EXCLUDE_ZONES` ({"NE", "C"}), which the solver treats
+    as a HARD constraint for toilet-family room types, not a soft penalty.
+    The corpus's single most frequent toilet zone is often `C` (e.g. Kerala
+    0.474, Contemporary 0.323) -- a style whose toilet histogram clears
+    `_HIGH_FREQ_THRESHOLD` only in `NE`/`C` would score a permanent,
+    unimprovable 0 here, for a reason no amount of corpus-prior tuning can
+    move. Read a low `position_score` on wet rooms in that light, not as
+    evidence the position prior isn't working.
     """
     scores: list[float] = []
     for _floor, room in rooms:
@@ -225,12 +246,24 @@ def _shape_score(cfg: PlotConfig, rooms: list[tuple[int, Room]]) -> float | None
     fallback), which would make every RECT room auto-score 100 -- a
     misleadingly high score built from zero real signal, not evidence of
     similarity.
+
+    The same hole exists per-ROOM-TYPE, not just per-style: `0.0` from
+    `get_shape_usage_prior` is indistinguishable between "the corpus says
+    always rectangular" and "the corpus has no entry for this type at all"
+    (e.g. Kerala's `shape_usage` block has no `passage` key whatsoever).
+    Guarded here by checking the raw block for a real entry before scoring,
+    rather than trusting the accessor's 0.0 default -- a room of a type the
+    corpus never recorded is excluded, not auto-scored 100 from zero signal.
     """
     if cfg.style_preset is None:
         return None
+    style_block = load_priors()["by_style"].get(cfg.style_preset, {})
+    shape_usage_block = style_block.get("shape_usage", {})
     scores: list[float] = []
     for _floor, room in rooms:
         if room.type not in _TEMPLATE_TYPES:
+            continue
+        if room.type not in shape_usage_block:
             continue
         p_nonrect = get_shape_usage_prior(cfg, room.type)
         actual = 0.0 if room.template == "RECT" else 1.0
@@ -242,6 +275,16 @@ def compute_corpus_similarity(layout: Layout, cfg: PlotConfig) -> CorpusSimilari
     """Diagnostic-only similarity between `layout` and the mined corpus
     priors for `cfg.style_preset` (or the corpus-wide stats when unset).
     Never a gate -- see module docstring.
+
+    `overall` is a weighted average of only the PRESENT (non-None)
+    components, renormalized -- so a no-`style_preset` layout's `overall` is
+    really a size/adjacency-only blend (weights 0.35/0.35 renormalized to
+    0.5/0.5), while a styled layout's also folds in position/shape.
+    DO NOT COMPARE `overall` ACROSS LAYOUTS WHERE STYLE PRESENCE DIFFERS --
+    they are not measuring the same thing. Compare the individual components
+    instead when that's a possibility, and prefer components over `overall`
+    generally when tuning (see `_adjacency_score`'s and `_shape_score`'s
+    docstrings for further caveats on what each component can and can't say).
     """
     rooms = _all_rooms(layout)
 

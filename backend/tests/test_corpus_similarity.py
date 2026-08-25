@@ -168,3 +168,33 @@ def test_as_dict_matches_gcs_style():
         "position_score",
         "shape_score",
     }
+
+
+# ── shape_score's per-type "no data" hole (Task 12 review Finding C) ──────────
+
+
+def test_shape_score_excludes_a_templatable_type_the_style_never_recorded():
+    """Kerala's shape_usage block has no `passage` entry at all -- a RECT
+    passage must be excluded, not auto-scored 100 from zero real signal.
+    """
+    cfg = _cfg(style_preset="Kerala")
+    from app.engine.corpus_priors import load_priors
+
+    assert "passage" not in load_priors()["by_style"]["Kerala"]["shape_usage"]
+    layout = _layout([_room("p1", "passage", 0.0, 0.0, 1.0, 2.0)])
+    score = compute_corpus_similarity(layout, cfg)
+    assert score.shape_score is None
+
+
+def test_shape_score_still_scores_a_type_the_style_did_record():
+    """Sanity check the fix didn't just exclude everything: Kerala DOES
+    carry a `living` entry (p_nonrect == 0.0), so a RECT living room must
+    still score 100.
+    """
+    cfg = _cfg(style_preset="Kerala")
+    from app.engine.corpus_priors import load_priors
+
+    assert "living" in load_priors()["by_style"]["Kerala"]["shape_usage"]
+    layout = _layout([_room("l1", "living", 0.0, 0.0, 4.0, 4.0)])
+    score = compute_corpus_similarity(layout, cfg)
+    assert score.shape_score == 100.0
