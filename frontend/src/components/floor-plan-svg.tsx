@@ -503,6 +503,7 @@ function FurnitureKitchen({
         [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.3, rearY + cw * 0.3],
         [rx + margin + 0.1 + Math.min(0.6, (rw - 2 * margin) * 0.4) * 0.7, rearY + cw * 0.3],
       ].map(([bx, by], i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: fixed literal 2-item array, never reordered
         <circle key={`burner-${i}-${bx}-${by}`} cx={px(bx)} cy={py(by)} r={0.07 * scale} />
       ))}
     </g>
@@ -912,6 +913,7 @@ function DrawingStairSymbol({
       <g stroke="var(--svg-ink-secondary)" strokeWidth={0.6}>
         {stair.treads.map(([x1, y1, x2, y2], i) => (
           <line
+            // biome-ignore lint/suspicious/noArrayIndexKey: solver-derived, replaced wholesale each render
             key={`tread-${i}-${x1}-${y1}-${x2}-${y2}`}
             x1={px(x1)}
             y1={py(y1)}
@@ -1826,6 +1828,7 @@ export function FloorPlanSVG({
           <g opacity={drawingOpacity}>
             {drawing.walls.map((wall, i) => (
               <DrawingWall
+                // biome-ignore lint/suspicious/noArrayIndexKey: solver-derived, replaced wholesale each render
                 key={`wall-${i}-${wall.x1}-${wall.y1}-${wall.x2}-${wall.y2}`}
                 wall={wall}
                 px={px}
@@ -1873,6 +1876,7 @@ export function FloorPlanSVG({
           const colPx = Math.max(4, col.size * scale);
           return (
             <rect
+              // biome-ignore lint/suspicious/noArrayIndexKey: solver-derived, replaced wholesale each render
               key={`col-${i}-${col.cx}-${col.cy}`}
               x={px(col.cx) - colPx / 2}
               y={py(col.cy) - colPx / 2}
@@ -2015,7 +2019,7 @@ export function FloorPlanSVG({
         {annotations.length > 0 &&
           rooms.map((room) => {
             const ann = annotationMap.get(room.id);
-            if (!ann || !ann.note) return null;
+            if (!ann?.note) return null;
             const noteX = px(room.x + room.width / 2) - 10;
             const noteY = py(room.y + room.depth / 2) - 10;
             return (

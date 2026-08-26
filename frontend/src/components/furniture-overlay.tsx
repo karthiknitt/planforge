@@ -94,6 +94,7 @@ export function FurnitureOverlay({
         const room = roomsById.get(fixture.room_id);
         if (!room) return null;
         return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: solver-derived, replaced wholesale each render
           <g key={`fx-${fixture.room_id}-${fixture.kind}-${i}`}>
             {fixture.shapes.map((sh) => {
               const x = room.x + sh.x;

@@ -4,13 +4,13 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import en from "../../messages/en.json";
 import { isLocale, type Locale } from "./locale";
 
+export type { Locale };
 // Re-exported so existing client-side consumers of this module keep working
 // unchanged. Server Components / Route Handlers must import isLocale/Locale
 // from "./locale" directly — this file is "use client", and calling a
 // function exported from a client module in server code throws at runtime
 // (builds/typechecks fine, only fails on actual invocation).
 export { isLocale };
-export type { Locale };
 
 // BCP-47 tags for the reactive <html lang> — kept region-qualified ("-IN")
 // to match the tag the root layout sets statically for the "en" default.

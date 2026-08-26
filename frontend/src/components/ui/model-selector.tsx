@@ -239,14 +239,14 @@ function ModelSelectorLogo({ logoId, className }: { logoId: LogoId; className?: 
 
 export {
   ModelSelector,
-  ModelSelectorTrigger,
   ModelSelectorContent,
-  ModelSelectorInput,
-  ModelSelectorList,
   ModelSelectorEmpty,
   ModelSelectorGroup,
-  ModelSelectorSeparator,
+  ModelSelectorInput,
   ModelSelectorItem,
-  ModelSelectorName,
+  ModelSelectorList,
   ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelectorSeparator,
+  ModelSelectorTrigger,
 };

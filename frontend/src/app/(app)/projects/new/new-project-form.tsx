@@ -294,6 +294,9 @@ export default function NewProjectPage() {
   const [loading, setLoading] = useState(false);
   const [configMode, setConfigMode] = useState<"basic" | "advanced">("basic");
   const [customRooms, setCustomRooms] = useState<CustomRoomSpec[]>([]);
+  // Parallel to customRooms — a stable per-row identity so removing a middle row
+  // doesn't make React reuse another row's DOM/local state (index-as-key would).
+  const [customRoomKeys, setCustomRoomKeys] = useState<string[]>([]);
   const [step, setStep] = useState(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
@@ -442,6 +445,7 @@ export default function NewProjectPage() {
     if (form.has_balcony)
       rooms.push({ type: "balcony", name: "Balcony", floor_preference: "ff", mandatory: false });
     setCustomRooms(rooms);
+    setCustomRoomKeys(rooms.map(() => crypto.randomUUID()));
     setConfigMode("advanced");
   }
 
@@ -450,6 +454,7 @@ export default function NewProjectPage() {
       ...prev,
       { type: "bedroom", floor_preference: "either", mandatory: false },
     ]);
+    setCustomRoomKeys((prev) => [...prev, crypto.randomUUID()]);
   }
 
   /* ── Per-step validation (gates "Next", reuses the exact same geometric
@@ -1386,12 +1391,15 @@ export default function NewProjectPage() {
                   </div>
                   {customRooms.map((room, idx) => (
                     <CustomRoomRow
-                      key={`${room.type}-${idx}`}
+                      key={customRoomKeys[idx] ?? `${room.type}-${idx}`}
                       room={room}
                       onChange={(updated) =>
                         setCustomRooms((prev) => prev.map((r, i) => (i === idx ? updated : r)))
                       }
-                      onRemove={() => setCustomRooms((prev) => prev.filter((_, i) => i !== idx))}
+                      onRemove={() => {
+                        setCustomRooms((prev) => prev.filter((_, i) => i !== idx));
+                        setCustomRoomKeys((prev) => prev.filter((_, i) => i !== idx));
+                      }}
                     />
                   ))}
                   <button
