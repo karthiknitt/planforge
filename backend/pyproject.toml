@@ -41,6 +41,13 @@ dev = [
     "ruff>=0.15.9",
 ]
 
+[tool.ruff.lint]
+# Explicit pin of ruff's pre-0.16 default rule set. Ruff 0.16 broadened its
+# implicit defaults (bugbear, isort, bandit, pyupgrade, pylint, refurb, perf,
+# simplify, ...); without this the same `ruff check` with no config change
+# newly flags 300+ pre-existing lines untouched by this dependency bump.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
