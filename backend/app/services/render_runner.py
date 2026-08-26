@@ -82,7 +82,7 @@ async def check_render_quota(user_id: str, db, limit: int | None = None) -> None
 def validate_render_floor(floor: str) -> str:
     if floor not in RENDER_FLOORS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"floor must be one of {', '.join(RENDER_FLOORS)}",
         )
     return floor
