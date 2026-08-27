@@ -109,7 +109,7 @@ async def create_project(
         plot_width = data.get("plot_width", 0) or 0
         if float(plot_length) * float(plot_width) < 200:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="4BHK requires minimum 200 sqm plot area",
             )
 
@@ -151,7 +151,7 @@ async def update_project(
         merged_width = float(data.get("plot_width") or project.plot_width or 0)
         if merged_length * merged_width < 200:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="4BHK requires minimum 200 sqm plot area",
             )
 

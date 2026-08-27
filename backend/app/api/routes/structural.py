@@ -194,7 +194,7 @@ async def structural_design(
     grid = extract_grid(ground.get("columns") or [])
     if not grid.x_spacings_m or not grid.y_spacings_m:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "message": "Could not extract a structural grid from this layout",
                 "notes": grid.notes,
@@ -234,7 +234,7 @@ async def structural_design(
         )
     except structural_loop.GridNotExtractable as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "message": "Could not extract a structural grid from this layout",
                 "notes": exc.notes,
