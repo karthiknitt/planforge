@@ -1253,6 +1253,22 @@ class _Adjacency:
         self.hi = hi
 
 
+# A facing-wall overlap must clear the larger of these to count as a real
+# adjacency: an absolute floor (never more permissive than the old fixed
+# 0.05m cutoff) and a fraction of the SMALLER part's span on that axis.
+# Session 2026-08-29's recon harness hit the identical bug shape in its own
+# reconstruction rectifier (a bare absolute epsilon let a coincidental
+# near-zero overlap between small, similarly-sized rooms register as a real
+# shared wall, collapsing a whole floor plan onto itself) -- fixed there the
+# same way. On the smallest legal room here (guest WC, min_width_m=0.9 per
+# room_specs.json), the old 0.05m absolute floor alone was ~5.5% of its
+# span; scaling by span keeps a 12ft bedroom's adjacency exactly as
+# permissive as before while tightening the small-room-cluster case where a
+# sliver overlap isn't nearly enough wall to hang a door on anyway.
+_MIN_ADJ_OVERLAP_ABS = 0.05
+_MIN_ADJ_OVERLAP_FRAC = 0.1
+
+
 def _adjacencies(rooms: list[Room], iwt: float, tol: float) -> list[_Adjacency]:
     """Facing wall runs between every ordered room pair.
 
@@ -1283,6 +1299,7 @@ def _adjacencies(rooms: list[Room], iwt: float, tol: float) -> list[_Adjacency]:
                                 min(pa.y + pa.depth, pb.y + pb.depth),
                             )
                             mid = (pa.x + pa.width + pb.x) / 2
+                            span_a, span_b = pa.depth, pb.depth
                         else:
                             # pa's top edge facing pb's bottom edge
                             gap = pb.y - (pa.y + pa.depth)
@@ -1291,7 +1308,12 @@ def _adjacencies(rooms: list[Room], iwt: float, tol: float) -> list[_Adjacency]:
                                 min(pa.x + pa.width, pb.x + pb.width),
                             )
                             mid = (pa.y + pa.depth + pb.y) / 2
-                        if not (-tol <= gap <= iwt + tol) or hi - lo < 0.05:
+                            span_a, span_b = pa.width, pb.width
+                        needed = max(
+                            _MIN_ADJ_OVERLAP_ABS,
+                            _MIN_ADJ_OVERLAP_FRAC * min(span_a, span_b),
+                        )
+                        if not (-tol <= gap <= iwt + tol) or hi - lo < needed:
                             continue
                         grouped.setdefault(round(mid, 6), []).append((lo, hi))
                 for mid in sorted(grouped):
@@ -2619,6 +2641,27 @@ def _lines_fit(
     return len(lines) * font_pt * 1.3 * _PT_TO_MODEL_M <= avail_h
 
 
+def _label_footprint(
+    cx: float, cy: float, lines: list[str], font_pt: float, rotated: bool
+) -> BaseGeometry:
+    """Absolute-sheet AABB a candidate label would occupy if placed here.
+
+    Each label is normally sized/centred to fit strictly inside its own
+    room, so two ordinary rectangular rooms' labels can never collide by
+    construction. Two real cases break that: a staircase's label is
+    centred 2/3 down its depth rather than at the true centre (its own fit
+    check assumes a centred box, so the actual text can overhang the far
+    edge into whatever room sits there), and the "outside" leader-line
+    fallback slots are free-floating, not room-bounded. This footprint is
+    what a collision check needs regardless of which case produced it.
+    """
+    w = max(_text_width_m(t, font_pt) for t in lines)
+    h = len(lines) * font_pt * 1.3 * _PT_TO_MODEL_M
+    if rotated:
+        w, h = h, w
+    return box(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+
+
 def _room_label_lines(room) -> list[str]:
     """Dual-unit label (ft-in + metric), matching Indian working-drawing
     convention: NAME / 11'-10" × 25'-4" / (3.6 m × 7.7 m) / 299 SQFT."""
@@ -2638,7 +2681,13 @@ def derive_labels(
     rooms: list[Room], bounds: tuple[float, float, float, float] | None = None
 ) -> list[LabelBox]:
     labels: list[LabelBox] = []
+    placed: list[BaseGeometry] = []
     outside_count = 0
+
+    def clear(cx: float, cy: float, cand: list[str], f: float, rotated: bool) -> bool:
+        fp = _label_footprint(cx, cy, cand, f, rotated)
+        return not any(fp.intersects(p) for p in placed)
+
     for room in sorted(rooms, key=lambda r: r.id):
         lines = _room_label_lines(room)
         lines3 = [lines[0], lines[1], lines[3]]  # drop the metric line first
@@ -2658,7 +2707,9 @@ def derive_labels(
             ([lines[0]], (7.0, 6.0)),
         ):
             for f in fonts:
-                if _lines_fit(cand, f, avail_w, avail_h):
+                if _lines_fit(cand, f, avail_w, avail_h) and clear(
+                    cx, cy, cand, f, False
+                ):
                     chosen = (cand, f)
                     break
             if chosen:
@@ -2672,12 +2723,15 @@ def derive_labels(
                 ([lines[0]], (7.0, 6.0)),
             ):
                 for f in fonts:
-                    if _lines_fit(cand, f, avail_h, avail_w):
+                    if _lines_fit(cand, f, avail_h, avail_w) and clear(
+                        cx, cy, cand, f, True
+                    ):
                         chosen = (cand, f)
                         break
                 if chosen:
                     break
             if chosen:
+                placed.append(_label_footprint(cx, cy, chosen[0], chosen[1], True))
                 labels.append(
                     LabelBox(
                         room_id=room.id,
@@ -2690,21 +2744,32 @@ def derive_labels(
                 )
                 continue
         if chosen:
+            placed.append(_label_footprint(cx, cy, chosen[0], chosen[1], False))
             labels.append(
                 LabelBox(
                     room_id=room.id, cx=cx, cy=cy, lines=chosen[0], font_pt=chosen[1]
                 )
             )
         else:
-            # stacked slots above the building, clear of the dim lanes
-            if bounds is not None:
-                bx1, _by1, _bx2, by2 = bounds
-                slot_x = bx1 + 1.2 + 3.0 * (outside_count % 2)
-                slot_y = by2 + 2.6 + 0.7 * (outside_count // 2)
-            else:
-                slot_x = room.x + room.width + 0.6
-                slot_y = room.y + room.depth / 2
-            outside_count += 1
+            # stacked slots above the building, clear of the dim lanes. Slots
+            # are free-floating (not room-bounded like the cases above), so
+            # if the fixed grid spacing isn't enough to clear an already
+            # placed label (a long name at the smallest font can exceed the
+            # 3.0m/0.7m step), push further out along the same grid rather
+            # than accept an overlap.
+            for attempt in range(24):
+                n = outside_count + attempt
+                if bounds is not None:
+                    bx1, _by1, _bx2, by2 = bounds
+                    slot_x = bx1 + 1.2 + 3.0 * (n % 2)
+                    slot_y = by2 + 2.6 + 0.7 * (n // 2)
+                else:
+                    slot_x = room.x + room.width + 0.6 + 0.7 * (n // 2)
+                    slot_y = room.y + room.depth / 2 + 3.0 * (n % 2)
+                if clear(slot_x, slot_y, lines3, 7.0, False):
+                    break
+            outside_count += attempt + 1
+            placed.append(_label_footprint(slot_x, slot_y, lines3, 7.0, False))
             labels.append(
                 LabelBox(
                     room_id=room.id,

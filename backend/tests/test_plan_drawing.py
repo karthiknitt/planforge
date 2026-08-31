@@ -152,6 +152,51 @@ def test_tiny_room_label_goes_outside_with_leader_untruncated():
     assert "…" not in "".join(lb.lines)
 
 
+def _label_footprint(lb):
+    """Absolute-sheet AABB for a LabelBox, mirroring how derive_labels()
+    itself measures a candidate before accepting it."""
+    from shapely.geometry import box
+
+    from app.engine.plan_geometry import _PT_TO_MODEL_M, _text_width_m
+
+    w = max(_text_width_m(t, lb.font_pt) for t in lb.lines)
+    h = len(lb.lines) * lb.font_pt * 1.3 * _PT_TO_MODEL_M
+    if lb.rotated:
+        w, h = h, w
+    return box(lb.cx - w / 2, lb.cy - h / 2, lb.cx + w / 2, lb.cy + h / 2)
+
+
+def test_staircase_label_does_not_collide_with_room_above():
+    # A staircase's label is centered 2/3 down its depth (not at the true
+    # centre), so at these realistic dimensions the fitted label's own
+    # height pushes past the room's top edge into whatever sits above it —
+    # reproduced directly against derive_labels() before any fix: the
+    # staircase's box top (2.092) sits below the room-above's label bottom
+    # (2.012), a real 0.08m overlap in absolute sheet coordinates.
+    stair = _room("stair", 0.0, 0.0, 2.4, 1.9, rtype="staircase")
+    above = _room("above", 0.0, 1.9, 1.0, 0.5, rtype="utility")
+    labels = derive_labels([stair, above])
+    assert len(labels) == 2
+    boxes = {lb.room_id: _label_footprint(lb) for lb in labels}
+    assert not boxes["stair"].intersects(boxes["above"]), (
+        "staircase label overlaps the room above it: "
+        f"{boxes['stair'].bounds} vs {boxes['above'].bounds}"
+    )
+
+
+def test_non_colliding_rooms_keep_full_labels():
+    # Control: two ordinary, well-separated rooms should be entirely
+    # unaffected by collision avoidance -- both keep their best-fit label.
+    a = _room("a", 0.0, 0.0, 3.5, 4.0, rtype="bedroom")
+    b = _room("b", 10.0, 10.0, 3.5, 4.0, rtype="bedroom")
+    labels = derive_labels([a, b])
+    assert len(labels) == 2
+    for lb in labels:
+        assert lb.leader is None
+        assert len(lb.lines) == 4
+        assert lb.font_pt == 12.0
+
+
 def test_stair_geometry_inside_room():
     floor, _cfg = _fixture_gf()
     stair_room = next(r for r in floor.rooms if r.type == "staircase")
