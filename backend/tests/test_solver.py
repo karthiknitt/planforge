@@ -7,6 +7,7 @@ from app.engine.solver import (
     solve_layouts,
     _load_specs,
     _build_room_list,
+    _section_ok,
     ensuite_attachment,
 )
 
@@ -380,3 +381,50 @@ def test_solve_does_not_raise_on_bad_input():
         assert isinstance(result, list)
     except Exception:
         pytest.fail("solve_layouts should not raise — it should return empty list")
+
+
+def _single_room_layout(cfg: PlotConfig, open_sides: frozenset[str]):
+    from app.engine.geometry import buildable_polygon
+    from app.engine.models import ComplianceResult, FloorPlan, Layout, Room
+
+    bp = buildable_polygon(cfg)
+    minx, miny, maxx, maxy = bp.bounds
+    room = Room(
+        id="r0",
+        name="Living",
+        type="living",
+        x=minx,
+        y=miny,
+        width=maxx - minx,
+        depth=maxy - miny,
+        open_sides=open_sides,
+    )
+    gf = FloorPlan(floor=0, floor_type="ground", rooms=[room], columns=[])
+    ff = FloorPlan(floor=1, floor_type="first", rooms=[], columns=[])
+    return Layout(
+        id="t",
+        name="t",
+        ground_floor=gf,
+        first_floor=ff,
+        compliance=ComplianceResult(passed=True),
+    )
+
+
+def test_section_ok_flags_layout_with_no_wall_crossing_the_cut_line():
+    # A single room spanning the whole (staircase-less) buildable polygon,
+    # open on both N and S: the section-cut line is a plain vertical
+    # mid-line for a stair-less floor, and it only ever crosses N/S walls
+    # for this room shape -- opening both removes every wall it could cross,
+    # reproducing derive_section()'s "min() iterable argument is empty"
+    # crash. Confirmed against the real function, not assumed.
+    cfg = _basic_cfg()
+    layout = _single_room_layout(cfg, frozenset({"N", "S"}))
+    reason = _section_ok(layout, cfg)
+    assert reason is not None
+    assert "section geometry invalid" in reason
+
+
+def test_section_ok_passes_ordinary_layout():
+    cfg = _basic_cfg()
+    layout = _single_room_layout(cfg, frozenset())
+    assert _section_ok(layout, cfg) is None

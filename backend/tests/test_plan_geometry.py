@@ -1096,6 +1096,32 @@ def test_adjacency_of_an_l_room_covers_only_the_parts_that_touch():
         )
 
 
+def test_adjacency_rejects_sliver_overlap_between_small_rooms():
+    """A 0.08m facing-wall overlap between two 0.9m guest-WC-sized rooms
+    (the min_width_m floor in room_specs.json) is ~9% of the smaller room's
+    span -- barely enough to register as *any* facing wall, nowhere near
+    enough to hang a door on. The old fixed 0.05m cutoff accepted this
+    (0.08 > 0.05); it should no longer count as a real adjacency."""
+    a = _room("a", 0.0, 0.0, 0.9, 0.9, rtype="toilet")
+    b = _room("b", 0.9 + IWT, 0.82, 0.9, 0.9, rtype="toilet")
+    adjs = [adj for adj in _adjacencies([a, b], IWT, 0.01) if adj.vertical]
+    assert not adjs, (
+        f"a 0.08m sliver overlap should not register as adjacent: {[(x.lo, x.hi) for x in adjs]}"
+    )
+
+
+def test_adjacency_keeps_genuine_facing_wall_between_small_rooms():
+    """Control for the sliver-overlap fix above: a facing wall covering
+    most of the smaller room's span must still register, at the same room
+    size that the sliver case now rejects."""
+    a = _room("a", 0.0, 0.0, 0.9, 0.9, rtype="toilet")
+    b = _room("b", 0.9 + IWT, 0.1, 0.9, 0.9, rtype="toilet")
+    adjs = [adj for adj in _adjacencies([a, b], IWT, 0.01) if adj.vertical]
+    assert adjs, (
+        "a genuine 0.8m facing wall between two small rooms must still register"
+    )
+
+
 # --- Deterministic wall IDs (Phase 7 / Task 26) -----------------------------
 
 

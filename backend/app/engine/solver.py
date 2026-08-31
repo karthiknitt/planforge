@@ -1657,6 +1657,28 @@ def _add_vastu_terms(
     return terms
 
 
+def _section_ok(layout: Layout, cfg: PlotConfig) -> str | None:
+    """Smoke-test a solved layout against the real section-drawing pass
+    (SECTION A-A) that render/export will run on it later, instead of
+    discovering a broken layout only at render or export time.
+
+    Same technique the recon harness's `_safe_open_sides()` uses: probe the
+    REAL downstream function in a try/except rather than reimplementing its
+    precondition by hand (`derive_section()` needs at least one external
+    wall crossing the single line `section_cut_line()` picks — a narrower
+    and easier-to-get-wrong requirement than it looks). No compliance path
+    called this before; validation stopped at bye-law geometry checks.
+    Returns a violation string on failure, None on success.
+    """
+    from app.engine.section_geometry import derive_section
+
+    try:
+        derive_section(layout, cfg)
+    except Exception as exc:
+        return f"section geometry invalid: {type(exc).__name__}: {exc}"
+    return None
+
+
 def _solve_one(
     cfg: PlotConfig,
     ewt: float,
@@ -2282,6 +2304,11 @@ def _solve_one(
         # plus a graded score for every layout, solver and archetype alike, on
         # the final post-fill geometry.
         layout.compliance = check(layout, cfg, rules)
+        if layout.compliance.passed:
+            reason = _section_ok(layout, cfg)
+            if reason:
+                layout.compliance.violations.append(reason)
+                layout.compliance.passed = False
         return layout
 
     # Post-solve snap: coalesce residual near-aligned wall lines (the

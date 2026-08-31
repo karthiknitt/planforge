@@ -415,23 +415,6 @@ def render_pdf(
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-def _compute_layout(
-    cfg: PlotConfig, page_w: float, page_h: float
-) -> tuple[float, float, float, float, float]:
-    """Return (scale pt/m, offset_x, offset_y, plot_px, plot_py)."""
-    avail_w = page_w - 2 * MARGIN
-    avail_h = page_h - TITLE_H - 2 * MARGIN - ROAD_H - ROAD_GAP - TOP_PAD
-
-    scale = min(avail_w / cfg.plot_x_extent, avail_h / cfg.plot_y_extent)
-    plot_px = cfg.plot_x_extent * scale
-    plot_py = cfg.plot_y_extent * scale
-
-    offset_x = MARGIN + (avail_w - plot_px) / 2
-    offset_y = TITLE_H + MARGIN + ROAD_H + ROAD_GAP
-
-    return scale, offset_x, offset_y, plot_px, plot_py
-
-
 def _draw_doors(c, rooms, scale, ox, oy):
     """Draw simplified door symbols (line + arc) on room entry walls.
 
