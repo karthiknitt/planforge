@@ -978,11 +978,16 @@ def _programme_types(flags: set[str]) -> frozenset[str]:
 def generate_from_request(req: GenerateRequest) -> list[Layout]:
     """Map an API request onto a PlotConfig plus programme requirements.
 
-    Note that `style_preset` is deliberately NOT read here: presets seed the
-    wizard form's checkboxes, and the resulting explicit `programme` set is the
-    only thing the engine honours. A user who unticks every box on a Kerala
-    preset gets no courtyard. See spec section 6 on why style signal is too
-    weak to drive generation directly.
+    Note that `style_preset` is NOT read for programme selection: presets seed
+    the wizard form's checkboxes, and the resulting explicit `programme` set is
+    the only thing the engine honours for what rooms exist. A user who unticks
+    every box on a Kerala preset gets no courtyard. See spec section 6 on why
+    style signal is too weak to drive generation directly.
+
+    `style_preset` IS threaded through onto `PlotConfig` below, but only for a
+    later phase's corpus-priors soft objective terms to key off (picking a
+    style-specific prior over the corpus-wide fallback) -- it has zero effect
+    on generation until that phase reads it.
     """
     cfg = PlotConfig(
         plot_x_extent=req.plot_x_extent,
@@ -1004,5 +1009,6 @@ def generate_from_request(req: GenerateRequest) -> list[Layout]:
         allow_shape_templates=False,
         required_types=_programme_types(req.programme),
         open_parking=("car_porch_open" in req.programme),
+        style_preset=req.style_preset,
     )
     return generate(cfg)

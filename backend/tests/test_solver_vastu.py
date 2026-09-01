@@ -438,9 +438,9 @@ def test_no_zone_vars_are_added_when_vastu_is_disabled(monkeypatch):
     calls: list[bool] = []
     real = S._add_vastu_terms
 
-    def spy(model, cfg, room_vars, ox, oy):
+    def spy(model, cfg, room_vars, ox, oy, **kw):
         calls.append(cfg.vastu_enabled)
-        return real(model, cfg, room_vars, ox, oy)
+        return real(model, cfg, room_vars, ox, oy, **kw)
 
     monkeypatch.setattr(S, "_add_vastu_terms", spy)
     # Tiny budgets: this test cares about what gets BUILT, not about solution
