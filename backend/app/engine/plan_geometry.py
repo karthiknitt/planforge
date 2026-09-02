@@ -2506,6 +2506,51 @@ _OVERALL_LANE = 2.4  # overall (level-1) chain sits outside the plot chain
 _PT_TO_MODEL_M = 0.000352778 * 100  # 1 pt on paper at 1:100 -> metres in model
 _LABEL_MARGIN = 0.2
 _LABEL_FONT = "Helvetica-Bold"
+# Dimension-chain text metrics. These MUST match what _draw_dim_chains() puts
+# on the page (pdf.py imports them) -- the whole bug below was a geometric
+# threshold chosen with no reference to the text it had to carry.
+# Half the stroked width of the A-A cut line plus a hair of breathing room,
+# in model metres -- labels keep at least this far off it.
+_SECTION_LINE_CLEARANCE_M = 0.12
+# Leadered captions stack in a band above the outermost dim chain. Capped so a
+# crowded plan never pushes a label off the sheet on a plan-crossing leader.
+_MAX_LABEL_BAND_ROWS = 3
+_LABEL_BAND_PITCH_M = 1.6
+_DIM_FONT = "Helvetica"
+_DIM_FONT_PT = 6.0
+_DIM_FONT_PT_OVERALL = 6.5
+
+
+def dim_text_width_m(text: str, font_pt: float = _DIM_FONT_PT) -> float:
+    """Width of a dimension string in MODEL metres, as the renderer draws it."""
+    from reportlab.pdfbase import pdfmetrics
+
+    return pdfmetrics.stringWidth(text, _DIM_FONT, font_pt) * _PT_TO_MODEL_M
+
+
+def _merge_until_text_fits(kept: list[float]) -> list[float]:
+    """Drop interior coordinate lines until every segment can carry its label.
+
+    A flat minimum segment width cannot work here: the narrowest ft-in string
+    the renderer can emit ("1'-2\"") is 0.421 m wide at 6 pt, so any segment
+    below that carries text wider than itself, and _draw_dim_chains centres
+    every string unconditionally -- adjacent short segments then print on top
+    of each other. Merging is the established behaviour for this chain (it
+    already dropped lines closer than a fixed 0.30 m); this just makes the
+    threshold the thing that actually matters, the text metric.
+
+    The first and last coordinates are never dropped, so the chain still sums
+    to the overall building extent (test_room_chain_sums_to_overall).
+    """
+    i = 1
+    while len(kept) > 2 and i < len(kept):
+        span = kept[i] - kept[i - 1]
+        if span > 1e-6 and dim_text_width_m(metres_to_ftin(span)) > span:
+            del kept[i if i < len(kept) - 1 else i - 1]
+            i = max(1, i - 1)
+        else:
+            i += 1
+    return kept
 
 
 def derive_dim_chains(
@@ -2524,6 +2569,11 @@ def derive_dim_chains(
             kept.append(cvalue)
         if kept and kept[-1] != coords[-1]:
             kept[-1] = coords[-1]
+        # Only the room chain (min_seg > 0) may merge. The level-1/2 chains
+        # have a fixed 3-segment structure whose setback quotes are rewritten
+        # to "1.5M" by the caller -- dropping one would lose required info.
+        if min_seg > 0:
+            kept = _merge_until_text_fits(kept)
         out = []
         for a, b in zip(kept, kept[1:]):
             if b - a < 1e-6:
@@ -2678,10 +2728,20 @@ def _room_label_lines(room) -> list[str]:
 
 
 def derive_labels(
-    rooms: list[Room], bounds: tuple[float, float, float, float] | None = None
+    rooms: list[Room],
+    bounds: tuple[float, float, float, float] | None = None,
+    obstacles: list[BaseGeometry] | None = None,
 ) -> list[LabelBox]:
+    """Place a caption in each room, avoiding other captions AND `obstacles`.
+
+    `obstacles` seeds the same collision ladder that keeps labels off each
+    other, so anything drawn across the plan can be declared here and captions
+    will route around it. The A-A section cut line is passed in by
+    build_floor_drawing(): it is stroked straight across the plan, and labels
+    that sat in its path were drawn struck through.
+    """
     labels: list[LabelBox] = []
-    placed: list[BaseGeometry] = []
+    placed: list[BaseGeometry] = list(obstacles or [])
     outside_count = 0
 
     def clear(cx: float, cy: float, cand: list[str], f: float, rotated: bool) -> bool:
@@ -2757,18 +2817,49 @@ def derive_labels(
             # placed label (a long name at the smallest font can exceed the
             # 3.0m/0.7m step), push further out along the same grid rather
             # than accept an overlap.
-            for attempt in range(24):
-                n = outside_count + attempt
-                if bounds is not None:
-                    bx1, _by1, _bx2, by2 = bounds
-                    slot_x = bx1 + 1.2 + 3.0 * (n % 2)
-                    slot_y = by2 + 2.6 + 0.7 * (n // 2)
-                else:
+            if bounds is not None:
+                bx1, _by1, bx2, by2 = bounds
+                # Spread slots ACROSS a band just clear of the outermost dim
+                # chain, and try the column nearest this room first, so the
+                # leader stays short. The previous form anchored every slot at
+                # the building's left edge and marched upward 0.7 m per row
+                # with no cap, which put captions outside the plot on a leader
+                # that crossed the whole drawing.
+                band_y = by2 + _OVERALL_LANE + 0.7
+                # One column roughly every _LABEL_BAND_PITCH_M, so a displaced
+                # caption always has a near-neighbour slot to fall into. Too
+                # few columns and a taken slot forces the label to the far side
+                # of the sheet, which is the long-leader defect itself.
+                cols = max(3, min(8, round((bx2 - bx1) / _LABEL_BAND_PITCH_M)))
+                xs = [bx1 + (bx2 - bx1) * (i + 0.5) / cols for i in range(cols)]
+                rcx = min(max(cx, bx1), bx2)
+                order = sorted(range(cols), key=lambda i: abs(xs[i] - rcx))
+                slot_x, slot_y = rcx, band_y
+                # Column-major: exhaust the rows of the NEAREST column before
+                # moving to a farther one, so a crowded band stacks the caption
+                # above its own room instead of flinging it across the sheet.
+                hit = False
+                for i in order:
+                    for row in range(_MAX_LABEL_BAND_ROWS):
+                        sx, sy = xs[i], band_y + 0.7 * row
+                        if clear(sx, sy, lines3, 7.0, False):
+                            slot_x, slot_y, hit = sx, sy, True
+                            break
+                    if hit:
+                        break
+                if not hit:
+                    # Band is full: accept the nearest column on the last row
+                    # rather than keep marching outside the sheet.
+                    slot_x = xs[order[0]]
+                    slot_y = band_y + 0.7 * (_MAX_LABEL_BAND_ROWS - 1)
+            else:
+                for attempt in range(24):
+                    n = outside_count + attempt
                     slot_x = room.x + room.width + 0.6 + 0.7 * (n // 2)
                     slot_y = room.y + room.depth / 2 + 3.0 * (n % 2)
-                if clear(slot_x, slot_y, lines3, 7.0, False):
-                    break
-            outside_count += attempt + 1
+                    if clear(slot_x, slot_y, lines3, 7.0, False):
+                        break
+                outside_count += attempt + 1
             placed.append(_label_footprint(slot_x, slot_y, lines3, 7.0, False))
             labels.append(
                 LabelBox(
@@ -3362,6 +3453,23 @@ def derive_site_context(
     )
 
 
+def _plan_obstacles(rooms: list[Room], buildable) -> list[BaseGeometry]:
+    """Geometry drawn across the plan that room labels must not collide with.
+
+    Currently the A-A section cut line. Imported locally: section_geometry
+    imports build_floor_drawing from this module, so a module-level import
+    would be circular.
+    """
+    try:
+        from app.engine.section_geometry import section_cut_line
+
+        line, _ = section_cut_line(rooms, buildable)
+    except Exception:  # never let label placement take rendering down
+        return []
+    # Buffer by half the stroked line width so a caption cannot graze it.
+    return [line.buffer(_SECTION_LINE_CLEARANCE_M)]
+
+
 def build_floor_drawing(
     floorplan: FloorPlan, cfg: PlotConfig, *, site_main_door_cx: float | None = None
 ) -> FloorDrawing:
@@ -3426,7 +3534,9 @@ def build_floor_drawing(
         columns=columns,
         junctions=junctions,
         dim_chains=derive_dim_chains(rooms, walls, cfg),
-        labels=derive_labels(rooms, bounds=buildable.bounds),
+        labels=derive_labels(
+            rooms, bounds=buildable.bounds, obstacles=_plan_obstacles(rooms, buildable)
+        ),
         stair=derive_stair(rooms),
         bounds=buildable.bounds,
         diagnostics=diagnostics,

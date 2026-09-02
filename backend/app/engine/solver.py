@@ -1657,6 +1657,72 @@ def _add_vastu_terms(
     return terms
 
 
+# Room types that are outdoor space: they must not be drawn walled off from
+# the outside. `garage` is deliberately absent -- it is an enclosed structure.
+_OPEN_AIR_TYPES = frozenset(
+    {
+        "verandah",
+        "balcony",
+        "terrace",
+        "courtyard",
+        "parking",
+        "parking_4w",
+        "parking_2w",
+    }
+)
+_OPEN_AIR_TOL_M = 0.05
+
+
+def _apply_open_air_sides(rooms: list[Room]) -> list[Room]:
+    """Declare outdoor rooms wall-less on whichever sides face the outside.
+
+    `Room.open_sides` is honoured throughout the drawing stack (derive_walls
+    drops the wall on a declared-open edge), but the only place production set
+    it was `parking["open_sides"] = ("S",)`, and only under cfg.open_parking.
+    Every verandah, balcony, terrace and perimeter courtyard therefore rendered
+    with four walls and read as an interior room.
+
+    A side is open only when that room's edge lies on the built form's OWN
+    perimeter (the bounding box across all rooms), so an internal courtyard --
+    open to sky but genuinely enclosed by rooms -- keeps its walls; being
+    roofless is not the same as being wall-less. models.py rejects a room with
+    all four sides open (no derivable footprint), so a room at an extreme
+    corner keeps at most three.
+
+    Returns new Room objects; callers must use the returned list.
+    """
+    if not rooms:
+        return rooms
+    mnx = min(r.x for r in rooms)
+    mxx = max(r.x + r.width for r in rooms)
+    mny = min(r.y for r in rooms)
+    mxy = max(r.y + r.depth for r in rooms)
+    t = _OPEN_AIR_TOL_M
+
+    out: list[Room] = []
+    for r in rooms:
+        if r.type not in _OPEN_AIR_TYPES:
+            out.append(r)
+            continue
+        sides = [
+            s
+            for s, on_edge in (
+                ("S", abs(r.y - mny) < t),
+                ("N", abs((r.y + r.depth) - mxy) < t),
+                ("W", abs(r.x - mnx) < t),
+                ("E", abs((r.x + r.width) - mxx) < t),
+            )
+            if on_edge
+        ]
+        if not sides:
+            out.append(r)
+            continue
+        if len(sides) == 4:  # models.py forbids it; keep the shortest wall
+            sides = sides[:3]
+        out.append(replace(r, open_sides=frozenset(sides) | r.open_sides))
+    return out
+
+
 def _section_ok(layout: Layout, cfg: PlotConfig) -> str | None:
     """Smoke-test a solved layout against the real section-drawing pass
     (SECTION A-A) that render/export will run on it later, instead of
@@ -2279,6 +2345,16 @@ def _solve_one(
     rules = load_rules()
 
     def _build_layout(gf_list: list[Room], ff_list: list[Room]) -> Layout:
+        # Outdoor rooms lose the walls on their outward faces. Applied here,
+        # on the final geometry, because "outward" is defined against the
+        # built form's own perimeter, which only exists once every room is
+        # placed. Reverted below if it breaks section derivation.
+        gf_list_walled, ff_list_walled = gf_list, ff_list
+        gf_open, ff_open = (
+            _apply_open_air_sides(gf_list),
+            _apply_open_air_sides(ff_list),
+        )
+        gf_list, ff_list = gf_open, ff_open
         layout = Layout(
             id=layout_id,
             name=layout_name,
@@ -2306,6 +2382,18 @@ def _solve_one(
         layout.compliance = check(layout, cfg, rules)
         if layout.compliance.passed:
             reason = _section_ok(layout, cfg)
+            if reason is not None and (
+                any(r.open_sides for r in gf_open) or any(r.open_sides for r in ff_open)
+            ):
+                # Opening an outdoor room's outward faces can leave a whole
+                # building edge with no wall, which derive_section() cannot
+                # cut. Prefer a walled verandah to a layout thrown away:
+                # revert the open sides and re-probe, exactly the
+                # "check the real precondition, then repair" shape the recon
+                # harness settled on after guessing it by hand went wrong.
+                layout.ground_floor.rooms = list(gf_list_walled)
+                layout.first_floor.rooms = list(ff_list_walled)
+                reason = _section_ok(layout, cfg)
             if reason:
                 layout.compliance.violations.append(reason)
                 layout.compliance.passed = False

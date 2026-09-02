@@ -307,3 +307,131 @@ def test_unknown_dim_chain_keys_are_ignored_not_rejected():
         payload["dim_chains"][0]["entries"][0]["future_entry_field"] = "ignore me too"
     rehydrated = FloorDrawing.from_dict(payload)
     assert len(rehydrated.dim_chains) == len(payload["dim_chains"])
+
+
+def _dim_text_width_m(text: str, font_pt: float = 6.0) -> float:
+    """Width of a dimension string in MODEL metres, as _draw_dim_chains draws it.
+
+    _draw_dim_chains centres every entry's text at 6 pt Helvetica (level 1 uses
+    6.5 pt bold), so this is the space each string actually occupies on the
+    sheet, converted back into plan metres at 1:100.
+    """
+    from reportlab.pdfbase import pdfmetrics
+
+    from app.engine.plan_geometry import _PT_TO_MODEL_M
+
+    return pdfmetrics.stringWidth(text, "Helvetica", font_pt) * _PT_TO_MODEL_M
+
+
+def test_dim_chain_entries_are_wide_enough_for_their_own_text():
+    """A dim segment must be at least as wide as the text that labels it.
+
+    `derive_dim_chains` merged coordinate lines closer than a flat 0.30 m --
+    a purely geometric floor with no reference to text metrics. The narrowest
+    string the renderer can emit ("1'-2\"") is 0.421 m wide at 6 pt, so every
+    segment in the 0.30-0.42 m band was guaranteed to carry text wider than
+    itself, and `_draw_dim_chains` centres each string unconditionally. The
+    result is the vision judge's "stack of overlapping strings printed on top
+    of each other".
+    """
+    floor, cfg = _fixture_gf()
+    # Slivers just above the old 0.30 m floor: these survive the merge but
+    # cannot fit their own label.
+    rooms = list(floor.rooms)
+    x0 = cfg.setback_left + 0.115
+    for i in range(3):
+        rooms.append(
+            _room(f"sliver{i}", x0 + i * 0.32, cfg.setback_front + 0.115, 0.32, 0.9)
+        )
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    chains = derive_dim_chains(rooms, walls, cfg)
+
+    offenders = []
+    for ch in chains:
+        for e in ch.entries:
+            span = e.end - e.start
+            need = _dim_text_width_m(e.text, 6.5 if ch.level == 1 else 6.0)
+            if need > span + 1e-9:
+                offenders.append(
+                    (ch.side, ch.level, e.text, round(span, 3), round(need, 3))
+                )
+    assert not offenders, (
+        f"{len(offenders)} dim entries carry text wider than their own segment "
+        f"(side, level, text, span_m, needed_m): {offenders[:6]}"
+    )
+
+
+def test_labels_avoid_the_section_cut_line():
+    """No room label may sit on the A-A section cut line.
+
+    The cut line is drawn straight across the plan by `_draw_section_marker`,
+    but `derive_labels()` never knew it existed, so captions in its path were
+    struck through. The vision judge reported this on both judged designs:
+    "the A-A section cut line and its centreline run straight through the
+    DINING AREA and CAR PORCH labels" and "the section line A-A and its cut
+    markers run straight through the CAR PORCH / STAIRCASE / DINING label
+    stack, further obscuring the already-crowded left column".
+    """
+    from app.engine.plan_geometry import _label_footprint
+    from app.engine.section_geometry import section_cut_line
+
+    floor, cfg = _fixture_gf()
+    buildable = buildable_polygon(cfg)
+    drawing = build_floor_drawing(floor, cfg)
+    line, _ = section_cut_line(floor.rooms, buildable)
+
+    struck = []
+    for lb in drawing.labels:
+        fp = _label_footprint(lb.cx, lb.cy, lb.lines, lb.font_pt, lb.rotated)
+        if fp.intersects(line):
+            struck.append((lb.lines[0], round(lb.cx, 2), round(lb.cy, 2)))
+    assert not struck, (
+        f"{len(struck)} labels struck through by section line A-A: {struck}"
+    )
+
+
+def test_leadered_labels_stay_near_the_plan():
+    """Leadered labels must stay in a bounded band and keep their leader short.
+
+    The outside-slot fallback anchored every slot at the BUILDING'S LEFT EDGE
+    (`slot_x = bx1 + 1.2 + ...`) regardless of where the room actually was, and
+    marched upward by 0.7 m per row with no cap, starting only 0.2 m above the
+    outermost dimension chain (_OVERALL_LANE = 2.4). Enough slivers and the
+    captions ended up far outside the plot with a leader shooting back across
+    the whole drawing.
+
+    The vision judge on a 12-design sample: "its label had to be leadered out
+    far above the plot boundary" (Gujrati-03) and "the label is placed entirely
+    OUTSIDE the building, above the top dimension line, connected by a long
+    leader line into the middle of the plan" (Mughal-09).
+    """
+    from app.engine.plan_geometry import _OVERALL_LANE, derive_labels
+
+    floor, cfg = _fixture_gf()
+    buildable = buildable_polygon(cfg)
+    bx1, _by1, bx2, by2 = buildable.bounds
+    # A row of slivers: too small to hold their own caption, so they all fall
+    # through to the outside-slot path.
+    rooms = list(floor.rooms)
+    for i in range(8):
+        rooms.append(_room(f"tiny{i}", bx1 + 0.2 + i * 0.55, by2 - 0.75, 0.5, 0.5))
+
+    labels = derive_labels(rooms, bounds=buildable.bounds)
+    leadered = [lb for lb in labels if lb.leader is not None]
+    assert leadered, "expected the sliver rooms to fall through to leader slots"
+
+    ceiling = by2 + _OVERALL_LANE + 2.5  # band above the outermost dim chain
+    too_high = [(lb.lines[0], round(lb.cy, 2)) for lb in leadered if lb.cy > ceiling]
+    assert not too_high, (
+        f"labels pushed past {ceiling:.2f} m (plot boundary/dim lanes): {too_high}"
+    )
+
+    span = bx2 - bx1
+    long_leaders = [
+        (lb.lines[0], round(abs(lb.cx - lb.leader[0]), 2))
+        for lb in leadered
+        if abs(lb.cx - lb.leader[0]) > span / 2
+    ]
+    assert not long_leaders, (
+        f"leaders run more than half the building span ({span / 2:.2f} m): {long_leaders}"
+    )

@@ -1861,6 +1861,13 @@ def _draw_opening_symbol(c: canvas.Canvas, o, s: float, ox: float, oy: float) ->
         c.line(cxp - t / 2, cyp + half, cxp + t / 2, cyp + half)
 
 
+from app.engine.plan_geometry import (  # noqa: E402
+    _DIM_FONT,
+    _DIM_FONT_PT,
+    _DIM_FONT_PT_OVERALL,
+)
+
+
 def _draw_dim_chains(
     c: canvas.Canvas,
     drawing,
@@ -1907,9 +1914,13 @@ def _draw_dim_chains(
                 c.line(lane - 3, p, lane + 3, p)
                 c.line(lane - 2, p - 2, lane + 2, p + 2)
         if chain.level == 1:
-            c.setFont("Helvetica-Bold", 6.5)  # overall dual-unit dim reads bolder
+            # overall dual-unit dim reads bolder
+            c.setFont("Helvetica-Bold", _DIM_FONT_PT_OVERALL)
         else:
-            c.setFont("Helvetica", 6)
+            # _DIM_FONT/_DIM_FONT_PT are shared with plan_geometry, which sizes
+            # the chain's segments against these exact metrics -- keep them in
+            # one place so the two can never drift apart again.
+            c.setFont(_DIM_FONT, _DIM_FONT_PT)
         c.setFillColor(HexColor("#000000"))
         for e in chain.entries:
             mid = (ox if horiz else oy) + (e.start + e.end) / 2 * s
