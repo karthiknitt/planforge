@@ -2506,6 +2506,44 @@ _OVERALL_LANE = 2.4  # overall (level-1) chain sits outside the plot chain
 _PT_TO_MODEL_M = 0.000352778 * 100  # 1 pt on paper at 1:100 -> metres in model
 _LABEL_MARGIN = 0.2
 _LABEL_FONT = "Helvetica-Bold"
+# Dimension-chain text metrics. These MUST match what _draw_dim_chains() puts
+# on the page (pdf.py imports them) -- the whole bug below was a geometric
+# threshold chosen with no reference to the text it had to carry.
+_DIM_FONT = "Helvetica"
+_DIM_FONT_PT = 6.0
+_DIM_FONT_PT_OVERALL = 6.5
+
+
+def dim_text_width_m(text: str, font_pt: float = _DIM_FONT_PT) -> float:
+    """Width of a dimension string in MODEL metres, as the renderer draws it."""
+    from reportlab.pdfbase import pdfmetrics
+
+    return pdfmetrics.stringWidth(text, _DIM_FONT, font_pt) * _PT_TO_MODEL_M
+
+
+def _merge_until_text_fits(kept: list[float]) -> list[float]:
+    """Drop interior coordinate lines until every segment can carry its label.
+
+    A flat minimum segment width cannot work here: the narrowest ft-in string
+    the renderer can emit ("1'-2\"") is 0.421 m wide at 6 pt, so any segment
+    below that carries text wider than itself, and _draw_dim_chains centres
+    every string unconditionally -- adjacent short segments then print on top
+    of each other. Merging is the established behaviour for this chain (it
+    already dropped lines closer than a fixed 0.30 m); this just makes the
+    threshold the thing that actually matters, the text metric.
+
+    The first and last coordinates are never dropped, so the chain still sums
+    to the overall building extent (test_room_chain_sums_to_overall).
+    """
+    i = 1
+    while len(kept) > 2 and i < len(kept):
+        span = kept[i] - kept[i - 1]
+        if span > 1e-6 and dim_text_width_m(metres_to_ftin(span)) > span:
+            del kept[i if i < len(kept) - 1 else i - 1]
+            i = max(1, i - 1)
+        else:
+            i += 1
+    return kept
 
 
 def derive_dim_chains(
@@ -2524,6 +2562,11 @@ def derive_dim_chains(
             kept.append(cvalue)
         if kept and kept[-1] != coords[-1]:
             kept[-1] = coords[-1]
+        # Only the room chain (min_seg > 0) may merge. The level-1/2 chains
+        # have a fixed 3-segment structure whose setback quotes are rewritten
+        # to "1.5M" by the caller -- dropping one would lose required info.
+        if min_seg > 0:
+            kept = _merge_until_text_fits(kept)
         out = []
         for a, b in zip(kept, kept[1:]):
             if b - a < 1e-6:

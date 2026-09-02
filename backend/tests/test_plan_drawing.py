@@ -307,3 +307,55 @@ def test_unknown_dim_chain_keys_are_ignored_not_rejected():
         payload["dim_chains"][0]["entries"][0]["future_entry_field"] = "ignore me too"
     rehydrated = FloorDrawing.from_dict(payload)
     assert len(rehydrated.dim_chains) == len(payload["dim_chains"])
+
+
+def _dim_text_width_m(text: str, font_pt: float = 6.0) -> float:
+    """Width of a dimension string in MODEL metres, as _draw_dim_chains draws it.
+
+    _draw_dim_chains centres every entry's text at 6 pt Helvetica (level 1 uses
+    6.5 pt bold), so this is the space each string actually occupies on the
+    sheet, converted back into plan metres at 1:100.
+    """
+    from reportlab.pdfbase import pdfmetrics
+
+    from app.engine.plan_geometry import _PT_TO_MODEL_M
+
+    return pdfmetrics.stringWidth(text, "Helvetica", font_pt) * _PT_TO_MODEL_M
+
+
+def test_dim_chain_entries_are_wide_enough_for_their_own_text():
+    """A dim segment must be at least as wide as the text that labels it.
+
+    `derive_dim_chains` merged coordinate lines closer than a flat 0.30 m --
+    a purely geometric floor with no reference to text metrics. The narrowest
+    string the renderer can emit ("1'-2\"") is 0.421 m wide at 6 pt, so every
+    segment in the 0.30-0.42 m band was guaranteed to carry text wider than
+    itself, and `_draw_dim_chains` centres each string unconditionally. The
+    result is the vision judge's "stack of overlapping strings printed on top
+    of each other".
+    """
+    floor, cfg = _fixture_gf()
+    # Slivers just above the old 0.30 m floor: these survive the merge but
+    # cannot fit their own label.
+    rooms = list(floor.rooms)
+    x0 = cfg.setback_left + 0.115
+    for i in range(3):
+        rooms.append(
+            _room(f"sliver{i}", x0 + i * 0.32, cfg.setback_front + 0.115, 0.32, 0.9)
+        )
+    walls = derive_walls(rooms, buildable_polygon(cfg))
+    chains = derive_dim_chains(rooms, walls, cfg)
+
+    offenders = []
+    for ch in chains:
+        for e in ch.entries:
+            span = e.end - e.start
+            need = _dim_text_width_m(e.text, 6.5 if ch.level == 1 else 6.0)
+            if need > span + 1e-9:
+                offenders.append(
+                    (ch.side, ch.level, e.text, round(span, 3), round(need, 3))
+                )
+    assert not offenders, (
+        f"{len(offenders)} dim entries carry text wider than their own segment "
+        f"(side, level, text, span_m, needed_m): {offenders[:6]}"
+    )
