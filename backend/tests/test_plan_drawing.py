@@ -359,3 +359,32 @@ def test_dim_chain_entries_are_wide_enough_for_their_own_text():
         f"{len(offenders)} dim entries carry text wider than their own segment "
         f"(side, level, text, span_m, needed_m): {offenders[:6]}"
     )
+
+
+def test_labels_avoid_the_section_cut_line():
+    """No room label may sit on the A-A section cut line.
+
+    The cut line is drawn straight across the plan by `_draw_section_marker`,
+    but `derive_labels()` never knew it existed, so captions in its path were
+    struck through. The vision judge reported this on both judged designs:
+    "the A-A section cut line and its centreline run straight through the
+    DINING AREA and CAR PORCH labels" and "the section line A-A and its cut
+    markers run straight through the CAR PORCH / STAIRCASE / DINING label
+    stack, further obscuring the already-crowded left column".
+    """
+    from app.engine.plan_geometry import _label_footprint
+    from app.engine.section_geometry import section_cut_line
+
+    floor, cfg = _fixture_gf()
+    buildable = buildable_polygon(cfg)
+    drawing = build_floor_drawing(floor, cfg)
+    line, _ = section_cut_line(floor.rooms, buildable)
+
+    struck = []
+    for lb in drawing.labels:
+        fp = _label_footprint(lb.cx, lb.cy, lb.lines, lb.font_pt, lb.rotated)
+        if fp.intersects(line):
+            struck.append((lb.lines[0], round(lb.cx, 2), round(lb.cy, 2)))
+    assert not struck, (
+        f"{len(struck)} labels struck through by section line A-A: {struck}"
+    )

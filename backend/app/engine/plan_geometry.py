@@ -2509,6 +2509,9 @@ _LABEL_FONT = "Helvetica-Bold"
 # Dimension-chain text metrics. These MUST match what _draw_dim_chains() puts
 # on the page (pdf.py imports them) -- the whole bug below was a geometric
 # threshold chosen with no reference to the text it had to carry.
+# Half the stroked width of the A-A cut line plus a hair of breathing room,
+# in model metres -- labels keep at least this far off it.
+_SECTION_LINE_CLEARANCE_M = 0.12
 _DIM_FONT = "Helvetica"
 _DIM_FONT_PT = 6.0
 _DIM_FONT_PT_OVERALL = 6.5
@@ -2721,10 +2724,20 @@ def _room_label_lines(room) -> list[str]:
 
 
 def derive_labels(
-    rooms: list[Room], bounds: tuple[float, float, float, float] | None = None
+    rooms: list[Room],
+    bounds: tuple[float, float, float, float] | None = None,
+    obstacles: list[BaseGeometry] | None = None,
 ) -> list[LabelBox]:
+    """Place a caption in each room, avoiding other captions AND `obstacles`.
+
+    `obstacles` seeds the same collision ladder that keeps labels off each
+    other, so anything drawn across the plan can be declared here and captions
+    will route around it. The A-A section cut line is passed in by
+    build_floor_drawing(): it is stroked straight across the plan, and labels
+    that sat in its path were drawn struck through.
+    """
     labels: list[LabelBox] = []
-    placed: list[BaseGeometry] = []
+    placed: list[BaseGeometry] = list(obstacles or [])
     outside_count = 0
 
     def clear(cx: float, cy: float, cand: list[str], f: float, rotated: bool) -> bool:
@@ -3405,6 +3418,23 @@ def derive_site_context(
     )
 
 
+def _plan_obstacles(rooms: list[Room], buildable) -> list[BaseGeometry]:
+    """Geometry drawn across the plan that room labels must not collide with.
+
+    Currently the A-A section cut line. Imported locally: section_geometry
+    imports build_floor_drawing from this module, so a module-level import
+    would be circular.
+    """
+    try:
+        from app.engine.section_geometry import section_cut_line
+
+        line, _ = section_cut_line(rooms, buildable)
+    except Exception:  # never let label placement take rendering down
+        return []
+    # Buffer by half the stroked line width so a caption cannot graze it.
+    return [line.buffer(_SECTION_LINE_CLEARANCE_M)]
+
+
 def build_floor_drawing(
     floorplan: FloorPlan, cfg: PlotConfig, *, site_main_door_cx: float | None = None
 ) -> FloorDrawing:
@@ -3469,7 +3499,9 @@ def build_floor_drawing(
         columns=columns,
         junctions=junctions,
         dim_chains=derive_dim_chains(rooms, walls, cfg),
-        labels=derive_labels(rooms, bounds=buildable.bounds),
+        labels=derive_labels(
+            rooms, bounds=buildable.bounds, obstacles=_plan_obstacles(rooms, buildable)
+        ),
         stair=derive_stair(rooms),
         bounds=buildable.bounds,
         diagnostics=diagnostics,
