@@ -388,3 +388,50 @@ def test_labels_avoid_the_section_cut_line():
     assert not struck, (
         f"{len(struck)} labels struck through by section line A-A: {struck}"
     )
+
+
+def test_leadered_labels_stay_near_the_plan():
+    """Leadered labels must stay in a bounded band and keep their leader short.
+
+    The outside-slot fallback anchored every slot at the BUILDING'S LEFT EDGE
+    (`slot_x = bx1 + 1.2 + ...`) regardless of where the room actually was, and
+    marched upward by 0.7 m per row with no cap, starting only 0.2 m above the
+    outermost dimension chain (_OVERALL_LANE = 2.4). Enough slivers and the
+    captions ended up far outside the plot with a leader shooting back across
+    the whole drawing.
+
+    The vision judge on a 12-design sample: "its label had to be leadered out
+    far above the plot boundary" (Gujrati-03) and "the label is placed entirely
+    OUTSIDE the building, above the top dimension line, connected by a long
+    leader line into the middle of the plan" (Mughal-09).
+    """
+    from app.engine.plan_geometry import _OVERALL_LANE, derive_labels
+
+    floor, cfg = _fixture_gf()
+    buildable = buildable_polygon(cfg)
+    bx1, _by1, bx2, by2 = buildable.bounds
+    # A row of slivers: too small to hold their own caption, so they all fall
+    # through to the outside-slot path.
+    rooms = list(floor.rooms)
+    for i in range(8):
+        rooms.append(_room(f"tiny{i}", bx1 + 0.2 + i * 0.55, by2 - 0.75, 0.5, 0.5))
+
+    labels = derive_labels(rooms, bounds=buildable.bounds)
+    leadered = [lb for lb in labels if lb.leader is not None]
+    assert leadered, "expected the sliver rooms to fall through to leader slots"
+
+    ceiling = by2 + _OVERALL_LANE + 2.5  # band above the outermost dim chain
+    too_high = [(lb.lines[0], round(lb.cy, 2)) for lb in leadered if lb.cy > ceiling]
+    assert not too_high, (
+        f"labels pushed past {ceiling:.2f} m (plot boundary/dim lanes): {too_high}"
+    )
+
+    span = bx2 - bx1
+    long_leaders = [
+        (lb.lines[0], round(abs(lb.cx - lb.leader[0]), 2))
+        for lb in leadered
+        if abs(lb.cx - lb.leader[0]) > span / 2
+    ]
+    assert not long_leaders, (
+        f"leaders run more than half the building span ({span / 2:.2f} m): {long_leaders}"
+    )

@@ -2512,6 +2512,10 @@ _LABEL_FONT = "Helvetica-Bold"
 # Half the stroked width of the A-A cut line plus a hair of breathing room,
 # in model metres -- labels keep at least this far off it.
 _SECTION_LINE_CLEARANCE_M = 0.12
+# Leadered captions stack in a band above the outermost dim chain. Capped so a
+# crowded plan never pushes a label off the sheet on a plan-crossing leader.
+_MAX_LABEL_BAND_ROWS = 3
+_LABEL_BAND_PITCH_M = 1.6
 _DIM_FONT = "Helvetica"
 _DIM_FONT_PT = 6.0
 _DIM_FONT_PT_OVERALL = 6.5
@@ -2813,18 +2817,49 @@ def derive_labels(
             # placed label (a long name at the smallest font can exceed the
             # 3.0m/0.7m step), push further out along the same grid rather
             # than accept an overlap.
-            for attempt in range(24):
-                n = outside_count + attempt
-                if bounds is not None:
-                    bx1, _by1, _bx2, by2 = bounds
-                    slot_x = bx1 + 1.2 + 3.0 * (n % 2)
-                    slot_y = by2 + 2.6 + 0.7 * (n // 2)
-                else:
+            if bounds is not None:
+                bx1, _by1, bx2, by2 = bounds
+                # Spread slots ACROSS a band just clear of the outermost dim
+                # chain, and try the column nearest this room first, so the
+                # leader stays short. The previous form anchored every slot at
+                # the building's left edge and marched upward 0.7 m per row
+                # with no cap, which put captions outside the plot on a leader
+                # that crossed the whole drawing.
+                band_y = by2 + _OVERALL_LANE + 0.7
+                # One column roughly every _LABEL_BAND_PITCH_M, so a displaced
+                # caption always has a near-neighbour slot to fall into. Too
+                # few columns and a taken slot forces the label to the far side
+                # of the sheet, which is the long-leader defect itself.
+                cols = max(3, min(8, round((bx2 - bx1) / _LABEL_BAND_PITCH_M)))
+                xs = [bx1 + (bx2 - bx1) * (i + 0.5) / cols for i in range(cols)]
+                rcx = min(max(cx, bx1), bx2)
+                order = sorted(range(cols), key=lambda i: abs(xs[i] - rcx))
+                slot_x, slot_y = rcx, band_y
+                # Column-major: exhaust the rows of the NEAREST column before
+                # moving to a farther one, so a crowded band stacks the caption
+                # above its own room instead of flinging it across the sheet.
+                hit = False
+                for i in order:
+                    for row in range(_MAX_LABEL_BAND_ROWS):
+                        sx, sy = xs[i], band_y + 0.7 * row
+                        if clear(sx, sy, lines3, 7.0, False):
+                            slot_x, slot_y, hit = sx, sy, True
+                            break
+                    if hit:
+                        break
+                if not hit:
+                    # Band is full: accept the nearest column on the last row
+                    # rather than keep marching outside the sheet.
+                    slot_x = xs[order[0]]
+                    slot_y = band_y + 0.7 * (_MAX_LABEL_BAND_ROWS - 1)
+            else:
+                for attempt in range(24):
+                    n = outside_count + attempt
                     slot_x = room.x + room.width + 0.6 + 0.7 * (n // 2)
                     slot_y = room.y + room.depth / 2 + 3.0 * (n % 2)
-                if clear(slot_x, slot_y, lines3, 7.0, False):
-                    break
-            outside_count += attempt + 1
+                    if clear(slot_x, slot_y, lines3, 7.0, False):
+                        break
+                outside_count += attempt + 1
             placed.append(_label_footprint(slot_x, slot_y, lines3, 7.0, False))
             labels.append(
                 LabelBox(
