@@ -428,3 +428,45 @@ def test_section_ok_passes_ordinary_layout():
     cfg = _basic_cfg()
     layout = _single_room_layout(cfg, frozenset())
     assert _section_ok(layout, cfg) is None
+
+
+def _oa_room(rid, typ, x, y, w, d):
+    from app.engine.models import Room
+
+    return Room(id=rid, name=typ.title(), type=typ, x=x, y=y, width=w, depth=d)
+
+
+def test_open_air_rooms_open_on_the_building_perimeter():
+    """Verandahs/courtyards/porches must not be drawn as fully walled rooms.
+
+    `Room.open_sides` is honoured all the way through the drawing stack
+    (derive_walls drops the wall on a declared-open edge), but the only place
+    production ever SET it was `parking["open_sides"] = ("S",)` in
+    _room_defs -- and only when cfg.open_parking. Every verandah, balcony,
+    terrace and perimeter courtyard therefore rendered with four walls, which
+    reads as an interior room.
+
+    A side counts as open only when that edge lies on the built form's own
+    perimeter, so an INTERNAL courtyard (surrounded by rooms) is left alone.
+    """
+    from app.engine.solver import _apply_open_air_sides
+
+    rooms = [
+        _oa_room("r0", "living", 0.0, 0.0, 6.0, 6.0),
+        # verandah juts out along the front (y-min) edge of the built form
+        _oa_room("r1", "verandah", 0.0, -2.0, 6.0, 2.0),
+        # courtyard fully enclosed by the living block -> must stay walled
+        _oa_room("r2", "courtyard", 2.0, 2.0, 2.0, 2.0),
+    ]
+    out = {r.id: r for r in _apply_open_air_sides(rooms)}
+
+    assert "S" in out["r1"].open_sides, (
+        f"verandah on the front perimeter should be open to the south, "
+        f"got {sorted(out['r1'].open_sides)}"
+    )
+    assert not out["r2"].open_sides, (
+        f"internal courtyard should keep its walls, got {sorted(out['r2'].open_sides)}"
+    )
+    assert not out["r0"].open_sides, "a living room is never open-sided"
+    for r in out.values():
+        assert len(r.open_sides) < 4, "models.py forbids all four sides open"
